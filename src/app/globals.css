@@ -1,0 +1,221 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 10 10 15;
+    --foreground: 255 255 255;
+  }
+
+  .light {
+    --background: 255 255 255;
+    --foreground: 10 10 15;
+  }
+
+  * {
+    @apply border-dark-border;
+  }
+
+  .light * {
+    @apply border-light-border;
+  }
+
+  body {
+    @apply bg-dark-primary text-white font-mono antialiased;
+  }
+
+  .light body {
+    @apply bg-light-primary text-gray-900;
+  }
+}
+
+@layer components {
+  /* Glass morphism card */
+  .glass-card {
+    @apply bg-dark-secondary/80 backdrop-blur-xl border border-dark-border rounded-2xl;
+  }
+
+  .light .glass-card {
+    @apply bg-white/80 border-light-border shadow-lg;
+  }
+
+  /* Glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1);
+  }
+
+  .glow-magenta {
+    box-shadow: 0 0 20px rgba(255, 0, 170, 0.3), 0 0 40px rgba(255, 0, 170, 0.1);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+  }
+
+  .glow-red {
+    box-shadow: 0 0 20px rgba(255, 51, 102, 0.3);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-bulk-cyan to-bulk-magenta bg-clip-text text-transparent;
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply px-4 py-2 bg-gradient-to-r from-bulk-cyan to-bulk-magenta text-white font-semibold rounded-lg
+           hover:opacity-90 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-buy {
+    @apply px-4 py-2 bg-bulk-green text-dark-primary font-semibold rounded-lg
+           hover:bg-bulk-green/90 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-sell {
+    @apply px-4 py-2 bg-bulk-red text-white font-semibold rounded-lg
+           hover:bg-bulk-red/90 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-gray-400 hover:text-white hover:bg-dark-tertiary 
+           rounded-lg transition-all duration-200;
+  }
+
+  .light .btn-ghost {
+    @apply text-gray-600 hover:text-gray-900 hover:bg-light-tertiary;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-3 bg-dark-tertiary border border-dark-border rounded-lg
+           text-white placeholder-gray-500 focus:outline-none focus:border-bulk-cyan
+           transition-colors duration-200;
+  }
+
+  .light .input {
+    @apply bg-light-secondary border-light-border text-gray-900 focus:border-bulk-cyan;
+  }
+
+  /* Panel header */
+  .panel-header {
+    @apply flex items-center justify-between px-5 py-4 border-b border-dark-border bg-dark-tertiary/50;
+  }
+
+  .light .panel-header {
+    @apply border-light-border bg-light-tertiary/50;
+  }
+
+  .panel-title {
+    @apply font-display text-sm font-semibold uppercase tracking-wider flex items-center gap-3;
+  }
+
+  /* Table styles */
+  .table-header {
+    @apply text-[10px] uppercase tracking-widest text-gray-500 font-medium;
+  }
+
+  .table-row {
+    @apply border-b border-dark-border/50 hover:bg-dark-tertiary/30 transition-colors;
+  }
+
+  .light .table-row {
+    @apply border-light-border/50 hover:bg-light-tertiary/50;
+  }
+
+  /* Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-dark-primary;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-dark-border rounded-full hover:bg-gray-600;
+  }
+
+  .light .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-light-primary;
+  }
+
+  .light .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-light-border hover:bg-gray-400;
+  }
+}
+
+@layer utilities {
+  /* Text colors */
+  .text-positive { @apply text-bulk-green; }
+  .text-negative { @apply text-bulk-red; }
+  .text-muted { @apply text-gray-500; }
+
+  /* Background fills */
+  .bg-positive { @apply bg-bulk-green/10; }
+  .bg-negative { @apply bg-bulk-red/10; }
+
+  /* Flash animations for price updates */
+  .flash-green {
+    animation: flash-green 0.5s ease-out;
+  }
+
+  .flash-red {
+    animation: flash-red 0.5s ease-out;
+  }
+
+  @keyframes flash-green {
+    0% { background-color: rgba(0, 255, 136, 0.3); }
+    100% { background-color: transparent; }
+  }
+
+  @keyframes flash-red {
+    0% { background-color: rgba(255, 51, 102, 0.3); }
+    100% { background-color: transparent; }
+  }
+
+  /* Noise texture overlay */
+  .noise-overlay::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.02;
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  .grid-bg {
+    background-image: 
+      linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: grid-move 20s linear infinite;
+  }
+
+  @keyframes grid-move {
+    0% { background-position: 0 0; }
+    100% { background-position: 50px 50px; }
+  }
+
+  /* Scanlines effect */
+  .scanlines::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.1) 2px,
+      rgba(0, 0, 0, 0.1) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.3;
+  }
+}
