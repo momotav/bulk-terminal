@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
-import { analytics, formatCompact, cn, type ChartDataPoint, type LongShortDataPoint } from '@/lib/api';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
+import { analytics, formatCompact, cn, type ChartDataPoint } from '@/lib/api';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
 import { useStore } from '@/store';
 
 const symbols = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
