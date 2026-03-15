@@ -268,46 +268,69 @@ export default function AnalyticsPage() {
             {correlation && (
               <div className="chart-card lg:col-span-2">
                 <h3 className="chart-title">Correlation Matrix</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full max-w-md mx-auto">
-                    <thead>
-                      <tr>
-                        <th className="p-2"></th>
-                        {correlation.symbols.map((s) => (
-                          <th key={s} className="p-2 text-xs text-text-secondary font-medium">
-                            {s.split('-')[0]}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {correlation.symbols.map((s, i) => (
-                        <tr key={s}>
-                          <td className="p-2 text-xs text-text-secondary font-medium">
-                            {s.split('-')[0]}
-                          </td>
-                          {correlation.matrix[i].map((val, j) => (
-                            <td key={j} className="p-2">
-                              <div 
-                                className={cn(
-                                  "w-16 h-16 rounded-lg flex items-center justify-center font-mono text-sm font-bold",
-                                  val === 1 
-                                    ? "bg-bulk-cyan/30 text-bulk-cyan"
-                                    : val > 0.7 
-                                    ? "bg-bulk-green/30 text-bulk-green"
-                                    : val > 0.3 
-                                    ? "bg-bulk-yellow/30 text-bulk-yellow"
-                                    : "bg-gray-700/30 text-gray-400"
-                                )}
-                              >
-                                {val.toFixed(2)}
-                              </div>
-                            </td>
-                          ))}
-                        </tr>
+                <div className="flex justify-center py-4">
+                  <div className="flex gap-1">
+                    {/* Row labels */}
+                    <div className="flex flex-col justify-end pb-1">
+                      {correlation.symbols.map((s) => (
+                        <div key={s} className="h-16 flex items-center justify-end pr-3">
+                          <span className="text-sm font-medium text-text-primary">{s.split('-')[0]}</span>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                    
+                    {/* Matrix grid */}
+                    <div>
+                      {/* Column labels */}
+                      <div className="flex mb-1">
+                        {correlation.symbols.map((s) => (
+                          <div key={s} className="w-16 text-center">
+                            <span className="text-sm font-medium text-text-primary">{s.split('-')[0]}</span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Cells */}
+                      {correlation.symbols.map((s, i) => (
+                        <div key={s} className="flex">
+                          {correlation.matrix[i].map((val, j) => {
+                            // Blue color scale based on correlation value
+                            const intensity = Math.abs(val);
+                            const bgColor = `rgba(34, 113, 181, ${intensity * 0.9 + 0.1})`;
+                            const textColor = intensity > 0.5 ? '#FFFFFF' : '#1a1a2e';
+                            
+                            return (
+                              <div 
+                                key={j} 
+                                className="w-16 h-16 flex items-center justify-center font-mono text-sm font-bold border border-dark-primary/20"
+                                style={{ 
+                                  backgroundColor: bgColor,
+                                  color: textColor
+                                }}
+                              >
+                                {val.toFixed(3)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="flex flex-col justify-center ml-4">
+                      <div 
+                        className="w-6 h-32 rounded"
+                        style={{
+                          background: 'linear-gradient(to bottom, rgba(34, 113, 181, 1), rgba(34, 113, 181, 0.1))'
+                        }}
+                      />
+                      <div className="flex flex-col justify-between h-32 ml-2 text-xs text-text-secondary">
+                        <span>1.0</span>
+                        <span>0.5</span>
+                        <span>0.0</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
