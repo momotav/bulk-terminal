@@ -24,7 +24,6 @@ export default function WhalesPage() {
     setError('');
 
     try {
-      // Navigate to wallet page
       router.push(`/whales/${searchAddress.trim()}`);
     } catch (err) {
       setError('Failed to search wallet.');
@@ -55,45 +54,45 @@ export default function WhalesPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold mb-2 flex items-center gap-3">
-            <Anchor className="w-8 h-8 text-bulk-cyan" />
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-text-primary mb-1 flex items-center gap-2">
+            <Anchor className="w-6 h-6 text-bulk-blue" />
             Whale Tracker
           </h1>
-          <p className="text-gray-500">
+          <p className="text-sm text-text-secondary">
             Track any wallet on BULK Exchange. View positions, PnL history, and trading activity.
           </p>
         </div>
 
         {/* Search */}
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="glass-card p-6">
-            <label className="block text-xs uppercase tracking-wider text-gray-500 mb-3">
+        <form onSubmit={handleSearch} className="mb-6">
+          <div className="glass-card p-4">
+            <label className="block text-xs uppercase tracking-wider text-text-secondary mb-2">
               Search Wallet Address
             </label>
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
                 <input
                   type="text"
                   value={searchAddress}
                   onChange={(e) => setSearchAddress(e.target.value)}
                   placeholder="Enter Solana wallet address..."
-                  className="input pl-12 text-base"
+                  className="input pl-10 text-sm"
                 />
               </div>
               <button
                 type="submit"
                 disabled={searching || !searchAddress.trim()}
-                className="btn-primary px-6 flex items-center gap-2"
+                className="btn-primary px-4 flex items-center gap-2 text-sm"
               >
                 {searching ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
                     <Eye className="w-4 h-4" />
@@ -104,8 +103,8 @@ export default function WhalesPage() {
             </div>
             
             {error && (
-              <div className="flex items-center gap-2 mt-3 text-bulk-red text-sm">
-                <AlertCircle className="w-4 h-4" />
+              <div className="flex items-center gap-2 mt-2 text-bulk-red text-xs">
+                <AlertCircle className="w-3 h-3" />
                 {error}
               </div>
             )}
@@ -114,31 +113,31 @@ export default function WhalesPage() {
 
         {/* Watchlist */}
         {user && watchlist.length > 0 && (
-          <div className="mb-8">
-            <h2 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-bulk-yellow" />
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <Star className="w-4 h-4 text-bulk-orange" />
               Your Watchlist
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {watchlist.map((address) => (
                 <div
                   key={address}
-                  className="glass-card p-4 flex items-center justify-between hover:border-bulk-cyan/50 transition-colors"
+                  className="glass-card p-3 flex items-center justify-between hover:border-bulk-green transition-colors"
                 >
                   <button
                     onClick={() => router.push(`/whales/${address}`)}
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left"
                   >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-bulk-cyan to-bulk-magenta flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-bulk-green to-bulk-blue flex items-center justify-center text-white text-xs font-bold shrink-0">
                       {address.slice(0, 2)}
                     </div>
-                    <span className="font-mono text-sm truncate">
+                    <span className="font-mono text-xs text-text-primary truncate">
                       {formatAddress(address)}
                     </span>
                   </button>
                   <button
                     onClick={() => handleWatchlistToggle(address)}
-                    className="p-2 hover:bg-dark-tertiary rounded-lg transition-colors text-bulk-yellow"
+                    className="p-1.5 hover:bg-dark-tertiary rounded transition-colors text-bulk-orange"
                   >
                     <StarOff className="w-4 h-4" />
                   </button>
@@ -149,7 +148,7 @@ export default function WhalesPage() {
         )}
 
         {/* Top Whales */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="h-[500px]">
             <LeaderboardTable type="whales" limit={15} showTimeframe={false} />
           </div>
