@@ -27,25 +27,25 @@ export function ExchangeHealthStats() {
 
   const stats = [
     {
-      label: '24h Volume',
+      label: '24H VOLUME',
       value: health ? `$${formatCompact(health.total_volume_24h)}` : '—',
       icon: DollarSign,
       color: 'text-bulk-green',
     },
     {
-      label: 'Open Interest',
+      label: 'OPEN INTEREST',
       value: health ? `$${formatCompact(health.total_open_interest)}` : '—',
       icon: Activity,
       color: 'text-bulk-blue',
     },
     {
-      label: 'Active Traders',
+      label: 'ACTIVE TRADERS',
       value: health ? formatCompact(health.total_traders) : '—',
       icon: Users,
       color: 'text-bulk-purple',
     },
     {
-      label: '24h Liquidations',
+      label: '24H LIQUIDATIONS',
       value: health ? `$${formatCompact(health.liquidation_value_24h)}` : '—',
       icon: Flame,
       color: 'text-bulk-red',
@@ -58,8 +58,8 @@ export function ExchangeHealthStats() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="stat-card animate-pulse">
-            <div className="h-3 w-16 bg-dark-tertiary rounded mb-2" />
-            <div className="h-7 w-20 bg-dark-tertiary rounded" />
+            <div className="h-3 w-20 bg-dark-tertiary rounded mb-3" />
+            <div className="h-10 w-24 bg-dark-tertiary rounded" />
           </div>
         ))}
       </div>
@@ -70,15 +70,15 @@ export function ExchangeHealthStats() {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {stats.map((stat, i) => (
         <div key={i} className="stat-card">
-          <div className="flex items-center gap-2 mb-1">
-            <stat.icon className={cn("w-3.5 h-3.5", stat.color)} />
-            <span className="stat-label">{stat.label}</span>
+          <div className="flex items-center gap-2 mb-2">
+            <stat.icon className={cn("w-4 h-4", stat.color)} />
+            <span className="text-[11px] font-medium text-text-secondary tracking-wide">{stat.label}</span>
           </div>
-          <p className={cn("font-display text-xl font-bold", stat.color)}>
+          <p className={cn("text-3xl font-bold", stat.color)}>
             {stat.value}
           </p>
           {stat.subValue && (
-            <p className="text-[10px] text-text-secondary mt-0.5">{stat.subValue}</p>
+            <p className="text-xs text-text-secondary mt-1">{stat.subValue}</p>
           )}
         </div>
       ))}
