@@ -20,8 +20,13 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply bg-dark-primary;
+  }
+  
   body {
-    @apply bg-dark-primary text-text-primary font-sans antialiased;
+    @apply bg-dark-primary text-text-primary font-sans antialiased min-h-screen;
+    overscroll-behavior: none;
   }
 
   /* Custom selection colors */
