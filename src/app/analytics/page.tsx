@@ -62,31 +62,29 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-display text-3xl font-bold mb-2">Analytics</h1>
-            <p className="text-gray-500">
+            <h1 className="text-2xl font-bold text-text-primary mb-1">Analytics</h1>
+            <p className="text-sm text-text-secondary">
               Market trends, sentiment, and historical data.
             </p>
           </div>
 
           <div className="flex gap-2">
             {/* Symbol selector */}
-            <div className="flex gap-1 bg-dark-tertiary rounded-lg p-1">
+            <div className="toggle-group">
               {symbols.map((s) => (
                 <button
                   key={s}
                   onClick={() => setSelectedSymbol(s)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                    selectedSymbol === s
-                      ? "bg-bulk-cyan text-dark-primary"
-                      : "text-gray-400 hover:text-white"
+                    "toggle-btn",
+                    selectedSymbol === s && "active"
                   )}
                 >
                   {s.split('-')[0]}
@@ -95,16 +93,14 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Time range */}
-            <div className="flex gap-1 bg-dark-tertiary rounded-lg p-1">
+            <div className="toggle-group">
               {timeRanges.map((t) => (
                 <button
                   key={t.hours}
                   onClick={() => setHours(t.hours)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                    hours === t.hours
-                      ? "bg-bulk-magenta text-white"
-                      : "text-gray-400 hover:text-white"
+                    "toggle-btn",
+                    hours === t.hours && "active"
                   )}
                 >
                   {t.label}
@@ -115,75 +111,75 @@ export default function AnalyticsPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="glass-card p-6 h-[300px] animate-pulse">
-                <div className="h-6 w-32 bg-dark-tertiary rounded mb-4" />
+              <div key={i} className="chart-card h-[280px] animate-pulse">
+                <div className="h-4 w-24 bg-dark-tertiary rounded mb-4" />
                 <div className="h-full bg-dark-tertiary rounded" />
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Open Interest */}
-            <div className="glass-card p-6">
-              <h3 className="font-display text-sm font-semibold mb-4">Open Interest</h3>
-              <div className="h-[250px]">
+            <div className="chart-card">
+              <h3 className="chart-title">Open Interest</h3>
+              <div className="h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={openInterest}>
                     <defs>
                       <linearGradient id="oiGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00f0ff" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#00f0ff" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <XAxis 
                       dataKey="timestamp" 
                       tickFormatter={formatDate}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <YAxis 
                       tickFormatter={(v) => `$${formatCompact(v)}`}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <Tooltip 
                       contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'OI']}
                     />
-                    <Area type="monotone" dataKey="value" stroke="#00f0ff" fill="url(#oiGradient)" />
+                    <Area type="monotone" dataKey="value" stroke="#00B482" fill="url(#oiGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Funding Rate */}
-            <div className="glass-card p-6">
-              <h3 className="font-display text-sm font-semibold mb-4">Funding Rate</h3>
-              <div className="h-[250px]">
+            <div className="chart-card">
+              <h3 className="chart-title">Funding Rate</h3>
+              <div className="h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={fundingRate}>
                     <XAxis 
                       dataKey="timestamp" 
                       tickFormatter={formatDate}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <YAxis 
                       tickFormatter={(v) => `${(v * 100).toFixed(3)}%`}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <Tooltip 
-                      contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
+                      contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`${(v * 100).toFixed(4)}%`, 'Funding']}
                     />
                     <Bar dataKey="value">
                       {fundingRate.map((entry, index) => (
-                        <Cell key={index} fill={entry.value >= 0 ? '#00ff88' : '#ff3366'} />
+                        <Cell key={index} fill={entry.value >= 0 ? '#00B482' : '#EF4A3C'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -192,69 +188,69 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Volume */}
-            <div className="glass-card p-6">
-              <h3 className="font-display text-sm font-semibold mb-4">24h Volume</h3>
-              <div className="h-[250px]">
+            <div className="chart-card">
+              <h3 className="chart-title">24h Volume</h3>
+              <div className="h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={volume}>
                     <defs>
                       <linearGradient id="volGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ff00aa" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#ff00aa" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#7570B3" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#7570B3" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <XAxis 
                       dataKey="timestamp" 
                       tickFormatter={formatDate}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <YAxis 
                       tickFormatter={(v) => `$${formatCompact(v)}`}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <Tooltip 
-                      contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
+                      contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'Volume']}
                     />
-                    <Area type="monotone" dataKey="value" stroke="#ff00aa" fill="url(#volGradient)" />
+                    <Area type="monotone" dataKey="value" stroke="#7570B3" fill="url(#volGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Price History */}
-            <div className="glass-card p-6">
-              <h3 className="font-display text-sm font-semibold mb-4">Price</h3>
-              <div className="h-[250px]">
+            <div className="chart-card">
+              <h3 className="chart-title">Price</h3>
+              <div className="h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={price}>
                     <defs>
                       <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#00ff88" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#FFB548" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#FFB548" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <XAxis 
                       dataKey="timestamp" 
                       tickFormatter={formatDate}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <YAxis 
                       domain={['auto', 'auto']}
                       tickFormatter={(v) => `$${formatCompact(v)}`}
-                      tick={{ fill: '#666', fontSize: 10 }}
-                      axisLine={{ stroke: '#2a2a40' }}
+                      tick={{ fill: '#817778', fontSize: 9 }}
+                      axisLine={{ stroke: '#554B4C' }}
                     />
                     <Tooltip 
-                      contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
+                      contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'Price']}
                     />
-                    <Area type="monotone" dataKey="value" stroke="#00ff88" fill="url(#priceGradient)" />
+                    <Area type="monotone" dataKey="value" stroke="#FFB548" fill="url(#priceGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -262,15 +258,15 @@ export default function AnalyticsPage() {
 
             {/* Correlation Matrix */}
             {correlation && (
-              <div className="glass-card p-6 lg:col-span-2">
-                <h3 className="font-display text-sm font-semibold mb-4">Correlation Matrix</h3>
+              <div className="chart-card lg:col-span-2">
+                <h3 className="chart-title">Correlation Matrix</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full max-w-md mx-auto">
                     <thead>
                       <tr>
                         <th className="p-2"></th>
                         {correlation.symbols.map((s) => (
-                          <th key={s} className="p-2 text-xs text-gray-500 font-medium">
+                          <th key={s} className="p-2 text-xs text-text-secondary font-medium">
                             {s.split('-')[0]}
                           </th>
                         ))}
@@ -279,7 +275,7 @@ export default function AnalyticsPage() {
                     <tbody>
                       {correlation.symbols.map((s, i) => (
                         <tr key={s}>
-                          <td className="p-2 text-xs text-gray-500 font-medium">
+                          <td className="p-2 text-xs text-text-secondary font-medium">
                             {s.split('-')[0]}
                           </td>
                           {correlation.matrix[i].map((val, j) => (
