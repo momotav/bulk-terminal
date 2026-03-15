@@ -146,6 +146,12 @@ export default function WalletPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <h1 className="font-mono text-lg sm:text-xl">{formatAddress(address)}</h1>
+                      {/* BULK MM Tag */}
+                      {address === '7DHvrCZMMLZ2ovNfKaGpvJZXAQyydbTz6dM7w7qXtzX5' && (
+                        <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
+                          BULK MM
+                        </span>
+                      )}
                       <button
                         onClick={copyAddress}
                         className="p-1.5 hover:bg-dark-tertiary rounded transition-colors"
