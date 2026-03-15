@@ -36,8 +36,9 @@ const config: Config = {
         },
       },
       fontFamily: {
+        sans: ['DIN Alternate', 'Helvetica Neue', 'Arial', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
-        display: ['Orbitron', 'sans-serif'],
+        display: ['DIN Alternate', 'Helvetica Neue', 'Arial', 'sans-serif'],
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
