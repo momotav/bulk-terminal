@@ -16,24 +16,24 @@
 
 @layer components {
   .glass-card {
-    @apply bg-dark-secondary/80 backdrop-blur-xl border border-dark-border rounded-2xl overflow-hidden;
+    @apply bg-dark-secondary/90 backdrop-blur-xl border border-dark-border rounded-xl overflow-hidden;
   }
 
   .light .glass-card {
     @apply bg-white/90 border-gray-200 shadow-lg;
   }
 
-  .glow-cyan {
-    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1);
+  .glow-teal {
+    box-shadow: 0 0 20px rgba(78, 205, 196, 0.3), 0 0 40px rgba(78, 205, 196, 0.1);
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-bulk-cyan to-bulk-magenta bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-bulk-teal to-bulk-purple bg-clip-text text-transparent;
   }
 
   .btn-primary {
-    @apply px-4 py-2 bg-gradient-to-r from-bulk-cyan to-bulk-magenta text-white font-semibold rounded-lg
-           hover:opacity-90 transition-all duration-200 active:scale-95 disabled:opacity-50;
+    @apply px-4 py-2 bg-bulk-teal text-dark-primary font-semibold rounded-lg
+           hover:bg-bulk-teal/90 transition-all duration-200 active:scale-95 disabled:opacity-50;
   }
 
   .btn-secondary {
@@ -43,12 +43,12 @@
 
   .input {
     @apply w-full px-4 py-3 bg-dark-tertiary border border-dark-border rounded-lg
-           text-white placeholder-gray-500 focus:outline-none focus:border-bulk-cyan
+           text-white placeholder-gray-500 focus:outline-none focus:border-bulk-teal
            transition-colors duration-200;
   }
 
   .light .input {
-    @apply bg-white border-gray-300 text-gray-900 focus:border-bulk-cyan;
+    @apply bg-white border-gray-300 text-gray-900 focus:border-bulk-teal;
   }
 
   .panel-header {
@@ -64,7 +64,7 @@
   }
 
   .tab-btn.active {
-    @apply bg-bulk-cyan text-dark-primary;
+    @apply bg-bulk-teal text-dark-primary;
   }
 
   .tab-btn:not(.active) {
@@ -93,13 +93,13 @@
 }
 
 @layer utilities {
-  .text-positive { @apply text-bulk-green; }
-  .text-negative { @apply text-bulk-red; }
+  .text-positive { @apply text-bulk-teal; }
+  .text-negative { @apply text-bulk-coral; }
 
   .grid-bg {
     background-image: 
-      linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(78, 205, 196, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(78, 205, 196, 0.03) 1px, transparent 1px);
     background-size: 50px 50px;
   }
 }
