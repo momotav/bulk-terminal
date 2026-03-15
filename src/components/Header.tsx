@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Sun, Moon, User, LogOut, Menu, X } from 'lucide-react';
+import { User, LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { useStore } from '@/store';
 import { auth, cn } from '@/lib/api';
 
@@ -17,7 +17,7 @@ const navItems = [
 
 export function Header() {
   const pathname = usePathname();
-  const { theme, toggleTheme, user, setUser } = useStore();
+  const { user, setUser } = useStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -26,31 +26,31 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-bulk-teal flex items-center justify-center">
-              <span className="font-display font-black text-dark-primary text-lg">✦</span>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-bulk-orange text-xl">✦</span>
+              <span className="font-display text-lg font-bold text-text-primary tracking-wide">BULK</span>
             </div>
-            <div className="hidden sm:block">
-              <h1 className="font-display text-xl font-bold text-white tracking-wide">BULK</h1>
-              <p className="text-[9px] text-gray-500 uppercase tracking-[3px] -mt-1">Terminal</p>
-            </div>
+            <span className="text-[10px] text-text-secondary uppercase tracking-widest border-l border-dark-border pl-2 ml-1">
+              Terminal
+            </span>
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-0.5">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                  "px-3 py-1.5 rounded text-sm font-medium transition-all",
                   pathname === item.href
-                    ? "bg-bulk-teal/15 text-bulk-teal"
-                    : "text-gray-400 hover:text-white hover:bg-dark-tertiary"
+                    ? "text-bulk-green"
+                    : "text-text-secondary hover:text-text-primary"
                 )}
               >
                 {item.label}
@@ -59,52 +59,40 @@ export function Header() {
           </nav>
 
           {/* Right side */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Network Badge */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-tertiary border border-dark-border">
-              <div className="w-2 h-2 rounded-full bg-bulk-teal animate-pulse" />
-              <span className="text-[11px] font-medium text-gray-300">Alphanet</span>
+            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded border border-dark-border bg-dark-secondary">
+              <div className="w-1.5 h-1.5 rounded-full bg-bulk-green animate-pulse" />
+              <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Alphanet</span>
             </div>
-
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-dark-tertiary transition-colors"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-bulk-yellow" />
-              ) : (
-                <Moon className="w-5 h-5 text-bulk-teal" />
-              )}
-            </button>
 
             {/* Auth */}
             {user ? (
               <div className="flex items-center gap-2">
-                <span className="hidden sm:block text-sm text-gray-400">
+                <span className="hidden sm:block text-sm text-text-secondary">
                   {user.username || user.email.split('@')[0]}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="p-2 rounded-lg hover:bg-dark-tertiary transition-colors text-gray-400 hover:text-white"
+                  className="p-2 rounded hover:bg-dark-tertiary transition-colors text-text-secondary hover:text-text-primary"
                 >
-                  <LogOut className="w-5 h-5" />
+                  <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <Link
                 href="/login"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-tertiary hover:bg-dark-border transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 rounded border border-dark-border bg-dark-secondary hover:bg-dark-tertiary transition-colors"
               >
-                <User className="w-4 h-4" />
-                <span className="hidden sm:block text-sm">Login</span>
+                <User className="w-4 h-4 text-text-secondary" />
+                <span className="text-sm text-text-primary">Login</span>
               </Link>
             )}
 
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-dark-tertiary"
+              className="md:hidden p-2 rounded hover:bg-dark-tertiary text-text-secondary"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -113,17 +101,17 @@ export function Header() {
 
         {/* Mobile Nav */}
         {mobileMenuOpen && (
-          <nav className="md:hidden py-4 border-t border-dark-border">
+          <nav className="md:hidden py-3 border-t border-dark-border">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
-                  "block px-4 py-3 rounded-lg text-sm font-medium transition-all",
+                  "block px-4 py-2.5 rounded text-sm font-medium transition-all",
                   pathname === item.href
-                    ? "bg-bulk-teal/15 text-bulk-teal"
-                    : "text-gray-400"
+                    ? "text-bulk-green bg-bulk-green/10"
+                    : "text-text-secondary hover:text-text-primary"
                 )}
               >
                 {item.label}
