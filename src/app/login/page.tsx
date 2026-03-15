@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { auth, cn } from '@/lib/api';
@@ -50,8 +51,14 @@ export default function LoginPage() {
           <div className="glass-card p-8">
             {/* Header */}
             <div className="text-center mb-8">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-red flex items-center justify-center">
-                <span className="font-bold text-2xl text-white">B</span>
+              <div className="flex justify-center mb-4">
+                <Image 
+                  src="/bulkstats.png" 
+                  alt="BULK Stats" 
+                  width={160} 
+                  height={40} 
+                  className="h-10 w-auto"
+                />
               </div>
               <h1 className="text-2xl font-bold text-text-primary">
                 {mode === 'login' ? 'Welcome Back' : 'Create Account'}
@@ -59,7 +66,7 @@ export default function LoginPage() {
               <p className="text-text-secondary text-sm mt-2">
                 {mode === 'login' 
                   ? 'Sign in to access your watchlist and alerts' 
-                  : 'Join the BULK Terminal community'}
+                  : 'Join the BULK Stats community'}
               </p>
             </div>
 
@@ -110,7 +117,7 @@ export default function LoginPage() {
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="satoshi"
+                      placeholder="bulkie"
                       className="w-full px-4 py-3 pl-11 bg-dark-tertiary border border-dark-border rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
                     />
                   </div>
