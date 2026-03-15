@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Bell, BellOff, Users, TrendingUp, TrendingDown, Flame, 
-  Trash2, Check, CheckCheck, ExternalLink, Eye
+  Trash2, CheckCheck, Eye
 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { wallet, formatNumber, formatAddress, formatCompact, cn, type Notification } from '@/lib/api';
