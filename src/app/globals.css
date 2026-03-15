@@ -20,13 +20,14 @@
 @tailwind utilities;
 
 @layer base {
-  html {
+  html, body {
     @apply bg-dark-primary;
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
   }
   
   body {
-    @apply bg-dark-primary text-text-primary font-sans antialiased min-h-screen;
-    overscroll-behavior: none;
+    @apply text-text-primary font-sans antialiased min-h-screen;
   }
 
   /* Custom selection colors */
@@ -113,7 +114,7 @@
 
   /* Stats card styles like BULK testnet */
   .stat-card {
-    @apply bg-dark-secondary border border-dark-border rounded-lg p-4;
+    @apply bg-dark-secondary border border-dark-border rounded-lg px-4 py-3;
   }
 
   .stat-label {
