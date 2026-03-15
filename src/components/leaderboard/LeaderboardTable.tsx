@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Flame, Anchor, Activity, Crown, Medal, TrendingUp, TrendingDown } from 'lucide-react';
+import { Trophy, Flame, Anchor, Activity, Crown, Medal } from 'lucide-react';
 import { leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
 import { useStore } from '@/store';
 import Link from 'next/link';
