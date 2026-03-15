@@ -6,49 +6,61 @@
 
 @layer base {
   body {
-    @apply bg-dark-primary text-white font-mono antialiased;
+    @apply bg-dark-primary text-text-primary font-mono antialiased;
   }
 
-  .light body {
-    @apply bg-gray-50 text-gray-900;
+  /* Custom selection colors */
+  ::selection {
+    @apply bg-bulk-green/30 text-white;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-dark-secondary/90 backdrop-blur-xl border border-dark-border rounded-xl overflow-hidden;
+    @apply bg-dark-secondary border border-dark-border rounded-xl overflow-hidden;
   }
 
-  .light .glass-card {
-    @apply bg-white/90 border-gray-200 shadow-lg;
+  .glow-green {
+    box-shadow: 0 0 20px rgba(0, 180, 130, 0.2), 0 0 40px rgba(0, 180, 130, 0.1);
   }
 
-  .glow-teal {
-    box-shadow: 0 0 20px rgba(78, 205, 196, 0.3), 0 0 40px rgba(78, 205, 196, 0.1);
+  .glow-red {
+    box-shadow: 0 0 20px rgba(239, 74, 60, 0.2), 0 0 40px rgba(239, 74, 60, 0.1);
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-bulk-teal to-bulk-purple bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-bulk-green to-bulk-blue bg-clip-text text-transparent;
   }
 
   .btn-primary {
-    @apply px-4 py-2 bg-bulk-teal text-dark-primary font-semibold rounded-lg
-           hover:bg-bulk-teal/90 transition-all duration-200 active:scale-95 disabled:opacity-50;
+    @apply px-4 py-2 bg-bulk-green text-dark-primary font-semibold rounded-lg
+           hover:brightness-110 transition-all duration-200 active:scale-95 disabled:opacity-50;
+  }
+
+  .btn-buy {
+    @apply px-4 py-2 bg-bulk-green text-dark-primary font-semibold rounded-lg
+           hover:brightness-110 transition-all duration-200 active:scale-95;
+  }
+
+  .btn-sell {
+    @apply px-4 py-2 bg-bulk-red text-white font-semibold rounded-lg
+           hover:brightness-110 transition-all duration-200 active:scale-95;
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-dark-tertiary border border-dark-border text-white font-medium rounded-lg
-           hover:bg-dark-border transition-all duration-200;
+    @apply px-4 py-2 bg-dark-tertiary border border-dark-border text-text-primary font-medium rounded-lg
+           hover:bg-dark-border hover:text-white transition-all duration-200;
+  }
+
+  .btn-outline {
+    @apply px-4 py-2 bg-transparent border border-dark-border text-text-primary font-medium rounded-lg
+           hover:bg-dark-tertiary transition-all duration-200;
   }
 
   .input {
-    @apply w-full px-4 py-3 bg-dark-tertiary border border-dark-border rounded-lg
-           text-white placeholder-gray-500 focus:outline-none focus:border-bulk-teal
+    @apply w-full px-4 py-3 bg-dark-secondary border border-dark-border rounded-lg
+           text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green
            transition-colors duration-200;
-  }
-
-  .light .input {
-    @apply bg-white border-gray-300 text-gray-900 focus:border-bulk-teal;
   }
 
   .panel-header {
@@ -56,29 +68,69 @@
   }
 
   .panel-title {
-    @apply font-display text-sm font-semibold uppercase tracking-wider flex items-center gap-3;
+    @apply font-display text-sm font-semibold uppercase tracking-wider flex items-center gap-3 text-text-primary;
   }
 
   .tab-btn {
-    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all;
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all border border-transparent;
   }
 
   .tab-btn.active {
-    @apply bg-bulk-teal text-dark-primary;
+    @apply bg-bulk-green text-dark-primary;
   }
 
   .tab-btn:not(.active) {
-    @apply text-gray-400 hover:text-white hover:bg-dark-tertiary;
+    @apply text-text-secondary hover:text-text-primary hover:bg-dark-tertiary border-dark-border;
   }
 
   .table-header {
-    @apply text-[10px] uppercase tracking-widest text-gray-500 font-medium;
+    @apply text-[10px] uppercase tracking-widest text-text-secondary font-medium;
   }
 
   .table-row {
-    @apply border-b border-dark-border/50 hover:bg-dark-tertiary/30 transition-colors;
+    @apply border-b border-dark-border/50 hover:bg-dark-tertiary/50 transition-colors;
   }
 
+  /* Stats card styles like BULK testnet */
+  .stat-card {
+    @apply bg-dark-secondary border border-dark-border rounded-lg p-4;
+  }
+
+  .stat-label {
+    @apply text-xs text-text-secondary uppercase tracking-wide mb-1;
+  }
+
+  .stat-value {
+    @apply font-display text-lg font-bold text-text-primary;
+  }
+
+  /* Toggle/Switch styles */
+  .toggle-group {
+    @apply flex bg-dark-secondary rounded-lg p-1 border border-dark-border;
+  }
+
+  .toggle-btn {
+    @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all;
+  }
+
+  .toggle-btn.active {
+    @apply bg-bulk-green text-dark-primary;
+  }
+
+  .toggle-btn:not(.active) {
+    @apply text-text-secondary hover:text-text-primary;
+  }
+
+  /* Chart card styles */
+  .chart-card {
+    @apply bg-dark-secondary border border-dark-border rounded-xl p-5;
+  }
+
+  .chart-title {
+    @apply text-sm font-medium text-text-primary mb-4;
+  }
+
+  /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
@@ -88,18 +140,43 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-dark-border rounded-full hover:bg-gray-600;
+    @apply bg-dark-border rounded-full hover:bg-text-secondary;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply px-2 py-0.5 text-xs font-medium rounded;
+  }
+
+  .badge-green {
+    @apply bg-bulk-green/15 text-bulk-green border border-bulk-green/30;
+  }
+
+  .badge-red {
+    @apply bg-bulk-red/15 text-bulk-red border border-bulk-red/30;
+  }
+
+  .badge-orange {
+    @apply bg-bulk-orange/15 text-bulk-orange border border-bulk-orange/30;
+  }
+
+  .badge-blue {
+    @apply bg-bulk-blue/15 text-bulk-blue border border-bulk-blue/30;
+  }
+
+  .badge-purple {
+    @apply bg-bulk-purple/15 text-bulk-purple border border-bulk-purple/30;
   }
 }
 
 @layer utilities {
-  .text-positive { @apply text-bulk-teal; }
-  .text-negative { @apply text-bulk-coral; }
+  .text-positive { @apply text-bulk-green; }
+  .text-negative { @apply text-bulk-red; }
 
   .grid-bg {
     background-image: 
-      linear-gradient(rgba(78, 205, 196, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(78, 205, 196, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0, 180, 130, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 180, 130, 0.02) 1px, transparent 1px);
     background-size: 50px 50px;
   }
 }
