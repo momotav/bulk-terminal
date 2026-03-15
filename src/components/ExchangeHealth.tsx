@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, Activity, DollarSign, Flame, Users } from 'lucide-react';
+import { Activity, DollarSign, Flame, Users } from 'lucide-react';
 import { analytics, formatCompact, cn, type ExchangeHealth } from '@/lib/api';
 
 export function ExchangeHealthStats() {
