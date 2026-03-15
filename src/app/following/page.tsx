@@ -92,21 +92,21 @@ export default function FollowingPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
 
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-display text-3xl font-bold mb-2">Following</h1>
-            <p className="text-gray-500">
+            <h1 className="text-2xl font-bold text-text-primary mb-1">Following</h1>
+            <p className="text-sm text-text-secondary">
               Track your favorite wallets and see their activity.
             </p>
           </div>
           
           {unreadCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-bulk-cyan/10 text-bulk-cyan rounded-full text-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-bulk-green/10 text-bulk-green rounded-full text-sm">
               <Bell className="w-4 h-4" />
               {unreadCount} new
             </div>
@@ -118,10 +118,10 @@ export default function FollowingPage() {
           <button
             onClick={() => setActiveTab('activity')}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
               activeTab === 'activity'
-                ? "bg-bulk-cyan text-dark-primary"
-                : "bg-dark-tertiary text-gray-400 hover:text-white"
+                ? "bg-bulk-green text-dark-primary border-bulk-green"
+                : "bg-dark-secondary border-dark-border text-text-secondary hover:text-text-primary"
             )}
           >
             <Bell className="w-4 h-4" />
@@ -135,10 +135,10 @@ export default function FollowingPage() {
           <button
             onClick={() => setActiveTab('wallets')}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
               activeTab === 'wallets'
-                ? "bg-bulk-cyan text-dark-primary"
-                : "bg-dark-tertiary text-gray-400 hover:text-white"
+                ? "bg-bulk-green text-dark-primary border-bulk-green"
+                : "bg-dark-secondary border-dark-border text-text-secondary hover:text-text-primary"
             )}
           >
             <Users className="w-4 h-4" />
