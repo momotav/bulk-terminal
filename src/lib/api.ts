@@ -57,6 +57,7 @@ export interface WalletData {
       liquidationPrice: number;
     }>;
   } | null;
+  markPrices: Record<string, number>;
   tracked: {
     total_pnl: number;
     total_volume: number;
