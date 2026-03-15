@@ -1,4 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+/* DIN Alternate fallback - using system fonts */
+@font-face {
+  font-family: 'DIN Alternate';
+  src: local('DIN Alternate'), local('DINAlternate-Bold'), local('Helvetica Neue');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'DIN Alternate';
+  src: local('DIN Alternate Bold'), local('DINAlternate-Bold'), local('Helvetica Neue Bold');
+  font-weight: 700;
+  font-style: normal;
+}
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +21,7 @@
 
 @layer base {
   body {
-    @apply bg-dark-primary text-text-primary font-mono antialiased;
+    @apply bg-dark-primary text-text-primary font-sans antialiased;
   }
 
   /* Custom selection colors */
