@@ -52,13 +52,6 @@ const InteractiveRangeSlider = ({
   // If only 1 day of data, disable slider
   const isDisabled = data.length <= 1;
 
-  const getPositionFromEvent = (e: React.MouseEvent | MouseEvent) => {
-    if (!sliderRef.current) return 0;
-    const rect = sliderRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    return Math.max(0, Math.min(100, (x / rect.width) * 100));
-  };
-
   const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
     if (isDisabled) return;
     e.preventDefault();
@@ -270,12 +263,8 @@ export default function AnalyticsPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [
-          btcOi, ethOi, solOi,
-          btcFr, ethFr, solFr,
-          trades, liquidations, adl, volume,
-          statsData, users
-        ] = await Promise.all([
+        // Use allSettled so one failure doesn't break everything
+        const results = await Promise.allSettled([
           analytics.getOpenInterest('BTC-USD', hours),
           analytics.getOpenInterest('ETH-USD', hours),
           analytics.getOpenInterest('SOL-USD', hours),
@@ -289,15 +278,28 @@ export default function AnalyticsPage() {
           analytics.getStats(),
           leaderboard.getMostActive('all', 100),
         ]);
-        
-        setOiData({ BTC: btcOi, ETH: ethOi, SOL: solOi });
-        setFundingData({ BTC: btcFr, ETH: ethFr, SOL: solFr });
-        setTradesChart(trades);
-        setLiquidationsChart(liquidations);
-        setAdlChart(adl);
-        setVolumeChart(volume);
-        setStats(statsData);
-        setTopUsers(users);
+
+        // Helper to extract value or return default
+        const getValue = <T,>(result: PromiseSettledResult<T>, defaultValue: T): T => {
+          return result.status === 'fulfilled' ? result.value : defaultValue;
+        };
+
+        setOiData({
+          BTC: getValue(results[0], []),
+          ETH: getValue(results[1], []),
+          SOL: getValue(results[2], []),
+        });
+        setFundingData({
+          BTC: getValue(results[3], []),
+          ETH: getValue(results[4], []),
+          SOL: getValue(results[5], []),
+        });
+        setTradesChart(getValue(results[6], []));
+        setLiquidationsChart(getValue(results[7], []));
+        setAdlChart(getValue(results[8], []));
+        setVolumeChart(getValue(results[9], []));
+        setStats(getValue(results[10], null));
+        setTopUsers(getValue(results[11], []));
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
       } finally {
@@ -411,7 +413,7 @@ export default function AnalyticsPage() {
   const NoDataMessage = ({ title }: { title: string }) => (
     <div className="h-[260px] flex flex-col items-center justify-center text-gray-500">
       <p className="text-sm">No {title} data yet</p>
-      <p className="text-xs mt-1">Data will appear as users trade on testnet</p>
+      <p className="text-xs mt-1">Data will appear as activity increases</p>
     </div>
   );
 
