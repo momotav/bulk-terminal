@@ -21,24 +21,24 @@ export default function AnalyticsPage() {
   const [openInterest, setOpenInterest] = useState<ChartDataPoint[]>([]);
   const [fundingRate, setFundingRate] = useState<ChartDataPoint[]>([]);
   const [volume, setVolume] = useState<ChartDataPoint[]>([]);
-  const [longShort, setLongShort] = useState<LongShortDataPoint[]>([]);
+  const [price, setPrice] = useState<ChartDataPoint[]>([]);
   const [correlation, setCorrelation] = useState<{ symbols: string[]; matrix: number[][] } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [oi, fr, vol, ls, corr] = await Promise.all([
+        const [oi, fr, vol, pr, corr] = await Promise.all([
           analytics.getOpenInterest(selectedSymbol, hours),
           analytics.getFundingRate(selectedSymbol, hours),
           analytics.getVolume(selectedSymbol, hours),
-          analytics.getLongShortRatio(selectedSymbol, hours),
+          analytics.getPrice(selectedSymbol, hours),
           analytics.getCorrelation(hours),
         ]);
         setOpenInterest(oi);
         setFundingRate(fr);
         setVolume(vol);
-        setLongShort(ls);
+        setPrice(pr);
         setCorrelation(corr);
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
@@ -52,6 +52,12 @@ export default function AnalyticsPage() {
 
   const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
+    // For 24h view, show time. For longer views, show date
+    if (hours <= 24) {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } else if (hours <= 168) {
+      return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit' });
+    }
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -219,12 +225,18 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Long/Short Ratio */}
+            {/* Price History */}
             <div className="glass-card p-6">
-              <h3 className="font-display text-sm font-semibold mb-4">Long vs Short Ratio</h3>
+              <h3 className="font-display text-sm font-semibold mb-4">Price</h3>
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={longShort}>
+                  <AreaChart data={price}>
+                    <defs>
+                      <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#00ff88" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                     <XAxis 
                       dataKey="timestamp" 
                       tickFormatter={formatDate}
@@ -232,33 +244,19 @@ export default function AnalyticsPage() {
                       axisLine={{ stroke: '#2a2a40' }}
                     />
                     <YAxis 
-                      domain={[0, 100]}
-                      tickFormatter={(v) => `${v}%`}
+                      domain={['auto', 'auto']}
+                      tickFormatter={(v) => `$${formatCompact(v)}`}
                       tick={{ fill: '#666', fontSize: 10 }}
                       axisLine={{ stroke: '#2a2a40' }}
                     />
                     <Tooltip 
                       contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
                       labelFormatter={formatDate}
-                      formatter={(v: number, name: string) => [
-                        `${v.toFixed(1)}%`, 
-                        name === 'long_ratio' ? 'Long' : 'Short'
-                      ]}
+                      formatter={(v: number) => [`$${formatCompact(v)}`, 'Price']}
                     />
-                    <Area type="monotone" dataKey="long_ratio" stackId="1" stroke="#00ff88" fill="#00ff88" fillOpacity={0.3} />
-                    <Area type="monotone" dataKey="short_ratio" stackId="1" stroke="#ff3366" fill="#ff3366" fillOpacity={0.3} />
+                    <Area type="monotone" dataKey="value" stroke="#00ff88" fill="url(#priceGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
-              <div className="flex justify-center gap-6 mt-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-bulk-green" />
-                  <span className="text-xs text-gray-400">Long</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-bulk-red" />
-                  <span className="text-xs text-gray-400">Short</span>
-                </div>
               </div>
             </div>
 
