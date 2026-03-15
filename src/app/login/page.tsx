@@ -42,7 +42,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -50,13 +50,13 @@ export default function LoginPage() {
           <div className="glass-card p-8">
             {/* Header */}
             <div className="text-center mb-8">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-bulk-cyan to-bulk-magenta flex items-center justify-center">
-                <span className="font-display font-black text-2xl text-white">B</span>
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-red flex items-center justify-center">
+                <span className="font-bold text-2xl text-white">B</span>
               </div>
-              <h1 className="font-display text-2xl font-bold">
+              <h1 className="text-2xl font-bold text-text-primary">
                 {mode === 'login' ? 'Welcome Back' : 'Create Account'}
               </h1>
-              <p className="text-gray-500 text-sm mt-2">
+              <p className="text-text-secondary text-sm mt-2">
                 {mode === 'login' 
                   ? 'Sign in to access your watchlist and alerts' 
                   : 'Join the BULK Terminal community'}
@@ -64,14 +64,14 @@ export default function LoginPage() {
             </div>
 
             {/* Toggle */}
-            <div className="flex gap-2 p-1 bg-dark-tertiary rounded-lg mb-6">
+            <div className="flex gap-2 p-1 bg-dark-tertiary rounded-lg mb-6 border border-dark-border">
               <button
                 onClick={() => setMode('login')}
                 className={cn(
                   "flex-1 py-2 rounded-md text-sm font-medium transition-all",
                   mode === 'login'
-                    ? "bg-bulk-cyan text-dark-primary"
-                    : "text-gray-400 hover:text-white"
+                    ? "bg-bulk-green text-dark-primary"
+                    : "text-text-secondary hover:text-text-primary"
                 )}
               >
                 Login
@@ -81,8 +81,8 @@ export default function LoginPage() {
                 className={cn(
                   "flex-1 py-2 rounded-md text-sm font-medium transition-all",
                   mode === 'register'
-                    ? "bg-bulk-cyan text-dark-primary"
-                    : "text-gray-400 hover:text-white"
+                    ? "bg-bulk-green text-dark-primary"
+                    : "text-text-secondary hover:text-text-primary"
                 )}
               >
                 Register
@@ -101,45 +101,45 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === 'register' && (
                 <div>
-                  <label className="block text-xs uppercase tracking-wider text-gray-500 mb-2">
+                  <label className="block text-xs uppercase tracking-wider text-text-secondary mb-2">
                     Username (optional)
                   </label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                     <input
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="satoshi"
-                      className="input pl-11"
+                      className="w-full px-4 py-3 pl-11 bg-dark-tertiary border border-dark-border rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs uppercase tracking-wider text-gray-500 mb-2">
+                <label className="block text-xs uppercase tracking-wider text-text-secondary mb-2">
                   Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     required
-                    className="input pl-11"
+                    className="w-full px-4 py-3 pl-11 bg-dark-tertiary border border-dark-border rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-wider text-gray-500 mb-2">
+                <label className="block text-xs uppercase tracking-wider text-text-secondary mb-2">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                   <input
                     type="password"
                     value={password}
@@ -147,11 +147,11 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     required
                     minLength={8}
-                    className="input pl-11"
+                    className="w-full px-4 py-3 pl-11 bg-dark-tertiary border border-dark-border rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
                   />
                 </div>
                 {mode === 'register' && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-text-secondary mt-1">
                     Must be at least 8 characters
                   </p>
                 )}
@@ -174,13 +174,13 @@ export default function LoginPage() {
             </form>
 
             {/* Footer */}
-            <p className="text-center text-sm text-gray-500 mt-6">
+            <p className="text-center text-sm text-text-secondary mt-6">
               {mode === 'login' ? (
                 <>
                   Don&apos;t have an account?{' '}
                   <button
                     onClick={() => setMode('register')}
-                    className="text-bulk-cyan hover:underline"
+                    className="text-bulk-green hover:underline"
                   >
                     Sign up
                   </button>
@@ -190,7 +190,7 @@ export default function LoginPage() {
                   Already have an account?{' '}
                   <button
                     onClick={() => setMode('login')}
-                    className="text-bulk-cyan hover:underline"
+                    className="text-bulk-green hover:underline"
                   >
                     Sign in
                   </button>
@@ -199,7 +199,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <p className="text-center text-xs text-gray-600 mt-6">
+          <p className="text-center text-xs text-text-secondary mt-6">
             By signing up, you agree to track your favorite wallets and receive alerts.
           </p>
         </div>
