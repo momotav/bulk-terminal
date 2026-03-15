@@ -68,27 +68,23 @@ export function RecentActivity() {
 
   return (
     <div className="glass-card h-full flex flex-col">
-      <div className="panel-header">
-        <h2 className="panel-title">
-          <span className="w-6 h-6 rounded-md bg-bulk-purple/20 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-bulk-purple" />
-          </span>
-          Live Activity
-        </h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-bulk-orange" />
+          <h2 className="text-sm font-semibold text-text-primary">Live Activity</h2>
+        </div>
 
-        <div className="flex gap-1 bg-dark-tertiary rounded-lg p-1">
+        <div className="toggle-group">
           {(['all', 'liquidations', 'trades'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={cn(
-                "px-2 py-1 text-[10px] font-medium rounded capitalize transition-all",
-                tab === t
-                  ? "bg-bulk-teal text-dark-primary"
-                  : "text-gray-400 hover:text-white"
+                "toggle-btn capitalize",
+                tab === t && "active"
               )}
             >
-              {t}
+              {t === 'liquidations' ? 'Liqs' : t}
             </button>
           ))}
         </div>
@@ -96,44 +92,44 @@ export function RecentActivity() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
-          <div className="p-4 space-y-3">
+          <div className="p-3 space-y-2">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-3 animate-pulse">
-                <div className="w-10 h-10 bg-dark-tertiary rounded-xl" />
+              <div key={i} className="flex items-center gap-3 animate-pulse p-2">
+                <div className="w-8 h-8 bg-dark-tertiary rounded" />
                 <div className="flex-1">
-                  <div className="h-4 w-32 bg-dark-tertiary rounded mb-1" />
-                  <div className="h-3 w-20 bg-dark-tertiary rounded" />
+                  <div className="h-3 w-24 bg-dark-tertiary rounded mb-1" />
+                  <div className="h-2 w-16 bg-dark-tertiary rounded" />
                 </div>
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-            <Zap className="w-12 h-12 mb-3 opacity-30" />
+          <div className="flex flex-col items-center justify-center py-12 text-text-secondary">
+            <Zap className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm">No recent activity</p>
           </div>
         ) : (
-          <div className="divide-y divide-dark-border/50">
+          <div className="divide-y divide-dark-border/30">
             {filtered.slice(0, 20).map((item) => (
               <div
                 key={`${item.type}-${item.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-dark-tertiary/30 transition-colors"
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-dark-tertiary/50 transition-colors"
               >
                 {/* Icon */}
                 <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                  "w-8 h-8 rounded flex items-center justify-center shrink-0",
                   item.type === 'liquidation'
-                    ? "bg-bulk-coral/15 text-bulk-coral"
+                    ? "bg-bulk-red/10 text-bulk-red"
                     : item.side === 'buy'
-                    ? "bg-bulk-teal/15 text-bulk-teal"
-                    : "bg-bulk-coral/15 text-bulk-coral"
+                    ? "bg-bulk-green/10 text-bulk-green"
+                    : "bg-bulk-red/10 text-bulk-red"
                 )}>
                   {item.type === 'liquidation' ? (
-                    <Flame className="w-5 h-5" />
+                    <Flame className="w-4 h-4" />
                   ) : item.side === 'buy' ? (
-                    <TrendingUp className="w-5 h-5" />
+                    <TrendingUp className="w-4 h-4" />
                   ) : (
-                    <TrendingDown className="w-5 h-5" />
+                    <TrendingDown className="w-4 h-4" />
                   )}
                 </div>
 
@@ -141,18 +137,18 @@ export function RecentActivity() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className={cn(
-                      "text-[10px] font-bold uppercase px-1.5 py-0.5 rounded",
+                      "text-[9px] font-bold uppercase px-1 py-0.5 rounded",
                       item.type === 'liquidation'
-                        ? "bg-bulk-coral/20 text-bulk-coral"
+                        ? "bg-bulk-red/15 text-bulk-red"
                         : item.side === 'buy'
-                        ? "bg-bulk-teal/20 text-bulk-teal"
-                        : "bg-bulk-coral/20 text-bulk-coral"
+                        ? "bg-bulk-green/15 text-bulk-green"
+                        : "bg-bulk-red/15 text-bulk-red"
                     )}>
                       {item.type === 'liquidation' ? 'REKT' : item.side.toUpperCase()}
                     </span>
-                    <span className="font-semibold text-sm">{item.symbol}</span>
+                    <span className="font-medium text-xs text-text-primary">{item.symbol}</span>
                   </div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-[10px] text-text-secondary">
                     {item.wallet_address ? formatAddress(item.wallet_address) : 'Unknown'} • {timeAgo(item.timestamp)}
                   </p>
                 </div>
@@ -160,12 +156,12 @@ export function RecentActivity() {
                 {/* Value */}
                 <div className="text-right shrink-0">
                   <p className={cn(
-                    "font-display font-bold text-sm",
-                    item.type === 'liquidation' ? "text-bulk-coral" : "text-white"
+                    "font-display font-bold text-xs",
+                    item.type === 'liquidation' ? "text-bulk-red" : "text-text-primary"
                   )}>
                     ${formatCompact(item.value)}
                   </p>
-                  <p className="text-[10px] text-gray-500">
+                  <p className="text-[9px] text-text-secondary">
                     @ ${item.price.toLocaleString()}
                   </p>
                 </div>
