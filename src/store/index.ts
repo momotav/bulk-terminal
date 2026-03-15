@@ -68,6 +68,7 @@ export const useStore = create<AppState>()(
         theme: state.theme,
         selectedSymbol: state.selectedSymbol,
         watchlist: state.watchlist,
+        user: state.user,
       }),
     }
   )
