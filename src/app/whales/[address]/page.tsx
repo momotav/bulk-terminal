@@ -82,6 +82,7 @@ export default function WalletPage() {
 
   const margin = data?.live?.margin;
   const positions = data?.live?.positions || [];
+  const markPrices = data?.markPrices || {};
   const history = data?.history || [];
   const tracked = data?.tracked;
 
@@ -268,6 +269,7 @@ export default function WalletPage() {
                       const pnlPercent = pos.notional 
                         ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100 
                         : 0;
+                      const markPrice = markPrices[pos.symbol] || 0;
 
                       return (
                         <div key={i} className="p-4 hover:bg-dark-tertiary/30 transition-colors">
@@ -302,7 +304,7 @@ export default function WalletPage() {
                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="grid grid-cols-4 gap-2 text-xs">
                             <div>
                               <p className="text-gray-500">Size</p>
                               <p className="font-mono">{formatNumber(Math.abs(pos.size), 4)}</p>
@@ -310,6 +312,10 @@ export default function WalletPage() {
                             <div>
                               <p className="text-gray-500">Entry</p>
                               <p className="font-mono">${formatNumber(pos.price, 2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Mark</p>
+                              <p className="font-mono text-bulk-cyan">${formatNumber(markPrice, 2)}</p>
                             </div>
                             <div>
                               <p className="text-gray-500">Liq. Price</p>
