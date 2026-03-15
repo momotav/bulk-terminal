@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Bar, ComposedChart, Line, LineChart, ReferenceLine
+  Bar, ComposedChart, Line, LineChart, ReferenceLine, AreaChart, Area
 } from 'recharts';
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
@@ -29,6 +29,157 @@ const COLORS = {
 
 // Chart data type
 type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total: number };
+
+// Interactive Range Slider Component
+const InteractiveRangeSlider = ({ 
+  data, 
+  color = COLORS.BTC,
+  rangeStart,
+  rangeEnd,
+  onRangeChange,
+}: { 
+  data: any[];
+  color?: string;
+  rangeStart: number;
+  rangeEnd: number;
+  onRangeChange: (start: number, end: number) => void;
+}) => {
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartRange, setDragStartRange] = useState({ start: 0, end: 100 });
+
+  // If only 1 day of data, disable slider
+  const isDisabled = data.length <= 1;
+
+  const getPositionFromEvent = (e: React.MouseEvent | MouseEvent) => {
+    if (!sliderRef.current) return 0;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    return Math.max(0, Math.min(100, (x / rect.width) * 100));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
+    if (isDisabled) return;
+    e.preventDefault();
+    setDragging(type);
+    setDragStartX(e.clientX);
+    setDragStartRange({ start: rangeStart, end: rangeEnd });
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!sliderRef.current) return;
+      const rect = sliderRef.current.getBoundingClientRect();
+      const deltaX = e.clientX - dragStartX;
+      const deltaPercent = (deltaX / rect.width) * 100;
+
+      if (dragging === 'left') {
+        const newStart = Math.max(0, Math.min(dragStartRange.start + deltaPercent, rangeEnd - 5));
+        onRangeChange(newStart, rangeEnd);
+      } else if (dragging === 'right') {
+        const newEnd = Math.max(rangeStart + 5, Math.min(100, dragStartRange.end + deltaPercent));
+        onRangeChange(rangeStart, newEnd);
+      } else if (dragging === 'middle') {
+        const rangeWidth = dragStartRange.end - dragStartRange.start;
+        let newStart = dragStartRange.start + deltaPercent;
+        let newEnd = dragStartRange.end + deltaPercent;
+        
+        if (newStart < 0) {
+          newStart = 0;
+          newEnd = rangeWidth;
+        }
+        if (newEnd > 100) {
+          newEnd = 100;
+          newStart = 100 - rangeWidth;
+        }
+        onRangeChange(newStart, newEnd);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setDragging(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, dragStartX, dragStartRange, rangeStart, rangeEnd, onRangeChange]);
+
+  // Calculate bar heights from data
+  const maxValue = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || 0), 1);
+  const barHeights = data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || 0) / maxValue) * 100);
+
+  return (
+    <div 
+      ref={sliderRef}
+      className={cn(
+        "mt-3 h-8 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden select-none",
+        isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+      )}
+    >
+      {/* Mini bar chart preview */}
+      <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px">
+        {(data.length > 0 ? barHeights : Array(30).fill(20)).map((height, i) => (
+          <div 
+            key={i} 
+            className="flex-1 rounded-t transition-opacity"
+            style={{ 
+              height: `${Math.max(10, height)}%`, 
+              backgroundColor: `${color}30`,
+              opacity: !isDisabled && (i / data.length * 100 >= rangeStart && i / data.length * 100 <= rangeEnd) ? 1 : 0.3
+            }} 
+          />
+        ))}
+      </div>
+
+      {!isDisabled && (
+        <>
+          {/* Selected range highlight */}
+          <div 
+            className="absolute top-0 bottom-0 bg-transparent border-l-2 border-r-2 cursor-grab active:cursor-grabbing"
+            style={{ 
+              left: `${rangeStart}%`, 
+              right: `${100 - rangeEnd}%`,
+              borderColor: color,
+            }}
+            onMouseDown={(e) => handleMouseDown(e, 'middle')}
+          />
+
+          {/* Left handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10 group"
+            style={{ left: `calc(${rangeStart}% - 6px)` }}
+            onMouseDown={(e) => handleMouseDown(e, 'left')}
+          >
+            <div 
+              className="w-1.5 h-4 rounded-full transition-colors"
+              style={{ backgroundColor: dragging === 'left' ? color : '#666' }}
+            />
+          </div>
+
+          {/* Right handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10 group"
+            style={{ left: `calc(${rangeEnd}% - 6px)` }}
+            onMouseDown={(e) => handleMouseDown(e, 'right')}
+          >
+            <div 
+              className="w-1.5 h-4 rounded-full transition-colors"
+              style={{ backgroundColor: dragging === 'right' ? color : '#666' }}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 // Shared tooltip component
 const ChartTooltip = ({ active, payload, label }: any) => {
@@ -65,6 +216,14 @@ export default function AnalyticsPage() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
   
+  // Range slider states for each chart
+  const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
+  const [oiRange, setOiRange] = useState({ start: 0, end: 100 });
+  const [fundingRange, setFundingRange] = useState({ start: 0, end: 100 });
+  const [liquidationsRange, setLiquidationsRange] = useState({ start: 0, end: 100 });
+  const [tradesRange, setTradesRange] = useState({ start: 0, end: 100 });
+  const [adlRange, setAdlRange] = useState({ start: 0, end: 100 });
+  
   // Real data from BULK API
   const [oiData, setOiData] = useState<Record<string, { timestamp: string; value: number }[]>>({ BTC: [], ETH: [], SOL: [] });
   const [fundingData, setFundingData] = useState<Record<string, { timestamp: string; value: number }[]>>({ BTC: [], ETH: [], SOL: [] });
@@ -77,6 +236,16 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
+  // Reset ranges when timeframe changes
+  useEffect(() => {
+    setVolumeRange({ start: 0, end: 100 });
+    setOiRange({ start: 0, end: 100 });
+    setFundingRange({ start: 0, end: 100 });
+    setLiquidationsRange({ start: 0, end: 100 });
+    setTradesRange({ start: 0, end: 100 });
+    setAdlRange({ start: 0, end: 100 });
+  }, [hours]);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -87,14 +256,12 @@ export default function AnalyticsPage() {
           trades, liquidations, adl, volume,
           statsData, users
         ] = await Promise.all([
-          // BULK API data
           analytics.getOpenInterest('BTC-USD', hours),
           analytics.getOpenInterest('ETH-USD', hours),
           analytics.getOpenInterest('SOL-USD', hours),
           analytics.getFundingRate('BTC-USD', hours),
           analytics.getFundingRate('ETH-USD', hours),
           analytics.getFundingRate('SOL-USD', hours),
-          // Real testnet data from our database
           analytics.getTradesChart(hours),
           analytics.getLiquidationsChart(hours),
           analytics.getADLChart(hours),
@@ -119,6 +286,14 @@ export default function AnalyticsPage() {
     };
     fetchData();
   }, [hours]);
+
+  // Helper to slice data based on range
+  const sliceDataByRange = <T,>(data: T[], range: { start: number; end: number }): T[] => {
+    if (data.length <= 1) return data;
+    const startIdx = Math.floor((range.start / 100) * data.length);
+    const endIdx = Math.ceil((range.end / 100) * data.length);
+    return data.slice(startIdx, endIdx);
+  };
 
   // Add cumulative to chart data
   const withCumulative = (data: ChartData[]) => {
@@ -220,17 +395,6 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const RangeSlider = ({ color = COLORS.BTC }: { color?: string }) => (
-    <div className="mt-3 h-6 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden">
-      <div className="absolute inset-y-0 left-[5%] right-[5%] flex items-end gap-px px-1">
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div key={i} className="flex-1 rounded-t" style={{ height: `${15 + Math.random() * 70}%`, backgroundColor: `${color}40` }} />
-        ))}
-      </div>
-      <div className="absolute inset-y-0 left-[10%] right-[10%] border-l-2 border-r-2" style={{ borderColor: color }} />
-    </div>
-  );
-
   const NoDataMessage = ({ title }: { title: string }) => (
     <div className="h-[260px] flex flex-col items-center justify-center text-gray-500">
       <p className="text-sm">No {title} data yet</p>
@@ -257,10 +421,21 @@ export default function AnalyticsPage() {
   const paginatedUsers = topUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
   const totalPages = Math.ceil(topUsers.length / 10) || 1;
 
-  const volumeDataWithCumulative = withCumulative(volumeChart);
-  const tradesDataWithCumulative = withCumulative(tradesChart);
-  const liquidationsDataWithCumulative = withCumulative(liquidationsChart);
-  const adlDataWithCumulative = withCumulative(adlChart);
+  // Apply range filters and cumulative
+  const volumeDataFull = withCumulative(volumeChart);
+  const volumeDataFiltered = sliceDataByRange(volumeDataFull, volumeRange);
+  
+  const tradesDataFull = withCumulative(tradesChart);
+  const tradesDataFiltered = sliceDataByRange(tradesDataFull, tradesRange);
+  
+  const liquidationsDataFull = withCumulative(liquidationsChart);
+  const liquidationsDataFiltered = sliceDataByRange(liquidationsDataFull, liquidationsRange);
+  
+  const adlDataFull = withCumulative(adlChart);
+  const adlDataFiltered = sliceDataByRange(adlDataFull, adlRange);
+  
+  const oiDataFiltered = sliceDataByRange(combinedOIData, oiRange);
+  const fundingDataFiltered = sliceDataByRange(combinedFundingData, fundingRange);
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
@@ -295,7 +470,7 @@ export default function AnalyticsPage() {
           <div className="space-y-4">
             {/* Row 1: Volume & Open Interest */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Total Volume - Real data from trades */}
+              {/* Total Volume */}
               <ChartCard 
                 title="Total Volume"
                 toggles={<>
@@ -306,11 +481,11 @@ export default function AnalyticsPage() {
                   <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
                 </>}
               >
-                {volumeDataWithCumulative.length > 0 ? (
+                {volumeDataFull.length > 0 ? (
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={volumeDataWithCumulative} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
+                        <ComposedChart data={volumeDataFiltered} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
@@ -322,12 +497,18 @@ export default function AnalyticsPage() {
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider />
+                    <InteractiveRangeSlider 
+                      data={volumeDataFull} 
+                      color={COLORS.BTC}
+                      rangeStart={volumeRange.start}
+                      rangeEnd={volumeRange.end}
+                      onRangeChange={(start, end) => setVolumeRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="volume" />}
               </ChartCard>
 
-              {/* Open Interest - From BULK API */}
+              {/* Open Interest */}
               <ChartCard 
                 title="Open Interest"
                 toggles={<>
@@ -342,7 +523,7 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={combinedOIData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                        <LineChart data={oiDataFiltered} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <Tooltip content={<ChartTooltip />} />
@@ -353,7 +534,13 @@ export default function AnalyticsPage() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider color={COLORS.cumulative} />
+                    <InteractiveRangeSlider 
+                      data={combinedOIData} 
+                      color={COLORS.cumulative}
+                      rangeStart={oiRange.start}
+                      rangeEnd={oiRange.end}
+                      onRangeChange={(start, end) => setOiRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="open interest" />}
               </ChartCard>
@@ -361,7 +548,7 @@ export default function AnalyticsPage() {
 
             {/* Row 2: Funding Rate & Liquidations */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Funding Rate - From BULK API */}
+              {/* Funding Rate */}
               <ChartCard 
                 title="Annualized Funding Rate"
                 toggles={<>
@@ -375,7 +562,7 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={combinedFundingData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                        <LineChart data={fundingDataFiltered} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis tickFormatter={v => `${v?.toFixed(2) || 0}%`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
@@ -386,12 +573,18 @@ export default function AnalyticsPage() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider color={COLORS.ETH} />
+                    <InteractiveRangeSlider 
+                      data={combinedFundingData} 
+                      color={COLORS.ETH}
+                      rangeStart={fundingRange.start}
+                      rangeEnd={fundingRange.end}
+                      onRangeChange={(start, end) => setFundingRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="funding rate" />}
               </ChartCard>
 
-              {/* Liquidations - Real data from database */}
+              {/* Liquidations */}
               <ChartCard 
                 title="Liquidations"
                 toggles={<>
@@ -402,11 +595,11 @@ export default function AnalyticsPage() {
                   <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
                 </>}
               >
-                {liquidationsDataWithCumulative.length > 0 ? (
+                {liquidationsDataFull.length > 0 ? (
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={liquidationsDataWithCumulative} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
+                        <ComposedChart data={liquidationsDataFiltered} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
@@ -418,7 +611,13 @@ export default function AnalyticsPage() {
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider color="#EF4A3C" />
+                    <InteractiveRangeSlider 
+                      data={liquidationsDataFull} 
+                      color="#EF4A3C"
+                      rangeStart={liquidationsRange.start}
+                      rangeEnd={liquidationsRange.end}
+                      onRangeChange={(start, end) => setLiquidationsRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="liquidation" />}
               </ChartCard>
@@ -426,7 +625,7 @@ export default function AnalyticsPage() {
 
             {/* Row 3: Number of Trades & ADL */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Number of Trades - Real data from database */}
+              {/* Number of Trades */}
               <ChartCard 
                 title="Number Of Trades"
                 toggles={<>
@@ -437,11 +636,11 @@ export default function AnalyticsPage() {
                   <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
                 </>}
               >
-                {tradesDataWithCumulative.length > 0 ? (
+                {tradesDataFull.length > 0 ? (
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={tradesDataWithCumulative} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
+                        <ComposedChart data={tradesDataFiltered} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
@@ -453,12 +652,18 @@ export default function AnalyticsPage() {
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider />
+                    <InteractiveRangeSlider 
+                      data={tradesDataFull} 
+                      color={COLORS.BTC}
+                      rangeStart={tradesRange.start}
+                      rangeEnd={tradesRange.end}
+                      onRangeChange={(start, end) => setTradesRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="trades" />}
               </ChartCard>
 
-              {/* ADL Events - Real data from database */}
+              {/* ADL Events */}
               <ChartCard 
                 title="Auto-Deleveraging (ADL)"
                 toggles={<>
@@ -469,11 +674,11 @@ export default function AnalyticsPage() {
                   <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
                 </>}
               >
-                {adlDataWithCumulative.length > 0 ? (
+                {adlDataFull.length > 0 ? (
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={adlDataWithCumulative} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
+                        <ComposedChart data={adlDataFiltered} margin={{ top: 5, right: 50, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
@@ -485,7 +690,13 @@ export default function AnalyticsPage() {
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
-                    <RangeSlider color="#7570B3" />
+                    <InteractiveRangeSlider 
+                      data={adlDataFull} 
+                      color={COLORS.SOL}
+                      rangeStart={adlRange.start}
+                      rangeEnd={adlRange.end}
+                      onRangeChange={(start, end) => setAdlRange({ start, end })}
+                    />
                   </>
                 ) : <NoDataMessage title="ADL" />}
               </ChartCard>
