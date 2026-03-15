@@ -19,8 +19,8 @@ const typeConfig = {
     title: 'Top Traders',
     subtitle: 'Ranked by PnL',
     icon: Trophy,
-    color: 'text-bulk-green',
-    bgColor: 'bg-bulk-green/10',
+    color: 'text-bulk-teal',
+    bgColor: 'bg-bulk-teal/10',
     valueLabel: 'PnL',
     valuePrefix: '$',
   },
@@ -28,8 +28,8 @@ const typeConfig = {
     title: 'Hall of Shame',
     subtitle: 'Most Liquidated',
     icon: Flame,
-    color: 'text-bulk-red',
-    bgColor: 'bg-bulk-red/10',
+    color: 'text-bulk-coral',
+    bgColor: 'bg-bulk-coral/10',
     valueLabel: 'Rekt Value',
     valuePrefix: '$',
   },
@@ -37,8 +37,8 @@ const typeConfig = {
     title: 'Whale Watch',
     subtitle: 'Biggest Positions',
     icon: Anchor,
-    color: 'text-bulk-cyan',
-    bgColor: 'bg-bulk-cyan/10',
+    color: 'text-bulk-blue',
+    bgColor: 'bg-bulk-blue/10',
     valueLabel: 'Notional',
     valuePrefix: '$',
   },
@@ -46,8 +46,8 @@ const typeConfig = {
     title: 'Most Active',
     subtitle: 'By Trade Count',
     icon: Activity,
-    color: 'text-bulk-yellow',
-    bgColor: 'bg-bulk-yellow/10',
+    color: 'text-bulk-purple',
+    bgColor: 'bg-bulk-purple/10',
     valueLabel: 'Volume',
     valuePrefix: '$',
   },
@@ -119,7 +119,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
                 className={cn(
                   "px-2 py-1 text-[10px] font-medium rounded transition-all",
                   timeframe === tf
-                    ? "bg-bulk-cyan text-dark-primary"
+                    ? "bg-bulk-teal text-dark-primary"
                     : "text-gray-400 hover:text-white"
                 )}
               >
@@ -169,7 +169,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
                     <div className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
                       entry.rank <= 3 
-                        ? "bg-gradient-to-br from-bulk-cyan to-bulk-magenta text-white"
+                        ? "bg-gradient-to-br from-bulk-teal to-bulk-purple text-white"
                         : "bg-dark-border text-gray-400"
                     )}>
                       {entry.wallet_address.slice(0, 2)}
@@ -201,7 +201,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
         <div className="px-4 py-3 border-t border-dark-border">
           <Link
             href={`/leaderboard?type=${type}`}
-            className="text-xs text-bulk-cyan hover:text-bulk-cyan/80 transition-colors"
+            className="text-xs text-bulk-teal hover:text-bulk-teal/80 transition-colors"
           >
             View full leaderboard →
           </Link>
