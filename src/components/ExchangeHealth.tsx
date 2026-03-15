@@ -76,9 +76,6 @@ export function ExchangeHealthStats() {
           <p className={cn("text-4xl font-bold text-right", stat.color)}>
             {stat.value}
           </p>
-          {stat.subValue && (
-            <p className="text-xs text-text-secondary mt-1 text-right">{stat.subValue}</p>
-          )}
         </div>
       ))}
     </div>
