@@ -214,6 +214,13 @@ export const analytics = {
     return data.data;
   },
 
+  async getPrice(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
+    const data = await request<{ data: ChartDataPoint[] }>(
+      `/api/analytics/price/${symbol}?hours=${hours}`
+    );
+    return data.data;
+  },
+
   async getLongShortRatio(symbol: string, hours: number = 168): Promise<LongShortDataPoint[]> {
     const data = await request<{ data: LongShortDataPoint[] }>(
       `/api/analytics/long-short-ratio/${symbol}?hours=${hours}`
