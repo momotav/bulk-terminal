@@ -30,8 +30,20 @@ export function RecentActivity() {
         ]);
 
         const combined: ActivityItem[] = [
-          ...(liqs as ActivityItem[]).map((l) => ({ ...l, type: 'liquidation' as const })),
-          ...(trades as ActivityItem[]).map((t) => ({ ...t, type: 'trade' as const })),
+          ...(liqs as ActivityItem[]).map((l) => ({ 
+            ...l, 
+            type: 'liquidation' as const,
+            price: parseFloat(l.price as any) || 0,
+            value: parseFloat(l.value as any) || 0,
+            size: parseFloat(l.size as any) || 0,
+          })),
+          ...(trades as ActivityItem[]).map((t) => ({ 
+            ...t, 
+            type: 'trade' as const,
+            price: parseFloat(t.price as any) || 0,
+            value: parseFloat(t.value as any) || 0,
+            size: parseFloat(t.size as any) || 0,
+          })),
         ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
         setActivities(combined);
