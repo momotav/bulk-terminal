@@ -37,6 +37,20 @@ export interface ExchangeHealth {
   liquidation_value_24h: number;
 }
 
+export interface Notification {
+  id: number;
+  wallet_address: string;
+  nickname: string | null;
+  type: 'trade' | 'liquidation';
+  symbol: string;
+  side: string;
+  size: number;
+  price: number;
+  value: number;
+  read: boolean;
+  created_at: string;
+}
+
 export interface WalletData {
   address: string;
   live: {
@@ -254,8 +268,8 @@ export const wallet = {
     return request(`/api/wallet/${address}/track`, { method: 'POST' });
   },
 
-  async getWatchlist(): Promise<Array<{ wallet_address: string; nickname: string | null }>> {
-    const data = await request<{ data: Array<{ wallet_address: string; nickname: string | null }> }>(
+  async getWatchlist(): Promise<Array<{ wallet_address: string; nickname: string | null; total_pnl?: number; total_volume?: number }>> {
+    const data = await request<{ data: Array<{ wallet_address: string; nickname: string | null; total_pnl?: number; total_volume?: number }> }>(
       '/api/wallet/user/watchlist'
     );
     return data.data;
@@ -270,6 +284,21 @@ export const wallet = {
 
   async removeFromWatchlist(address: string): Promise<{ success: boolean }> {
     return request(`/api/wallet/watchlist/${address}`, { method: 'DELETE' });
+  },
+
+  async getNotifications(limit: number = 50, unreadOnly: boolean = false): Promise<{ data: Notification[]; unread_count: number }> {
+    return request(`/api/wallet/user/notifications?limit=${limit}&unread=${unreadOnly}`);
+  },
+
+  async markNotificationsRead(ids?: number[]): Promise<{ success: boolean }> {
+    return request('/api/wallet/user/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  async clearNotifications(): Promise<{ success: boolean }> {
+    return request('/api/wallet/user/notifications', { method: 'DELETE' });
   },
 };
 
