@@ -256,6 +256,44 @@ export const analytics = {
   async getExchangeHealth(): Promise<ExchangeHealth> {
     return request('/api/analytics/exchange-health');
   },
+
+  // Real data from database (testnet activity)
+  async getTradesChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/trades-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  async getLiquidationsChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/liquidations-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  async getADLChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/adl-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  async getVolumeChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/volume-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  async getStats(): Promise<{
+    trades: { count: number; volume: number };
+    liquidations: { count: number; volume: number };
+    adl: { count: number; volume: number };
+    uniqueTraders: number;
+  }> {
+    return request('/api/analytics/stats');
+  },
 };
 
 // Wallet API
