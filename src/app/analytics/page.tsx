@@ -86,7 +86,7 @@ export default function AnalyticsPage() {
           analytics.getFundingRate('BTC-USD', hours),
           analytics.getFundingRate('ETH-USD', hours),
           analytics.getFundingRate('SOL-USD', hours),
-          leaderboard.getTopVolume('all', 100),
+          leaderboard.getMostActive('all', 100),
         ]);
         
         setVolumeData({ BTC: btcVol, ETH: ethVol, SOL: solVol });
