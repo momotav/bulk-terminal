@@ -145,7 +145,9 @@ export default function AnalyticsPage() {
                       axisLine={{ stroke: '#554B4C' }}
                     />
                     <Tooltip 
-                      contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
+                      contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
+                      labelStyle={{ color: '#C7B6BA' }}
+                      itemStyle={{ color: '#FFFFFF' }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'OI']}
                     />
@@ -174,6 +176,8 @@ export default function AnalyticsPage() {
                     />
                     <Tooltip 
                       contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
+                      labelStyle={{ color: '#C7B6BA' }}
+                      itemStyle={{ color: '#FFFFFF' }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`${(v * 100).toFixed(4)}%`, 'Funding']}
                     />
@@ -212,6 +216,8 @@ export default function AnalyticsPage() {
                     />
                     <Tooltip 
                       contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
+                      labelStyle={{ color: '#C7B6BA' }}
+                      itemStyle={{ color: '#FFFFFF' }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'Volume']}
                     />
@@ -247,6 +253,8 @@ export default function AnalyticsPage() {
                     />
                     <Tooltip 
                       contentStyle={{ background: '#1B1A13', border: '1px solid #554B4C', borderRadius: 4 }}
+                      labelStyle={{ color: '#C7B6BA' }}
+                      itemStyle={{ color: '#FFFFFF' }}
                       labelFormatter={formatDate}
                       formatter={(v: number) => [`$${formatCompact(v)}`, 'Price']}
                     />
