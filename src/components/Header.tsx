@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { User, LogOut, Menu, X } from 'lucide-react';
 import { useStore } from '@/store';
@@ -30,14 +31,15 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <span className="text-bulk-orange text-xl">✦</span>
-              <span className="font-display text-lg font-bold text-text-primary tracking-wide">BULK</span>
-            </div>
-            <span className="text-[10px] text-text-secondary uppercase tracking-widest border-l border-dark-border pl-2 ml-1">
-              Terminal
-            </span>
+          <Link href="/" className="flex items-center">
+            <Image 
+              src="/bulkstats.png" 
+              alt="BULK Stats" 
+              width={140} 
+              height={36} 
+              className="h-8 w-auto"
+              priority
+            />
           </Link>
 
           {/* Desktop Nav */}
