@@ -69,16 +69,16 @@ export function ExchangeHealthStats() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {stats.map((stat, i) => (
-        <div key={i} className="stat-card py-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div key={i} className="stat-card">
+          <div className="flex items-center gap-2 mb-2">
             <stat.icon className={cn("w-4 h-4", stat.color)} />
             <span className="text-[11px] font-medium text-text-secondary tracking-wide">{stat.label}</span>
           </div>
-          <p className={cn("text-4xl font-bold", stat.color)}>
+          <p className={cn("text-4xl font-bold text-right", stat.color)}>
             {stat.value}
           </p>
           {stat.subValue && (
-            <p className="text-xs text-text-secondary mt-1">{stat.subValue}</p>
+            <p className="text-xs text-text-secondary mt-1 text-right">{stat.subValue}</p>
           )}
         </div>
       ))}
