@@ -21,7 +21,7 @@ export function ExchangeHealthStats() {
     };
 
     fetchHealth();
-    const interval = setInterval(fetchHealth, 60000); // Refresh every minute
+    const interval = setInterval(fetchHealth, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -30,41 +30,36 @@ export function ExchangeHealthStats() {
       label: '24h Volume',
       value: health ? `$${formatCompact(health.total_volume_24h)}` : '—',
       icon: DollarSign,
-      color: 'text-bulk-cyan',
-      bgColor: 'bg-bulk-cyan/10',
+      color: 'text-bulk-green',
     },
     {
       label: 'Open Interest',
       value: health ? `$${formatCompact(health.total_open_interest)}` : '—',
       icon: Activity,
-      color: 'text-bulk-magenta',
-      bgColor: 'bg-bulk-magenta/10',
+      color: 'text-bulk-blue',
     },
     {
       label: 'Active Traders',
       value: health ? formatCompact(health.total_traders) : '—',
       icon: Users,
-      color: 'text-bulk-green',
-      bgColor: 'bg-bulk-green/10',
+      color: 'text-bulk-purple',
     },
     {
       label: '24h Liquidations',
       value: health ? `$${formatCompact(health.liquidation_value_24h)}` : '—',
       icon: Flame,
       color: 'text-bulk-red',
-      bgColor: 'bg-bulk-red/10',
       subValue: health ? `${health.total_liquidations_24h} rekt` : '',
     },
   ];
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="glass-card p-4 animate-pulse">
-            <div className="h-10 w-10 bg-dark-tertiary rounded-xl mb-3" />
-            <div className="h-4 w-20 bg-dark-tertiary rounded mb-2" />
-            <div className="h-8 w-24 bg-dark-tertiary rounded" />
+          <div key={i} className="stat-card animate-pulse">
+            <div className="h-3 w-16 bg-dark-tertiary rounded mb-2" />
+            <div className="h-7 w-20 bg-dark-tertiary rounded" />
           </div>
         ))}
       </div>
@@ -72,22 +67,18 @@ export function ExchangeHealthStats() {
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {stats.map((stat, i) => (
-        <div key={i} className="glass-card p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bgColor)}>
-              <stat.icon className={cn("w-5 h-5", stat.color)} />
-            </div>
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">
-              {stat.label}
-            </span>
+        <div key={i} className="stat-card">
+          <div className="flex items-center gap-2 mb-1">
+            <stat.icon className={cn("w-3.5 h-3.5", stat.color)} />
+            <span className="stat-label">{stat.label}</span>
           </div>
-          <p className={cn("font-display text-2xl font-bold", stat.color)}>
+          <p className={cn("font-display text-xl font-bold", stat.color)}>
             {stat.value}
           </p>
           {stat.subValue && (
-            <p className="text-xs text-gray-500 mt-1">{stat.subValue}</p>
+            <p className="text-[10px] text-text-secondary mt-0.5">{stat.subValue}</p>
           )}
         </div>
       ))}
