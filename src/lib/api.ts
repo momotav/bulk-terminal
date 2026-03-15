@@ -303,21 +303,25 @@ export const wallet = {
 };
 
 // Utility functions
-export function formatNumber(num: number | null | undefined, decimals = 2): string {
-  if (num === null || num === undefined) return '—';
+export function formatNumber(num: number | string | null | undefined, decimals = 2): string {
+  if (num === null || num === undefined || num === '') return '—';
+  const n = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(n)) return '—';
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(num);
+  }).format(n);
 }
 
-export function formatCompact(num: number | null | undefined): string {
-  if (num === null || num === undefined) return '—';
-  const abs = Math.abs(num);
-  if (abs >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-  if (abs >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-  if (abs >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-  return num.toFixed(2);
+export function formatCompact(num: number | string | null | undefined): string {
+  if (num === null || num === undefined || num === '') return '—';
+  const n = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+  return n.toFixed(2);
 }
 
 export function formatAddress(addr: string): string {
@@ -325,10 +329,12 @@ export function formatAddress(addr: string): string {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-export function formatPercent(num: number | null | undefined, decimals = 2): string {
-  if (num === null || num === undefined) return '—';
-  const sign = num >= 0 ? '+' : '';
-  return sign + num.toFixed(decimals) + '%';
+export function formatPercent(num: number | string | null | undefined, decimals = 2): string {
+  if (num === null || num === undefined || num === '') return '—';
+  const n = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(n)) return '—';
+  const sign = n >= 0 ? '+' : '';
+  return sign + n.toFixed(decimals) + '%';
 }
 
 export function timeAgo(timestamp: string | number): string {
