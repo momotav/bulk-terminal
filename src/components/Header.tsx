@@ -1,67 +1,121 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search } from 'lucide-react';
-import { Header } from '@/components/Header';
-import { ExchangeHealthStats } from '@/components/ExchangeHealth';
-import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
-import { RecentActivity } from '@/components/RecentActivity';
+import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
+import { User, LogOut, Menu, X } from 'lucide-react';
+import { useStore } from '@/store';
+import { auth, cn } from '@/lib/api';
 
-export default function HomePage() {
-  const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
+const navItems = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/leaderboard', label: 'Leaderboard' },
+  { href: '/analytics', label: 'Analytics' },
+  { href: '/whales', label: 'Whale Tracker' },
+  { href: '/following', label: 'Following' },
+];
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = searchQuery.trim();
-    if (query) {
-      router.push(`/whales/${query}`);
-      setSearchQuery('');
-    }
+export function Header() {
+  const pathname = usePathname();
+  const { user, setUser } = useStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    auth.logout();
+    setUser(null);
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-dark-primary">
-      <Header />
-
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
-        {/* Search Bar */}
-        <form onSubmit={handleSearch}>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search wallet address..."
-              className="w-full pl-12 pr-4 py-3 text-base bg-dark-secondary border border-dark-border rounded-xl text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
+    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-14">
+          {/* Logo - Left */}
+          <Link href="/" className="flex items-center shrink-0">
+            <Image 
+              src="/bulkstats.png" 
+              alt="BULK Stats" 
+              width={140} 
+              height={36} 
+              className="h-8 w-auto"
+              priority
             />
-          </div>
-        </form>
+          </Link>
 
-        {/* Exchange Health Stats */}
-        <ExchangeHealthStats />
+          {/* Desktop Nav - Center */}
+          <nav className="hidden md:flex items-center justify-center gap-1 absolute left-1/2 -translate-x-1/2">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "px-3 py-1.5 rounded text-sm font-medium transition-all",
+                  pathname === item.href
+                    ? "text-bulk-green"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
-        {/* Leaderboards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-[450px]">
-            <LeaderboardTable type="pnl" limit={10} />
-          </div>
-          <div className="h-[450px]">
-            <LeaderboardTable type="liquidated" limit={10} />
+          {/* Right side - Login */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Auth */}
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:block text-sm text-text-secondary">
+                  {user.username || user.email.split('@')[0]}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded hover:bg-dark-tertiary transition-colors text-text-secondary hover:text-text-primary"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 px-3 py-1.5 rounded border border-dark-border bg-dark-secondary hover:bg-dark-tertiary transition-colors"
+              >
+                <User className="w-4 h-4 text-text-secondary" />
+                <span className="text-sm text-text-primary">Login</span>
+              </Link>
+            )}
+
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded hover:bg-dark-tertiary text-text-secondary"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-[450px]">
-            <LeaderboardTable type="whales" limit={10} showTimeframe={false} />
-          </div>
-          <div className="h-[450px]">
-            <RecentActivity />
-          </div>
-        </div>
-      </main>
-    </div>
+        {/* Mobile Nav */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden py-3 border-t border-dark-border">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  "block px-4 py-2.5 rounded text-sm font-medium transition-all",
+                  pathname === item.href
+                    ? "text-bulk-green bg-bulk-green/10"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+      </div>
+    </header>
   );
 }
