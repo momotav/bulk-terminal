@@ -49,7 +49,6 @@ export function ExchangeHealthStats() {
       value: health ? `$${formatCompact(health.liquidation_value_24h)}` : '—',
       icon: Flame,
       color: 'text-bulk-red',
-      subValue: health ? `${health.total_liquidations_24h} rekt` : '',
     },
   ];
 
