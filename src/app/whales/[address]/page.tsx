@@ -91,14 +91,14 @@ export default function WalletPage() {
     : 0;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Back button */}
         <Link 
           href="/whales"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-text-secondary hover:text-text-primary mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Whale Tracker
