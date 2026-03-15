@@ -268,12 +268,12 @@ export default function AnalyticsPage() {
             {correlation && (
               <div className="chart-card lg:col-span-2">
                 <h3 className="chart-title">Correlation Matrix</h3>
-                <div className="flex justify-center py-4">
-                  <div className="flex gap-1">
+                <div className="flex justify-center py-6">
+                  <div className="flex items-start">
                     {/* Row labels */}
-                    <div className="flex flex-col justify-end pb-1">
+                    <div className="flex flex-col mt-8">
                       {correlation.symbols.map((s) => (
-                        <div key={s} className="h-16 flex items-center justify-end pr-3">
+                        <div key={s} className="h-20 flex items-center justify-end pr-4">
                           <span className="text-sm font-medium text-text-primary">{s.split('-')[0]}</span>
                         </div>
                       ))}
@@ -282,9 +282,9 @@ export default function AnalyticsPage() {
                     {/* Matrix grid */}
                     <div>
                       {/* Column labels */}
-                      <div className="flex mb-1">
+                      <div className="flex h-8 mb-1">
                         {correlation.symbols.map((s) => (
-                          <div key={s} className="w-16 text-center">
+                          <div key={s} className="w-20 flex items-end justify-center">
                             <span className="text-sm font-medium text-text-primary">{s.split('-')[0]}</span>
                           </div>
                         ))}
@@ -294,41 +294,39 @@ export default function AnalyticsPage() {
                       {correlation.symbols.map((s, i) => (
                         <div key={s} className="flex">
                           {correlation.matrix[i].map((val, j) => {
-                            // Blue color scale based on correlation value
-                            const intensity = Math.abs(val);
-                            const bgColor = `rgba(34, 113, 181, ${intensity * 0.9 + 0.1})`;
-                            const textColor = intensity > 0.5 ? '#FFFFFF' : '#1a1a2e';
+                            // Color based on correlation value
+                            let bgClass = "bg-gray-700/30";
+                            let textClass = "text-gray-400";
+                            
+                            if (val === 1) {
+                              bgClass = "bg-bulk-green/40";
+                              textClass = "text-bulk-green";
+                            } else if (val > 0.8) {
+                              bgClass = "bg-bulk-green/30";
+                              textClass = "text-bulk-green";
+                            } else if (val > 0.6) {
+                              bgClass = "bg-bulk-orange/30";
+                              textClass = "text-bulk-orange";
+                            } else if (val > 0.3) {
+                              bgClass = "bg-bulk-purple/30";
+                              textClass = "text-bulk-purple";
+                            }
                             
                             return (
                               <div 
                                 key={j} 
-                                className="w-16 h-16 flex items-center justify-center font-mono text-sm font-bold border border-dark-primary/20"
-                                style={{ 
-                                  backgroundColor: bgColor,
-                                  color: textColor
-                                }}
+                                className={cn(
+                                  "w-20 h-20 flex items-center justify-center font-mono text-base font-bold rounded-lg m-0.5",
+                                  bgClass,
+                                  textClass
+                                )}
                               >
-                                {val.toFixed(3)}
+                                {val.toFixed(2)}
                               </div>
                             );
                           })}
                         </div>
                       ))}
-                    </div>
-                    
-                    {/* Legend */}
-                    <div className="flex flex-col justify-center ml-4">
-                      <div 
-                        className="w-6 h-32 rounded"
-                        style={{
-                          background: 'linear-gradient(to bottom, rgba(34, 113, 181, 1), rgba(34, 113, 181, 0.1))'
-                        }}
-                      />
-                      <div className="flex flex-col justify-between h-32 ml-2 text-xs text-text-secondary">
-                        <span>1.0</span>
-                        <span>0.5</span>
-                        <span>0.0</span>
-                      </div>
                     </div>
                   </div>
                 </div>
