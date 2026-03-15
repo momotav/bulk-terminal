@@ -62,12 +62,6 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            {/* Network Badge */}
-            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded border border-dark-border bg-dark-secondary">
-              <div className="w-1.5 h-1.5 rounded-full bg-bulk-green animate-pulse" />
-              <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Alphanet</span>
-            </div>
-
             {/* Auth */}
             {user ? (
               <div className="flex items-center gap-2">
