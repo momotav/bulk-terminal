@@ -30,8 +30,8 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
-          {/* Logo */}
-          <Link href="/" className="flex items-center">
+          {/* Logo - Left */}
+          <Link href="/" className="flex items-center shrink-0">
             <Image 
               src="/bulkstats.png" 
               alt="BULK Stats" 
@@ -42,8 +42,8 @@ export function Header() {
             />
           </Link>
 
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-0.5">
+          {/* Desktop Nav - Center */}
+          <nav className="hidden md:flex items-center justify-center gap-1 absolute left-1/2 -translate-x-1/2">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -60,8 +60,8 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Right side */}
-          <div className="flex items-center gap-2">
+          {/* Right side - Login */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Auth */}
             {user ? (
               <div className="flex items-center gap-2">
