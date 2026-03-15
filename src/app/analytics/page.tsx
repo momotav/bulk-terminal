@@ -181,7 +181,7 @@ const InteractiveRangeSlider = ({
   );
 };
 
-// Shared tooltip component
+// Shared tooltip component for dollar values
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   const date = new Date(label);
@@ -197,11 +197,31 @@ const ChartTooltip = ({ active, payload, label }: any) => {
             <span className="text-gray-400">{entry.name}</span>
           </div>
           <span className="text-white font-medium">
-            {typeof entry.value === 'number' 
-              ? entry.name.includes('%') || entry.name.includes('Rate')
-                ? `${entry.value.toFixed(4)}%`
-                : `$${formatCompact(entry.value)}`
-              : entry.value}
+            ${formatCompact(entry.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Tooltip for funding rate (percentage values)
+const FundingTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const date = new Date(label);
+  const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 shadow-xl min-w-[160px]">
+      <p className="text-xs text-gray-400 mb-2 border-b border-[#333] pb-2">{formattedDate}</p>
+      {payload.filter((e: any) => e.value !== null).map((entry: any, i: number) => (
+        <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+            <span className="text-gray-400">{entry.name}</span>
+          </div>
+          <span className={cn("font-medium", entry.value >= 0 ? "text-green-400" : "text-red-400")}>
+            {entry.value.toFixed(6)}%
           </span>
         </div>
       ))}
@@ -388,13 +408,6 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const CoinsDropdown = () => (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#1f1f1f] border border-[#333] text-xs text-white cursor-pointer">
-      {selectedCoins.length} coins selected
-      <ChevronDown className="w-3 h-3" />
-    </div>
-  );
-
   const NoDataMessage = ({ title }: { title: string }) => (
     <div className="h-[260px] flex flex-col items-center justify-center text-gray-500">
       <p className="text-sm">No {title} data yet</p>
@@ -410,8 +423,7 @@ export default function AnalyticsPage() {
     <div className="bg-[#111] rounded-lg border border-[#222] p-4">
       <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
       {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
-      <div className="flex items-center justify-between mb-4">
-        <CoinsDropdown />
+      <div className="flex items-center justify-end mb-4">
         <TimeframeButtons />
       </div>
       {children}
@@ -564,9 +576,9 @@ export default function AnalyticsPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={fundingDataFiltered} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
-                          <YAxis tickFormatter={v => `${v?.toFixed(2) || 0}%`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} domain={['auto', 'auto']} />
+                          <YAxis tickFormatter={v => `${v?.toFixed(4) || 0}%`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
-                          <Tooltip content={<ChartTooltip />} />
+                          <Tooltip content={<FundingTooltip />} />
                           <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} />
                           <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} />
                           <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} />
