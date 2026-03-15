@@ -11,17 +11,6 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
-        {/* Hero Section */}
-        <div className="text-center py-8">
-          <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">
-            <span className="gradient-text">BULK Terminal</span>
-          </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            Community analytics dashboard for BULK Exchange. Track top traders, whale positions, 
-            liquidations, and market trends in real-time.
-          </p>
-        </div>
-
         {/* Exchange Health Stats */}
         <ExchangeHealthStats />
 
