@@ -11,25 +11,28 @@ const config: Config = {
     extend: {
       colors: {
         bulk: {
-          // Primary colors from BULK explorer
-          teal: '#4ecdc4',      // Main teal/cyan color
-          coral: '#e8846b',     // Coral/salmon for sell/negative
-          // Secondary accent colors
-          blue: '#3b82c4',      // Blue accent
-          purple: '#8b7fc7',    // Purple accent
-          // Semantic colors
-          green: '#4ecdc4',     // Buy/positive (same as teal)
-          red: '#e8846b',       // Sell/negative (same as coral)
-          yellow: '#f5c842',    // Warnings/highlights
+          // Primary accent colors
+          green: '#00B482',
+          red: '#EF4A3C',
+          blue: '#2271B5',
+          purple: '#7570B3',
+          orange: '#FFB548',
           // Legacy aliases for compatibility
-          cyan: '#4ecdc4',
-          magenta: '#e8846b',
+          teal: '#00B482',
+          cyan: '#00B482',
+          coral: '#EF4A3C',
+          magenta: '#EF4A3C',
+          yellow: '#FFB548',
         },
         dark: {
-          primary: '#0d1117',   // Darker background like BULK
-          secondary: '#161b22', // Card backgrounds
-          tertiary: '#21262d',  // Hover states
-          border: '#30363d',    // Borders
+          primary: '#151411',    // Main background
+          secondary: '#1B1A13',  // Card/section backgrounds
+          tertiary: '#252319',   // Hover states
+          border: '#554B4C',     // Stroke/borders
+        },
+        text: {
+          primary: '#C7B6BA',    // Main text
+          secondary: '#817778',  // Muted text
         },
       },
       fontFamily: {
@@ -42,8 +45,8 @@ const config: Config = {
       },
       keyframes: {
         'pulse-glow': {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(78, 205, 196, 0.5)' },
-          '50%': { boxShadow: '0 0 40px rgba(139, 127, 199, 0.5)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(0, 180, 130, 0.3)' },
+          '50%': { boxShadow: '0 0 40px rgba(117, 112, 179, 0.3)' },
         },
         'float': {
           '0%, 100%': { transform: 'translateY(0)' },
