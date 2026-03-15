@@ -25,17 +25,17 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary/95 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-bulk-cyan to-bulk-magenta flex items-center justify-center font-display font-black text-lg">
-              B
+            <div className="w-9 h-9 rounded-lg bg-bulk-teal flex items-center justify-center">
+              <span className="font-display font-black text-dark-primary text-lg">✦</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="font-display text-xl font-bold gradient-text">BULK</h1>
-              <p className="text-[9px] text-gray-500 uppercase tracking-[2px] -mt-1">Terminal</p>
+              <h1 className="font-display text-xl font-bold text-white tracking-wide">BULK</h1>
+              <p className="text-[9px] text-gray-500 uppercase tracking-[3px] -mt-1">Terminal</p>
             </div>
           </Link>
 
@@ -48,7 +48,7 @@ export function Header() {
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium transition-all",
                   pathname === item.href
-                    ? "bg-bulk-cyan/10 text-bulk-cyan"
+                    ? "bg-bulk-teal/15 text-bulk-teal"
                     : "text-gray-400 hover:text-white hover:bg-dark-tertiary"
                 )}
               >
@@ -60,8 +60,9 @@ export function Header() {
           {/* Right side */}
           <div className="flex items-center gap-3">
             {/* Network Badge */}
-            <div className="hidden sm:block px-3 py-1 rounded-full bg-gradient-to-r from-bulk-orange to-bulk-yellow text-dark-primary text-[10px] font-bold uppercase tracking-wider">
-              Testnet
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-tertiary border border-dark-border">
+              <div className="w-2 h-2 rounded-full bg-bulk-teal animate-pulse" />
+              <span className="text-[11px] font-medium text-gray-300">Alphanet</span>
             </div>
 
             {/* Theme Toggle */}
@@ -72,7 +73,7 @@ export function Header() {
               {theme === 'dark' ? (
                 <Sun className="w-5 h-5 text-bulk-yellow" />
               ) : (
-                <Moon className="w-5 h-5 text-bulk-cyan" />
+                <Moon className="w-5 h-5 text-bulk-teal" />
               )}
             </button>
 
@@ -120,7 +121,7 @@ export function Header() {
                 className={cn(
                   "block px-4 py-3 rounded-lg text-sm font-medium transition-all",
                   pathname === item.href
-                    ? "bg-bulk-cyan/10 text-bulk-cyan"
+                    ? "bg-bulk-teal/15 text-bulk-teal"
                     : "text-gray-400"
                 )}
               >
