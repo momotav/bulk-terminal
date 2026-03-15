@@ -70,8 +70,8 @@ export function RecentActivity() {
     <div className="glass-card h-full flex flex-col">
       <div className="panel-header">
         <h2 className="panel-title">
-          <span className="w-6 h-6 rounded-md bg-bulk-yellow/20 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-bulk-yellow" />
+          <span className="w-6 h-6 rounded-md bg-bulk-purple/20 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-bulk-purple" />
           </span>
           Live Activity
         </h2>
@@ -84,7 +84,7 @@ export function RecentActivity() {
               className={cn(
                 "px-2 py-1 text-[10px] font-medium rounded capitalize transition-all",
                 tab === t
-                  ? "bg-bulk-yellow text-dark-primary"
+                  ? "bg-bulk-teal text-dark-primary"
                   : "text-gray-400 hover:text-white"
               )}
             >
@@ -123,10 +123,10 @@ export function RecentActivity() {
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
                   item.type === 'liquidation'
-                    ? "bg-bulk-red/15 text-bulk-red"
+                    ? "bg-bulk-coral/15 text-bulk-coral"
                     : item.side === 'buy'
-                    ? "bg-bulk-green/15 text-bulk-green"
-                    : "bg-bulk-red/15 text-bulk-red"
+                    ? "bg-bulk-teal/15 text-bulk-teal"
+                    : "bg-bulk-coral/15 text-bulk-coral"
                 )}>
                   {item.type === 'liquidation' ? (
                     <Flame className="w-5 h-5" />
@@ -143,10 +143,10 @@ export function RecentActivity() {
                     <span className={cn(
                       "text-[10px] font-bold uppercase px-1.5 py-0.5 rounded",
                       item.type === 'liquidation'
-                        ? "bg-bulk-red/20 text-bulk-red"
+                        ? "bg-bulk-coral/20 text-bulk-coral"
                         : item.side === 'buy'
-                        ? "bg-bulk-green/20 text-bulk-green"
-                        : "bg-bulk-red/20 text-bulk-red"
+                        ? "bg-bulk-teal/20 text-bulk-teal"
+                        : "bg-bulk-coral/20 text-bulk-coral"
                     )}>
                       {item.type === 'liquidation' ? 'REKT' : item.side.toUpperCase()}
                     </span>
@@ -161,7 +161,7 @@ export function RecentActivity() {
                 <div className="text-right shrink-0">
                   <p className={cn(
                     "font-display font-bold text-sm",
-                    item.type === 'liquidation' ? "text-bulk-red" : "text-white"
+                    item.type === 'liquidation' ? "text-bulk-coral" : "text-white"
                   )}>
                     ${formatCompact(item.value)}
                   </p>
