@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-primary text-white font-mono antialiased;
+  }
+
+  .light body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-dark-secondary/80 backdrop-blur-xl border border-dark-border rounded-2xl overflow-hidden;
+  }
+
+  .light .glass-card {
+    @apply bg-white/90 border-gray-200 shadow-lg;
+  }
+
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1);
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-bulk-cyan to-bulk-magenta bg-clip-text text-transparent;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-gradient-to-r from-bulk-cyan to-bulk-magenta text-white font-semibold rounded-lg
+           hover:opacity-90 transition-all duration-200 active:scale-95 disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-dark-tertiary border border-dark-border text-white font-medium rounded-lg
+           hover:bg-dark-border transition-all duration-200;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 bg-dark-tertiary border border-dark-border rounded-lg
+           text-white placeholder-gray-500 focus:outline-none focus:border-bulk-cyan
+           transition-colors duration-200;
+  }
+
+  .light .input {
+    @apply bg-white border-gray-300 text-gray-900 focus:border-bulk-cyan;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between px-5 py-4 border-b border-dark-border;
+  }
+
+  .panel-title {
+    @apply font-display text-sm font-semibold uppercase tracking-wider flex items-center gap-3;
+  }
+
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all;
+  }
+
+  .tab-btn.active {
+    @apply bg-bulk-cyan text-dark-primary;
+  }
+
+  .tab-btn:not(.active) {
+    @apply text-gray-400 hover:text-white hover:bg-dark-tertiary;
+  }
+
+  .table-header {
+    @apply text-[10px] uppercase tracking-widest text-gray-500 font-medium;
+  }
+
+  .table-row {
+    @apply border-b border-dark-border/50 hover:bg-dark-tertiary/30 transition-colors;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-dark-primary;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-dark-border rounded-full hover:bg-gray-600;
+  }
+}
+
+@layer utilities {
+  .text-positive { @apply text-bulk-green; }
+  .text-negative { @apply text-bulk-red; }
+
+  .grid-bg {
+    background-image: 
+      linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+}
