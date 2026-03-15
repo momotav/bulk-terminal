@@ -85,9 +85,16 @@ export default function WalletPage() {
   const history = data?.history || [];
   const tracked = data?.tracked;
 
-  const totalPnL = margin 
+  // Calculate PnL from positions if margin data is not available
+  const totalPnL = margin?.realizedPnl !== undefined
     ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
-    : 0;
+    : positions.reduce((sum, p) => sum + (p.realizedPnl || 0) + (p.unrealizedPnl || 0), 0);
+
+  // Calculate total notional from positions
+  const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.notional || 0), 0);
+
+  // Use tracked data as fallback for PnL
+  const displayPnL = totalPnL || parseFloat(tracked?.total_pnl) || 0;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -139,7 +146,7 @@ export default function WalletPage() {
             <div className="glass-card p-6 mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-cyan to-bulk-magenta flex items-center justify-center text-white text-xl font-bold">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-teal to-bulk-purple flex items-center justify-center text-white text-xl font-bold">
                     {address.slice(0, 2)}
                   </div>
                   <div>
@@ -200,44 +207,44 @@ export default function WalletPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Wallet className="w-4 h-4 text-bulk-cyan" />
-                  <span className="text-xs text-gray-500 uppercase tracking-wider">Balance</span>
+                  <Wallet className="w-4 h-4 text-bulk-teal" />
+                  <span className="text-xs text-gray-500 uppercase tracking-wider">Notional</span>
                 </div>
-                <p className="font-display text-2xl font-bold text-bulk-cyan">
-                  ${formatNumber(margin?.totalBalance, 2)}
+                <p className="font-display text-2xl font-bold text-bulk-teal">
+                  ${formatCompact(totalNotional || parseFloat(history[history.length-1]?.total_notional) || 0)}
                 </p>
               </div>
 
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-4 h-4 text-bulk-magenta" />
-                  <span className="text-xs text-gray-500 uppercase tracking-wider">Margin Used</span>
+                  <Activity className="w-4 h-4 text-bulk-purple" />
+                  <span className="text-xs text-gray-500 uppercase tracking-wider">Positions</span>
                 </div>
-                <p className="font-display text-2xl font-bold text-bulk-magenta">
-                  ${formatNumber(margin?.marginUsed, 2)}
+                <p className="font-display text-2xl font-bold text-bulk-purple">
+                  {positions.length || history[history.length-1]?.positions_count || 0}
                 </p>
               </div>
 
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  {totalPnL >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-bulk-green" />
+                  {displayPnL >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-bulk-teal" />
                   ) : (
-                    <TrendingDown className="w-4 h-4 text-bulk-red" />
+                    <TrendingDown className="w-4 h-4 text-bulk-coral" />
                   )}
                   <span className="text-xs text-gray-500 uppercase tracking-wider">Total PnL</span>
                 </div>
                 <p className={cn(
                   "font-display text-2xl font-bold",
-                  totalPnL >= 0 ? "text-bulk-green" : "text-bulk-red"
+                  displayPnL >= 0 ? "text-bulk-teal" : "text-bulk-coral"
                 )}>
-                  {totalPnL >= 0 ? '+' : ''}${formatNumber(totalPnL, 2)}
+                  {displayPnL >= 0 ? '+' : ''}${formatNumber(displayPnL, 2)}
                 </p>
               </div>
 
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-bulk-red" />
+                  <Flame className="w-4 h-4 text-bulk-coral" />
                   <span className="text-xs text-gray-500 uppercase tracking-wider">Liquidations</span>
                 </div>
                 <p className="font-display text-2xl font-bold">
@@ -251,7 +258,7 @@ export default function WalletPage() {
               <div className="glass-card">
                 <div className="panel-header">
                   <h2 className="panel-title">
-                    <Activity className="w-4 h-4 text-bulk-cyan" />
+                    <Activity className="w-4 h-4 text-bulk-teal" />
                     Open Positions ({positions.length})
                   </h2>
                 </div>
@@ -275,7 +282,7 @@ export default function WalletPage() {
                             <div className="flex items-center gap-2">
                               <span className={cn(
                                 "w-8 h-8 rounded-lg flex items-center justify-center",
-                                isLong ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red"
+                                isLong ? "bg-bulk-teal/15 text-bulk-teal" : "bg-bulk-coral/15 text-bulk-coral"
                               )}>
                                 {isLong ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                               </span>
@@ -289,13 +296,13 @@ export default function WalletPage() {
                             <div className="text-right">
                               <p className={cn(
                                 "font-display font-bold",
-                                pos.unrealizedPnl >= 0 ? "text-bulk-green" : "text-bulk-red"
+                                pos.unrealizedPnl >= 0 ? "text-bulk-teal" : "text-bulk-coral"
                               )}>
                                 {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
                               </p>
                               <p className={cn(
                                 "text-xs",
-                                pnlPercent >= 0 ? "text-bulk-green" : "text-bulk-red"
+                                pnlPercent >= 0 ? "text-bulk-teal" : "text-bulk-coral"
                               )}>
                                 {formatPercent(pnlPercent)}
                               </p>
@@ -313,7 +320,7 @@ export default function WalletPage() {
                             </div>
                             <div>
                               <p className="text-gray-500">Liq. Price</p>
-                              <p className="font-mono text-bulk-red">${formatNumber(pos.liquidationPrice, 2)}</p>
+                              <p className="font-mono text-bulk-coral">${formatNumber(pos.liquidationPrice, 2)}</p>
                             </div>
                           </div>
                         </div>
