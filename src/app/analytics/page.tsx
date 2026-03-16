@@ -438,12 +438,12 @@ export default function AnalyticsPage() {
     if (!loading) fetchLiquidationsData();
   }, [liquidationsHours, loading]);
 
-  // Fetch trades data when timeframe changes - now from BULK API klines
+  // Fetch trades data when timeframe changes - from PostgreSQL database
   useEffect(() => {
     const fetchTradesData = async () => {
       setChartLoading(prev => ({ ...prev, trades: true }));
       try {
-        const data = await analytics.getTradesFromBulkAPI(tradesHours);
+        const data = await analytics.getTradesChart(tradesHours);
         setTradesChart(data);
         setTradesRange({ start: 0, end: 100 });
       } catch (error) {
@@ -484,7 +484,7 @@ export default function AnalyticsPage() {
           analytics.getFundingRate('BTC-USD', fundingHours),
           analytics.getFundingRate('ETH-USD', fundingHours),
           analytics.getFundingRate('SOL-USD', fundingHours),
-          analytics.getTradesFromBulkAPI(tradesHours),
+          analytics.getTradesChart(tradesHours),
           analytics.getLiquidationsChart(liquidationsHours),
           analytics.getADLChart(adlHours),
           analytics.getVolumeFromBulkAPI(volumeHours),
