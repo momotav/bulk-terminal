@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Bar, ComposedChart, Line, LineChart, ReferenceLine, AreaChart, Area
+  Bar, ComposedChart, Line, LineChart, ReferenceLine
 } from 'recharts';
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
@@ -18,7 +18,6 @@ const timeRanges = [
   { label: 'ALL', hours: 8760 * 2 },
 ];
 
-// BULK color palette
 const COLORS = {
   BTC: '#00B482',
   ETH: '#2271B5',
@@ -27,10 +26,8 @@ const COLORS = {
   total: '#FFB548',
 };
 
-// Chart data type
 type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total: number };
 
-// Interactive Range Slider Component
 const InteractiveRangeSlider = ({ 
   data, 
   color = COLORS.BTC,
@@ -49,7 +46,6 @@ const InteractiveRangeSlider = ({
   const [dragStartX, setDragStartX] = useState(0);
   const [dragStartRange, setDragStartRange] = useState({ start: 0, end: 100 });
 
-  // If only 1 day of data, disable slider
   const isDisabled = data.length <= 1;
 
   const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
@@ -92,9 +88,7 @@ const InteractiveRangeSlider = ({
       }
     };
 
-    const handleMouseUp = () => {
-      setDragging(null);
-    };
+    const handleMouseUp = () => setDragging(null);
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -105,9 +99,8 @@ const InteractiveRangeSlider = ({
     };
   }, [dragging, dragStartX, dragStartRange, rangeStart, rangeEnd, onRangeChange]);
 
-  // Calculate bar heights from data
-  const maxValue = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || 0), 1);
-  const barHeights = data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || 0) / maxValue) * 100);
+  const maxValue = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || d.value || 0), 1);
+  const barHeights = data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || d.value || 0) / maxValue) * 100);
 
   return (
     <div 
@@ -117,7 +110,6 @@ const InteractiveRangeSlider = ({
         isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
       )}
     >
-      {/* Mini bar chart preview */}
       <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px">
         {(data.length > 0 ? barHeights : Array(30).fill(20)).map((height, i) => (
           <div 
@@ -134,39 +126,24 @@ const InteractiveRangeSlider = ({
 
       {!isDisabled && (
         <>
-          {/* Selected range highlight */}
           <div 
             className="absolute top-0 bottom-0 bg-transparent border-l-2 border-r-2 cursor-grab active:cursor-grabbing"
-            style={{ 
-              left: `${rangeStart}%`, 
-              right: `${100 - rangeEnd}%`,
-              borderColor: color,
-            }}
+            style={{ left: `${rangeStart}%`, right: `${100 - rangeEnd}%`, borderColor: color }}
             onMouseDown={(e) => handleMouseDown(e, 'middle')}
           />
-
-          {/* Left handle */}
           <div 
-            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10 group"
+            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10"
             style={{ left: `calc(${rangeStart}% - 6px)` }}
             onMouseDown={(e) => handleMouseDown(e, 'left')}
           >
-            <div 
-              className="w-1.5 h-4 rounded-full transition-colors"
-              style={{ backgroundColor: dragging === 'left' ? color : '#666' }}
-            />
+            <div className="w-1.5 h-4 rounded-full transition-colors" style={{ backgroundColor: dragging === 'left' ? color : '#666' }} />
           </div>
-
-          {/* Right handle */}
           <div 
-            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10 group"
+            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10"
             style={{ left: `calc(${rangeEnd}% - 6px)` }}
             onMouseDown={(e) => handleMouseDown(e, 'right')}
           >
-            <div 
-              className="w-1.5 h-4 rounded-full transition-colors"
-              style={{ backgroundColor: dragging === 'right' ? color : '#666' }}
-            />
+            <div className="w-1.5 h-4 rounded-full transition-colors" style={{ backgroundColor: dragging === 'right' ? color : '#666' }} />
           </div>
         </>
       )}
@@ -174,7 +151,6 @@ const InteractiveRangeSlider = ({
   );
 };
 
-// Shared tooltip component for dollar values
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   const date = new Date(label);
@@ -189,16 +165,13 @@ const ChartTooltip = ({ active, payload, label }: any) => {
             <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
             <span className="text-gray-400">{entry.name}</span>
           </div>
-          <span className="text-white font-medium">
-            ${formatCompact(entry.value)}
-          </span>
+          <span className="text-white font-medium">${formatCompact(entry.value)}</span>
         </div>
       ))}
     </div>
   );
 };
 
-// Tooltip for funding rate (percentage values)
 const FundingTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   const date = new Date(label);
@@ -229,7 +202,6 @@ export default function AnalyticsPage() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
   
-  // Range slider states for each chart
   const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
   const [oiRange, setOiRange] = useState({ start: 0, end: 100 });
   const [fundingRange, setFundingRange] = useState({ start: 0, end: 100 });
@@ -237,11 +209,8 @@ export default function AnalyticsPage() {
   const [tradesRange, setTradesRange] = useState({ start: 0, end: 100 });
   const [adlRange, setAdlRange] = useState({ start: 0, end: 100 });
   
-  // Real data from BULK API
-  const [oiData, setOiData] = useState<Record<string, { timestamp: string; value: number }[]>>({ BTC: [], ETH: [], SOL: [] });
+  const [oiData, setOiData] = useState<{ BTC: any; ETH: any; SOL: any }>({ BTC: null, ETH: null, SOL: null });
   const [fundingData, setFundingData] = useState<Record<string, { timestamp: string; value: number }[]>>({ BTC: [], ETH: [], SOL: [] });
-  
-  // Real data from our database (testnet activity)
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
@@ -249,7 +218,6 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
-  // Reset ranges when timeframe changes
   useEffect(() => {
     setVolumeRange({ start: 0, end: 100 });
     setOiRange({ start: 0, end: 100 });
@@ -263,11 +231,10 @@ export default function AnalyticsPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Use allSettled so one failure doesn't break everything
         const results = await Promise.allSettled([
-          analytics.getOpenInterest('BTC-USD', hours),
-          analytics.getOpenInterest('ETH-USD', hours),
-          analytics.getOpenInterest('SOL-USD', hours),
+          analytics.getOpenInterestCalculated('BTC-USD', hours),
+          analytics.getOpenInterestCalculated('ETH-USD', hours),
+          analytics.getOpenInterestCalculated('SOL-USD', hours),
           analytics.getFundingRate('BTC-USD', hours),
           analytics.getFundingRate('ETH-USD', hours),
           analytics.getFundingRate('SOL-USD', hours),
@@ -279,21 +246,22 @@ export default function AnalyticsPage() {
           leaderboard.getMostActive('all', 100),
         ]);
 
-        // Helper to extract value or return default
         const getValue = <T,>(result: PromiseSettledResult<T>, defaultValue: T): T => {
           return result.status === 'fulfilled' ? result.value : defaultValue;
         };
 
         setOiData({
-          BTC: getValue(results[0], []),
-          ETH: getValue(results[1], []),
-          SOL: getValue(results[2], []),
+          BTC: getValue(results[0], null),
+          ETH: getValue(results[1], null),
+          SOL: getValue(results[2], null),
         });
+        
         setFundingData({
           BTC: getValue(results[3], []),
           ETH: getValue(results[4], []),
           SOL: getValue(results[5], []),
         });
+        
         setTradesChart(getValue(results[6], []));
         setLiquidationsChart(getValue(results[7], []));
         setAdlChart(getValue(results[8], []));
@@ -309,7 +277,6 @@ export default function AnalyticsPage() {
     fetchData();
   }, [hours]);
 
-  // Helper to slice data based on range
   const sliceDataByRange = <T,>(data: T[], range: { start: number; end: number }): T[] => {
     if (data.length <= 1) return data;
     const startIdx = Math.floor((range.start / 100) * data.length);
@@ -317,7 +284,6 @@ export default function AnalyticsPage() {
     return data.slice(startIdx, endIdx);
   };
 
-  // Add cumulative to chart data
   const withCumulative = (data: ChartData[]) => {
     let cumulative = 0;
     return data.map(item => {
@@ -329,22 +295,27 @@ export default function AnalyticsPage() {
     });
   };
 
-  // Combined OI data for multi-line
   const combinedOIData = useMemo(() => {
-    const btc = oiData.BTC;
-    if (!btc.length) return [];
-    return btc.map((item, i) => ({
+    const btcData = oiData.BTC?.data || [];
+    const ethData = oiData.ETH?.data || [];
+    const solData = oiData.SOL?.data || [];
+    
+    if (!btcData.length && !ethData.length && !solData.length) return [];
+    
+    const maxLen = Math.max(btcData.length, ethData.length, solData.length);
+    const baseData = btcData.length === maxLen ? btcData : (ethData.length === maxLen ? ethData : solData);
+    
+    return baseData.map((item: any, i: number) => ({
       timestamp: item.timestamp,
-      BTC: selectedCoins.includes('BTC') ? item.value : 0,
-      ETH: selectedCoins.includes('ETH') ? (oiData.ETH[i]?.value || 0) : 0,
-      SOL: selectedCoins.includes('SOL') ? (oiData.SOL[i]?.value || 0) : 0,
-      'Total OI': (selectedCoins.includes('BTC') ? item.value : 0) +
-                  (selectedCoins.includes('ETH') ? (oiData.ETH[i]?.value || 0) : 0) +
-                  (selectedCoins.includes('SOL') ? (oiData.SOL[i]?.value || 0) : 0),
+      BTC: selectedCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0,
+      ETH: selectedCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0,
+      SOL: selectedCoins.includes('SOL') ? (solData[i]?.value || 0) : 0,
+      'Total OI': (selectedCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0) +
+                  (selectedCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0) +
+                  (selectedCoins.includes('SOL') ? (solData[i]?.value || 0) : 0),
     }));
   }, [oiData, selectedCoins]);
 
-  // Combined funding rate data
   const combinedFundingData = useMemo(() => {
     const btc = fundingData.BTC;
     if (!btc.length) return [];
@@ -368,7 +339,6 @@ export default function AnalyticsPage() {
 
   const formatDate = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  // Reusable components
   const CoinToggle = ({ coin }: { coin: string }) => (
     <button
       onClick={() => toggleCoin(coin)}
@@ -435,7 +405,6 @@ export default function AnalyticsPage() {
   const paginatedUsers = topUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
   const totalPages = Math.ceil(topUsers.length / 10) || 1;
 
-  // Apply range filters and cumulative
   const volumeDataFull = withCumulative(volumeChart);
   const volumeDataFiltered = sliceDataByRange(volumeDataFull, volumeRange);
   
@@ -451,18 +420,19 @@ export default function AnalyticsPage() {
   const oiDataFiltered = sliceDataByRange(combinedOIData, oiRange);
   const fundingDataFiltered = sliceDataByRange(combinedFundingData, fundingRange);
 
+  const totalOI = (oiData.BTC?.currentOI || 0) + (oiData.ETH?.currentOI || 0) + (oiData.SOL?.currentOI || 0);
+
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         <h1 className="text-3xl font-bold text-white mb-6">Analytics</h1>
 
-        {/* Stats Row - Real data */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#333] mb-6 rounded-lg overflow-hidden">
           {[
             { label: 'Total Trades', value: stats?.trades.count || 0, format: 'number' },
             { label: 'Total Volume', value: stats?.trades.volume || 0, format: 'currency' },
-            { label: 'Liquidations', value: stats?.liquidations.count || 0, format: 'number' },
+            { label: 'Open Interest', value: totalOI, format: 'currency' },
             { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
           ].map((stat, i) => (
             <div key={i} className="bg-dark-primary p-4">
@@ -482,9 +452,7 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Row 1: Volume & Open Interest */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Total Volume */}
               <ChartCard 
                 title="Total Volume"
                 toggles={<>
@@ -522,9 +490,8 @@ export default function AnalyticsPage() {
                 ) : <NoDataMessage title="volume" />}
               </ChartCard>
 
-              {/* Open Interest */}
               <ChartCard 
-                title="Open Interest"
+                title="Open Interest (Real-Time)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -560,9 +527,7 @@ export default function AnalyticsPage() {
               </ChartCard>
             </div>
 
-            {/* Row 2: Funding Rate & Liquidations */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Funding Rate */}
               <ChartCard 
                 title="Annualized Funding Rate"
                 toggles={<>
@@ -598,7 +563,6 @@ export default function AnalyticsPage() {
                 ) : <NoDataMessage title="funding rate" />}
               </ChartCard>
 
-              {/* Liquidations */}
               <ChartCard 
                 title="Liquidations"
                 toggles={<>
@@ -637,9 +601,7 @@ export default function AnalyticsPage() {
               </ChartCard>
             </div>
 
-            {/* Row 3: Number of Trades & ADL */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Number of Trades */}
               <ChartCard 
                 title="Number Of Trades"
                 toggles={<>
@@ -677,7 +639,6 @@ export default function AnalyticsPage() {
                 ) : <NoDataMessage title="trades" />}
               </ChartCard>
 
-              {/* ADL Events */}
               <ChartCard 
                 title="Auto-Deleveraging (ADL)"
                 toggles={<>
@@ -716,7 +677,6 @@ export default function AnalyticsPage() {
               </ChartCard>
             </div>
 
-            {/* Row 4: Top Users By Volume */}
             <div className="grid grid-cols-1 gap-4">
               <div className="bg-[#111] rounded-lg border border-[#222] p-4">
                 <h3 className="text-lg font-semibold text-white mb-4">Top Users By Volume</h3>
