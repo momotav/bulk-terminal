@@ -325,13 +325,13 @@ const ChartCard = ({
 );
 
 export default function AnalyticsPage() {
-  // Per-chart timeframes
-  const [volumeHours, setVolumeHours] = useState(720);
-  const [oiHours, setOiHours] = useState(168);
-  const [fundingHours, setFundingHours] = useState(168);
-  const [liquidationsHours, setLiquidationsHours] = useState(720);
-  const [tradesHours, setTradesHours] = useState(720);
-  const [adlHours, setAdlHours] = useState(720);
+  // Per-chart timeframes - default to 24h since BULK just launched
+  const [volumeHours, setVolumeHours] = useState(24);
+  const [oiHours, setOiHours] = useState(24);
+  const [fundingHours, setFundingHours] = useState(24);
+  const [liquidationsHours, setLiquidationsHours] = useState(24);
+  const [tradesHours, setTradesHours] = useState(24);
+  const [adlHours, setAdlHours] = useState(24);
   
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState<Record<string, boolean>>({});
