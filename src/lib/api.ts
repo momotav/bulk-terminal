@@ -338,158 +338,20 @@ export const analytics = {
     return request('/api/analytics/stats');
   },
 
-  // BULK API Direct - Exchange Stats (volume, OI, funding)
-  async getBulkStats(period: '1d' | '7d' | '30d' | '90d' | '1y' | 'all' = '1d'): Promise<{
-    timestamp: number;
-    period: string;
-    volume: { totalUsd: number };
-    openInterest: { totalUsd: number };
-    funding: { rates: Record<string, { current: number; annualized: number }> };
-    markets: Array<{
-      symbol: string;
-      volume: number;
-      quoteVolume: number;
-      openInterest: number;
-      fundingRate: number;
-      fundingRateAnnualized: number;
-      lastPrice: number;
-      markPrice: number;
-    }>;
-  }> {
-    const response = await fetch(`https://exchange-api.bulk.trade/api/v1/stats?period=${period}`);
-    if (!response.ok) throw new Error('Failed to fetch BULK stats');
-    return response.json();
-  },
-
-  // BULK API Direct - Klines for trade count aggregation
-  async getBulkKlines(symbol: string, interval: string, startTime?: number, endTime?: number): Promise<Array<{
-    t: number;  // open timestamp ms
-    T: number;  // close timestamp ms
-    o: number;  // open
-    h: number;  // high
-    l: number;  // low
-    c: number;  // close
-    v: number;  // volume
-    n: number;  // number of trades
-  }>> {
-    let url = `https://exchange-api.bulk.trade/api/v1/klines?symbol=${symbol}&interval=${interval}`;
-    if (startTime) url += `&startTime=${startTime}`;
-    if (endTime) url += `&endTime=${endTime}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch BULK klines');
-    return response.json();
-  },
-
-  // Helper: Get volume chart data from BULK API klines
+  // Volume chart from BULK API (via backend proxy)
   async getVolumeFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const now = Date.now();
-    const startTime = now - (hours * 60 * 60 * 1000);
-    
-    // Determine interval based on hours
-    let interval = '1h';
-    if (hours <= 24) interval = '1h';
-    else if (hours <= 168) interval = '4h'; // 1 week
-    else if (hours <= 720) interval = '1d'; // 1 month
-    else interval = '1d';
-
-    const [btcKlines, ethKlines, solKlines] = await Promise.all([
-      this.getBulkKlines('BTC-USD', interval, startTime, now),
-      this.getBulkKlines('ETH-USD', interval, startTime, now),
-      this.getBulkKlines('SOL-USD', interval, startTime, now),
-    ]);
-
-    // Create a map of timestamp -> volumes
-    const volumeMap = new Map<number, { BTC: number; ETH: number; SOL: number }>();
-
-    // Process BTC
-    btcKlines.forEach(k => {
-      const ts = k.t;
-      if (!volumeMap.has(ts)) volumeMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      volumeMap.get(ts)!.BTC = k.v * k.c; // volume in USD (size * price)
-    });
-
-    // Process ETH
-    ethKlines.forEach(k => {
-      const ts = k.t;
-      if (!volumeMap.has(ts)) volumeMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      volumeMap.get(ts)!.ETH = k.v * k.c;
-    });
-
-    // Process SOL
-    solKlines.forEach(k => {
-      const ts = k.t;
-      if (!volumeMap.has(ts)) volumeMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      volumeMap.get(ts)!.SOL = k.v * k.c;
-    });
-
-    // Convert to array and sort
-    const result = Array.from(volumeMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([ts, vol]) => ({
-        timestamp: new Date(ts).toISOString(),
-        BTC: vol.BTC,
-        ETH: vol.ETH,
-        SOL: vol.SOL,
-        total: vol.BTC + vol.ETH + vol.SOL,
-      }));
-
-    return result;
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/volume-chart-api?hours=${hours}`
+    );
+    return data.data;
   },
 
-  // Helper: Get trades count chart data from BULK API klines
+  // Trades count chart from BULK API (via backend proxy)
   async getTradesFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const now = Date.now();
-    const startTime = now - (hours * 60 * 60 * 1000);
-    
-    // Determine interval based on hours
-    let interval = '1h';
-    if (hours <= 24) interval = '1h';
-    else if (hours <= 168) interval = '4h';
-    else if (hours <= 720) interval = '1d';
-    else interval = '1d';
-
-    const [btcKlines, ethKlines, solKlines] = await Promise.all([
-      this.getBulkKlines('BTC-USD', interval, startTime, now),
-      this.getBulkKlines('ETH-USD', interval, startTime, now),
-      this.getBulkKlines('SOL-USD', interval, startTime, now),
-    ]);
-
-    // Create a map of timestamp -> trade counts
-    const tradesMap = new Map<number, { BTC: number; ETH: number; SOL: number }>();
-
-    // Process BTC
-    btcKlines.forEach(k => {
-      const ts = k.t;
-      if (!tradesMap.has(ts)) tradesMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      tradesMap.get(ts)!.BTC = k.n; // number of trades
-    });
-
-    // Process ETH
-    ethKlines.forEach(k => {
-      const ts = k.t;
-      if (!tradesMap.has(ts)) tradesMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      tradesMap.get(ts)!.ETH = k.n;
-    });
-
-    // Process SOL
-    solKlines.forEach(k => {
-      const ts = k.t;
-      if (!tradesMap.has(ts)) tradesMap.set(ts, { BTC: 0, ETH: 0, SOL: 0 });
-      tradesMap.get(ts)!.SOL = k.n;
-    });
-
-    // Convert to array and sort
-    const result = Array.from(tradesMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([ts, trades]) => ({
-        timestamp: new Date(ts).toISOString(),
-        BTC: trades.BTC,
-        ETH: trades.ETH,
-        SOL: trades.SOL,
-        total: trades.BTC + trades.ETH + trades.SOL,
-      }));
-
-    return result;
+    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      `/api/analytics/trades-chart-api?hours=${hours}`
+    );
+    return data.data;
   },
 };
 
