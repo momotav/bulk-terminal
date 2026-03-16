@@ -411,29 +411,55 @@ export default function WalletPage() {
                       );
                     })
                   ) : trades.length > 0 ? (
-                    // Show recent trades from database
+                    // Show recent trades from database - styled like position cards
                     trades.map((trade) => {
                       const isBuy = trade.side.toLowerCase() === 'buy' || trade.side.toLowerCase() === 'long';
+                      const isShort = trade.side.toLowerCase() === 'sell' || trade.side.toLowerCase() === 'short';
                       return (
-                        <div key={trade.id} className="p-4 hover:bg-dark-tertiary/30 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className={cn(
-                                "px-2 py-0.5 rounded text-xs font-medium",
-                                isBuy ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red"
-                              )}>
-                                {trade.side.toUpperCase()}
-                              </span>
-                              <span className="font-medium">{trade.symbol}</span>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-medium">${formatCompact(trade.value)}</p>
-                              <p className="text-xs text-gray-500">{formatShortDate(trade.timestamp)}</p>
-                            </div>
+                        <div key={trade.id} className="p-4 hover:bg-dark-tertiary/30 transition-colors border-b border-dark-border last:border-b-0">
+                          {/* Header row */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="font-semibold text-white">{trade.symbol}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-300">Perp</span>
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                              isBuy ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red"
+                            )}>
+                              Cross {isBuy ? 'Long' : 'Short'}
+                            </span>
+                            <span className="text-gray-500 text-xs">|</span>
+                            <span className="text-gray-400 text-xs">Trade</span>
                           </div>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                            <span>Size: {formatNumber(trade.size, 4)}</span>
-                            <span>Price: ${formatNumber(trade.price, 2)}</span>
+                          
+                          {/* Stats grid */}
+                          <div className="grid grid-cols-5 gap-4 text-xs">
+                            <div>
+                              <p className="text-gray-500 mb-1">Value</p>
+                              <p className={cn(
+                                "font-semibold",
+                                isBuy ? "text-bulk-green" : "text-bulk-red"
+                              )}>
+                                ${formatNumber(trade.value, 2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 mb-1">Size</p>
+                              <p className="text-white">{formatNumber(trade.size, 4)} {trade.symbol.split('-')[0]}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 mb-1">Price</p>
+                              <p className="text-white">{formatNumber(trade.price, 2)} USD</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 mb-1">Side</p>
+                              <p className={isBuy ? "text-bulk-green" : "text-bulk-red"}>
+                                {isBuy ? 'Buy' : 'Sell'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 mb-1">Time</p>
+                              <p className="text-white">{new Date(trade.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(trade.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+                            </div>
                           </div>
                         </div>
                       );
