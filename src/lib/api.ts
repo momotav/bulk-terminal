@@ -345,6 +345,14 @@ export const wallet = {
     return request(`/api/wallet/${address}`);
   },
 
+  async getTrades(address: string, limit: number = 50): Promise<{ data: Array<{ id: number; symbol: string; side: string; size: number; price: number; value: number; timestamp: string }> }> {
+    return request(`/api/wallet/${address}/trades?limit=${limit}`);
+  },
+
+  async getLiquidations(address: string, limit: number = 50): Promise<{ data: Array<{ id: number; symbol: string; side: string; size: number; price: number; value: number; timestamp: string }> }> {
+    return request(`/api/wallet/${address}/liquidations?limit=${limit}`);
+  },
+
   async trackWallet(address: string): Promise<{ success: boolean }> {
     return request(`/api/wallet/${address}/track`, { method: 'POST' });
   },
