@@ -11,6 +11,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-reac
 import Link from 'next/link';
 
 const timeRanges = [
+  { label: '1D', hours: 24 },
   { label: 'W', hours: 168 },
   { label: 'M', hours: 720 },
   { label: 'Q', hours: 2160 },
@@ -28,6 +29,7 @@ const COLORS = {
 
 type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total: number };
 
+// Interactive range slider with smooth dragging
 const InteractiveRangeSlider = ({ 
   data, 
   color = COLORS.BTC,
@@ -43,38 +45,47 @@ const InteractiveRangeSlider = ({
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
-  const [dragStartX, setDragStartX] = useState(0);
-  const [dragStartRange, setDragStartRange] = useState({ start: 0, end: 100 });
+  const dragStartX = useRef(0);
+  const dragStartRange = useRef({ start: 0, end: 100 });
 
   const isDisabled = data.length <= 1;
 
-  const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
+  const handleStart = useCallback((clientX: number, type: 'left' | 'right' | 'middle') => {
     if (isDisabled) return;
-    e.preventDefault();
     setDragging(type);
-    setDragStartX(e.clientX);
-    setDragStartRange({ start: rangeStart, end: rangeEnd });
+    dragStartX.current = clientX;
+    dragStartRange.current = { start: rangeStart, end: rangeEnd };
+  }, [isDisabled, rangeStart, rangeEnd]);
+
+  const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
+    e.preventDefault();
+    handleStart(e.clientX, type);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent, type: 'left' | 'right' | 'middle') => {
+    e.preventDefault();
+    handleStart(e.touches[0].clientX, type);
   };
 
   useEffect(() => {
     if (!dragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMove = (clientX: number) => {
       if (!sliderRef.current) return;
       const rect = sliderRef.current.getBoundingClientRect();
-      const deltaX = e.clientX - dragStartX;
+      const deltaX = clientX - dragStartX.current;
       const deltaPercent = (deltaX / rect.width) * 100;
 
       if (dragging === 'left') {
-        const newStart = Math.max(0, Math.min(dragStartRange.start + deltaPercent, rangeEnd - 5));
+        const newStart = Math.max(0, Math.min(dragStartRange.current.start + deltaPercent, rangeEnd - 5));
         onRangeChange(newStart, rangeEnd);
       } else if (dragging === 'right') {
-        const newEnd = Math.max(rangeStart + 5, Math.min(100, dragStartRange.end + deltaPercent));
+        const newEnd = Math.max(rangeStart + 5, Math.min(100, dragStartRange.current.end + deltaPercent));
         onRangeChange(rangeStart, newEnd);
       } else if (dragging === 'middle') {
-        const rangeWidth = dragStartRange.end - dragStartRange.start;
-        let newStart = dragStartRange.start + deltaPercent;
-        let newEnd = dragStartRange.end + deltaPercent;
+        const rangeWidth = dragStartRange.current.end - dragStartRange.current.start;
+        let newStart = dragStartRange.current.start + deltaPercent;
+        let newEnd = dragStartRange.current.end + deltaPercent;
         
         if (newStart < 0) {
           newStart = 0;
@@ -88,16 +99,22 @@ const InteractiveRangeSlider = ({
       }
     };
 
-    const handleMouseUp = () => setDragging(null);
+    const handleMouseMove = (e: MouseEvent) => handleMove(e.clientX);
+    const handleTouchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
+    const handleEnd = () => setDragging(null);
 
     document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleEnd);
     };
-  }, [dragging, dragStartX, dragStartRange, rangeStart, rangeEnd, onRangeChange]);
+  }, [dragging, rangeStart, rangeEnd, onRangeChange]);
 
   const maxValue = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || d.value || 0), 1);
   const barHeights = data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || d.value || 0) / maxValue) * 100);
@@ -106,44 +123,78 @@ const InteractiveRangeSlider = ({
     <div 
       ref={sliderRef}
       className={cn(
-        "mt-3 h-8 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden select-none",
+        "mt-3 h-10 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden select-none touch-none",
         isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
       )}
     >
+      {/* Mini bar chart background */}
       <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px">
-        {(data.length > 0 ? barHeights : Array(30).fill(20)).map((height, i) => (
-          <div 
-            key={i} 
-            className="flex-1 rounded-t transition-opacity"
-            style={{ 
-              height: `${Math.max(10, height)}%`, 
-              backgroundColor: `${color}30`,
-              opacity: !isDisabled && (i / data.length * 100 >= rangeStart && i / data.length * 100 <= rangeEnd) ? 1 : 0.3
-            }} 
-          />
-        ))}
+        {(data.length > 0 ? barHeights : Array(30).fill(20)).map((height, i) => {
+          const percent = data.length > 0 ? (i / data.length) * 100 : (i / 30) * 100;
+          const isInRange = percent >= rangeStart && percent <= rangeEnd;
+          return (
+            <div 
+              key={i} 
+              className="flex-1 rounded-t transition-all duration-150"
+              style={{ 
+                height: `${Math.max(10, height)}%`, 
+                backgroundColor: isInRange ? `${color}60` : `${color}20`,
+              }} 
+            />
+          );
+        })}
       </div>
 
+      {/* Selection overlay */}
       {!isDisabled && (
         <>
+          {/* Dimmed areas outside selection */}
           <div 
-            className="absolute top-0 bottom-0 bg-transparent border-l-2 border-r-2 cursor-grab active:cursor-grabbing"
-            style={{ left: `${rangeStart}%`, right: `${100 - rangeEnd}%`, borderColor: color }}
-            onMouseDown={(e) => handleMouseDown(e, 'middle')}
+            className="absolute top-0 bottom-0 left-0 bg-black/40 transition-all duration-75"
+            style={{ width: `${rangeStart}%` }}
           />
           <div 
-            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10"
-            style={{ left: `calc(${rangeStart}% - 6px)` }}
-            onMouseDown={(e) => handleMouseDown(e, 'left')}
-          >
-            <div className="w-1.5 h-4 rounded-full transition-colors" style={{ backgroundColor: dragging === 'left' ? color : '#666' }} />
-          </div>
+            className="absolute top-0 bottom-0 right-0 bg-black/40 transition-all duration-75"
+            style={{ width: `${100 - rangeEnd}%` }}
+          />
+          
+          {/* Draggable selection area */}
           <div 
-            className="absolute top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-10"
-            style={{ left: `calc(${rangeEnd}% - 6px)` }}
-            onMouseDown={(e) => handleMouseDown(e, 'right')}
+            className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-all duration-75"
+            style={{ 
+              left: `${rangeStart}%`, 
+              right: `${100 - rangeEnd}%`,
+              borderLeft: `2px solid ${color}`,
+              borderRight: `2px solid ${color}`,
+            }}
+            onMouseDown={(e) => handleMouseDown(e, 'middle')}
+            onTouchStart={(e) => handleTouchStart(e, 'middle')}
+          />
+          
+          {/* Left handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-10 transition-all duration-75"
+            style={{ left: `calc(${rangeStart}% - 8px)` }}
+            onMouseDown={(e) => handleMouseDown(e, 'left')}
+            onTouchStart={(e) => handleTouchStart(e, 'left')}
           >
-            <div className="w-1.5 h-4 rounded-full transition-colors" style={{ backgroundColor: dragging === 'right' ? color : '#666' }} />
+            <div 
+              className="w-1 h-6 rounded-full transition-all duration-150"
+              style={{ backgroundColor: dragging === 'left' ? color : '#888' }}
+            />
+          </div>
+          
+          {/* Right handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-10 transition-all duration-75"
+            style={{ left: `calc(${rangeEnd}% - 8px)` }}
+            onMouseDown={(e) => handleMouseDown(e, 'right')}
+            onTouchStart={(e) => handleTouchStart(e, 'right')}
+          >
+            <div 
+              className="w-1 h-6 rounded-full transition-all duration-150"
+              style={{ backgroundColor: dragging === 'right' ? color : '#888' }}
+            />
           </div>
         </>
       )}
@@ -195,13 +246,79 @@ const FundingTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+// Per-chart timeframe selector
+const TimeframeSelector = ({ 
+  value, 
+  onChange,
+}: { 
+  value: number; 
+  onChange: (hours: number) => void;
+}) => (
+  <div className="flex items-center gap-0.5 bg-[#1a1a1a] rounded-lg p-0.5 border border-[#282828]">
+    {timeRanges.map((t) => (
+      <button
+        key={t.hours}
+        onClick={() => onChange(t.hours)}
+        className={cn(
+          "px-2 py-1 text-xs font-medium rounded transition-all duration-200",
+          value === t.hours
+            ? "bg-[#00B482] text-white shadow-sm"
+            : "text-gray-500 hover:text-white hover:bg-[#252525]"
+        )}
+      >
+        {t.label}
+      </button>
+    ))}
+  </div>
+);
+
+// Chart wrapper component with loading state
+const ChartCard = ({ 
+  title, 
+  children, 
+  toggles,
+  timeframe,
+  onTimeframeChange,
+  loading = false,
+}: { 
+  title: string; 
+  children: React.ReactNode; 
+  toggles?: React.ReactNode;
+  timeframe: number;
+  onTimeframeChange: (hours: number) => void;
+  loading?: boolean;
+}) => (
+  <div className={cn(
+    "bg-[#111] rounded-lg border border-[#222] p-4 transition-opacity duration-300",
+    loading && "opacity-60"
+  )}>
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
+    </div>
+    {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
+    <div className={cn("transition-all duration-300", loading && "blur-sm")}>
+      {children}
+    </div>
+  </div>
+);
+
 export default function AnalyticsPage() {
-  const [hours, setHours] = useState(720);
+  // Per-chart timeframes
+  const [volumeHours, setVolumeHours] = useState(720);
+  const [oiHours, setOiHours] = useState(168);
+  const [fundingHours, setFundingHours] = useState(168);
+  const [liquidationsHours, setLiquidationsHours] = useState(720);
+  const [tradesHours, setTradesHours] = useState(720);
+  const [adlHours, setAdlHours] = useState(720);
+  
   const [loading, setLoading] = useState(true);
+  const [chartLoading, setChartLoading] = useState<Record<string, boolean>>({});
   const [selectedCoins, setSelectedCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
   
+  // Range sliders state
   const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
   const [oiRange, setOiRange] = useState({ start: 0, end: 100 });
   const [fundingRange, setFundingRange] = useState({ start: 0, end: 100 });
@@ -209,6 +326,7 @@ export default function AnalyticsPage() {
   const [tradesRange, setTradesRange] = useState({ start: 0, end: 100 });
   const [adlRange, setAdlRange] = useState({ start: 0, end: 100 });
   
+  // Data state
   const [oiData, setOiData] = useState<{ BTC: any; ETH: any; SOL: any }>({ BTC: null, ETH: null, SOL: null });
   const [fundingData, setFundingData] = useState<Record<string, { timestamp: string; value: number }[]>>({ BTC: [], ETH: [], SOL: [] });
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
@@ -218,30 +336,132 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
+  // Fetch volume data when timeframe changes
   useEffect(() => {
-    setVolumeRange({ start: 0, end: 100 });
-    setOiRange({ start: 0, end: 100 });
-    setFundingRange({ start: 0, end: 100 });
-    setLiquidationsRange({ start: 0, end: 100 });
-    setTradesRange({ start: 0, end: 100 });
-    setAdlRange({ start: 0, end: 100 });
-  }, [hours]);
+    const fetchVolumeData = async () => {
+      setChartLoading(prev => ({ ...prev, volume: true }));
+      try {
+        const data = await analytics.getVolumeChart(volumeHours);
+        setVolumeChart(data);
+        setVolumeRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch volume data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, volume: false }));
+      }
+    };
+    if (!loading) fetchVolumeData();
+  }, [volumeHours, loading]);
 
+  // Fetch OI data when timeframe changes
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchOiData = async () => {
+      setChartLoading(prev => ({ ...prev, oi: true }));
+      try {
+        const [btc, eth, sol] = await Promise.all([
+          analytics.getOpenInterestCalculated('BTC-USD', oiHours),
+          analytics.getOpenInterestCalculated('ETH-USD', oiHours),
+          analytics.getOpenInterestCalculated('SOL-USD', oiHours),
+        ]);
+        setOiData({ BTC: btc, ETH: eth, SOL: sol });
+        setOiRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch OI data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, oi: false }));
+      }
+    };
+    if (!loading) fetchOiData();
+  }, [oiHours, loading]);
+
+  // Fetch funding data when timeframe changes
+  useEffect(() => {
+    const fetchFundingData = async () => {
+      setChartLoading(prev => ({ ...prev, funding: true }));
+      try {
+        const [btc, eth, sol] = await Promise.all([
+          analytics.getFundingRate('BTC-USD', fundingHours),
+          analytics.getFundingRate('ETH-USD', fundingHours),
+          analytics.getFundingRate('SOL-USD', fundingHours),
+        ]);
+        setFundingData({ BTC: btc, ETH: eth, SOL: sol });
+        setFundingRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch funding data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, funding: false }));
+      }
+    };
+    if (!loading) fetchFundingData();
+  }, [fundingHours, loading]);
+
+  // Fetch liquidations data when timeframe changes
+  useEffect(() => {
+    const fetchLiquidationsData = async () => {
+      setChartLoading(prev => ({ ...prev, liquidations: true }));
+      try {
+        const data = await analytics.getLiquidationsChart(liquidationsHours);
+        setLiquidationsChart(data);
+        setLiquidationsRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch liquidations data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, liquidations: false }));
+      }
+    };
+    if (!loading) fetchLiquidationsData();
+  }, [liquidationsHours, loading]);
+
+  // Fetch trades data when timeframe changes
+  useEffect(() => {
+    const fetchTradesData = async () => {
+      setChartLoading(prev => ({ ...prev, trades: true }));
+      try {
+        const data = await analytics.getTradesChart(tradesHours);
+        setTradesChart(data);
+        setTradesRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch trades data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, trades: false }));
+      }
+    };
+    if (!loading) fetchTradesData();
+  }, [tradesHours, loading]);
+
+  // Fetch ADL data when timeframe changes
+  useEffect(() => {
+    const fetchAdlData = async () => {
+      setChartLoading(prev => ({ ...prev, adl: true }));
+      try {
+        const data = await analytics.getADLChart(adlHours);
+        setAdlChart(data);
+        setAdlRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch ADL data:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, adl: false }));
+      }
+    };
+    if (!loading) fetchAdlData();
+  }, [adlHours, loading]);
+
+  // Initial data fetch
+  useEffect(() => {
+    const fetchInitialData = async () => {
       setLoading(true);
       try {
         const results = await Promise.allSettled([
-          analytics.getOpenInterestCalculated('BTC-USD', hours),
-          analytics.getOpenInterestCalculated('ETH-USD', hours),
-          analytics.getOpenInterestCalculated('SOL-USD', hours),
-          analytics.getFundingRate('BTC-USD', hours),
-          analytics.getFundingRate('ETH-USD', hours),
-          analytics.getFundingRate('SOL-USD', hours),
-          analytics.getTradesChart(hours),
-          analytics.getLiquidationsChart(hours),
-          analytics.getADLChart(hours),
-          analytics.getVolumeChart(hours),
+          analytics.getOpenInterestCalculated('BTC-USD', oiHours),
+          analytics.getOpenInterestCalculated('ETH-USD', oiHours),
+          analytics.getOpenInterestCalculated('SOL-USD', oiHours),
+          analytics.getFundingRate('BTC-USD', fundingHours),
+          analytics.getFundingRate('ETH-USD', fundingHours),
+          analytics.getFundingRate('SOL-USD', fundingHours),
+          analytics.getTradesChart(tradesHours),
+          analytics.getLiquidationsChart(liquidationsHours),
+          analytics.getADLChart(adlHours),
+          analytics.getVolumeChart(volumeHours),
           analytics.getStats(),
           leaderboard.getMostActive('all', 100),
         ]);
@@ -274,17 +494,18 @@ export default function AnalyticsPage() {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [hours]);
+    fetchInitialData();
+  }, []);
 
-  const sliceDataByRange = <T,>(data: T[], range: { start: number; end: number }): T[] => {
+  // Slice data by range (for range slider)
+  const sliceDataByRange = useCallback(<T,>(data: T[], range: { start: number; end: number }): T[] => {
     if (data.length <= 1) return data;
     const startIdx = Math.floor((range.start / 100) * data.length);
     const endIdx = Math.ceil((range.end / 100) * data.length);
-    return data.slice(startIdx, endIdx);
-  };
+    return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
+  }, []);
 
-  const withCumulative = (data: ChartData[]) => {
+  const withCumulative = useCallback((data: ChartData[]) => {
     let cumulative = 0;
     return data.map(item => {
       const btc = selectedCoins.includes('BTC') ? item.BTC : 0;
@@ -293,7 +514,7 @@ export default function AnalyticsPage() {
       cumulative += btc + eth + sol;
       return { ...item, BTC: btc, ETH: eth, SOL: sol, Cumulative: cumulative };
     });
-  };
+  }, [selectedCoins]);
 
   const combinedOIData = useMemo(() => {
     const btcData = oiData.BTC?.data || [];
@@ -317,13 +538,13 @@ export default function AnalyticsPage() {
   }, [oiData, selectedCoins]);
 
   const combinedFundingData = useMemo(() => {
-    const btc = fundingData.BTC;
+    const btc = fundingData.BTC || [];
     if (!btc.length) return [];
     return btc.map((item, i) => ({
       timestamp: item.timestamp,
       BTC: selectedCoins.includes('BTC') ? (item.value * 100) : null,
-      ETH: selectedCoins.includes('ETH') ? ((fundingData.ETH[i]?.value || 0) * 100) : null,
-      SOL: selectedCoins.includes('SOL') ? ((fundingData.SOL[i]?.value || 0) * 100) : null,
+      ETH: selectedCoins.includes('ETH') ? ((fundingData.ETH?.[i]?.value || 0) * 100) : null,
+      SOL: selectedCoins.includes('SOL') ? ((fundingData.SOL?.[i]?.value || 0) * 100) : null,
     }));
   }, [fundingData, selectedCoins]);
 
@@ -343,7 +564,7 @@ export default function AnalyticsPage() {
     <button
       onClick={() => toggleCoin(coin)}
       className={cn(
-        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all",
+        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all duration-200",
         selectedCoins.includes(coin)
           ? "bg-[#1f1f1f] border-[#333] text-white"
           : "bg-transparent border-transparent text-gray-500 hover:text-gray-300"
@@ -361,25 +582,6 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const TimeframeButtons = () => (
-    <div className="flex items-center">
-      {timeRanges.map((t) => (
-        <button
-          key={t.hours}
-          onClick={() => setHours(t.hours)}
-          className={cn(
-            "px-3 py-1.5 text-xs font-medium transition-all",
-            hours === t.hours
-              ? "text-white border border-[#00B482] rounded bg-[#1a1a1a]"
-              : "text-gray-500 hover:text-gray-300"
-          )}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-
   const NoDataMessage = ({ title }: { title: string }) => (
     <div className="h-[260px] flex flex-col items-center justify-center text-gray-500">
       <p className="text-sm">No {title} data yet</p>
@@ -387,38 +589,24 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const ChartCard = ({ title, children, toggles }: { 
-    title: string; 
-    children: React.ReactNode; 
-    toggles?: React.ReactNode;
-  }) => (
-    <div className="bg-[#111] rounded-lg border border-[#222] p-4">
-      <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
-      {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
-      <div className="flex items-center justify-end mb-4">
-        <TimeframeButtons />
-      </div>
-      {children}
-    </div>
-  );
-
   const paginatedUsers = topUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
   const totalPages = Math.ceil(topUsers.length / 10) || 1;
 
-  const volumeDataFull = withCumulative(volumeChart);
-  const volumeDataFiltered = sliceDataByRange(volumeDataFull, volumeRange);
+  // Filtered data for each chart
+  const volumeDataFull = useMemo(() => withCumulative(volumeChart), [volumeChart, withCumulative]);
+  const volumeDataFiltered = useMemo(() => sliceDataByRange(volumeDataFull, volumeRange), [volumeDataFull, volumeRange, sliceDataByRange]);
   
-  const tradesDataFull = withCumulative(tradesChart);
-  const tradesDataFiltered = sliceDataByRange(tradesDataFull, tradesRange);
+  const tradesDataFull = useMemo(() => withCumulative(tradesChart), [tradesChart, withCumulative]);
+  const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
   
-  const liquidationsDataFull = withCumulative(liquidationsChart);
-  const liquidationsDataFiltered = sliceDataByRange(liquidationsDataFull, liquidationsRange);
+  const liquidationsDataFull = useMemo(() => withCumulative(liquidationsChart), [liquidationsChart, withCumulative]);
+  const liquidationsDataFiltered = useMemo(() => sliceDataByRange(liquidationsDataFull, liquidationsRange), [liquidationsDataFull, liquidationsRange, sliceDataByRange]);
   
-  const adlDataFull = withCumulative(adlChart);
-  const adlDataFiltered = sliceDataByRange(adlDataFull, adlRange);
+  const adlDataFull = useMemo(() => withCumulative(adlChart), [adlChart, withCumulative]);
+  const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
   
-  const oiDataFiltered = sliceDataByRange(combinedOIData, oiRange);
-  const fundingDataFiltered = sliceDataByRange(combinedFundingData, fundingRange);
+  const oiDataFiltered = useMemo(() => sliceDataByRange(combinedOIData, oiRange), [combinedOIData, oiRange, sliceDataByRange]);
+  const fundingDataFiltered = useMemo(() => sliceDataByRange(combinedFundingData, fundingRange), [combinedFundingData, fundingRange, sliceDataByRange]);
 
   const totalOI = (oiData.BTC?.currentOI || 0) + (oiData.ETH?.currentOI || 0) + (oiData.SOL?.currentOI || 0);
 
@@ -455,12 +643,14 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard 
                 title="Total Volume"
+                timeframe={volumeHours}
+                onTimeframeChange={setVolumeHours}
+                loading={chartLoading.volume}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <CumulativeToggle label="Cumulative Volume" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
+                  <CumulativeToggle label="Cumulative" />
                 </>}
               >
                 {volumeDataFull.length > 0 ? (
@@ -472,10 +662,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -492,12 +682,14 @@ export default function AnalyticsPage() {
 
               <ChartCard 
                 title="Open Interest (Real-Time)"
+                timeframe={oiHours}
+                onTimeframeChange={setOiHours}
+                loading={chartLoading.oi}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <CumulativeToggle label="Total Open Interest" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
+                  <CumulativeToggle label="Total OI" />
                 </>}
               >
                 {combinedOIData.length > 0 ? (
@@ -508,10 +700,10 @@ export default function AnalyticsPage() {
                           <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} />
-                          <Line type="monotone" dataKey="Total OI" stroke={COLORS.cumulative} strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="Total OI" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -530,11 +722,13 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard 
                 title="Annualized Funding Rate"
+                timeframe={fundingHours}
+                onTimeframeChange={setFundingHours}
+                loading={chartLoading.funding}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
                 </>}
               >
                 {combinedFundingData.length > 0 ? (
@@ -546,15 +740,15 @@ export default function AnalyticsPage() {
                           <YAxis tickFormatter={v => `${v?.toFixed(4) || 0}%`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                     <InteractiveRangeSlider 
                       data={combinedFundingData} 
-                      color={COLORS.ETH}
+                      color={COLORS.BTC}
                       rangeStart={fundingRange.start}
                       rangeEnd={fundingRange.end}
                       onRangeChange={(start, end) => setFundingRange({ start, end })}
@@ -565,12 +759,14 @@ export default function AnalyticsPage() {
 
               <ChartCard 
                 title="Liquidations"
+                timeframe={liquidationsHours}
+                onTimeframeChange={setLiquidationsHours}
+                loading={chartLoading.liquidations}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <CumulativeToggle label="Cumulative Liquidated" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
+                  <CumulativeToggle label="Cumulative" />
                 </>}
               >
                 {liquidationsDataFull.length > 0 ? (
@@ -582,10 +778,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -604,12 +800,14 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard 
                 title="Number Of Trades"
+                timeframe={tradesHours}
+                onTimeframeChange={setTradesHours}
+                loading={chartLoading.trades}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <CumulativeToggle label="Cumulative Trades" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
+                  <CumulativeToggle label="Cumulative" />
                 </>}
               >
                 {tradesDataFull.length > 0 ? (
@@ -621,10 +819,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -641,12 +839,14 @@ export default function AnalyticsPage() {
 
               <ChartCard 
                 title="Auto-Deleveraging (ADL)"
+                timeframe={adlHours}
+                onTimeframeChange={setAdlHours}
+                loading={chartLoading.adl}
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
                   <CoinToggle coin="SOL" />
-                  <CumulativeToggle label="Cumulative ADL" />
-                  <button onClick={() => setSelectedCoins([])} className="px-3 py-1.5 rounded border border-[#333] text-xs text-gray-500 hover:text-white">Deselect all</button>
+                  <CumulativeToggle label="Cumulative" />
                 </>}
               >
                 {adlDataFull.length > 0 ? (
@@ -658,10 +858,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={45} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
