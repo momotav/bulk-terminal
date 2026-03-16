@@ -340,18 +340,30 @@ export const analytics = {
 
   // Volume chart from BULK API (via backend proxy)
   async getVolumeFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
-      `/api/analytics/volume-chart-api?hours=${hours}`
-    );
-    return data.data;
+    try {
+      const response = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+        `/api/analytics/volume-chart-api?hours=${hours}`
+      );
+      console.log('Volume API response:', response);
+      return response.data || [];
+    } catch (error) {
+      console.error('Volume API error:', error);
+      return [];
+    }
   },
 
   // Trades count chart from BULK API (via backend proxy)
   async getTradesFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
-      `/api/analytics/trades-chart-api?hours=${hours}`
-    );
-    return data.data;
+    try {
+      const response = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+        `/api/analytics/trades-chart-api?hours=${hours}`
+      );
+      console.log('Trades API response:', response);
+      return response.data || [];
+    } catch (error) {
+      console.error('Trades API error:', error);
+      return [];
+    }
   },
 };
 
