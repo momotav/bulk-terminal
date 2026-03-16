@@ -465,16 +465,23 @@ export default function WalletPage() {
                 ) : (
                   <div className="p-4 h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={history}>
+                      <AreaChart data={history.map(h => ({ 
+                        ...h, 
+                        displayPnl: (h.pnl || 0) + (h.unrealized_pnl || 0) 
+                      }))}>
                         <defs>
-                          <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#00ff88" stopOpacity={0}/>
+                          <linearGradient id="pnlGradientPositive" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="pnlGradientNegative" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
                         <XAxis 
                           dataKey="timestamp" 
-                          tickFormatter={formatDate}
+                          tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: '#2a2a40' }}
                         />
@@ -482,17 +489,18 @@ export default function WalletPage() {
                           tickFormatter={(v) => `$${formatCompact(v)}`}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: '#2a2a40' }}
+                          domain={['auto', 'auto']}
                         />
                         <Tooltip 
                           contentStyle={{ background: '#12121a', border: '1px solid #2a2a40', borderRadius: 8 }}
-                          labelFormatter={formatDate}
-                          formatter={(v: number) => [`$${formatNumber(v, 2)}`, 'PnL']}
+                          labelFormatter={(ts) => new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          formatter={(v: number) => [`$${formatNumber(v, 2)}`, 'Total PnL']}
                         />
                         <Area 
                           type="monotone" 
-                          dataKey="pnl" 
-                          stroke="#00ff88" 
-                          fill="url(#pnlGradient)" 
+                          dataKey="displayPnl" 
+                          stroke="#00B482" 
+                          fill="url(#pnlGradientPositive)" 
                         />
                       </AreaChart>
                     </ResponsiveContainer>
