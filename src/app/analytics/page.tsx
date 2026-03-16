@@ -374,17 +374,22 @@ export default function AnalyticsPage() {
     if (!loading) fetchVolumeData();
   }, [volumeHours, loading]);
 
-  // Fetch OI data when timeframe changes
+  // Fetch OI data when timeframe changes - now from BULK API
   useEffect(() => {
     const fetchOiData = async () => {
       setChartLoading(prev => ({ ...prev, oi: true }));
       try {
         const [btc, eth, sol] = await Promise.all([
-          analytics.getOpenInterestCalculated('BTC-USD', oiHours),
-          analytics.getOpenInterestCalculated('ETH-USD', oiHours),
-          analytics.getOpenInterestCalculated('SOL-USD', oiHours),
+          analytics.getOpenInterest('BTC-USD', oiHours),
+          analytics.getOpenInterest('ETH-USD', oiHours),
+          analytics.getOpenInterest('SOL-USD', oiHours),
         ]);
-        setOiData({ BTC: btc, ETH: eth, SOL: sol });
+        // Transform ChartDataPoint[] to expected format
+        setOiData({ 
+          BTC: { data: btc.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: btc[btc.length - 1]?.value || 0 }, 
+          ETH: { data: eth.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: eth[eth.length - 1]?.value || 0 }, 
+          SOL: { data: sol.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: sol[sol.length - 1]?.value || 0 }
+        });
         setOiRange({ start: 0, end: 100 });
       } catch (error) {
         console.error('Failed to fetch OI data:', error);
@@ -473,9 +478,9 @@ export default function AnalyticsPage() {
       setLoading(true);
       try {
         const results = await Promise.allSettled([
-          analytics.getOpenInterestCalculated('BTC-USD', oiHours),
-          analytics.getOpenInterestCalculated('ETH-USD', oiHours),
-          analytics.getOpenInterestCalculated('SOL-USD', oiHours),
+          analytics.getOpenInterest('BTC-USD', oiHours),
+          analytics.getOpenInterest('ETH-USD', oiHours),
+          analytics.getOpenInterest('SOL-USD', oiHours),
           analytics.getFundingRate('BTC-USD', fundingHours),
           analytics.getFundingRate('ETH-USD', fundingHours),
           analytics.getFundingRate('SOL-USD', fundingHours),
@@ -491,10 +496,15 @@ export default function AnalyticsPage() {
           return result.status === 'fulfilled' ? result.value : defaultValue;
         };
 
+        // Transform OI data from BULK API format
+        const btcOi = getValue(results[0], [] as any[]);
+        const ethOi = getValue(results[1], [] as any[]);
+        const solOi = getValue(results[2], [] as any[]);
+        
         setOiData({
-          BTC: getValue(results[0], null),
-          ETH: getValue(results[1], null),
-          SOL: getValue(results[2], null),
+          BTC: { data: btcOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: btcOi[btcOi.length - 1]?.value || 0 },
+          ETH: { data: ethOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: ethOi[ethOi.length - 1]?.value || 0 },
+          SOL: { data: solOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: solOi[solOi.length - 1]?.value || 0 },
         });
         
         setFundingData({
