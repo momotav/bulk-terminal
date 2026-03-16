@@ -448,7 +448,7 @@ export default function WalletPage() {
               </div>
 
               {/* PnL History Chart */}
-              <div className="glass-card">
+              <div className="glass-card flex flex-col">
                 <div className="panel-header">
                   <h2 className="panel-title">
                     <TrendingUp className="w-4 h-4 text-bulk-green" />
@@ -457,13 +457,15 @@ export default function WalletPage() {
                 </div>
 
                 {history.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p>No history data yet</p>
-                    <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
+                  <div className="flex-1 flex items-center justify-center p-8 text-center text-gray-500 min-h-[300px]">
+                    <div>
+                      <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>No history data yet</p>
+                      <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="p-4 h-[300px]">
+                  <div className="flex-1 p-4 min-h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={history.map(h => ({ 
                         ...h, 
