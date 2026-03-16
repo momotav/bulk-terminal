@@ -265,7 +265,7 @@ const TimeframeSelector = ({
   </div>
 );
 
-// Chart wrapper component with loading state
+// Chart wrapper component with loading state and Y-axis labels
 const ChartCard = ({ 
   title, 
   children, 
@@ -273,6 +273,8 @@ const ChartCard = ({
   timeframe,
   onTimeframeChange,
   loading = false,
+  leftAxisLabel,
+  rightAxisLabel,
 }: { 
   title: string; 
   children: React.ReactNode; 
@@ -280,6 +282,8 @@ const ChartCard = ({
   timeframe: number;
   onTimeframeChange: (hours: number) => void;
   loading?: boolean;
+  leftAxisLabel?: string;
+  rightAxisLabel?: string;
 }) => (
   <div className={cn(
     "bg-[#111] rounded-lg border border-[#222] p-4 transition-opacity duration-300",
@@ -290,8 +294,26 @@ const ChartCard = ({
       <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
     </div>
     {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
-    <div className={cn("transition-all duration-300", loading && "blur-sm")}>
-      {children}
+    <div className={cn("relative transition-all duration-300", loading && "blur-sm")}>
+      {/* Left Y-axis label - vertical text */}
+      {leftAxisLabel && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 pointer-events-none">
+          <div className="transform -rotate-90 whitespace-nowrap">
+            <span className="text-[10px] text-gray-500 tracking-wide">{leftAxisLabel}</span>
+          </div>
+        </div>
+      )}
+      {/* Right Y-axis label - vertical text */}
+      {rightAxisLabel && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 pointer-events-none">
+          <div className="transform rotate-90 whitespace-nowrap">
+            <span className="text-[10px] text-gray-500 tracking-wide">{rightAxisLabel}</span>
+          </div>
+        </div>
+      )}
+      <div className={cn(leftAxisLabel && "ml-4", rightAxisLabel && "mr-4")}>
+        {children}
+      </div>
     </div>
   </div>
 );
@@ -639,6 +661,8 @@ export default function AnalyticsPage() {
                 timeframe={volumeHours}
                 onTimeframeChange={setVolumeHours}
                 loading={chartLoading.volume}
+                leftAxisLabel="Daily Volume (USD)"
+                rightAxisLabel="Cumulative Volume (USD)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -678,6 +702,7 @@ export default function AnalyticsPage() {
                 timeframe={oiHours}
                 onTimeframeChange={setOiHours}
                 loading={chartLoading.oi}
+                leftAxisLabel="Open Interest (USD)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -718,6 +743,7 @@ export default function AnalyticsPage() {
                 timeframe={fundingHours}
                 onTimeframeChange={setFundingHours}
                 loading={chartLoading.funding}
+                leftAxisLabel="Funding Rate (%)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -755,6 +781,8 @@ export default function AnalyticsPage() {
                 timeframe={liquidationsHours}
                 onTimeframeChange={setLiquidationsHours}
                 loading={chartLoading.liquidations}
+                leftAxisLabel="Daily Liquidations (USD)"
+                rightAxisLabel="Cumulative (USD)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -796,6 +824,8 @@ export default function AnalyticsPage() {
                 timeframe={tradesHours}
                 onTimeframeChange={setTradesHours}
                 loading={chartLoading.trades}
+                leftAxisLabel="Daily Trades"
+                rightAxisLabel="Cumulative Trades"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
@@ -835,6 +865,8 @@ export default function AnalyticsPage() {
                 timeframe={adlHours}
                 onTimeframeChange={setAdlHours}
                 loading={chartLoading.adl}
+                leftAxisLabel="Daily ADL (USD)"
+                rightAxisLabel="Cumulative ADL (USD)"
                 toggles={<>
                   <CoinToggle coin="BTC" />
                   <CoinToggle coin="ETH" />
