@@ -357,12 +357,12 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
-  // Fetch volume data when timeframe changes
+  // Fetch volume data when timeframe changes - now from BULK API klines
   useEffect(() => {
     const fetchVolumeData = async () => {
       setChartLoading(prev => ({ ...prev, volume: true }));
       try {
-        const data = await analytics.getVolumeChart(volumeHours);
+        const data = await analytics.getVolumeFromBulkAPI(volumeHours);
         setVolumeChart(data);
         setVolumeRange({ start: 0, end: 100 });
       } catch (error) {
@@ -438,12 +438,12 @@ export default function AnalyticsPage() {
     if (!loading) fetchLiquidationsData();
   }, [liquidationsHours, loading]);
 
-  // Fetch trades data when timeframe changes
+  // Fetch trades data when timeframe changes - now from BULK API klines
   useEffect(() => {
     const fetchTradesData = async () => {
       setChartLoading(prev => ({ ...prev, trades: true }));
       try {
-        const data = await analytics.getTradesChart(tradesHours);
+        const data = await analytics.getTradesFromBulkAPI(tradesHours);
         setTradesChart(data);
         setTradesRange({ start: 0, end: 100 });
       } catch (error) {
@@ -484,10 +484,10 @@ export default function AnalyticsPage() {
           analytics.getFundingRate('BTC-USD', fundingHours),
           analytics.getFundingRate('ETH-USD', fundingHours),
           analytics.getFundingRate('SOL-USD', fundingHours),
-          analytics.getTradesChart(tradesHours),
+          analytics.getTradesFromBulkAPI(tradesHours),
           analytics.getLiquidationsChart(liquidationsHours),
           analytics.getADLChart(adlHours),
-          analytics.getVolumeChart(volumeHours),
+          analytics.getVolumeFromBulkAPI(volumeHours),
           analytics.getStats(),
           leaderboard.getMostActive('all', 100),
         ]);
