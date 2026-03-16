@@ -335,9 +335,16 @@ export default function AnalyticsPage() {
   
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState<Record<string, boolean>>({});
-  const [selectedCoins, setSelectedCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
+  
+  // Per-chart coin selections (independent for each chart)
+  const [volumeCoins, setVolumeCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [oiCoins, setOiCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [fundingCoins, setFundingCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [tradesCoins, setTradesCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [liquidationsCoins, setLiquidationsCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [adlCoins, setAdlCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   
   // Range sliders state
   const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
@@ -536,16 +543,17 @@ export default function AnalyticsPage() {
     return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
   }, []);
 
-  const withCumulative = useCallback((data: ChartData[]) => {
+  // Generic function to apply coin filter and cumulative
+  const withCumulativeForCoins = useCallback((data: ChartData[], coins: string[]) => {
     let cumulative = 0;
     return data.map(item => {
-      const btc = selectedCoins.includes('BTC') ? item.BTC : 0;
-      const eth = selectedCoins.includes('ETH') ? item.ETH : 0;
-      const sol = selectedCoins.includes('SOL') ? item.SOL : 0;
+      const btc = coins.includes('BTC') ? item.BTC : 0;
+      const eth = coins.includes('ETH') ? item.ETH : 0;
+      const sol = coins.includes('SOL') ? item.SOL : 0;
       cumulative += btc + eth + sol;
       return { ...item, BTC: btc, ETH: eth, SOL: sol, Cumulative: cumulative };
     });
-  }, [selectedCoins]);
+  }, []);
 
   const combinedOIData = useMemo(() => {
     const btcData = oiData.BTC?.data || [];
@@ -559,29 +567,25 @@ export default function AnalyticsPage() {
     
     return baseData.map((item: any, i: number) => ({
       timestamp: item.timestamp,
-      BTC: selectedCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0,
-      ETH: selectedCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0,
-      SOL: selectedCoins.includes('SOL') ? (solData[i]?.value || 0) : 0,
-      'Total OI': (selectedCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0) +
-                  (selectedCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0) +
-                  (selectedCoins.includes('SOL') ? (solData[i]?.value || 0) : 0),
+      BTC: oiCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0,
+      ETH: oiCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0,
+      SOL: oiCoins.includes('SOL') ? (solData[i]?.value || 0) : 0,
+      'Total OI': (oiCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0) +
+                  (oiCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0) +
+                  (oiCoins.includes('SOL') ? (solData[i]?.value || 0) : 0),
     }));
-  }, [oiData, selectedCoins]);
+  }, [oiData, oiCoins]);
 
   const combinedFundingData = useMemo(() => {
     const btc = fundingData.BTC || [];
     if (!btc.length) return [];
     return btc.map((item, i) => ({
       timestamp: item.timestamp,
-      BTC: selectedCoins.includes('BTC') ? (item.value * 100) : null,
-      ETH: selectedCoins.includes('ETH') ? ((fundingData.ETH?.[i]?.value || 0) * 100) : null,
-      SOL: selectedCoins.includes('SOL') ? ((fundingData.SOL?.[i]?.value || 0) * 100) : null,
+      BTC: fundingCoins.includes('BTC') ? (item.value * 100) : null,
+      ETH: fundingCoins.includes('ETH') ? ((fundingData.ETH?.[i]?.value || 0) * 100) : null,
+      SOL: fundingCoins.includes('SOL') ? ((fundingData.SOL?.[i]?.value || 0) * 100) : null,
     }));
-  }, [fundingData, selectedCoins]);
-
-  const toggleCoin = useCallback((coin: string) => {
-    setSelectedCoins(prev => prev.includes(coin) ? prev.filter(c => c !== coin) : [...prev, coin]);
-  }, []);
+  }, [fundingData, fundingCoins]);
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -589,14 +593,28 @@ export default function AnalyticsPage() {
     setTimeout(() => setCopiedAddress(null), 2000);
   };
 
-  const formatDate = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Smart date formatting - show time for 1D, date for longer periods
+  const formatDateForChart = (ts: string, hours: number) => {
+    const date = new Date(ts);
+    if (hours <= 24) {
+      // Show time for 1 day
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else if (hours <= 168) {
+      // Show day + time for 1 week
+      return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+    } else {
+      // Show month + day for longer
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
 
-  const CoinToggle = ({ coin }: { coin: string }) => (
+  // Per-chart coin toggle component
+  const CoinToggle = ({ coin, coins, setCoins }: { coin: string; coins: string[]; setCoins: (coins: string[]) => void }) => (
     <button
-      onClick={() => toggleCoin(coin)}
+      onClick={() => setCoins(coins.includes(coin) ? coins.filter(c => c !== coin) : [...coins, coin])}
       className={cn(
         "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all duration-200",
-        selectedCoins.includes(coin)
+        coins.includes(coin)
           ? "bg-[#1f1f1f] border-[#333] text-white"
           : "bg-transparent border-transparent text-gray-500 hover:text-gray-300"
       )}
@@ -623,17 +641,17 @@ export default function AnalyticsPage() {
   const paginatedUsers = topUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
   const totalPages = Math.ceil(topUsers.length / 10) || 1;
 
-  // Filtered data for each chart
-  const volumeDataFull = useMemo(() => withCumulative(volumeChart), [volumeChart, withCumulative]);
+  // Filtered data for each chart (each with its own coin selection)
+  const volumeDataFull = useMemo(() => withCumulativeForCoins(volumeChart, volumeCoins), [volumeChart, volumeCoins, withCumulativeForCoins]);
   const volumeDataFiltered = useMemo(() => sliceDataByRange(volumeDataFull, volumeRange), [volumeDataFull, volumeRange, sliceDataByRange]);
   
-  const tradesDataFull = useMemo(() => withCumulative(tradesChart), [tradesChart, withCumulative]);
+  const tradesDataFull = useMemo(() => withCumulativeForCoins(tradesChart, tradesCoins), [tradesChart, tradesCoins, withCumulativeForCoins]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
   
-  const liquidationsDataFull = useMemo(() => withCumulative(liquidationsChart), [liquidationsChart, withCumulative]);
+  const liquidationsDataFull = useMemo(() => withCumulativeForCoins(liquidationsChart, liquidationsCoins), [liquidationsChart, liquidationsCoins, withCumulativeForCoins]);
   const liquidationsDataFiltered = useMemo(() => sliceDataByRange(liquidationsDataFull, liquidationsRange), [liquidationsDataFull, liquidationsRange, sliceDataByRange]);
   
-  const adlDataFull = useMemo(() => withCumulative(adlChart), [adlChart, withCumulative]);
+  const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
   
   const oiDataFiltered = useMemo(() => sliceDataByRange(combinedOIData, oiRange), [combinedOIData, oiRange, sliceDataByRange]);
@@ -680,9 +698,9 @@ export default function AnalyticsPage() {
                 leftAxisLabel="Daily Volume (USD)"
                 rightAxisLabel="Cumulative Volume (USD)"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={volumeCoins} setCoins={setVolumeCoins} />
+                  <CoinToggle coin="ETH" coins={volumeCoins} setCoins={setVolumeCoins} />
+                  <CoinToggle coin="SOL" coins={volumeCoins} setCoins={setVolumeCoins} />
                   <CumulativeToggle label="Cumulative" />
                 </>}
               >
@@ -691,7 +709,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={volumeDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, volumeHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} />
                           <Tooltip content={<ChartTooltip />} />
@@ -720,9 +738,9 @@ export default function AnalyticsPage() {
                 loading={chartLoading.oi}
                 leftAxisLabel="Open Interest (USD)"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={oiCoins} setCoins={setOiCoins} />
+                  <CoinToggle coin="ETH" coins={oiCoins} setCoins={setOiCoins} />
+                  <CoinToggle coin="SOL" coins={oiCoins} setCoins={setOiCoins} />
                   <CumulativeToggle label="Total OI" />
                 </>}
               >
@@ -731,7 +749,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={oiDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, oiHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <Tooltip content={<ChartTooltip />} />
                           <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} animationDuration={300} />
@@ -761,9 +779,9 @@ export default function AnalyticsPage() {
                 loading={chartLoading.funding}
                 leftAxisLabel="Funding Rate (%)"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={fundingCoins} setCoins={setFundingCoins} />
+                  <CoinToggle coin="ETH" coins={fundingCoins} setCoins={setFundingCoins} />
+                  <CoinToggle coin="SOL" coins={fundingCoins} setCoins={setFundingCoins} />
                 </>}
               >
                 {combinedFundingData.length > 0 ? (
@@ -771,7 +789,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={fundingDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis tickFormatter={v => `${v?.toFixed(4) || 0}%`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
@@ -800,9 +818,9 @@ export default function AnalyticsPage() {
                 leftAxisLabel="Daily Liquidations (USD)"
                 rightAxisLabel="Cumulative (USD)"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
+                  <CoinToggle coin="ETH" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
+                  <CoinToggle coin="SOL" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
                   <CumulativeToggle label="Cumulative" />
                 </>}
               >
@@ -811,7 +829,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={liquidationsDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, liquidationsHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} />
                           <Tooltip content={<ChartTooltip />} />
@@ -843,9 +861,9 @@ export default function AnalyticsPage() {
                 leftAxisLabel="Daily Trades"
                 rightAxisLabel="Cumulative Trades"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={tradesCoins} setCoins={setTradesCoins} />
+                  <CoinToggle coin="ETH" coins={tradesCoins} setCoins={setTradesCoins} />
+                  <CoinToggle coin="SOL" coins={tradesCoins} setCoins={setTradesCoins} />
                   <CumulativeToggle label="Cumulative" />
                 </>}
               >
@@ -854,7 +872,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={tradesDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, tradesHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} />
                           <Tooltip content={<ChartTooltip />} />
@@ -884,9 +902,9 @@ export default function AnalyticsPage() {
                 leftAxisLabel="Daily ADL (USD)"
                 rightAxisLabel="Cumulative ADL (USD)"
                 toggles={<>
-                  <CoinToggle coin="BTC" />
-                  <CoinToggle coin="ETH" />
-                  <CoinToggle coin="SOL" />
+                  <CoinToggle coin="BTC" coins={adlCoins} setCoins={setAdlCoins} />
+                  <CoinToggle coin="ETH" coins={adlCoins} setCoins={setAdlCoins} />
+                  <CoinToggle coin="SOL" coins={adlCoins} setCoins={setAdlCoins} />
                   <CumulativeToggle label="Cumulative" />
                 </>}
               >
@@ -895,7 +913,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={adlDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={formatDate} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, adlHours)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={50} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: '#333' }} tickLine={false} width={55} />
                           <Tooltip content={<ChartTooltip />} />
