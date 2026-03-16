@@ -467,7 +467,7 @@ export default function WalletPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={history.map(h => ({ 
                         ...h, 
-                        displayPnl: (h.pnl || 0) + (h.unrealized_pnl || 0) 
+                        displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0) 
                       }))}>
                         <defs>
                           <linearGradient id="pnlGradientPositive" x1="0" y1="0" x2="0" y2="1">
@@ -486,7 +486,7 @@ export default function WalletPage() {
                           axisLine={{ stroke: '#2a2a40' }}
                         />
                         <YAxis 
-                          tickFormatter={(v) => `$${formatCompact(v)}`}
+                          tickFormatter={(v) => `$${formatCompact(Math.abs(v))}${v < 0 ? '' : ''}`}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: '#2a2a40' }}
                           domain={['auto', 'auto']}
