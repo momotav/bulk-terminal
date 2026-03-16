@@ -6,12 +6,22 @@ import Link from 'next/link';
 import { 
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
   TrendingUp, TrendingDown, Wallet, Activity, Flame,
-  AlertCircle
+  AlertCircle, BarChart3, Clock
 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, cn, type WalletData } from '@/lib/api';
 import { useStore } from '@/store';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+
+interface Trade {
+  id: number;
+  symbol: string;
+  side: string;
+  size: number;
+  price: number;
+  value: number;
+  timestamp: string;
+}
 
 export default function WalletPage() {
   const params = useParams();
@@ -21,6 +31,7 @@ export default function WalletPage() {
   const { watchlist, addToWatchlist, removeFromWatchlist, user } = useStore();
   
   const [data, setData] = useState<WalletData | null>(null);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -33,8 +44,14 @@ export default function WalletPage() {
       setError('');
       
       try {
-        const result = await wallet.getWallet(address);
-        setData(result);
+        // Fetch wallet data and trades in parallel
+        const [walletResult, tradesResult] = await Promise.all([
+          wallet.getWallet(address),
+          wallet.getTrades(address, 50).catch(() => ({ data: [] })),
+        ]);
+        
+        setData(walletResult);
+        setTrades(tradesResult.data || []);
         
         // Auto-track wallet when viewed
         await wallet.trackWallet(address).catch(() => {});
@@ -80,15 +97,27 @@ export default function WalletPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatShortDate = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Live data from BULK API
   const margin = data?.live?.margin;
   const positions = data?.live?.positions || [];
   const markPrices = data?.markPrices || {};
   const history = data?.history || [];
+  
+  // Database tracked data (always available if wallet has traded)
   const tracked = data?.tracked;
 
+  // Use live PnL if available, otherwise use tracked PnL from database
   const totalPnL = margin 
     ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
-    : 0;
+    : (tracked?.total_pnl || 0);
+
+  const hasLiveData = margin !== null && margin !== undefined;
+  const hasTrackedData = tracked !== null && tracked !== undefined;
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
@@ -124,7 +153,7 @@ export default function WalletPage() {
               ))}
             </div>
           </div>
-        ) : error ? (
+        ) : error && !hasTrackedData ? (
           <div className="glass-card p-8 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-bulk-red opacity-50" />
             <h2 className="font-display text-xl font-bold mb-2">Wallet Not Found</h2>
@@ -171,11 +200,12 @@ export default function WalletPage() {
                         <ExternalLink className="w-4 h-4 text-gray-400" />
                       </a>
                     </div>
-                    {tracked && (
-                      <p className="text-xs text-gray-500">
-                        {tracked.total_trades || 0} trades • Tracking since first activity
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500">
+                      {tracked?.total_trades || 0} trades • ${formatCompact(tracked?.total_volume || 0)} volume
+                      {!hasLiveData && hasTrackedData && (
+                        <span className="text-bulk-yellow ml-2">• No active positions</span>
+                      )}
+                    </p>
                   </div>
                 </div>
 
@@ -207,21 +237,21 @@ export default function WalletPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Wallet className="w-4 h-4 text-bulk-cyan" />
-                  <span className="text-xs text-gray-500 uppercase tracking-wider">Balance</span>
+                  <BarChart3 className="w-4 h-4 text-bulk-cyan" />
+                  <span className="text-xs text-gray-500 uppercase tracking-wider">Total Volume</span>
                 </div>
                 <p className="font-display text-2xl font-bold text-bulk-cyan">
-                  ${formatNumber(margin?.totalBalance, 2)}
+                  ${formatCompact(tracked?.total_volume || 0)}
                 </p>
               </div>
 
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Activity className="w-4 h-4 text-bulk-magenta" />
-                  <span className="text-xs text-gray-500 uppercase tracking-wider">Margin Used</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wider">Total Trades</span>
                 </div>
                 <p className="font-display text-2xl font-bold text-bulk-magenta">
-                  ${formatNumber(margin?.marginUsed, 2)}
+                  {tracked?.total_trades || 0}
                 </p>
               </div>
 
@@ -253,23 +283,76 @@ export default function WalletPage() {
               </div>
             </div>
 
+            {/* Live Account Stats (if available) */}
+            {hasLiveData && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="glass-card p-4 border border-bulk-cyan/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wallet className="w-4 h-4 text-bulk-cyan" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Live Balance</span>
+                  </div>
+                  <p className="font-display text-xl font-bold text-bulk-cyan">
+                    ${formatNumber(margin?.totalBalance, 2)}
+                  </p>
+                </div>
+
+                <div className="glass-card p-4 border border-bulk-magenta/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-bulk-magenta" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Margin Used</span>
+                  </div>
+                  <p className="font-display text-xl font-bold text-bulk-magenta">
+                    ${formatNumber(margin?.marginUsed, 2)}
+                  </p>
+                </div>
+
+                <div className="glass-card p-4 border border-bulk-green/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="w-4 h-4 text-bulk-green" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Unrealized PnL</span>
+                  </div>
+                  <p className={cn(
+                    "font-display text-xl font-bold",
+                    (margin?.unrealizedPnl || 0) >= 0 ? "text-bulk-green" : "text-bulk-red"
+                  )}>
+                    {(margin?.unrealizedPnl || 0) >= 0 ? '+' : ''}${formatNumber(margin?.unrealizedPnl, 2)}
+                  </p>
+                </div>
+
+                <div className="glass-card p-4 border border-bulk-yellow/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart3 className="w-4 h-4 text-bulk-yellow" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Available</span>
+                  </div>
+                  <p className="font-display text-xl font-bold text-bulk-yellow">
+                    ${formatNumber(margin?.availableBalance, 2)}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Positions */}
+              {/* Positions or Recent Trades */}
               <div className="glass-card">
                 <div className="panel-header">
                   <h2 className="panel-title">
-                    <Activity className="w-4 h-4 text-bulk-cyan" />
-                    Open Positions ({positions.length})
+                    {positions.length > 0 ? (
+                      <>
+                        <Activity className="w-4 h-4 text-bulk-cyan" />
+                        Open Positions ({positions.length})
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-4 h-4 text-bulk-cyan" />
+                        Recent Trades ({trades.length})
+                      </>
+                    )}
                   </h2>
                 </div>
 
-                <div className="divide-y divide-dark-border/50">
-                  {positions.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                      <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                      <p>No open positions</p>
-                    </div>
-                  ) : (
+                <div className="divide-y divide-dark-border/50 max-h-[400px] overflow-y-auto">
+                  {positions.length > 0 ? (
+                    // Show positions if available
                     positions.map((pos, i) => {
                       const isLong = pos.size > 0;
                       const pnlPercent = pos.notional 
@@ -279,24 +362,20 @@ export default function WalletPage() {
 
                       return (
                         <div key={i} className="p-4 hover:bg-dark-tertiary/30 transition-colors">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                               <span className={cn(
-                                "w-8 h-8 rounded-lg flex items-center justify-center",
+                                "px-2 py-0.5 rounded text-xs font-medium",
                                 isLong ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red"
                               )}>
-                                {isLong ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                                {isLong ? 'LONG' : 'SHORT'}
                               </span>
-                              <div>
-                                <p className="font-semibold">{pos.symbol}</p>
-                                <p className="text-[10px] text-gray-500">
-                                  {isLong ? 'Long' : 'Short'} {pos.leverage}x
-                                </p>
-                              </div>
+                              <span className="font-medium">{pos.symbol}</span>
+                              <span className="text-gray-500 text-sm">{pos.leverage}x</span>
                             </div>
                             <div className="text-right">
                               <p className={cn(
-                                "font-display font-bold",
+                                "font-medium",
                                 pos.unrealizedPnl >= 0 ? "text-bulk-green" : "text-bulk-red"
                               )}>
                                 {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
@@ -305,7 +384,7 @@ export default function WalletPage() {
                                 "text-xs",
                                 pnlPercent >= 0 ? "text-bulk-green" : "text-bulk-red"
                               )}>
-                                {formatPercent(pnlPercent)}
+                                {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
                               </p>
                             </div>
                           </div>
@@ -331,6 +410,39 @@ export default function WalletPage() {
                         </div>
                       );
                     })
+                  ) : trades.length > 0 ? (
+                    // Show recent trades from database
+                    trades.map((trade) => {
+                      const isBuy = trade.side.toLowerCase() === 'buy' || trade.side.toLowerCase() === 'long';
+                      return (
+                        <div key={trade.id} className="p-4 hover:bg-dark-tertiary/30 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded text-xs font-medium",
+                                isBuy ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red"
+                              )}>
+                                {trade.side.toUpperCase()}
+                              </span>
+                              <span className="font-medium">{trade.symbol}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium">${formatCompact(trade.value)}</p>
+                              <p className="text-xs text-gray-500">{formatShortDate(trade.timestamp)}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <span>Size: {formatNumber(trade.size, 4)}</span>
+                            <span>Price: ${formatNumber(trade.price, 2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center text-gray-500">
+                      <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>No positions or trades found</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -348,7 +460,7 @@ export default function WalletPage() {
                   <div className="p-8 text-center text-gray-500">
                     <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p>No history data yet</p>
-                    <p className="text-xs mt-1">Check back later</p>
+                    <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
                   </div>
                 ) : (
                   <div className="p-4 h-[300px]">
