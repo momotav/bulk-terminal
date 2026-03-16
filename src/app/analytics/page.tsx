@@ -29,10 +29,10 @@ const COLORS = {
 
 type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total: number };
 
-// Interactive range slider with smooth dragging
+// Fixed Interactive Range Slider - follows cursor 1:1
 const InteractiveRangeSlider = ({ 
   data, 
-  color = COLORS.BTC,
+  color = '#00B482',
   rangeStart,
   rangeEnd,
   onRangeChange,
@@ -45,155 +45,148 @@ const InteractiveRangeSlider = ({
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
-  const dragStartX = useRef(0);
-  const dragStartRange = useRef({ start: 0, end: 100 });
+  const dragOffset = useRef(0);
+  const rangeWidth = useRef(0);
 
   const isDisabled = data.length <= 1;
 
+  const clientXToPercent = useCallback((clientX: number): number => {
+    if (!sliderRef.current) return 0;
+    const rect = sliderRef.current.getBoundingClientRect();
+    return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+  }, []);
+
   const handleStart = useCallback((clientX: number, type: 'left' | 'right' | 'middle') => {
     if (isDisabled) return;
+    const pct = clientXToPercent(clientX);
+    if (type === 'left') {
+      dragOffset.current = pct - rangeStart;
+    } else if (type === 'right') {
+      dragOffset.current = pct - rangeEnd;
+    } else {
+      rangeWidth.current = rangeEnd - rangeStart;
+      dragOffset.current = pct - rangeStart;
+    }
     setDragging(type);
-    dragStartX.current = clientX;
-    dragStartRange.current = { start: rangeStart, end: rangeEnd };
-  }, [isDisabled, rangeStart, rangeEnd]);
-
-  const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'middle') => {
-    e.preventDefault();
-    handleStart(e.clientX, type);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent, type: 'left' | 'right' | 'middle') => {
-    e.preventDefault();
-    handleStart(e.touches[0].clientX, type);
-  };
+  }, [isDisabled, rangeStart, rangeEnd, clientXToPercent]);
 
   useEffect(() => {
     if (!dragging) return;
 
-    const handleMove = (clientX: number) => {
-      if (!sliderRef.current) return;
-      const rect = sliderRef.current.getBoundingClientRect();
-      const deltaX = clientX - dragStartX.current;
-      const deltaPercent = (deltaX / rect.width) * 100;
-
+    const move = (clientX: number) => {
+      const pct = clientXToPercent(clientX);
       if (dragging === 'left') {
-        const newStart = Math.max(0, Math.min(dragStartRange.current.start + deltaPercent, rangeEnd - 5));
+        const newStart = Math.max(0, Math.min(pct - dragOffset.current, rangeEnd - 5));
         onRangeChange(newStart, rangeEnd);
       } else if (dragging === 'right') {
-        const newEnd = Math.max(rangeStart + 5, Math.min(100, dragStartRange.current.end + deltaPercent));
+        const newEnd = Math.max(rangeStart + 5, Math.min(100, pct - dragOffset.current));
         onRangeChange(rangeStart, newEnd);
-      } else if (dragging === 'middle') {
-        const rangeWidth = dragStartRange.current.end - dragStartRange.current.start;
-        let newStart = dragStartRange.current.start + deltaPercent;
-        let newEnd = dragStartRange.current.end + deltaPercent;
-        
-        if (newStart < 0) {
-          newStart = 0;
-          newEnd = rangeWidth;
-        }
-        if (newEnd > 100) {
-          newEnd = 100;
-          newStart = 100 - rangeWidth;
-        }
-        onRangeChange(newStart, newEnd);
+      } else {
+        let s = pct - dragOffset.current;
+        let e = s + rangeWidth.current;
+        if (s < 0) { s = 0; e = rangeWidth.current; }
+        if (e > 100) { e = 100; s = 100 - rangeWidth.current; }
+        onRangeChange(s, e);
       }
     };
 
-    const handleMouseMove = (e: MouseEvent) => handleMove(e.clientX);
-    const handleTouchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
-    const handleEnd = () => setDragging(null);
+    const onMouseMove = (e: MouseEvent) => move(e.clientX);
+    const onTouchMove = (e: TouchEvent) => move(e.touches[0].clientX);
+    const onEnd = () => setDragging(null);
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleEnd);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleEnd);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onTouchMove);
+    document.addEventListener('touchend', onEnd);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleEnd);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onEnd);
     };
-  }, [dragging, rangeStart, rangeEnd, onRangeChange]);
+  }, [dragging, rangeStart, rangeEnd, onRangeChange, clientXToPercent]);
 
-  const maxValue = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || d.value || 0), 1);
-  const barHeights = data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || d.value || 0) / maxValue) * 100);
+  const maxVal = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || d.value || 0), 1);
+  const bars = data.length > 0 
+    ? data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || d.value || 0) / maxVal) * 100) 
+    : Array(30).fill(20);
 
   return (
     <div 
-      ref={sliderRef}
+      ref={sliderRef} 
       className={cn(
-        "mt-3 h-10 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden select-none touch-none",
-        isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-      )}
+        "mt-3 h-10 bg-[#1a1a1a] rounded border border-[#282828] relative overflow-hidden select-none",
+        isDisabled && "opacity-50 cursor-not-allowed"
+      )} 
+      style={{ touchAction: 'none' }}
     >
       {/* Mini bar chart background */}
-      <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px">
-        {(data.length > 0 ? barHeights : Array(30).fill(20)).map((height, i) => {
-          const percent = data.length > 0 ? (i / data.length) * 100 : (i / 30) * 100;
-          const isInRange = percent >= rangeStart && percent <= rangeEnd;
+      <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px pointer-events-none">
+        {bars.map((h, i) => {
+          const pct = (i / bars.length) * 100;
+          const inRange = pct >= rangeStart && pct <= rangeEnd;
           return (
             <div 
               key={i} 
-              className="flex-1 rounded-t transition-all duration-150"
+              className="flex-1 rounded-t" 
               style={{ 
-                height: `${Math.max(10, height)}%`, 
-                backgroundColor: isInRange ? `${color}60` : `${color}20`,
+                height: `${Math.max(8, h)}%`, 
+                backgroundColor: inRange ? `${color}50` : `${color}20` 
               }} 
             />
           );
         })}
       </div>
 
-      {/* Selection overlay */}
       {!isDisabled && (
         <>
-          {/* Dimmed areas outside selection */}
+          {/* Dimmed areas */}
           <div 
-            className="absolute top-0 bottom-0 left-0 bg-black/40 transition-all duration-75"
-            style={{ width: `${rangeStart}%` }}
+            className="absolute top-0 bottom-0 left-0 bg-black/50 pointer-events-none" 
+            style={{ width: `${rangeStart}%` }} 
           />
           <div 
-            className="absolute top-0 bottom-0 right-0 bg-black/40 transition-all duration-75"
-            style={{ width: `${100 - rangeEnd}%` }}
+            className="absolute top-0 bottom-0 right-0 bg-black/50 pointer-events-none" 
+            style={{ width: `${100 - rangeEnd}%` }} 
           />
           
-          {/* Draggable selection area */}
+          {/* Middle drag area */}
           <div 
-            className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-all duration-75"
+            className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing" 
             style={{ 
               left: `${rangeStart}%`, 
-              right: `${100 - rangeEnd}%`,
-              borderLeft: `2px solid ${color}`,
-              borderRight: `2px solid ${color}`,
-            }}
-            onMouseDown={(e) => handleMouseDown(e, 'middle')}
-            onTouchStart={(e) => handleTouchStart(e, 'middle')}
+              width: `${rangeEnd - rangeStart}%`, 
+              borderLeft: `2px solid ${color}`, 
+              borderRight: `2px solid ${color}` 
+            }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'middle'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'middle'); }} 
           />
           
           {/* Left handle */}
           <div 
-            className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-10 transition-all duration-75"
-            style={{ left: `calc(${rangeStart}% - 8px)` }}
-            onMouseDown={(e) => handleMouseDown(e, 'left')}
-            onTouchStart={(e) => handleTouchStart(e, 'left')}
+            className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
+            style={{ left: `calc(${rangeStart}% - 10px)` }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'left'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'left'); }}
           >
             <div 
-              className="w-1 h-6 rounded-full transition-all duration-150"
-              style={{ backgroundColor: dragging === 'left' ? color : '#888' }}
+              className="w-1.5 h-6 rounded-full transition-colors" 
+              style={{ backgroundColor: dragging === 'left' ? color : '#888' }} 
             />
           </div>
           
           {/* Right handle */}
           <div 
-            className="absolute top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center z-10 transition-all duration-75"
-            style={{ left: `calc(${rangeEnd}% - 8px)` }}
-            onMouseDown={(e) => handleMouseDown(e, 'right')}
-            onTouchStart={(e) => handleTouchStart(e, 'right')}
+            className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
+            style={{ left: `calc(${rangeEnd}% - 10px)` }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'right'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'right'); }}
           >
             <div 
-              className="w-1 h-6 rounded-full transition-all duration-150"
-              style={{ backgroundColor: dragging === 'right' ? color : '#888' }}
+              className="w-1.5 h-6 rounded-full transition-colors" 
+              style={{ backgroundColor: dragging === 'right' ? color : '#888' }} 
             />
           </div>
         </>
