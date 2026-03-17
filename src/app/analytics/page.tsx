@@ -367,12 +367,46 @@ export default function AnalyticsPage() {
   // Data state - REAL data from ticker_snapshots via WebSocket collection
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
+  const [liveOI, setLiveOI] = useState<number>(0); // Live OI from BULK API for stats card
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
   const [volumeChart, setVolumeChart] = useState<ChartData[]>([]);
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
+
+  // Fetch LIVE OI directly from BULK API for stats card
+  useEffect(() => {
+    const fetchLiveOI = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+        const [btcRes, ethRes, solRes] = await Promise.all([
+          fetch(`${API_URL}/api/analytics/ticker/BTC-USD`),
+          fetch(`${API_URL}/api/analytics/ticker/ETH-USD`),
+          fetch(`${API_URL}/api/analytics/ticker/SOL-USD`),
+        ]);
+        
+        const [btc, eth, sol] = await Promise.all([
+          btcRes.ok ? btcRes.json() : null,
+          ethRes.ok ? ethRes.json() : null,
+          solRes.ok ? solRes.json() : null,
+        ]);
+        
+        // OI is in coins, multiply by mark price to get USD
+        const btcOI = (parseFloat(btc?.openInterest || 0)) * (parseFloat(btc?.markPrice || 0));
+        const ethOI = (parseFloat(eth?.openInterest || 0)) * (parseFloat(eth?.markPrice || 0));
+        const solOI = (parseFloat(sol?.openInterest || 0)) * (parseFloat(sol?.markPrice || 0));
+        
+        setLiveOI(btcOI + ethOI + solOI);
+      } catch (error) {
+        console.error('Failed to fetch live OI:', error);
+      }
+    };
+    
+    fetchLiveOI();
+    const interval = setInterval(fetchLiveOI, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch volume data when timeframe changes - now from BULK API klines
   useEffect(() => {
@@ -600,13 +634,6 @@ export default function AnalyticsPage() {
   const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
 
-  // Calculate total OI from the latest chart data point
-  const totalOI = useMemo(() => {
-    if (oiChartData.length === 0) return 0;
-    const lastPoint = oiChartData[oiChartData.length - 1];
-    return (lastPoint.BTC || 0) + (lastPoint.ETH || 0) + (lastPoint.SOL || 0);
-  }, [oiChartData]);
-
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
       <Header />
@@ -617,7 +644,7 @@ export default function AnalyticsPage() {
           {[
             { label: 'Total Trades', value: stats?.trades.count || 0, format: 'number' },
             { label: 'Total Volume', value: stats?.trades.volume || 0, format: 'currency' },
-            { label: 'Open Interest', value: totalOI, format: 'currency' },
+            { label: 'Open Interest', value: liveOI, format: 'currency' },
             { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
           ].map((stat, i) => (
             <div key={i} className="bg-dark-primary p-4">
