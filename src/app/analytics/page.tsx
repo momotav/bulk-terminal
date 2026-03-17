@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Bar, ComposedChart, Line, LineChart, ReferenceLine
+  Bar, ComposedChart, Line, LineChart, ReferenceLine, Area, AreaChart
 } from 'recharts';
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
@@ -286,7 +286,7 @@ const ChartCard = ({
   rightAxisLabel?: string;
 }) => (
   <div className={cn(
-    "bg-[#111] rounded-lg border border-[#222] p-4 transition-opacity duration-300",
+    "bg-transparent rounded-lg border border-[#222] p-4 transition-opacity duration-300",
     loading && "opacity-60"
   )}>
     <div className="flex items-center justify-between mb-4">
