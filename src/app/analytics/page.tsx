@@ -600,7 +600,12 @@ export default function AnalyticsPage() {
   const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
 
-  const totalOI = (oiData.BTC?.currentOI || 0) + (oiData.ETH?.currentOI || 0) + (oiData.SOL?.currentOI || 0);
+  // Calculate total OI from the latest chart data point
+  const totalOI = useMemo(() => {
+    if (oiChartData.length === 0) return 0;
+    const lastPoint = oiChartData[oiChartData.length - 1];
+    return (lastPoint.BTC || 0) + (lastPoint.ETH || 0) + (lastPoint.SOL || 0);
+  }, [oiChartData]);
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
