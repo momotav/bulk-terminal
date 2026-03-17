@@ -228,7 +228,39 @@ export const leaderboard = {
 
 // Analytics API
 export const analytics = {
-  // Original BULK API proxy (may be delayed/cached)
+  // REAL Open Interest history from ticker_snapshots (collected via WebSocket)
+  async getOpenInterestHistory(symbol: string, hours: number = 24): Promise<ChartDataPoint[]> {
+    const data = await request<{ data: ChartDataPoint[] }>(
+      `/api/analytics/open-interest-history/${symbol}?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  // REAL Funding Rate history from ticker_snapshots (collected via WebSocket)
+  async getFundingRateHistory(symbol: string, hours: number = 24): Promise<ChartDataPoint[]> {
+    const data = await request<{ data: ChartDataPoint[] }>(
+      `/api/analytics/funding-rate-history/${symbol}?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  // REAL Combined OI chart for all symbols
+  async getOIChart(hours: number = 24): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
+      `/api/analytics/oi-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  // REAL Combined Funding Rate chart for all symbols
+  async getFundingChart(hours: number = 24): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
+      `/api/analytics/funding-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  // Original BULK API proxy (may be delayed/cached) - DEPRECATED, use getOpenInterestHistory
   async getOpenInterest(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
     const data = await request<{ data: ChartDataPoint[] }>(
       `/api/analytics/open-interest/${symbol}?hours=${hours}`
@@ -257,6 +289,7 @@ export const analytics = {
     );
   },
 
+  // DEPRECATED - use getFundingRateHistory instead
   async getFundingRate(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
     const data = await request<{ data: ChartDataPoint[] }>(
       `/api/analytics/funding-rate/${symbol}?hours=${hours}`
