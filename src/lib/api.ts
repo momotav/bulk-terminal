@@ -23,6 +23,15 @@ export interface ChartDataPoint {
   value: number;
 }
 
+export interface ChartData {
+  timestamp: string;
+  BTC: number;
+  ETH: number;
+  SOL: number;
+  Cumulative?: number;
+  total?: number;
+}
+
 export interface LongShortDataPoint {
   timestamp: string;
   long_ratio: number;
