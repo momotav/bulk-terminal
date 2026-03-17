@@ -295,17 +295,19 @@ const ChartCard = ({
     </div>
     {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
     <div className={cn("relative transition-all duration-300", loading && "blur-sm")}>
-      {/* Wrapper with padding for axis labels */}
+      {/* Wrapper with axis labels positioned relative to chart height only */}
       <div className="flex">
-        {/* Left Y-axis label - vertical text */}
+        {/* Left Y-axis label - positioned to align with chart area (260px height) */}
         {leftAxisLabel && (
-          <div className="flex items-center justify-center w-6 shrink-0">
-            <span 
-              className="transform -rotate-90 whitespace-nowrap text-[14px] text-gray-400 tracking-wide origin-center"
-              style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
-            >
-              {leftAxisLabel}
-            </span>
+          <div className="relative w-6 shrink-0">
+            <div className="absolute top-0 h-[260px] flex items-center justify-center w-full">
+              <span 
+                className="transform -rotate-90 whitespace-nowrap text-[14px] text-gray-400 tracking-wide origin-center"
+                style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
+              >
+                {leftAxisLabel}
+              </span>
+            </div>
           </div>
         )}
         
@@ -314,15 +316,17 @@ const ChartCard = ({
           {children}
         </div>
         
-        {/* Right Y-axis label - vertical text */}
+        {/* Right Y-axis label - positioned to align with chart area (260px height) */}
         {rightAxisLabel && (
-          <div className="flex items-center justify-center w-6 shrink-0">
-            <span 
-              className="transform rotate-90 whitespace-nowrap text-[14px] text-gray-400 tracking-wide origin-center"
-              style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
-            >
-              {rightAxisLabel}
-            </span>
+          <div className="relative w-6 shrink-0">
+            <div className="absolute top-0 h-[260px] flex items-center justify-center w-full">
+              <span 
+                className="transform rotate-90 whitespace-nowrap text-[14px] text-gray-400 tracking-wide origin-center"
+                style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
+              >
+                {rightAxisLabel}
+              </span>
+            </div>
           </div>
         )}
       </div>
