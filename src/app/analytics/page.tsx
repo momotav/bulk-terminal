@@ -337,6 +337,8 @@ const ChartCard = ({
 export default function AnalyticsPage() {
   // Per-chart timeframes - default to 24h since BULK just launched
   const [volumeHours, setVolumeHours] = useState(24);
+  const [oiHours, setOiHours] = useState(24);
+  const [fundingHours, setFundingHours] = useState(24);
   const [liquidationsHours, setLiquidationsHours] = useState(24);
   const [tradesHours, setTradesHours] = useState(24);
   const [adlHours, setAdlHours] = useState(24);
@@ -348,12 +350,16 @@ export default function AnalyticsPage() {
   
   // Per-chart coin selections (independent for each chart)
   const [volumeCoins, setVolumeCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [oiCoins, setOiCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [fundingCoins, setFundingCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   const [tradesCoins, setTradesCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   const [liquidationsCoins, setLiquidationsCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   const [adlCoins, setAdlCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
   
   // Range sliders state
   const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
+  const [oiRange, setOiRange] = useState({ start: 0, end: 100 });
+  const [fundingRange, setFundingRange] = useState({ start: 0, end: 100 });
   const [liquidationsRange, setLiquidationsRange] = useState({ start: 0, end: 100 });
   const [tradesRange, setTradesRange] = useState({ start: 0, end: 100 });
   const [adlRange, setAdlRange] = useState({ start: 0, end: 100 });
@@ -385,81 +391,52 @@ export default function AnalyticsPage() {
     if (!loading) fetchVolumeData();
   }, [volumeHours, loading]);
 
-  // Fetch OI data - CURRENT VALUES ONLY (no fake history)
+  // Fetch OI data when timeframe changes - now from BULK API
   useEffect(() => {
     const fetchOiData = async () => {
       setChartLoading(prev => ({ ...prev, oi: true }));
       try {
-        // Fetch current tickers directly - these have real OI values
-        const [btcRes, ethRes, solRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/BTC-USD`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/ETH-USD`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/SOL-USD`),
+        const [btc, eth, sol] = await Promise.all([
+          analytics.getOpenInterest('BTC-USD', oiHours),
+          analytics.getOpenInterest('ETH-USD', oiHours),
+          analytics.getOpenInterest('SOL-USD', oiHours),
         ]);
-        
-        const [btcTicker, ethTicker, solTicker] = await Promise.all([
-          btcRes.ok ? btcRes.json() : null,
-          ethRes.ok ? ethRes.json() : null,
-          solRes.ok ? solRes.json() : null,
-        ]);
-        
-        // Calculate OI in USD (OI is in coins, multiply by mark price)
-        const btcOI = (btcTicker?.openInterest || 0) * (btcTicker?.markPrice || 0);
-        const ethOI = (ethTicker?.openInterest || 0) * (ethTicker?.markPrice || 0);
-        const solOI = (solTicker?.openInterest || 0) * (solTicker?.markPrice || 0);
-        
+        // Transform ChartDataPoint[] to expected format
         setOiData({ 
-          BTC: { currentOI: btcOI }, 
-          ETH: { currentOI: ethOI }, 
-          SOL: { currentOI: solOI }
+          BTC: { data: btc.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: btc[btc.length - 1]?.value || 0 }, 
+          ETH: { data: eth.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: eth[eth.length - 1]?.value || 0 }, 
+          SOL: { data: sol.map(d => ({ timestamp: d.timestamp, value: d.value })), currentOI: sol[sol.length - 1]?.value || 0 }
         });
+        setOiRange({ start: 0, end: 100 });
       } catch (error) {
         console.error('Failed to fetch OI data:', error);
       } finally {
         setChartLoading(prev => ({ ...prev, oi: false }));
       }
     };
-    fetchOiData();
-    // Refresh every 30 seconds for live data
-    const interval = setInterval(fetchOiData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!loading) fetchOiData();
+  }, [oiHours, loading]);
 
-  // Fetch funding data - CURRENT VALUES ONLY (no fake history)
+  // Fetch funding data when timeframe changes
   useEffect(() => {
     const fetchFundingData = async () => {
       setChartLoading(prev => ({ ...prev, funding: true }));
       try {
-        // Fetch current tickers directly - these have real funding rates
-        const [btcRes, ethRes, solRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/BTC-USD`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/ETH-USD`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app'}/api/analytics/ticker/SOL-USD`),
+        const [btc, eth, sol] = await Promise.all([
+          analytics.getFundingRate('BTC-USD', fundingHours),
+          analytics.getFundingRate('ETH-USD', fundingHours),
+          analytics.getFundingRate('SOL-USD', fundingHours),
         ]);
-        
-        const [btcTicker, ethTicker, solTicker] = await Promise.all([
-          btcRes.ok ? btcRes.json() : null,
-          ethRes.ok ? ethRes.json() : null,
-          solRes.ok ? solRes.json() : null,
-        ]);
-        
-        // Store as single data point with current funding rates
-        setFundingData({ 
-          BTC: [{ timestamp: new Date().toISOString(), value: btcTicker?.fundingRate || 0 }],
-          ETH: [{ timestamp: new Date().toISOString(), value: ethTicker?.fundingRate || 0 }],
-          SOL: [{ timestamp: new Date().toISOString(), value: solTicker?.fundingRate || 0 }]
-        });
+        setFundingData({ BTC: btc, ETH: eth, SOL: sol });
+        setFundingRange({ start: 0, end: 100 });
       } catch (error) {
         console.error('Failed to fetch funding data:', error);
       } finally {
         setChartLoading(prev => ({ ...prev, funding: false }));
       }
     };
-    fetchFundingData();
-    // Refresh every 30 seconds for live data
-    const interval = setInterval(fetchFundingData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!loading) fetchFundingData();
+  }, [fundingHours, loading]);
 
   // Fetch liquidations data when timeframe changes
   useEffect(() => {
@@ -512,12 +489,18 @@ export default function AnalyticsPage() {
     if (!loading) fetchAdlData();
   }, [adlHours, loading]);
 
-  // Initial data fetch - REAL DATA ONLY
+  // Initial data fetch
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
       try {
         const results = await Promise.allSettled([
+          analytics.getOpenInterest('BTC-USD', oiHours),
+          analytics.getOpenInterest('ETH-USD', oiHours),
+          analytics.getOpenInterest('SOL-USD', oiHours),
+          analytics.getFundingRate('BTC-USD', fundingHours),
+          analytics.getFundingRate('ETH-USD', fundingHours),
+          analytics.getFundingRate('SOL-USD', fundingHours),
           analytics.getTradesChart(tradesHours),
           analytics.getLiquidationsChart(liquidationsHours),
           analytics.getADLChart(adlHours),
@@ -529,13 +512,30 @@ export default function AnalyticsPage() {
         const getValue = <T,>(result: PromiseSettledResult<T>, defaultValue: T): T => {
           return result.status === 'fulfilled' ? result.value : defaultValue;
         };
+
+        // Transform OI data from BULK API format
+        const btcOi = getValue(results[0], [] as any[]);
+        const ethOi = getValue(results[1], [] as any[]);
+        const solOi = getValue(results[2], [] as any[]);
         
-        setTradesChart(getValue(results[0], []));
-        setLiquidationsChart(getValue(results[1], []));
-        setAdlChart(getValue(results[2], []));
-        setVolumeChart(getValue(results[3], []));
-        setStats(getValue(results[4], null));
-        setTopUsers(getValue(results[5], []));
+        setOiData({
+          BTC: { data: btcOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: btcOi[btcOi.length - 1]?.value || 0 },
+          ETH: { data: ethOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: ethOi[ethOi.length - 1]?.value || 0 },
+          SOL: { data: solOi.map((d: any) => ({ timestamp: d.timestamp, value: d.value })), currentOI: solOi[solOi.length - 1]?.value || 0 },
+        });
+        
+        setFundingData({
+          BTC: getValue(results[3], []),
+          ETH: getValue(results[4], []),
+          SOL: getValue(results[5], []),
+        });
+        
+        setTradesChart(getValue(results[6], []));
+        setLiquidationsChart(getValue(results[7], []));
+        setAdlChart(getValue(results[8], []));
+        setVolumeChart(getValue(results[9], []));
+        setStats(getValue(results[10], null));
+        setTopUsers(getValue(results[11], []));
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
       } finally {
@@ -565,18 +565,37 @@ export default function AnalyticsPage() {
     });
   }, []);
 
-  // Combined funding data for display (current values only)
+  const combinedOIData = useMemo(() => {
+    const btcData = oiData.BTC?.data || [];
+    const ethData = oiData.ETH?.data || [];
+    const solData = oiData.SOL?.data || [];
+    
+    if (!btcData.length && !ethData.length && !solData.length) return [];
+    
+    const maxLen = Math.max(btcData.length, ethData.length, solData.length);
+    const baseData = btcData.length === maxLen ? btcData : (ethData.length === maxLen ? ethData : solData);
+    
+    return baseData.map((item: any, i: number) => ({
+      timestamp: item.timestamp,
+      BTC: oiCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0,
+      ETH: oiCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0,
+      SOL: oiCoins.includes('SOL') ? (solData[i]?.value || 0) : 0,
+      'Total OI': (oiCoins.includes('BTC') ? (btcData[i]?.value || 0) : 0) +
+                  (oiCoins.includes('ETH') ? (ethData[i]?.value || 0) : 0) +
+                  (oiCoins.includes('SOL') ? (solData[i]?.value || 0) : 0),
+    }));
+  }, [oiData, oiCoins]);
+
   const combinedFundingData = useMemo(() => {
-    const btcRate = fundingData.BTC?.[0]?.value || 0;
-    const ethRate = fundingData.ETH?.[0]?.value || 0;
-    const solRate = fundingData.SOL?.[0]?.value || 0;
-    return [{
-      timestamp: new Date().toISOString(),
-      BTC: btcRate,
-      ETH: ethRate,
-      SOL: solRate,
-    }];
-  }, [fundingData]);
+    const btc = fundingData.BTC || [];
+    if (!btc.length) return [];
+    return btc.map((item, i) => ({
+      timestamp: item.timestamp,
+      BTC: fundingCoins.includes('BTC') ? (item.value * 100) : null,
+      ETH: fundingCoins.includes('ETH') ? ((fundingData.ETH?.[i]?.value || 0) * 100) : null,
+      SOL: fundingCoins.includes('SOL') ? ((fundingData.SOL?.[i]?.value || 0) * 100) : null,
+    }));
+  }, [fundingData, fundingCoins]);
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -644,6 +663,9 @@ export default function AnalyticsPage() {
   
   const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
+  
+  const oiDataFiltered = useMemo(() => sliceDataByRange(combinedOIData, oiRange), [combinedOIData, oiRange, sliceDataByRange]);
+  const fundingDataFiltered = useMemo(() => sliceDataByRange(combinedFundingData, fundingRange), [combinedFundingData, fundingRange, sliceDataByRange]);
 
   const totalOI = (oiData.BTC?.currentOI || 0) + (oiData.ETH?.currentOI || 0) + (oiData.SOL?.currentOI || 0);
 
@@ -719,66 +741,84 @@ export default function AnalyticsPage() {
                 ) : <NoDataMessage title="volume" />}
               </ChartCard>
 
-              {/* Open Interest - REAL-TIME CURRENT VALUES ONLY (no fake historical data) */}
-              <div className="bg-transparent rounded-lg border border-[#222] p-4">
-                <h3 className="text-lg font-semibold text-white mb-4">Open Interest (Live)</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  {['BTC', 'ETH', 'SOL'].map((coin) => {
-                    const coinData = oiData[coin as keyof typeof oiData];
-                    const currentOI = coinData?.currentOI || 0;
-                    return (
-                      <div key={coin} className="bg-[#1a1a1a] rounded-lg p-4 border border-[#333]">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[coin as keyof typeof COLORS] }} />
-                          <span className="text-gray-400 text-sm">{coin}-USD</span>
-                        </div>
-                        <p className="text-2xl font-bold text-white">${formatCompact(currentOI)}</p>
-                        <p className="text-xs text-gray-500 mt-1">Current Open Interest</p>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 pt-4 border-t border-[#333]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Total Open Interest</span>
-                    <span className="text-2xl font-bold text-[#FFB548]">${formatCompact(totalOI)}</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-600 mt-3 text-center">
-                  📡 Live data from BULK API • Historical charts require API endpoint
-                </p>
-              </div>
+              <ChartCard 
+                title="Open Interest (Real-Time)"
+                timeframe={oiHours}
+                onTimeframeChange={setOiHours}
+                loading={chartLoading.oi}
+                leftAxisLabel="Open Interest (USD)"
+                toggles={<>
+                  <CoinToggle coin="BTC" coins={oiCoins} setCoins={setOiCoins} />
+                  <CoinToggle coin="ETH" coins={oiCoins} setCoins={setOiCoins} />
+                  <CoinToggle coin="SOL" coins={oiCoins} setCoins={setOiCoins} />
+                  <CumulativeToggle label="Total OI" />
+                </>}
+              >
+                {combinedOIData.length > 0 ? (
+                  <>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={oiDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, oiHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="Total OI" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <InteractiveRangeSlider 
+                      data={combinedOIData} 
+                      color={COLORS.cumulative}
+                      rangeStart={oiRange.start}
+                      rangeEnd={oiRange.end}
+                      onRangeChange={(start, end) => setOiRange({ start, end })}
+                    />
+                  </>
+                ) : <NoDataMessage title="open interest" />}
+              </ChartCard>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Funding Rate - REAL-TIME CURRENT VALUES ONLY (no fake historical data) */}
-              <div className="bg-transparent rounded-lg border border-[#222] p-4">
-                <h3 className="text-lg font-semibold text-white mb-4">Funding Rate (Live)</h3>
-                <div className="space-y-3">
-                  {['BTC', 'ETH', 'SOL'].map((coin) => {
-                    const fundingData = combinedFundingData[0];
-                    const rate = fundingData?.[coin as keyof typeof fundingData] as number || 0;
-                    const isPositive = rate >= 0;
-                    return (
-                      <div key={coin} className="flex items-center justify-between bg-[#1a1a1a] rounded-lg p-3 border border-[#333]">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[coin as keyof typeof COLORS] }} />
-                          <span className="text-white font-medium">{coin}-USD</span>
-                        </div>
-                        <span className={cn(
-                          "text-lg font-bold",
-                          isPositive ? "text-bulk-green" : "text-bulk-red"
-                        )}>
-                          {isPositive ? '+' : ''}{(rate * 100).toFixed(4)}%
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-gray-600 mt-3 text-center">
-                  📡 Live data from BULK API • Historical charts require API endpoint
-                </p>
-              </div>
+              <ChartCard 
+                title="Annualized Funding Rate"
+                timeframe={fundingHours}
+                onTimeframeChange={setFundingHours}
+                loading={chartLoading.funding}
+                leftAxisLabel="Funding Rate (%)"
+                toggles={<>
+                  <CoinToggle coin="BTC" coins={fundingCoins} setCoins={setFundingCoins} />
+                  <CoinToggle coin="ETH" coins={fundingCoins} setCoins={setFundingCoins} />
+                  <CoinToggle coin="SOL" coins={fundingCoins} setCoins={setFundingCoins} />
+                </>}
+              >
+                {combinedFundingData.length > 0 ? (
+                  <>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={fundingDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <YAxis tickFormatter={v => `${v?.toFixed(4) || 0}%`} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} domain={['auto', 'auto']} />
+                          <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
+                          <Tooltip content={<FundingTooltip />} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={300} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <InteractiveRangeSlider 
+                      data={combinedFundingData} 
+                      color={COLORS.BTC}
+                      rangeStart={fundingRange.start}
+                      rangeEnd={fundingRange.end}
+                      onRangeChange={(start, end) => setFundingRange({ start, end })}
+                    />
+                  </>
+                ) : <NoDataMessage title="funding rate" />}
+              </ChartCard>
 
               <ChartCard 
                 title="Liquidations"
