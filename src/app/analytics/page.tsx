@@ -27,7 +27,7 @@ const COLORS = {
   total: '#FFB548',
 };
 
-type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total: number };
+type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total?: number; Cumulative?: number };
 
 // Fixed Interactive Range Slider - follows cursor 1:1
 const InteractiveRangeSlider = ({ 
