@@ -1,7 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Overused+Grotesk:wght@400;500;600&display=swap');
 
-/* BULK custom font for numbers - improved legibility */
+/* BULK custom font for numbers - improved legibility with longer comma */
+@font-face {
+  font-family: 'BULK';
+  src: url('/fonts/BULK-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: 'BULK';
   src: url('/fonts/BULK-Medium.otf') format('opentype');
