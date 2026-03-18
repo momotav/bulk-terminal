@@ -624,6 +624,13 @@ export default function AnalyticsPage() {
   // Filtered data for each chart (each with its own coin selection)
   const volumeDataFull = useMemo(() => withCumulativeForCoins(volumeChart, volumeCoins), [volumeChart, volumeCoins, withCumulativeForCoins]);
   const volumeDataFiltered = useMemo(() => sliceDataByRange(volumeDataFull, volumeRange), [volumeDataFull, volumeRange, sliceDataByRange]);
+
+  // Get total cumulative volume from the last data point of the volume chart (from BULK API /klines)
+  const totalCumulativeVolume = useMemo(() => {
+    if (volumeDataFull.length === 0) return 0;
+    const lastPoint = volumeDataFull[volumeDataFull.length - 1];
+    return lastPoint.Cumulative || 0;
+  }, [volumeDataFull]);
   
   const tradesDataFull = useMemo(() => withCumulativeForCoins(tradesChart, tradesCoins), [tradesChart, tradesCoins, withCumulativeForCoins]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
@@ -643,7 +650,7 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#333] mb-6 rounded-lg overflow-hidden">
           {[
             { label: 'Total Trades', value: stats?.trades.count || 0, format: 'number' },
-            { label: 'Total Volume', value: stats?.trades.volume || 0, format: 'currency' },
+            { label: 'Total Volume', value: totalCumulativeVolume, format: 'currency' },
             { label: 'Open Interest', value: liveOI, format: 'currency' },
             { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
           ].map((stat, i) => (
