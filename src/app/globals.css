@@ -1,6 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Overused+Grotesk:wght@400;500;600&display=swap');
 
+/* BULK custom font for numbers - improved legibility */
+@font-face {
+  font-family: 'BULK';
+  src: url('/fonts/BULK-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* DIN Alternate fallback - using system fonts */
 @font-face {
   font-family: 'DIN Alternate';
@@ -195,10 +204,28 @@
   .text-positive { @apply text-bulk-green; }
   .text-negative { @apply text-bulk-red; }
 
+  /* BULK font for numbers - use on stat values, prices, etc */
+  .font-bulk {
+    font-family: 'BULK', 'JetBrains Mono', monospace;
+  }
+
   .grid-bg {
     background-image: 
       linear-gradient(rgba(0, 180, 130, 0.02) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0, 180, 130, 0.02) 1px, transparent 1px);
     background-size: 50px 50px;
   }
+}
+
+/* Apply BULK font to all numeric content globally */
+/* This uses font-feature-settings for tabular numbers */
+.stat-value,
+.stat-card p:last-child,
+[class*="text-2xl"],
+[class*="text-3xl"],
+[class*="text-4xl"],
+[class*="text-5xl"],
+[class*="text-6xl"] {
+  font-family: 'BULK', 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
