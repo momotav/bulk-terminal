@@ -7,7 +7,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Bar, ComposedChart, Line, LineChart, ReferenceLine, Area, AreaChart
 } from 'recharts';
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 
 const timeRanges = [
@@ -347,6 +347,7 @@ export default function AnalyticsPage() {
   const [chartLoading, setChartLoading] = useState<Record<string, boolean>>({});
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
+  const [topUsersSortAsc, setTopUsersSortAsc] = useState(false); // false = high to low (default)
   
   // Per-chart coin selections (independent for each chart)
   const [volumeCoins, setVolumeCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
@@ -618,8 +619,16 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const paginatedUsers = topUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
-  const totalPages = Math.ceil(topUsers.length / 10) || 1;
+  // Sort top users based on sort direction
+  const sortedTopUsers = useMemo(() => {
+    const sorted = [...topUsers].sort((a, b) => {
+      return topUsersSortAsc ? a.value - b.value : b.value - a.value;
+    });
+    return sorted;
+  }, [topUsers, topUsersSortAsc]);
+
+  const paginatedUsers = sortedTopUsers.slice((topUsersPage - 1) * 10, topUsersPage * 10);
+  const totalPages = Math.ceil(sortedTopUsers.length / 10) || 1;
 
   // Filtered data for each chart (each with its own coin selection)
   const volumeDataFull = useMemo(() => withCumulativeForCoins(volumeChart, volumeCoins), [volumeChart, volumeCoins, withCumulativeForCoins]);
@@ -950,7 +959,17 @@ export default function AnalyticsPage() {
                   <>
                     <div className="flex items-center justify-between text-xs text-gray-500 uppercase tracking-wider pb-3 border-b border-[#222]">
                       <span>Address</span>
-                      <span className="flex items-center gap-1">Volume USD<ChevronDown className="w-3 h-3" /></span>
+                      <button 
+                        onClick={() => { setTopUsersSortAsc(!topUsersSortAsc); setTopUsersPage(1); }}
+                        className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Volume USD
+                        {topUsersSortAsc ? (
+                          <ChevronUp className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )}
+                      </button>
                     </div>
                     <div className="divide-y divide-[#222]">
                       {paginatedUsers.map((user) => (
