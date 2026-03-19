@@ -148,7 +148,7 @@ export default function WalletPage() {
             </Link>
           </div>
         ) : (
-          <>
+          <div>
             {/* Wallet Header */}
             <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -179,7 +179,7 @@ export default function WalletPage() {
                           <Copy className="w-4 h-4 text-text-tertiary" />
                         )}
                       </button>
-                      
+                      <a
                         href={`https://solscan.io/account/${address}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -189,9 +189,9 @@ export default function WalletPage() {
                       </a>
                     </div>
                     <p className="text-xs text-text-tertiary">
-                      {tracked?.total_trades || 0} trades • ${formatCompact(tracked?.total_volume || 0)} volume
+                      {tracked?.total_trades || 0} trades &bull; ${formatCompact(tracked?.total_volume || 0)} volume
                       {!hasLiveData && hasTrackedData && (
-                        <span className="text-yellow-400 ml-2">• No active positions</span>
+                        <span className="text-yellow-400 ml-2">&bull; No active positions</span>
                       )}
                     </p>
                   </div>
@@ -505,7 +505,7 @@ export default function WalletPage() {
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
       </main>
     </div>
