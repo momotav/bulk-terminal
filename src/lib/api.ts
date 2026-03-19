@@ -461,6 +461,113 @@ export const wallet = {
   },
 };
 
+// ============ USER API (Privy auth) ============
+
+export const userApi = {
+  // Authenticate with backend after Privy login
+  async authenticate(token: string, walletAddress: string) {
+    return request('/api/users/auth', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ walletAddress }),
+    });
+  },
+
+  // Get current user
+  async getMe(token: string) {
+    return request('/api/users/me', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Link Twitter account
+  async linkTwitter(token: string, data: {
+    twitterId: string;
+    twitterHandle: string;
+    twitterName: string;
+    twitterAvatar: string;
+  }) {
+    return request('/api/users/link/twitter', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Unlink Twitter account
+  async unlinkTwitter(token: string) {
+    return request('/api/users/link/twitter', {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Get followed wallets
+  async getFollowing(token: string) {
+    return request('/api/users/following', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Follow a wallet
+  async followWallet(token: string, walletAddress: string, nickname?: string) {
+    return request('/api/users/follow', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ walletAddress, nickname }),
+    });
+  },
+
+  // Unfollow a wallet
+  async unfollowWallet(token: string, walletAddress: string) {
+    return request(`/api/users/follow/${walletAddress}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Check if following a wallet
+  async isFollowing(token: string, walletAddress: string) {
+    return request(`/api/users/is-following/${walletAddress}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Get public wallet profile
+  async getWalletProfile(walletAddress: string) {
+    return request(`/api/users/wallet/${walletAddress}`);
+  },
+};
+
+// Utility functions
+export function formatCurrency(num: number | string | null | undefined): string {
+  if (num === null || num === undefined || num === '') return '$0';
+  const n = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(n)) return '$0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(2) + 'K';
+  return sign + '$' + abs.toFixed(2);
+}
+
 // Utility functions
 export function formatNumber(num: number | string | null | undefined, decimals = 2): string {
   if (num === null || num === undefined || num === '') return '—';
