@@ -17,6 +17,8 @@
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.344.0",
     "zustand": "^4.5.0",
+    "@privy-io/react-auth": "^1.92.0",
+    "@solana/web3.js": "^1.95.0",
     "clsx": "^2.1.0"
   },
   "devDependencies": {
