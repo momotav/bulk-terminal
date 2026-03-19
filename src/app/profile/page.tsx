@@ -9,7 +9,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useStore } from '@/store';
+import { useStore, FollowedWallet } from '@/store';
 import { userApi, formatCompact } from '@/lib/api';
 
 export default function ProfilePage() {
@@ -36,8 +36,8 @@ export default function ProfilePage() {
       if (authToken) {
         setLoadingFollowing(true);
         try {
-          const response = await userApi.getFollowing(authToken);
-          if (response.following) {
+          const response = await userApi.getFollowing(authToken) as { following?: FollowedWallet[] };
+          if (response?.following) {
             setFollowing(response.following);
           }
         } catch (error) {
@@ -63,18 +63,20 @@ export default function ProfilePage() {
     try {
       await linkTwitter();
       
-      if (privyUser?.twitter && authToken) {
+      if (privyUser?.twitter) {
         const { subject: twitterId, username, name, profilePictureUrl } = privyUser.twitter as any;
         
-        const response = await userApi.linkTwitter(authToken, {
-          twitterId,
-          twitterHandle: username || '',
-          twitterName: name || '',
-          twitterAvatar: profilePictureUrl || '',
-        });
-        
-        if (response.user) {
-          setUser(response.user);
+        if (authToken) {
+          const response = await userApi.linkTwitter(authToken, {
+            twitterId,
+            twitterHandle: username || '',
+            twitterName: name || '',
+            twitterAvatar: profilePictureUrl || '',
+          }) as { user?: any };
+          
+          if (response?.user) {
+            setUser(response.user);
+          }
         }
       }
     } catch (error) {
@@ -90,11 +92,14 @@ export default function ProfilePage() {
         (account: any) => account.type === 'twitter_oauth'
       );
       
-      if (twitterAccount && authToken) {
+      if (twitterAccount) {
         await unlinkTwitter(twitterAccount.subject);
-        const response = await userApi.unlinkTwitter(authToken);
-        if (response.user) {
-          setUser(response.user);
+        
+        if (authToken) {
+          const response = await userApi.unlinkTwitter(authToken) as { user?: any };
+          if (response?.user) {
+            setUser(response.user);
+          }
         }
       }
     } catch (error) {
@@ -130,7 +135,11 @@ export default function ProfilePage() {
         <div className="flex items-start gap-6">
           <div className="shrink-0">
             {user?.twitter_avatar ? (
-              <img src={user.twitter_avatar} alt="" className="w-20 h-20 rounded-full border-2 border-dark-border" />
+              <img 
+                src={user.twitter_avatar} 
+                alt="" 
+                className="w-20 h-20 rounded-full border-2 border-dark-border"
+              />
             ) : (
               <div className="w-20 h-20 rounded-full bg-dark-tertiary flex items-center justify-center">
                 <User className="w-10 h-10 text-text-tertiary" />
@@ -161,8 +170,15 @@ export default function ProfilePage() {
               <code className="text-sm text-text-secondary font-mono">
                 {walletAddress?.slice(0, 8)}...{walletAddress?.slice(-8)}
               </code>
-              <button onClick={copyAddress} className="p-1 hover:bg-dark-tertiary rounded transition-colors">
-                {copied ? <Check className="w-4 h-4 text-bulk-green" /> : <Copy className="w-4 h-4 text-text-tertiary" />}
+              <button
+                onClick={copyAddress}
+                className="p-1 hover:bg-dark-tertiary rounded transition-colors"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-bulk-green" />
+                ) : (
+                  <Copy className="w-4 h-4 text-text-tertiary hover:text-text-primary" />
+                )}
               </button>
             </div>
 
@@ -187,19 +203,32 @@ export default function ProfilePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-dark-tertiary rounded-lg p-4">
               <p className="text-sm text-text-tertiary mb-1">Total Trades</p>
-              <p className="text-xl font-semibold text-text-primary">{user.stats.trade_count || 0}</p>
+              <p className="text-xl font-semibold text-text-primary">
+                {user.stats.trade_count || 0}
+              </p>
             </div>
+            
             <div className="bg-dark-tertiary rounded-lg p-4">
               <p className="text-sm text-text-tertiary mb-1">Total Volume</p>
-              <p className="text-xl font-semibold text-text-primary">${formatCompact(user.stats.total_volume)}</p>
+              <p className="text-xl font-semibold text-text-primary">
+                ${formatCompact(user.stats.total_volume)}
+              </p>
             </div>
+            
             <div className="bg-dark-tertiary rounded-lg p-4">
               <p className="text-sm text-text-tertiary mb-1">Total PnL</p>
-              <p className={`text-xl font-semibold flex items-center gap-1 ${(user.stats.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {(user.stats.total_pnl || 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              <p className={`text-xl font-semibold flex items-center gap-1 ${
+                (user.stats.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
+              }`}>
+                {(user.stats.total_pnl || 0) >= 0 ? (
+                  <TrendingUp className="w-4 h-4" />
+                ) : (
+                  <TrendingDown className="w-4 h-4" />
+                )}
                 ${formatCompact(Math.abs(user.stats.total_pnl || 0))}
               </p>
             </div>
+            
             <div className="bg-dark-tertiary rounded-lg p-4">
               <p className="text-sm text-text-tertiary mb-1">Win Rate</p>
               <p className="text-xl font-semibold text-text-primary">
@@ -208,15 +237,21 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <Link href={`/whales/${walletAddress}`} className="inline-flex items-center gap-2 mt-4 text-sm text-bulk-green hover:underline">
-            View detailed wallet stats <ExternalLink className="w-4 h-4" />
+          <Link
+            href={`/whales/${walletAddress}`}
+            className="inline-flex items-center gap-2 mt-4 text-sm text-bulk-green hover:underline"
+          >
+            View detailed wallet stats
+            <ExternalLink className="w-4 h-4" />
           </Link>
         </div>
       )}
 
       {/* Connected Accounts */}
       <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold text-text-primary mb-4">Connected Accounts</h3>
+        <h3 className="text-lg font-semibold text-text-primary mb-4">
+          Connected Accounts
+        </h3>
 
         {/* Twitter */}
         <div className="flex items-center justify-between py-4 border-b border-dark-border">
@@ -237,7 +272,7 @@ export default function ProfilePage() {
           {user?.twitter_handle ? (
             <button
               onClick={handleUnlinkTwitter}
-              className="px-4 py-2 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+              className="px-4 py-2 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
             >
               Disconnect
             </button>
@@ -245,9 +280,13 @@ export default function ProfilePage() {
             <button
               onClick={handleLinkTwitter}
               disabled={linkingTwitter}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-[#1DA1F2] text-white hover:bg-[#1DA1F2]/90 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-[#1DA1F2] text-white hover:bg-[#1DA1F2]/90 transition-colors text-sm disabled:opacity-50"
             >
-              {linkingTwitter ? <Loader2 className="w-4 h-4 animate-spin" /> : <Twitter className="w-4 h-4" />}
+              {linkingTwitter ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Twitter className="w-4 h-4" />
+              )}
               Connect Twitter
             </button>
           )}
@@ -261,11 +300,15 @@ export default function ProfilePage() {
             </div>
             <div>
               <p className="font-medium text-text-primary">Solana Wallet</p>
-              <p className="text-sm text-text-secondary font-mono">{walletAddress?.slice(0, 8)}...{walletAddress?.slice(-8)}</p>
+              <p className="text-sm text-text-secondary font-mono">
+                {walletAddress?.slice(0, 8)}...{walletAddress?.slice(-8)}
+              </p>
             </div>
           </div>
+          
           <span className="flex items-center gap-2 px-3 py-1.5 rounded bg-bulk-green/10 text-bulk-green text-sm">
-            <Check className="w-4 h-4" /> Connected
+            <Check className="w-4 h-4" />
+            Connected
           </span>
         </div>
       </div>
@@ -277,7 +320,10 @@ export default function ProfilePage() {
             <Users className="w-5 h-5 text-bulk-green" />
             Following ({following.length})
           </h3>
-          <Link href="/following" className="text-sm text-bulk-green hover:underline">View all</Link>
+          
+          <Link href="/following" className="text-sm text-bulk-green hover:underline">
+            View all
+          </Link>
         </div>
 
         {loadingFollowing ? (
@@ -287,9 +333,13 @@ export default function ProfilePage() {
         ) : following.length === 0 ? (
           <div className="text-center py-8">
             <Users className="w-12 h-12 text-text-tertiary mx-auto mb-3" />
-            <p className="text-text-secondary mb-2">You're not following any wallets yet</p>
-            <Link href="/whales" className="text-sm text-bulk-green hover:underline">
+            <p className="text-text-secondary mb-2">You&apos;re not following any wallets yet</p>
+            <Link
+              href="/whales"
+              className="inline-flex items-center gap-2 text-sm text-bulk-green hover:underline"
+            >
               Discover wallets to follow
+              <ExternalLink className="w-4 h-4" />
             </Link>
           </div>
         ) : (
@@ -301,10 +351,21 @@ export default function ProfilePage() {
                 className="flex items-center justify-between p-3 rounded-lg bg-dark-tertiary hover:bg-dark-tertiary/80 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <Wallet className="w-5 h-5 text-text-tertiary" />
-                  <span className="text-sm font-mono text-text-primary">
-                    {wallet.nickname || `${wallet.wallet_address.slice(0, 6)}...${wallet.wallet_address.slice(-4)}`}
-                  </span>
+                  <div className="w-8 h-8 rounded-full bg-dark-secondary flex items-center justify-center">
+                    <Wallet className="w-4 h-4 text-text-tertiary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary font-mono">
+                      {wallet.nickname || `${wallet.wallet_address.slice(0, 6)}...${wallet.wallet_address.slice(-4)}`}
+                    </p>
+                    {wallet.total_pnl !== undefined && (
+                      <p className={`text-xs ${
+                        (wallet.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
+                      }`}>
+                        PnL: ${formatCompact(wallet.total_pnl)}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <ExternalLink className="w-4 h-4 text-text-tertiary" />
               </Link>
