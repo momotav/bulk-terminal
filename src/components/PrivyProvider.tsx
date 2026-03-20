@@ -18,14 +18,8 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
           logo: '/bulkstats.png',
         },
         loginMethods: ['wallet'],
-        supportedChains: [],
         embeddedWallets: {
           createOnLogin: 'off',
-        },
-        externalWallets: {
-          solana: {
-            connectors: (connectors) => connectors,
-          },
         },
         solanaClusters: [
           {
