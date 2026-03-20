@@ -652,7 +652,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
-      <Header />
+     
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
         <h1 className="text-3xl font-bold text-white mb-6">Analytics</h1>
 
