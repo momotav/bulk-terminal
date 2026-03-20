@@ -34,7 +34,16 @@ export function Header() {
   const { wallets: solanaWallets } = useSolanaWallets();
 
   // Get the first connected Solana wallet address
-  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address;
+  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
+
+  // Get Twitter info from Privy user's linked accounts
+  const twitterAccount = privyUser?.linkedAccounts?.find(
+    (account): account is any => account.type === 'twitter_oauth'
+  );
+  
+  const twitterHandle = twitterAccount?.username || user?.twitter_handle;
+  const twitterName = twitterAccount?.name || user?.twitter_name;
+  const twitterAvatar = twitterAccount?.profilePictureUrl || user?.twitter_avatar;
 
   // Sync Privy auth with backend
   useEffect(() => {
@@ -99,6 +108,13 @@ export function Header() {
     };
   }, [profileMenuOpen]);
 
+  // Display name priority: Twitter handle > Twitter name > wallet address
+  const displayName = twitterHandle 
+    ? `@${twitterHandle}` 
+    : twitterName 
+      ? twitterName
+      : formatAddress(walletAddress);
+
   return (
     <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -157,9 +173,9 @@ export function Header() {
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded border border-dark-border bg-dark-secondary hover:bg-dark-tertiary transition-colors"
                 >
-                  {user?.twitter_avatar ? (
+                  {twitterAvatar ? (
                     <img 
-                      src={user.twitter_avatar} 
+                      src={twitterAvatar} 
                       alt="" 
                       className="w-5 h-5 rounded-full"
                     />
@@ -168,12 +184,7 @@ export function Header() {
                   )}
                   
                   <span className="text-sm text-text-primary hidden sm:block">
-                    {user?.twitter_handle 
-                      ? `@${user.twitter_handle}` 
-                      : user?.display_name 
-                        ? user.display_name
-                        : formatAddress(walletAddress)
-                    }
+                    {displayName}
                   </span>
                   
                   <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform ${
