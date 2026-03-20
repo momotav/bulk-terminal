@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Activity, Users, Calendar,
   Loader2
 } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore, FollowedWallet } from '@/store';
 import { userApi, formatCompact } from '@/lib/api';
 
@@ -16,14 +16,14 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, setUser, following, setFollowing, authToken } = useStore();
   const { ready, authenticated, linkTwitter, unlinkTwitter, user: privyUser } = usePrivy();
-  const { wallets } = useWallets();
+  const { wallets: solanaWallets } = useSolanaWallets();
   
   const [copied, setCopied] = useState(false);
   const [linkingTwitter, setLinkingTwitter] = useState(false);
   const [loadingFollowing, setLoadingFollowing] = useState(false);
 
-  const solanaWallet = wallets.find(w => w.walletClientType !== 'privy');
-  const walletAddress = solanaWallet?.address;
+  // Get wallet address from Solana wallets or Privy user
+  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
 
   useEffect(() => {
     if (ready && !authenticated) {
@@ -63,25 +63,28 @@ export default function ProfilePage() {
     try {
       await linkTwitter();
       
-      if (privyUser?.twitter) {
-        const { subject: twitterId, username, name, profilePictureUrl } = privyUser.twitter as any;
-        
-        if (authToken) {
-          const response = await userApi.linkTwitter(authToken, {
-            twitterId,
-            twitterHandle: username || '',
-            twitterName: name || '',
-            twitterAvatar: profilePictureUrl || '',
-          }) as { user?: any };
+      // After linking, check if twitter info is available
+      setTimeout(async () => {
+        if (privyUser?.twitter) {
+          const { subject: twitterId, username, name, profilePictureUrl } = privyUser.twitter as any;
           
-          if (response?.user) {
-            setUser(response.user);
+          if (authToken) {
+            const response = await userApi.linkTwitter(authToken, {
+              twitterId: twitterId || '',
+              twitterHandle: username || '',
+              twitterName: name || '',
+              twitterAvatar: profilePictureUrl || '',
+            }) as { user?: any };
+            
+            if (response?.user) {
+              setUser(response.user);
+            }
           }
         }
-      }
+        setLinkingTwitter(false);
+      }, 1000);
     } catch (error) {
       console.error('Failed to link Twitter:', error);
-    } finally {
       setLinkingTwitter(false);
     }
   };
@@ -113,6 +116,11 @@ export default function ProfilePage() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const formatAddress = (address: string) => {
+    if (!address) return '...';
+    return `${address.slice(0, 8)}...${address.slice(-8)}`;
   };
 
   if (!ready || !authenticated) {
@@ -168,11 +176,12 @@ export default function ProfilePage() {
             <div className="flex items-center gap-2 mb-4">
               <Wallet className="w-4 h-4 text-text-tertiary" />
               <code className="text-sm text-text-secondary font-mono">
-                {walletAddress?.slice(0, 8)}...{walletAddress?.slice(-8)}
+                {formatAddress(walletAddress)}
               </code>
               <button
                 onClick={copyAddress}
                 className="p-1 hover:bg-dark-tertiary rounded transition-colors"
+                title="Copy full address"
               >
                 {copied ? (
                   <Check className="w-4 h-4 text-bulk-green" />
@@ -237,13 +246,15 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <Link
-            href={`/whales/${walletAddress}`}
-            className="inline-flex items-center gap-2 mt-4 text-sm text-bulk-green hover:underline"
-          >
-            View detailed wallet stats
-            <ExternalLink className="w-4 h-4" />
-          </Link>
+          {walletAddress && (
+            <Link
+              href={`/whales/${walletAddress}`}
+              className="inline-flex items-center gap-2 mt-4 text-sm text-bulk-green hover:underline"
+            >
+              View detailed wallet stats
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       )}
 
@@ -301,7 +312,7 @@ export default function ProfilePage() {
             <div>
               <p className="font-medium text-text-primary">Solana Wallet</p>
               <p className="text-sm text-text-secondary font-mono">
-                {walletAddress?.slice(0, 8)}...{walletAddress?.slice(-8)}
+                {formatAddress(walletAddress)}
               </p>
             </div>
           </div>
