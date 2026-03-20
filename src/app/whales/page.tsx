@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Anchor, Eye, Star, StarOff, AlertCircle } from 'lucide-react';
-import { LeaderboardTable } from '@/components/LeaderboardTable';
+import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { formatAddress } from '@/lib/api';
 import { useStore } from '@/store';
 import { usePrivy } from '@privy-io/react-auth';
