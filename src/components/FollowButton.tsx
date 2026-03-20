@@ -43,8 +43,8 @@ export function FollowButton({ walletAddress, className }: FollowButtonProps) {
         removeFollowing(walletAddress);
         setIsFollowing(false);
       } else {
-        const response = await userApi.followWallet(authToken, walletAddress);
-        if (response.follow) {
+        const response = await userApi.followWallet(authToken, walletAddress) as { follow?: any };
+        if (response?.follow) {
           addFollowing({
             wallet_address: walletAddress,
             followed_at: new Date().toISOString(),
