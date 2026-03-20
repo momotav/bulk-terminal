@@ -25,11 +25,44 @@ export default function ProfilePage() {
   // Get wallet address from Solana wallets or Privy user
   const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
 
+  // Get Twitter info from Privy user's linked accounts
+  const twitterAccount = privyUser?.linkedAccounts?.find(
+    (account): account is any => account.type === 'twitter_oauth'
+  );
+  
+  const twitterHandle = twitterAccount?.username || user?.twitter_handle;
+  const twitterName = twitterAccount?.name || user?.twitter_name;
+  const twitterAvatar = twitterAccount?.profilePictureUrl || user?.twitter_avatar;
+  const hasTwitter = !!twitterAccount || !!user?.twitter_handle;
+
   useEffect(() => {
     if (ready && !authenticated) {
       router.push('/');
     }
   }, [ready, authenticated, router]);
+
+  // Sync Twitter data to backend when it changes
+  useEffect(() => {
+    async function syncTwitter() {
+      if (twitterAccount && authToken && !user?.twitter_handle) {
+        try {
+          const response = await userApi.linkTwitter(authToken, {
+            twitterId: twitterAccount.subject || '',
+            twitterHandle: twitterAccount.username || '',
+            twitterName: twitterAccount.name || '',
+            twitterAvatar: twitterAccount.profilePictureUrl || '',
+          }) as { user?: any };
+          
+          if (response?.user) {
+            setUser(response.user);
+          }
+        } catch (error) {
+          console.error('Failed to sync Twitter:', error);
+        }
+      }
+    }
+    syncTwitter();
+  }, [twitterAccount, authToken, user?.twitter_handle, setUser]);
 
   useEffect(() => {
     async function loadFollowing() {
@@ -59,50 +92,28 @@ export default function ProfilePage() {
   };
 
   const handleLinkTwitter = async () => {
+    if (hasTwitter) return; // Already linked
+    
     setLinkingTwitter(true);
     try {
       await linkTwitter();
-      
-      // After linking, check if twitter info is available
-      setTimeout(async () => {
-        if (privyUser?.twitter) {
-          const { subject: twitterId, username, name, profilePictureUrl } = privyUser.twitter as any;
-          
-          if (authToken) {
-            const response = await userApi.linkTwitter(authToken, {
-              twitterId: twitterId || '',
-              twitterHandle: username || '',
-              twitterName: name || '',
-              twitterAvatar: profilePictureUrl || '',
-            }) as { user?: any };
-            
-            if (response?.user) {
-              setUser(response.user);
-            }
-          }
-        }
-        setLinkingTwitter(false);
-      }, 1000);
     } catch (error) {
       console.error('Failed to link Twitter:', error);
+    } finally {
       setLinkingTwitter(false);
     }
   };
 
   const handleUnlinkTwitter = async () => {
+    if (!twitterAccount) return;
+    
     try {
-      const twitterAccount = (privyUser?.linkedAccounts as any[])?.find(
-        (account: any) => account.type === 'twitter_oauth'
-      );
+      await unlinkTwitter(twitterAccount.subject);
       
-      if (twitterAccount) {
-        await unlinkTwitter(twitterAccount.subject);
-        
-        if (authToken) {
-          const response = await userApi.unlinkTwitter(authToken) as { user?: any };
-          if (response?.user) {
-            setUser(response.user);
-          }
+      if (authToken) {
+        const response = await userApi.unlinkTwitter(authToken) as { user?: any };
+        if (response?.user) {
+          setUser(response.user);
         }
       }
     } catch (error) {
@@ -131,6 +142,9 @@ export default function ProfilePage() {
     );
   }
 
+  // Display name priority: Twitter name > display name > Anonymous
+  const displayName = twitterName || user?.display_name || 'Anonymous Trader';
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-8">
@@ -142,9 +156,9 @@ export default function ProfilePage() {
       <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 mb-6">
         <div className="flex items-start gap-6">
           <div className="shrink-0">
-            {user?.twitter_avatar ? (
+            {twitterAvatar ? (
               <img 
-                src={user.twitter_avatar} 
+                src={twitterAvatar} 
                 alt="" 
                 className="w-20 h-20 rounded-full border-2 border-dark-border"
               />
@@ -157,18 +171,18 @@ export default function ProfilePage() {
 
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-semibold text-text-primary mb-1">
-              {user?.twitter_name || user?.display_name || 'Anonymous Trader'}
+              {displayName}
             </h2>
             
-            {user?.twitter_handle && (
+            {twitterHandle && (
               <a 
-                href={`https://twitter.com/${user.twitter_handle}`}
+                href={`https://twitter.com/${twitterHandle}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-text-secondary hover:text-bulk-green transition-colors mb-3"
               >
                 <Twitter className="w-4 h-4" />
-                @{user.twitter_handle}
+                @{twitterHandle}
                 <ExternalLink className="w-3 h-3" />
               </a>
             )}
@@ -272,15 +286,15 @@ export default function ProfilePage() {
             </div>
             <div>
               <p className="font-medium text-text-primary">Twitter / X</p>
-              {user?.twitter_handle ? (
-                <p className="text-sm text-text-secondary">@{user.twitter_handle}</p>
+              {hasTwitter ? (
+                <p className="text-sm text-text-secondary">@{twitterHandle}</p>
               ) : (
                 <p className="text-sm text-text-tertiary">Not connected</p>
               )}
             </div>
           </div>
           
-          {user?.twitter_handle ? (
+          {hasTwitter ? (
             <button
               onClick={handleUnlinkTwitter}
               className="px-4 py-2 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
