@@ -1,7 +1,12 @@
 'use client';
 
 import { PrivyProvider as PrivyProviderBase } from '@privy-io/react-auth';
+import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana';
 import { ReactNode } from 'react';
+
+const solanaConnectors = toSolanaWalletConnectors({
+  shouldAutoConnect: false,
+});
 
 interface PrivyProviderProps {
   children: ReactNode;
@@ -16,17 +21,17 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
           theme: 'dark',
           accentColor: '#B8FF04',
           logo: '/bulkstats.png',
+          walletChainType: 'solana-only',
         },
         loginMethods: ['wallet'],
         embeddedWallets: {
           createOnLogin: 'off',
         },
-        solanaClusters: [
-          {
-            name: 'mainnet-beta',
-            rpcUrl: 'https://api.mainnet-beta.solana.com',
+        externalWallets: {
+          solana: {
+            connectors: solanaConnectors,
           },
-        ],
+        },
       }}
     >
       {children}
