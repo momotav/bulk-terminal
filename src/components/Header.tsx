@@ -44,14 +44,14 @@ export function Header() {
           if (token) {
             setAuthToken(token);
             
-            const response = await userApi.authenticate(token, walletAddress);
-            if (response.user) {
+            const response = await userApi.authenticate(token, walletAddress) as { user?: any };
+            if (response?.user) {
               setUser(response.user);
             }
 
             // Load following
-            const followingResponse = await userApi.getFollowing(token);
-            if (followingResponse.following) {
+            const followingResponse = await userApi.getFollowing(token) as { following?: any[] };
+            if (followingResponse?.following) {
               setFollowing(followingResponse.following);
             }
           }
