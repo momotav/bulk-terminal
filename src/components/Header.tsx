@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { User, LogOut, Menu, X, ChevronDown, Wallet, Users } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
 
@@ -28,12 +28,13 @@ export function Header() {
     login, 
     logout: privyLogout, 
     getAccessToken,
+    user: privyUser,
   } = usePrivy();
   
-  const { wallets } = useWallets();
+  const { wallets: solanaWallets } = useSolanaWallets();
 
-  const solanaWallet = wallets.find(w => w.walletClientType !== 'privy');
-  const walletAddress = solanaWallet?.address;
+  // Get the first connected Solana wallet address
+  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address;
 
   // Sync Privy auth with backend
   useEffect(() => {
@@ -77,6 +78,7 @@ export function Header() {
   };
 
   const formatAddress = (address: string) => {
+    if (!address) return '...';
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
 
