@@ -20,7 +20,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
-      <Header />
+      
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
