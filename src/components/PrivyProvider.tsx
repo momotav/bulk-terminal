@@ -16,12 +16,23 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
           theme: 'dark',
           accentColor: '#B8FF04',
           logo: '/bulkstats.png',
-          showWalletLoginFirst: true,
         },
         loginMethods: ['wallet'],
+        supportedChains: [],
         embeddedWallets: {
           createOnLogin: 'off',
         },
+        externalWallets: {
+          solana: {
+            connectors: (connectors) => connectors,
+          },
+        },
+        solanaClusters: [
+          {
+            name: 'mainnet-beta',
+            rpcUrl: 'https://api.mainnet-beta.solana.com',
+          },
+        ],
       }}
     >
       {children}
