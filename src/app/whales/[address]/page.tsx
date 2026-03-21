@@ -6,12 +6,19 @@ import Link from 'next/link';
 import { 
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
   TrendingUp, TrendingDown, Wallet, Activity, Flame,
-  AlertCircle, BarChart3, Clock
+  AlertCircle, BarChart3, Clock, Loader2
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
 import { useStore } from '@/store';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+// X (Twitter) icon component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 interface Trade {
   id: number;
@@ -21,6 +28,16 @@ interface Trade {
   price: number;
   value: number;
   timestamp: string;
+}
+
+interface WalletProfile {
+  wallet_address: string;
+  twitter_handle?: string;
+  twitter_name?: string;
+  twitter_avatar?: string;
+  display_name?: string;
+  avatar_url?: string;
+  created_at?: string;
 }
 
 function cn(...classes: (string | boolean | undefined | null)[]): string {
@@ -34,15 +51,21 @@ export default function WalletPage() {
   
   const { following, addFollowing, removeFollowing, user, authToken } = useStore();
   const { authenticated, login } = usePrivy();
+  const { wallets: solanaWallets } = useSolanaWallets();
   
   const [data, setData] = useState<WalletData | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [profile, setProfile] = useState<WalletProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [followLoading, setFollowLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Get current user's wallet address
+  const currentUserWallet = solanaWallets?.[0]?.address || user?.wallet_address || '';
+  
   const isFollowing = following.some(w => w.wallet_address === address);
-  const isOwnWallet = user?.wallet_address === address;
+  const isOwnWallet = currentUserWallet.toLowerCase() === address.toLowerCase();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,13 +73,15 @@ export default function WalletPage() {
       setError('');
       
       try {
-        const [walletResult, tradesResult] = await Promise.all([
+        const [walletResult, tradesResult, profileResult] = await Promise.all([
           wallet.getWallet(address),
           wallet.getTrades(address, 50).catch(() => ({ data: [] })),
+          userApi.getWalletProfile(address).catch(() => ({ profile: null })),
         ]);
         
         setData(walletResult);
         setTrades(tradesResult.data || []);
+        setProfile((profileResult as any)?.profile || null);
         
         await wallet.trackWallet(address).catch(() => {});
       } catch (err) {
@@ -83,8 +108,13 @@ export default function WalletPage() {
       return;
     }
 
-    if (!authToken) return;
+    if (!authToken) {
+      console.error('No auth token available');
+      return;
+    }
 
+    setFollowLoading(true);
+    
     try {
       if (isFollowing) {
         await userApi.unfollowWallet(authToken, address);
@@ -98,6 +128,8 @@ export default function WalletPage() {
       }
     } catch (err) {
       console.error('Failed to update follow:', err);
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -113,6 +145,11 @@ export default function WalletPage() {
 
   const hasLiveData = margin !== null && margin !== undefined;
   const hasTrackedData = tracked !== null && tracked !== undefined;
+
+  // Display name priority: Twitter name > display name > shortened address
+  const displayName = profile?.twitter_name || profile?.display_name || null;
+  const twitterHandle = profile?.twitter_handle;
+  const twitterAvatar = profile?.twitter_avatar;
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
@@ -153,12 +190,44 @@ export default function WalletPage() {
             <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-xl font-bold">
-                    {address.slice(0, 2)}
-                  </div>
+                  {/* Avatar - show Twitter avatar if available */}
+                  {twitterAvatar ? (
+                    <img 
+                      src={twitterAvatar} 
+                      alt="" 
+                      className="w-16 h-16 rounded-full border-2 border-dark-border"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-xl font-bold">
+                      {address.slice(0, 2)}
+                    </div>
+                  )}
                   <div>
+                    {/* Display name if available */}
+                    {displayName && (
+                      <h1 className="text-xl font-semibold text-text-primary mb-1">
+                        {displayName}
+                      </h1>
+                    )}
+                    
+                    {/* Twitter/X handle */}
+                    {twitterHandle && (
+                      <a 
+                        href={`https://twitter.com/${twitterHandle}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-text-secondary hover:text-bulk-green transition-colors mb-2"
+                      >
+                        <XIcon className="w-4 h-4" />
+                        @{twitterHandle}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    
+                    {/* Wallet address */}
                     <div className="flex items-center gap-2 mb-1">
-                      <h1 className="font-mono text-lg sm:text-xl">{formatAddress(address)}</h1>
+                      <Wallet className="w-4 h-4 text-text-tertiary" />
+                      <h2 className="font-mono text-lg sm:text-xl">{formatAddress(address)}</h2>
                       {isOwnWallet && (
                         <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
                           You
@@ -197,17 +266,21 @@ export default function WalletPage() {
                   </div>
                 </div>
 
+                {/* Follow button - only show if NOT own wallet */}
                 {!isOwnWallet && (
                   <button
                     onClick={toggleFollow}
+                    disabled={followLoading}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
                       isFollowing
                         ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
                         : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
                     )}
                   >
-                    {isFollowing ? (
+                    {followLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isFollowing ? (
                       <>
                         <StarOff className="w-4 h-4" />
                         Unfollow
@@ -258,77 +331,30 @@ export default function WalletPage() {
                   "text-2xl font-bold",
                   totalPnL >= 0 ? "text-green-400" : "text-red-400"
                 )}>
-                  {totalPnL >= 0 ? '+' : ''}${formatNumber(totalPnL, 2)}
+                  {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
                 </p>
               </div>
 
               <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-red-400" />
+                  <Flame className="w-4 h-4 text-orange-400" />
                   <span className="text-xs text-text-tertiary uppercase tracking-wider">Liquidations</span>
                 </div>
-                <p className="text-2xl font-bold">
+                <p className="text-2xl font-bold text-orange-400">
                   {tracked?.total_liquidations || 0}
                 </p>
               </div>
             </div>
 
-            {/* Live Account Stats */}
-            {hasLiveData && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-dark-secondary border border-blue-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wallet className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs text-text-tertiary uppercase tracking-wider">Live Balance</span>
-                  </div>
-                  <p className="text-xl font-bold text-blue-400">
-                    ${formatNumber(margin?.totalBalance, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-dark-secondary border border-purple-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Activity className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs text-text-tertiary uppercase tracking-wider">Margin Used</span>
-                  </div>
-                  <p className="text-xl font-bold text-purple-400">
-                    ${formatNumber(margin?.marginUsed, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-dark-secondary border border-green-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                    <span className="text-xs text-text-tertiary uppercase tracking-wider">Unrealized PnL</span>
-                  </div>
-                  <p className={cn(
-                    "text-xl font-bold",
-                    (margin?.unrealizedPnl || 0) >= 0 ? "text-green-400" : "text-red-400"
-                  )}>
-                    {(margin?.unrealizedPnl || 0) >= 0 ? '+' : ''}${formatNumber(margin?.unrealizedPnl, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-dark-secondary border border-yellow-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="w-4 h-4 text-yellow-400" />
-                    <span className="text-xs text-text-tertiary uppercase tracking-wider">Available</span>
-                  </div>
-                  <p className="text-xl font-bold text-yellow-400">
-                    ${formatNumber(margin?.availableBalance, 2)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Positions or Recent Trades */}
-              <div className="bg-dark-secondary border border-dark-border rounded-lg">
+            {/* Main Content Grid */}
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Positions / Recent Trades */}
+              <div className="bg-dark-secondary border border-dark-border rounded-lg flex flex-col">
                 <div className="p-4 border-b border-dark-border">
                   <h2 className="font-semibold flex items-center gap-2">
                     {positions.length > 0 ? (
                       <>
-                        <Activity className="w-4 h-4 text-blue-400" />
+                        <Activity className="w-4 h-4 text-bulk-green" />
                         Open Positions ({positions.length})
                       </>
                     ) : (
