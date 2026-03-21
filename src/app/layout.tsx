@@ -28,9 +28,9 @@ export const metadata: Metadata = {
   description: 'Track trading activity, whale movements, and analytics for BULK Exchange',
   icons: {
     icon: [
-      { url: '/bulkstats.png', type: 'image/png' },
+      { url: '/STATS.png', type: 'image/png' },
     ],
-    apple: '/bulkstats.png',
+    apple: '/STATS.png',
   },
 };
 
