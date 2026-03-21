@@ -27,7 +27,10 @@ export const metadata: Metadata = {
   title: 'BULK Stats - Community Analytics Dashboard',
   description: 'Track trading activity, whale movements, and analytics for BULK Exchange',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/bulkstats.png', type: 'image/png' },
+    ],
+    apple: '/bulkstats.png',
   },
 };
 
