@@ -231,7 +231,7 @@ const FundingTooltip = ({ active, payload, label }: any) => {
             <span className="text-gray-400">{entry.name}</span>
           </div>
           <span className={cn("font-medium", entry.value >= 0 ? "text-green-400" : "text-red-400")}>
-            {entry.value.toFixed(6)}%
+            {(entry.value * 100).toFixed(4)}%
           </span>
         </div>
       ))}
@@ -574,19 +574,31 @@ export default function AnalyticsPage() {
     setTimeout(() => setCopiedAddress(null), 2000);
   };
 
-  // Smart date formatting - show time for 1D, date for longer periods
+  // Smart date formatting - simplified labels for cleaner X-axis
   const formatDateForChart = (ts: string, hours: number) => {
     const date = new Date(ts);
     if (hours <= 24) {
-      // Show time for 1 day
+      // 1D: Show just hour (e.g., "14:00")
       return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     } else if (hours <= 168) {
-      // Show day + time for 1 week
-      return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+      // 1W: Show day + hour (e.g., "Mon 14:00")
+      const day = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const hour = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${day} ${hour}`;
+    } else if (hours <= 720) {
+      // 1M: Show month + day (e.g., "Mar 15")
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } else {
-      // Show month + day for longer
+      // Longer: Show month + day (e.g., "Mar 15")
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
+  };
+
+  // Calculate optimal tick interval - show 4-6 clean labels max
+  const getTickInterval = (dataLength: number, hours: number) => {
+    // Target 4-5 labels for clean spacing
+    const targetLabels = hours <= 24 ? 5 : hours <= 168 ? 5 : 5;
+    return Math.max(1, Math.floor(dataLength / targetLabels));
   };
 
   // Per-chart coin toggle component
@@ -700,7 +712,15 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={volumeDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, volumeHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => formatDateForChart(ts, volumeHours)} 
+                            tick={{ fill: '#888', fontSize: 12, fontFamily: '"Overused Grotesk", sans-serif' }} 
+                            axisLine={{ stroke: '#333' }} 
+                            tickLine={false} 
+                            interval={getTickInterval(volumeDataFiltered.length, volumeHours)}
+                            padding={{ left: 10, right: 10 }} 
+                          />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
@@ -759,7 +779,15 @@ export default function AnalyticsPage() {
                               <stop offset="95%" stopColor={COLORS.SOL} stopOpacity={0}/>
                             </linearGradient>
                           </defs>
-                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, oiHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => formatDateForChart(ts, oiHours)} 
+                            tick={{ fill: '#888', fontSize: 12, fontFamily: '"Overused Grotesk", sans-serif' }} 
+                            axisLine={{ stroke: '#333' }} 
+                            tickLine={false} 
+                            interval={getTickInterval(oiChartData.length, oiHours)}
+                            padding={{ left: 10, right: 10 }} 
+                          />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
                           <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} />
@@ -804,7 +832,15 @@ export default function AnalyticsPage() {
                           ETH: fundingCoins.includes('ETH') ? item.ETH : null,
                           SOL: fundingCoins.includes('SOL') ? item.SOL : null,
                         })), fundingRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} 
+                            tick={{ fill: '#888', fontSize: 12, fontFamily: '"Overused Grotesk", sans-serif' }} 
+                            axisLine={{ stroke: '#333' }} 
+                            tickLine={false} 
+                            interval={getTickInterval(fundingChartData.length, fundingHours)}
+                            padding={{ left: 10, right: 10 }} 
+                          />
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
@@ -844,7 +880,15 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={liquidationsDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, liquidationsHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => formatDateForChart(ts, liquidationsHours)} 
+                            tick={{ fill: '#888', fontSize: 12, fontFamily: '"Overused Grotesk", sans-serif' }} 
+                            axisLine={{ stroke: '#333' }} 
+                            tickLine={false} 
+                            interval={getTickInterval(liquidationsDataFiltered.length, liquidationsHours)}
+                            padding={{ left: 10, right: 10 }} 
+                          />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
@@ -887,7 +931,15 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={tradesDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
-                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, tradesHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => formatDateForChart(ts, tradesHours)} 
+                            tick={{ fill: '#888', fontSize: 12, fontFamily: '"Overused Grotesk", sans-serif' }} 
+                            axisLine={{ stroke: '#333' }} 
+                            tickLine={false} 
+                            interval={getTickInterval(tradesDataFiltered.length, tradesHours)}
+                            padding={{ left: 10, right: 10 }} 
+                          />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
