@@ -50,7 +50,7 @@ export default function WalletPage() {
   const address = params.address as string;
   
   const { following, addFollowing, removeFollowing, user, authToken } = useStore();
-  const { authenticated, login, getAccessToken } = usePrivy();
+  const { authenticated, login, getAccessToken, user: privyUser } = usePrivy();
   const { wallets: solanaWallets } = useSolanaWallets();
   
   const [data, setData] = useState<WalletData | null>(null);
@@ -61,14 +61,22 @@ export default function WalletPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Get current user's wallet address - check multiple sources
-  const connectedWallet = solanaWallets?.[0]?.address;
-  const storeWallet = user?.wallet_address;
-  const currentUserWallet = connectedWallet || storeWallet || '';
+  // Get current user's wallet address from multiple sources
+  // Priority: 1. Solana wallets hook, 2. Privy user wallet, 3. Store user wallet
+  const solanaWalletAddress = solanaWallets?.[0]?.address;
+  const privyWalletAddress = privyUser?.wallet?.address;
+  // Also check linked accounts for Solana wallet
+  const linkedSolanaWallet = privyUser?.linkedAccounts?.find(
+    (account: any) => account.type === 'wallet' && account.chainType === 'solana'
+  ) as any;
+  const linkedWalletAddress = linkedSolanaWallet?.address;
+  const storeWalletAddress = user?.wallet_address;
+  
+  const currentUserWallet = solanaWalletAddress || privyWalletAddress || linkedWalletAddress || storeWalletAddress || '';
   
   // Check if viewing own wallet (case-insensitive comparison)
-  const isOwnWallet = currentUserWallet && address && 
-    currentUserWallet.toLowerCase() === address.toLowerCase();
+  const isOwnWallet = !!(currentUserWallet && address && 
+    currentUserWallet.toLowerCase() === address.toLowerCase());
   
   // Check if following this wallet
   const isFollowing = following.some(w => 
@@ -79,16 +87,23 @@ export default function WalletPage() {
   useEffect(() => {
     console.log('[WalletPage] Debug:', {
       address,
-      connectedWallet,
-      storeWallet,
+      solanaWalletAddress,
+      privyWalletAddress,
+      linkedWalletAddress,
+      storeWalletAddress,
       currentUserWallet,
       isOwnWallet,
       isFollowing,
       authenticated,
       hasAuthToken: !!authToken,
       followingCount: following.length,
+      privyUser: privyUser ? {
+        id: privyUser.id,
+        wallet: privyUser.wallet,
+        linkedAccounts: privyUser.linkedAccounts?.map((a: any) => ({ type: a.type, chainType: a.chainType, address: a.address }))
+      } : null,
     });
-  }, [address, connectedWallet, storeWallet, currentUserWallet, isOwnWallet, isFollowing, authenticated, authToken, following]);
+  }, [address, solanaWalletAddress, privyWalletAddress, linkedWalletAddress, storeWalletAddress, currentUserWallet, isOwnWallet, isFollowing, authenticated, authToken, following, privyUser]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -139,6 +154,7 @@ export default function WalletPage() {
       console.log('[Follow] No auth token in store, getting fresh token');
       try {
         token = await getAccessToken();
+        console.log('[Follow] Got fresh token:', !!token);
       } catch (err) {
         console.error('[Follow] Failed to get access token:', err);
       }
