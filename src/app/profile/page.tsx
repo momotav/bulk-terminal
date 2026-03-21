@@ -4,13 +4,20 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  User, Wallet, Twitter, ExternalLink, Copy, Check, 
+  User, Wallet, ExternalLink, Copy, Check, 
   TrendingUp, TrendingDown, Activity, Users, Calendar,
   Loader2
 } from 'lucide-react';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore, FollowedWallet } from '@/store';
 import { userApi, formatCompact } from '@/lib/api';
+
+// X (Twitter) icon component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -179,9 +186,9 @@ export default function ProfilePage() {
                 href={`https://twitter.com/${twitterHandle}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-text-secondary hover:text-bulk-green transition-colors mb-3"
+                className="inline-flex items-center gap-1.5 text-text-secondary hover:text-bulk-green transition-colors mb-3"
               >
-                <Twitter className="w-4 h-4" />
+                <XIcon className="w-4 h-4" />
                 @{twitterHandle}
                 <ExternalLink className="w-3 h-3" />
               </a>
@@ -278,14 +285,14 @@ export default function ProfilePage() {
           Connected Accounts
         </h3>
 
-        {/* Twitter */}
+        {/* Twitter/X */}
         <div className="flex items-center justify-between py-4 border-b border-dark-border">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#1DA1F2]/10 flex items-center justify-center">
-              <Twitter className="w-5 h-5 text-[#1DA1F2]" />
+            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+              <XIcon className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-medium text-text-primary">Twitter / X</p>
+              <p className="font-medium text-text-primary">X (Twitter)</p>
               {hasTwitter ? (
                 <p className="text-sm text-text-secondary">@{twitterHandle}</p>
               ) : (
@@ -305,14 +312,14 @@ export default function ProfilePage() {
             <button
               onClick={handleLinkTwitter}
               disabled={linkingTwitter}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-[#1DA1F2] text-white hover:bg-[#1DA1F2]/90 transition-colors text-sm disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-white text-black hover:bg-white/90 transition-colors text-sm disabled:opacity-50"
             >
               {linkingTwitter ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Twitter className="w-4 h-4" />
+                <XIcon className="w-4 h-4" />
               )}
-              Connect Twitter
+              Connect X
             </button>
           )}
         </div>
