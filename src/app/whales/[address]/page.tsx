@@ -50,7 +50,7 @@ export default function WalletPage() {
   const address = params.address as string;
   
   const { following, addFollowing, removeFollowing, user, authToken } = useStore();
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, getAccessToken } = usePrivy();
   const { wallets: solanaWallets } = useSolanaWallets();
   
   const [data, setData] = useState<WalletData | null>(null);
@@ -61,11 +61,34 @@ export default function WalletPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Get current user's wallet address
-  const currentUserWallet = solanaWallets?.[0]?.address || user?.wallet_address || '';
+  // Get current user's wallet address - check multiple sources
+  const connectedWallet = solanaWallets?.[0]?.address;
+  const storeWallet = user?.wallet_address;
+  const currentUserWallet = connectedWallet || storeWallet || '';
   
-  const isFollowing = following.some(w => w.wallet_address === address);
-  const isOwnWallet = currentUserWallet.toLowerCase() === address.toLowerCase();
+  // Check if viewing own wallet (case-insensitive comparison)
+  const isOwnWallet = currentUserWallet && address && 
+    currentUserWallet.toLowerCase() === address.toLowerCase();
+  
+  // Check if following this wallet
+  const isFollowing = following.some(w => 
+    w.wallet_address.toLowerCase() === address.toLowerCase()
+  );
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[WalletPage] Debug:', {
+      address,
+      connectedWallet,
+      storeWallet,
+      currentUserWallet,
+      isOwnWallet,
+      isFollowing,
+      authenticated,
+      hasAuthToken: !!authToken,
+      followingCount: following.length,
+    });
+  }, [address, connectedWallet, storeWallet, currentUserWallet, isOwnWallet, isFollowing, authenticated, authToken, following]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -103,13 +126,27 @@ export default function WalletPage() {
   };
 
   const toggleFollow = async () => {
+    // If not authenticated, prompt login
     if (!authenticated) {
+      console.log('[Follow] Not authenticated, prompting login');
       login();
       return;
     }
 
-    if (!authToken) {
-      console.error('No auth token available');
+    // Try to get a fresh token
+    let token = authToken;
+    if (!token) {
+      console.log('[Follow] No auth token in store, getting fresh token');
+      try {
+        token = await getAccessToken();
+      } catch (err) {
+        console.error('[Follow] Failed to get access token:', err);
+      }
+    }
+
+    if (!token) {
+      console.error('[Follow] No auth token available');
+      alert('Please reconnect your wallet to follow users');
       return;
     }
 
@@ -117,17 +154,28 @@ export default function WalletPage() {
     
     try {
       if (isFollowing) {
-        await userApi.unfollowWallet(authToken, address);
+        console.log('[Follow] Unfollowing wallet:', address);
+        await userApi.unfollowWallet(token, address);
         removeFollowing(address);
+        console.log('[Follow] Successfully unfollowed');
       } else {
-        await userApi.followWallet(authToken, address);
+        console.log('[Follow] Following wallet:', address);
+        await userApi.followWallet(token, address);
         addFollowing({
           wallet_address: address,
           followed_at: new Date().toISOString(),
         });
+        console.log('[Follow] Successfully followed');
       }
-    } catch (err) {
-      console.error('Failed to update follow:', err);
+    } catch (err: any) {
+      console.error('[Follow] Failed to update follow:', err);
+      
+      // If 401 error, token might be expired
+      if (err?.message?.includes('401') || err?.status === 401) {
+        alert('Session expired. Please reconnect your wallet.');
+      } else {
+        alert('Failed to update follow status. Please try again.');
+      }
     } finally {
       setFollowLoading(false);
     }
@@ -146,7 +194,7 @@ export default function WalletPage() {
   const hasLiveData = margin !== null && margin !== undefined;
   const hasTrackedData = tracked !== null && tracked !== undefined;
 
-  // Display name priority: Twitter name > display name > shortened address
+  // Display name priority: Twitter name > display name > null
   const displayName = profile?.twitter_name || profile?.display_name || null;
   const twitterHandle = profile?.twitter_handle;
   const twitterAvatar = profile?.twitter_avatar;
@@ -266,7 +314,7 @@ export default function WalletPage() {
                   </div>
                 </div>
 
-                {/* Follow button - only show if NOT own wallet */}
+                {/* Follow button - ONLY show if NOT own wallet */}
                 {!isOwnWallet && (
                   <button
                     onClick={toggleFollow}
@@ -274,7 +322,7 @@ export default function WalletPage() {
                     className={cn(
                       "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
                       isFollowing
-                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
+                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
                         : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
                     )}
                   >
