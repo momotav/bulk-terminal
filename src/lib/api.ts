@@ -419,7 +419,32 @@ export const wallet = {
 
 // ============ USER API (Privy auth) ============
 
+export interface UserSearchResult {
+  wallet_address: string;
+  twitter_handle?: string;
+  twitter_name?: string;
+  twitter_avatar?: string;
+  display_name?: string;
+  total_pnl?: number;
+  total_volume?: number;
+  trade_count?: number;
+}
+
 export const userApi = {
+  // Search users by Twitter handle or wallet address
+  async search(query: string): Promise<UserSearchResult[]> {
+    if (!query || query.length < 2) return [];
+    try {
+      const data = await request<{ results: UserSearchResult[] }>(
+        `/api/users/search?q=${encodeURIComponent(query)}`
+      );
+      return data.results || [];
+    } catch (error) {
+      console.error('User search error:', error);
+      return [];
+    }
+  },
+
   // Authenticate with backend after Privy login
   async authenticate(token: string, walletAddress: string) {
     return request('/api/users/auth', {
