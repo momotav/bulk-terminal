@@ -5,153 +5,150 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Bell, BellOff, Users, TrendingUp, TrendingDown, Flame, 
-  Trash2, CheckCheck, Eye
+  Trash2, Eye, Loader2
 } from 'lucide-react';
-import { Header } from '@/components/Header';
-import { wallet, formatNumber, formatAddress, formatCompact, cn, type Notification } from '@/lib/api';
-import { useStore } from '@/store';
+import { formatNumber, formatAddress, formatCompact, cn, userApi } from '@/lib/api';
+import { useStore, type FollowedWallet } from '@/store';
+import { usePrivy } from '@privy-io/react-auth';
+
+// X (Twitter) icon component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
+interface FollowedWalletWithProfile extends FollowedWallet {
+  twitter_handle?: string;
+  twitter_name?: string;
+  twitter_avatar?: string;
+}
 
 export default function FollowingPage() {
   const router = useRouter();
-  const { user } = useStore();
+  const { following, setFollowing, removeFollowing } = useStore();
+  const { authenticated, ready, getAccessToken, login } = usePrivy();
   
-  const [watchlist, setWatchlist] = useState<Array<{ wallet_address: string; nickname: string | null; total_pnl?: number; total_volume?: number }>>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [wallets, setWallets] = useState<FollowedWalletWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'wallets' | 'activity'>('activity');
+  const [unfollowingAddress, setUnfollowingAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      router.push('/login');
+    if (ready && !authenticated) {
+      // Redirect to whales page if not logged in
+      router.push('/whales');
       return;
     }
     
-    fetchData();
-  }, [user, router]);
+    if (ready && authenticated) {
+      fetchFollowing();
+    }
+  }, [ready, authenticated, router]);
 
-  const fetchData = async () => {
+  const fetchFollowing = async () => {
     setLoading(true);
     try {
-      const [watchlistData, notifData] = await Promise.all([
-        wallet.getWatchlist(),
-        wallet.getNotifications(100),
-      ]);
-      setWatchlist(watchlistData);
-      setNotifications(notifData.data);
-      setUnreadCount(notifData.unread_count);
+      const token = await getAccessToken();
+      if (!token) {
+        console.error('No access token');
+        setLoading(false);
+        return;
+      }
+
+      // Get following list from API
+      const response = await userApi.getFollowing(token) as { following?: FollowedWalletWithProfile[] };
+      
+      if (response?.following) {
+        setWallets(response.following);
+        setFollowing(response.following);
+      }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch following:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleUnfollow = async (address: string) => {
+    setUnfollowingAddress(address);
     try {
-      await wallet.removeFromWatchlist(address);
-      setWatchlist(prev => prev.filter(w => w.wallet_address !== address));
+      const token = await getAccessToken();
+      if (!token) {
+        alert('Please reconnect your wallet');
+        return;
+      }
+
+      await userApi.unfollowWallet(token, address);
+      setWallets(prev => prev.filter(w => w.wallet_address !== address));
+      removeFollowing(address);
     } catch (error) {
       console.error('Failed to unfollow:', error);
+      alert('Failed to unfollow wallet');
+    } finally {
+      setUnfollowingAddress(null);
     }
   };
 
-  const handleMarkAllRead = async () => {
-    try {
-      await wallet.markNotificationsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
-    }
-  };
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-dark-primary">
+        <Loader2 className="w-8 h-8 animate-spin text-bulk-green" />
+      </div>
+    );
+  }
 
-  const handleClearAll = async () => {
-    try {
-      await wallet.clearNotifications();
-      setNotifications([]);
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Failed to clear notifications:', error);
-    }
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  if (!user) {
-    return null;
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen flex flex-col bg-dark-primary">
+        <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
+          <div className="bg-dark-secondary border border-dark-border rounded-lg p-12 text-center">
+            <Users className="w-16 h-16 mx-auto mb-4 text-text-tertiary" />
+            <h2 className="text-xl font-bold mb-2">Connect to View Following</h2>
+            <p className="text-text-secondary mb-6">
+              Connect your wallet to see the wallets you're following.
+            </p>
+            <button
+              onClick={login}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-bulk-green text-dark-primary rounded-lg font-medium hover:bg-bulk-green/90"
+            >
+              Connect Wallet
+            </button>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-primary">
-      
-
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-text-primary mb-1">Following</h1>
+            <h1 className="text-2xl font-bold text-text-primary mb-1 flex items-center gap-2">
+              <Users className="w-6 h-6 text-bulk-green" />
+              Following
+            </h1>
             <p className="text-sm text-text-secondary">
-              Track your favorite wallets and see their activity.
+              Track your favorite wallets and see their trading activity.
             </p>
           </div>
           
-          {unreadCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-bulk-green/10 text-bulk-green rounded-full text-sm">
-              <Bell className="w-4 h-4" />
-              {unreadCount} new
-            </div>
-          )}
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
-              activeTab === 'activity'
-                ? "bg-bulk-green text-dark-primary border-bulk-green"
-                : "bg-dark-secondary border-dark-border text-text-secondary hover:text-text-primary"
-            )}
-          >
-            <Bell className="w-4 h-4" />
-            Activity
-            {unreadCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-bulk-red text-white text-xs rounded-full">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('wallets')}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
-              activeTab === 'wallets'
-                ? "bg-bulk-green text-dark-primary border-bulk-green"
-                : "bg-dark-secondary border-dark-border text-text-secondary hover:text-text-primary"
-            )}
+          <Link
+            href="/whales"
+            className="flex items-center gap-2 px-4 py-2 bg-bulk-green text-dark-primary rounded-lg font-medium hover:bg-bulk-green/90"
           >
             <Users className="w-4 h-4" />
-            Wallets ({watchlist.length})
-          </button>
+            Find Wallets
+          </Link>
         </div>
 
         {loading ? (
           <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="glass-card p-4 animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-dark-secondary border border-dark-border rounded-lg p-4 animate-pulse">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-dark-tertiary rounded-full" />
+                  <div className="w-12 h-12 bg-dark-tertiary rounded-full" />
                   <div className="flex-1">
                     <div className="h-4 w-32 bg-dark-tertiary rounded mb-2" />
                     <div className="h-3 w-48 bg-dark-tertiary rounded" />
@@ -160,191 +157,110 @@ export default function FollowingPage() {
               </div>
             ))}
           </div>
-        ) : activeTab === 'activity' ? (
-          /* Activity Tab */
-          <div className="glass-card">
-            {notifications.length > 0 && (
-              <div className="flex items-center justify-between p-4 border-b border-dark-border">
-                <span className="text-sm text-gray-500">
-                  {notifications.length} notifications
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleMarkAllRead}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-tertiary hover:bg-dark-border rounded-lg transition-colors"
+        ) : wallets.length === 0 ? (
+          <div className="bg-dark-secondary border border-dark-border rounded-lg p-12 text-center">
+            <Users className="w-16 h-16 mx-auto mb-4 text-text-tertiary" />
+            <h3 className="text-lg font-semibold mb-2">No Wallets Followed</h3>
+            <p className="text-text-secondary text-sm mb-6">
+              Start following wallets to track their trading activity.
+            </p>
+            <Link 
+              href="/whales"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-green text-dark-primary rounded-lg font-medium hover:bg-bulk-green/90"
+            >
+              <Users className="w-4 h-4" />
+              Find Wallets to Follow
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-dark-secondary border border-dark-border rounded-lg divide-y divide-dark-border">
+            {wallets.map((w) => (
+              <div
+                key={w.wallet_address}
+                className="flex items-center gap-4 p-4 hover:bg-dark-tertiary/30 transition-colors"
+              >
+                {/* Avatar */}
+                {w.twitter_avatar ? (
+                  <img 
+                    src={w.twitter_avatar} 
+                    alt="" 
+                    className="w-12 h-12 rounded-full border border-dark-border"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary font-bold">
+                    {w.wallet_address.slice(0, 2)}
+                  </div>
+                )}
+                
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    {w.twitter_name ? (
+                      <p className="font-medium truncate">{w.twitter_name}</p>
+                    ) : w.nickname ? (
+                      <p className="font-medium truncate">{w.nickname}</p>
+                    ) : (
+                      <p className="font-medium font-mono">{formatAddress(w.wallet_address)}</p>
+                    )}
+                    
+                    {w.twitter_handle && (
+                      <span className="flex items-center gap-1 text-text-secondary text-sm">
+                        <XIcon className="w-3 h-3" />
+                        @{w.twitter_handle}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-tertiary font-mono truncate">
+                    {w.wallet_address}
+                  </p>
+                </div>
+                
+                {/* Stats */}
+                <div className="text-right mr-4 hidden sm:block">
+                  {w.total_pnl !== undefined && w.total_pnl !== null && (
+                    <p className={cn(
+                      "font-bold",
+                      (w.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
+                    )}>
+                      {(w.total_pnl || 0) >= 0 ? '+' : ''}${formatCompact(w.total_pnl)}
+                    </p>
+                  )}
+                  {w.total_volume !== undefined && w.total_volume !== null && (
+                    <p className="text-xs text-text-tertiary">
+                      Vol: ${formatCompact(w.total_volume)}
+                    </p>
+                  )}
+                  {w.trade_count !== undefined && (
+                    <p className="text-xs text-text-tertiary">
+                      {w.trade_count} trades
+                    </p>
+                  )}
+                </div>
+                
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/whales/${w.wallet_address}`}
+                    className="p-2 hover:bg-dark-tertiary rounded-lg transition-colors"
+                    title="View wallet"
                   >
-                    <CheckCheck className="w-3.5 h-3.5" />
-                    Mark all read
-                  </button>
+                    <Eye className="w-4 h-4 text-text-secondary" />
+                  </Link>
                   <button
-                    onClick={handleClearAll}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-tertiary hover:bg-bulk-red/20 hover:text-bulk-red rounded-lg transition-colors"
+                    onClick={() => handleUnfollow(w.wallet_address)}
+                    disabled={unfollowingAddress === w.wallet_address}
+                    className="p-2 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-colors disabled:opacity-50"
+                    title="Unfollow"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Clear all
+                    {unfollowingAddress === w.wallet_address ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
-            )}
-
-            <div className="divide-y divide-dark-border/50">
-              {notifications.length === 0 ? (
-                <div className="p-12 text-center">
-                  <BellOff className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                  <h3 className="font-display text-lg font-semibold mb-2">No Activity Yet</h3>
-                  <p className="text-gray-500 text-sm mb-4">
-                    When wallets you follow make trades or get liquidated, you'll see it here.
-                  </p>
-                  <Link 
-                    href="/whales"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-cyan text-dark-primary rounded-lg font-medium hover:opacity-90 transition-opacity"
-                  >
-                    <Users className="w-4 h-4" />
-                    Find Wallets to Follow
-                  </Link>
-                </div>
-              ) : (
-                notifications.map((notif) => {
-                  const isTrade = notif.type === 'trade';
-                  const isBuy = notif.side === 'buy' || notif.side === 'long';
-                  
-                  return (
-                    <Link
-                      key={notif.id}
-                      href={`/whales/${notif.wallet_address}`}
-                      className={cn(
-                        "flex items-center gap-4 p-4 hover:bg-dark-tertiary/30 transition-colors",
-                        !notif.read && "bg-bulk-cyan/5"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center",
-                        isTrade 
-                          ? (isBuy ? "bg-bulk-green/15 text-bulk-green" : "bg-bulk-red/15 text-bulk-red")
-                          : "bg-bulk-red/15 text-bulk-red"
-                      )}>
-                        {isTrade ? (
-                          isBuy ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />
-                        ) : (
-                          <Flame className="w-5 h-5" />
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium">
-                            {notif.nickname || formatAddress(notif.wallet_address)}
-                          </span>
-                          {!notif.read && (
-                            <span className="w-2 h-2 bg-bulk-cyan rounded-full" />
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-400">
-                          {isTrade ? (
-                            <>
-                              <span className={isBuy ? "text-bulk-green" : "text-bulk-red"}>
-                                {isBuy ? 'Bought' : 'Sold'}
-                              </span>
-                              {' '}{formatNumber(notif.size, 4)} {notif.symbol.split('-')[0]} @ ${formatNumber(notif.price, 2)}
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-bulk-red">Liquidated</span>
-                              {' '}{notif.symbol} position worth ${formatCompact(notif.value)}
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      
-                      <div className="text-right">
-                        <p className={cn(
-                          "font-display font-bold",
-                          isTrade ? "text-white" : "text-bulk-red"
-                        )}>
-                          ${formatCompact(notif.value)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatTime(notif.created_at)}
-                        </p>
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Wallets Tab */
-          <div className="glass-card">
-            <div className="divide-y divide-dark-border/50">
-              {watchlist.length === 0 ? (
-                <div className="p-12 text-center">
-                  <Users className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                  <h3 className="font-display text-lg font-semibold mb-2">No Wallets Followed</h3>
-                  <p className="text-gray-500 text-sm mb-4">
-                    Start following wallets to track their trading activity.
-                  </p>
-                  <Link 
-                    href="/whales"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-cyan text-dark-primary rounded-lg font-medium hover:opacity-90 transition-opacity"
-                  >
-                    <Users className="w-4 h-4" />
-                    Find Wallets to Follow
-                  </Link>
-                </div>
-              ) : (
-                watchlist.map((w) => (
-                  <div
-                    key={w.wallet_address}
-                    className="flex items-center gap-4 p-4 hover:bg-dark-tertiary/30 transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-bulk-cyan to-bulk-magenta flex items-center justify-center text-white font-bold">
-                      {w.wallet_address.slice(0, 2)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {w.nickname || formatAddress(w.wallet_address)}
-                      </p>
-                      <p className="text-xs text-gray-500 font-mono truncate">
-                        {w.wallet_address}
-                      </p>
-                    </div>
-                    
-                    <div className="text-right mr-4">
-                      {w.total_pnl !== undefined && (
-                        <p className={cn(
-                          "font-display font-bold",
-                          (w.total_pnl || 0) >= 0 ? "text-bulk-green" : "text-bulk-red"
-                        )}>
-                          {(w.total_pnl || 0) >= 0 ? '+' : ''}${formatCompact(w.total_pnl)}
-                        </p>
-                      )}
-                      {w.total_volume !== undefined && (
-                        <p className="text-xs text-gray-500">
-                          Vol: ${formatCompact(w.total_volume)}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/whales/${w.wallet_address}`}
-                        className="p-2 hover:bg-dark-tertiary rounded-lg transition-colors"
-                      >
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      </Link>
-                      <button
-                        onClick={() => handleUnfollow(w.wallet_address)}
-                        className="p-2 hover:bg-bulk-red/20 hover:text-bulk-red rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            ))}
           </div>
         )}
       </main>
