@@ -49,7 +49,7 @@ export default function WalletPage() {
   const router = useRouter();
   const address = params.address as string;
   
-  const { following, addFollowing, removeFollowing, user, authToken } = useStore();
+  const { following, addFollowing, removeFollowing, user } = useStore();
   const { authenticated, login, getAccessToken, user: privyUser } = usePrivy();
   const { wallets: solanaWallets } = useSolanaWallets();
   
@@ -62,10 +62,8 @@ export default function WalletPage() {
   const [copied, setCopied] = useState(false);
 
   // Get current user's wallet address from multiple sources
-  // Priority: 1. Solana wallets hook, 2. Privy user wallet, 3. Store user wallet
   const solanaWalletAddress = solanaWallets?.[0]?.address;
   const privyWalletAddress = privyUser?.wallet?.address;
-  // Also check linked accounts for Solana wallet
   const linkedSolanaWallet = privyUser?.linkedAccounts?.find(
     (account: any) => account.type === 'wallet' && account.chainType === 'solana'
   ) as any;
@@ -74,7 +72,7 @@ export default function WalletPage() {
   
   const currentUserWallet = solanaWalletAddress || privyWalletAddress || linkedWalletAddress || storeWalletAddress || '';
   
-  // Check if viewing own wallet (case-insensitive comparison)
+  // Check if viewing own wallet
   const isOwnWallet = !!(currentUserWallet && address && 
     currentUserWallet.toLowerCase() === address.toLowerCase());
   
@@ -82,28 +80,6 @@ export default function WalletPage() {
   const isFollowing = following.some(w => 
     w.wallet_address.toLowerCase() === address.toLowerCase()
   );
-
-  // Debug logging
-  useEffect(() => {
-    console.log('[WalletPage] Debug:', {
-      address,
-      solanaWalletAddress,
-      privyWalletAddress,
-      linkedWalletAddress,
-      storeWalletAddress,
-      currentUserWallet,
-      isOwnWallet,
-      isFollowing,
-      authenticated,
-      hasAuthToken: !!authToken,
-      followingCount: following.length,
-      privyUser: privyUser ? {
-        id: privyUser.id,
-        wallet: privyUser.wallet,
-        linkedAccounts: privyUser.linkedAccounts?.map((a: any) => ({ type: a.type, chainType: a.chainType, address: a.address }))
-      } : null,
-    });
-  }, [address, solanaWalletAddress, privyWalletAddress, linkedWalletAddress, storeWalletAddress, currentUserWallet, isOwnWallet, isFollowing, authenticated, authToken, following, privyUser]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -148,27 +124,29 @@ export default function WalletPage() {
       return;
     }
 
-    // Try to get a fresh token
-    let token = authToken;
-    if (!token) {
-      console.log('[Follow] No auth token in store, getting fresh token');
-      try {
-        token = await getAccessToken();
-        console.log('[Follow] Got fresh token:', !!token);
-      } catch (err) {
-        console.error('[Follow] Failed to get access token:', err);
-      }
-    }
-
-    if (!token) {
-      console.error('[Follow] No auth token available');
-      alert('Please reconnect your wallet to follow users');
-      return;
-    }
-
     setFollowLoading(true);
     
     try {
+      // ALWAYS get fresh token from Privy (ES256 signed)
+      console.log('[Follow] Getting fresh Privy access token...');
+      const token = await getAccessToken();
+      
+      if (!token) {
+        console.error('[Follow] Failed to get Privy access token');
+        alert('Please reconnect your wallet to follow users');
+        setFollowLoading(false);
+        return;
+      }
+      
+      console.log('[Follow] Got Privy token, length:', token.length);
+      // Log token header to verify it's ES256
+      try {
+        const header = JSON.parse(atob(token.split('.')[0]));
+        console.log('[Follow] Token header:', header);
+      } catch (e) {
+        console.log('[Follow] Could not decode token header');
+      }
+
       if (isFollowing) {
         console.log('[Follow] Unfollowing wallet:', address);
         await userApi.unfollowWallet(token, address);
@@ -186,125 +164,125 @@ export default function WalletPage() {
     } catch (err: any) {
       console.error('[Follow] Failed to update follow:', err);
       
-      // If 401 error, token might be expired
-      if (err?.message?.includes('401') || err?.status === 401) {
+      // Check for specific error types
+      if (err.message?.includes('401') || err.message?.includes('expired') || err.message?.includes('Invalid')) {
         alert('Session expired. Please reconnect your wallet.');
       } else {
-        alert('Failed to update follow status. Please try again.');
+        alert(err.message || 'Failed to update follow status');
       }
     } finally {
       setFollowLoading(false);
     }
   };
 
-  const margin = data?.live?.margin;
   const positions = data?.live?.positions || [];
+  const margin = data?.live?.margin || {
+    totalBalance: 0,
+    availableBalance: 0,
+    marginUsed: 0,
+    realizedPnl: 0,
+    unrealizedPnl: 0,
+  };
   const markPrices = data?.markPrices || {};
+  const tracked = data?.tracked || { total_pnl: 0, total_volume: 0, total_trades: 0, total_liquidations: 0 };
   const history = data?.history || [];
-  const tracked = data?.tracked;
 
-  const totalPnL = margin 
-    ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
-    : (tracked?.total_pnl || 0);
+  // Calculate totals
+  const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
+  const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.notional || 0), 0);
 
-  const hasLiveData = margin !== null && margin !== undefined;
-  const hasTrackedData = tracked !== null && tracked !== undefined;
-
-  // Display name priority: Twitter name > display name > null
-  const displayName = profile?.twitter_name || profile?.display_name || null;
-  const twitterHandle = profile?.twitter_handle;
-  const twitterAvatar = profile?.twitter_avatar;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-bulk-green" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-dark-primary">
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
-        <Link 
-          href="/whales"
-          className="inline-flex items-center gap-2 text-text-secondary hover:text-text-primary mb-6 transition-colors"
+    <div className="min-h-screen">
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Back button */}
+        <button 
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-6"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Whale Tracker
-        </Link>
+          Back
+        </button>
 
-        {loading ? (
-          <div className="space-y-6">
-            <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-dark-tertiary rounded-full" />
-                <div className="flex-1">
-                  <div className="h-6 w-64 bg-dark-tertiary rounded mb-2" />
-                  <div className="h-4 w-32 bg-dark-tertiary rounded" />
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : error && !hasTrackedData ? (
-          <div className="bg-dark-secondary border border-dark-border rounded-lg p-8 text-center">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-400 opacity-50" />
-            <h2 className="text-xl font-bold mb-2">Wallet Not Found</h2>
-            <p className="text-text-secondary mb-4">{error}</p>
-            <Link href="/whales" className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-green text-dark-primary rounded-lg">
-              <ArrowLeft className="w-4 h-4" />
-              Go Back
-            </Link>
+        {error ? (
+          <div className="bg-dark-secondary border border-red-500/30 rounded-lg p-8 text-center">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-400" />
+            <p className="text-red-400 mb-4">{error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-dark-tertiary rounded hover:bg-dark-tertiary/80"
+            >
+              Retry
+            </button>
           </div>
         ) : (
-          <div>
-            {/* Wallet Header */}
-            <div className="bg-dark-secondary border border-dark-border rounded-lg p-6 mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  {/* Avatar - show Twitter avatar if available */}
-                  {twitterAvatar ? (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-dark-secondary border border-dark-border rounded-lg p-6">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  {/* Avatar */}
+                  {profile?.twitter_avatar ? (
                     <img 
-                      src={twitterAvatar} 
-                      alt="" 
+                      src={profile.twitter_avatar} 
+                      alt={profile.twitter_name || 'Profile'} 
                       className="w-16 h-16 rounded-full border-2 border-dark-border"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-xl font-bold">
-                      {address.slice(0, 2)}
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-bulk-green/30 to-blue-500/30 flex items-center justify-center">
+                      <Wallet className="w-8 h-8 text-bulk-green" />
                     </div>
                   )}
+                  
                   <div>
-                    {/* Display name if available */}
-                    {displayName && (
-                      <h1 className="text-xl font-semibold text-text-primary mb-1">
-                        {displayName}
+                    {/* Name and Twitter */}
+                    {profile?.twitter_handle ? (
+                      <div className="mb-1">
+                        <h1 className="text-xl font-bold flex items-center gap-2">
+                          {profile.twitter_name || profile.twitter_handle}
+                          {isOwnWallet && (
+                            <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs rounded-full">
+                              You
+                            </span>
+                          )}
+                        </h1>
+                        <a 
+                          href={`https://x.com/${profile.twitter_handle}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-text-secondary hover:text-bulk-green flex items-center gap-1 text-sm"
+                        >
+                          <XIcon className="w-3.5 h-3.5" />
+                          @{profile.twitter_handle}
+                        </a>
+                      </div>
+                    ) : (
+                      <h1 className="text-xl font-bold mb-1 flex items-center gap-2">
+                        {formatAddress(address)}
+                        {isOwnWallet && (
+                          <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs rounded-full">
+                            You
+                          </span>
+                        )}
                       </h1>
                     )}
                     
-                    {/* Twitter/X handle */}
-                    {twitterHandle && (
-                      <a 
-                        href={`https://twitter.com/${twitterHandle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-text-secondary hover:text-bulk-green transition-colors mb-2"
-                      >
-                        <XIcon className="w-4 h-4" />
-                        @{twitterHandle}
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                    
-                    {/* Wallet address */}
-                    <div className="flex items-center gap-2 mb-1">
-                      <Wallet className="w-4 h-4 text-text-tertiary" />
-                      <h2 className="font-mono text-lg sm:text-xl">{formatAddress(address)}</h2>
-                      {isOwnWallet && (
-                        <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
-                          You
-                        </span>
-                      )}
-                      {address === '7DHvrCZMMLZ2ovNfKaGpvJZXAQyydbTz6dM7w7qXtzX5' && (
-                        <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
-                          BULK MM
-                        </span>
-                      )}
-                      <button
+                    {/* Address */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <code className="text-sm text-text-tertiary font-mono bg-dark-tertiary px-2 py-1 rounded">
+                        {formatAddress(address)}
+                      </code>
+                      <button 
                         onClick={copyAddress}
-                        className="p-1.5 hover:bg-dark-tertiary rounded transition-colors"
+                        className="p-1.5 rounded hover:bg-dark-tertiary transition-colors"
+                        title="Copy address"
                       >
                         {copied ? (
                           <Check className="w-4 h-4 text-bulk-green" />
@@ -312,34 +290,30 @@ export default function WalletPage() {
                           <Copy className="w-4 h-4 text-text-tertiary" />
                         )}
                       </button>
-                      <a
+                      <a 
                         href={`https://solscan.io/account/${address}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-1.5 hover:bg-dark-tertiary rounded transition-colors"
+                        className="p-1.5 rounded hover:bg-dark-tertiary transition-colors"
+                        title="View on Solscan"
                       >
                         <ExternalLink className="w-4 h-4 text-text-tertiary" />
                       </a>
                     </div>
-                    <p className="text-xs text-text-tertiary">
-                      {tracked?.total_trades || 0} trades &bull; ${formatCompact(tracked?.total_volume || 0)} volume
-                      {!hasLiveData && hasTrackedData && (
-                        <span className="text-yellow-400 ml-2">&bull; No active positions</span>
-                      )}
-                    </p>
                   </div>
                 </div>
 
-                {/* Follow button - ONLY show if NOT own wallet */}
+                {/* Follow button - only show if not own wallet */}
                 {!isOwnWallet && (
                   <button
                     onClick={toggleFollow}
                     disabled={followLoading}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
+                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
                       isFollowing
-                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
-                        : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
+                        ? "border border-dark-border bg-dark-tertiary text-text-secondary hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
+                        : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90",
+                      followLoading && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     {followLoading ? (
@@ -347,7 +321,7 @@ export default function WalletPage() {
                     ) : isFollowing ? (
                       <>
                         <StarOff className="w-4 h-4" />
-                        Unfollow
+                        Following
                       </>
                     ) : (
                       <>
@@ -358,61 +332,67 @@ export default function WalletPage() {
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <BarChart3 className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-text-tertiary uppercase tracking-wider">Total Volume</span>
+              {/* Stats row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-dark-border">
+                <div>
+                  <p className="text-text-tertiary text-sm mb-1">Total PnL</p>
+                  <p className={cn(
+                    "text-lg font-semibold",
+                    (tracked.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
+                  )}>
+                    {(tracked.total_pnl || 0) >= 0 ? '+' : ''}${formatCompact(tracked.total_pnl || 0)}
+                  </p>
                 </div>
-                <p className="text-2xl font-bold text-blue-400">
-                  ${formatCompact(tracked?.total_volume || 0)}
-                </p>
-              </div>
-
-              <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs text-text-tertiary uppercase tracking-wider">Total Trades</span>
+                <div>
+                  <p className="text-text-tertiary text-sm mb-1">Volume</p>
+                  <p className="text-lg font-semibold">${formatCompact(tracked.total_volume || 0)}</p>
                 </div>
-                <p className="text-2xl font-bold text-purple-400">
-                  {tracked?.total_trades || 0}
-                </p>
-              </div>
-
-              <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  {totalPnL >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-red-400" />
-                  )}
-                  <span className="text-xs text-text-tertiary uppercase tracking-wider">Total PnL</span>
+                <div>
+                  <p className="text-text-tertiary text-sm mb-1">Trades</p>
+                  <p className="text-lg font-semibold">{tracked.total_trades || 0}</p>
                 </div>
-                <p className={cn(
-                  "text-2xl font-bold",
-                  totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                )}>
-                  {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
-                </p>
-              </div>
-
-              <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-xs text-text-tertiary uppercase tracking-wider">Liquidations</span>
+                <div>
+                  <p className="text-text-tertiary text-sm mb-1">Liquidations</p>
+                  <p className="text-lg font-semibold text-red-400">{tracked.total_liquidations || 0}</p>
                 </div>
-                <p className="text-2xl font-bold text-orange-400">
-                  {tracked?.total_liquidations || 0}
-                </p>
               </div>
             </div>
 
-            {/* Main Content Grid */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Positions / Recent Trades */}
+            {/* Live Stats (only if has positions) */}
+            {positions.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+                  <p className="text-text-tertiary text-sm mb-1">Balance</p>
+                  <p className="text-lg font-semibold">${formatNumber(margin.totalBalance, 2)}</p>
+                </div>
+                <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+                  <p className="text-text-tertiary text-sm mb-1">Available</p>
+                  <p className="text-lg font-semibold text-green-400">${formatNumber(margin.availableBalance, 2)}</p>
+                </div>
+                <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+                  <p className="text-text-tertiary text-sm mb-1">Margin Used</p>
+                  <p className="text-lg font-semibold text-yellow-400">${formatNumber(margin.marginUsed, 2)}</p>
+                </div>
+                <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+                  <p className="text-text-tertiary text-sm mb-1">Unrealized PnL</p>
+                  <p className={cn(
+                    "text-lg font-semibold",
+                    totalUnrealizedPnl >= 0 ? "text-green-400" : "text-red-400"
+                  )}>
+                    {totalUnrealizedPnl >= 0 ? '+' : ''}${formatNumber(totalUnrealizedPnl, 2)}
+                  </p>
+                </div>
+                <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+                  <p className="text-text-tertiary text-sm mb-1">Notional</p>
+                  <p className="text-lg font-semibold">${formatCompact(totalNotional)}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Two columns: Positions/Trades + Chart */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Positions/Trades */}
               <div className="bg-dark-secondary border border-dark-border rounded-lg flex flex-col">
                 <div className="p-4 border-b border-dark-border">
                   <h2 className="font-semibold flex items-center gap-2">
