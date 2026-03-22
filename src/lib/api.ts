@@ -117,7 +117,7 @@ export interface OpenInterestLive {
   timestamp: string;
 }
 
-// Helper to get auth token
+// Helper to get auth token (for legacy auth only)
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('bulk_token');
@@ -128,15 +128,21 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
-  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
   
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  // ONLY add bulk_token if no Authorization header was explicitly provided
+  // This allows Privy tokens to be passed through without being overwritten
+  const existingHeaders = options.headers as Record<string, string> | undefined;
+  const hasAuthHeader = existingHeaders?.['Authorization'] || existingHeaders?.['authorization'];
+  
+  if (!hasAuthHeader) {
+    const token = getToken();
+    if (token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
   }
   
   const res = await fetch(`${API_URL}${endpoint}`, {
@@ -152,7 +158,7 @@ async function request<T>(
   return res.json();
 }
 
-// Auth API
+// Auth API (legacy email/password - kept for compatibility)
 export const auth = {
   async register(email: string, password: string, username?: string): Promise<{ user: User; token: string }> {
     const data = await request<{ user: User; token: string }>('/api/auth/register', {
@@ -269,83 +275,33 @@ export const analytics = {
     return data.data;
   },
 
-  // Original BULK API proxy (may be delayed/cached) - DEPRECATED, use getOpenInterestHistory
-  async getOpenInterest(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
-    const data = await request<{ data: ChartDataPoint[] }>(
-      `/api/analytics/open-interest/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  // NEW: Open Interest calculated from trades table (real-time)
-  async getOpenInterestCalculated(symbol: string, hours: number = 24): Promise<OpenInterestCalculated> {
-    return request<OpenInterestCalculated>(
-      `/api/analytics/open-interest-calculated/${symbol}?hours=${hours}`
-    );
-  },
-
-  // NEW: Live OI snapshot with longs/shorts breakdown
-  async getOpenInterestLive(symbol: string): Promise<OpenInterestLive> {
-    return request<OpenInterestLive>(
-      `/api/analytics/open-interest-live/${symbol}`
-    );
-  },
-
-  // NEW: OI chart data calculated from trades
-  async getOpenInterestChart(symbol: string, hours: number = 24): Promise<{ symbol: string; hours: number; data: ChartDataPoint[] }> {
-    return request<{ symbol: string; hours: number; data: ChartDataPoint[] }>(
-      `/api/analytics/open-interest-chart/${symbol}?hours=${hours}`
-    );
-  },
-
-  // DEPRECATED - use getFundingRateHistory instead
-  async getFundingRate(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
-    const data = await request<{ data: ChartDataPoint[] }>(
-      `/api/analytics/funding-rate/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  async getVolume(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
-    const data = await request<{ data: ChartDataPoint[] }>(
-      `/api/analytics/volume/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  async getPrice(symbol: string, hours: number = 168): Promise<ChartDataPoint[]> {
-    const data = await request<{ data: ChartDataPoint[] }>(
-      `/api/analytics/price/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  async getLongShortRatio(symbol: string, hours: number = 168): Promise<LongShortDataPoint[]> {
-    const data = await request<{ data: LongShortDataPoint[] }>(
-      `/api/analytics/long-short-ratio/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  async getLiquidationHeatmap(symbol: string, hours: number = 168): Promise<unknown[]> {
-    const data = await request<{ data: unknown[] }>(
-      `/api/analytics/liquidation-heatmap/${symbol}?hours=${hours}`
-    );
-    return data.data;
-  },
-
-  async getCorrelation(hours: number = 168): Promise<{ symbols: string[]; matrix: number[][] }> {
-    return request(`/api/analytics/correlation?hours=${hours}`);
-  },
-
-  async getExchangeHealth(): Promise<ExchangeHealth> {
-    return request('/api/analytics/exchange-health');
-  },
-
-  // Real data from database (testnet activity)
-  async getTradesChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+  // Trades chart from our database
+  async getTradesChart(hours: number = 24): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
       `/api/analytics/trades-chart?hours=${hours}`
+    );
+    return data.data;
+  },
+
+  // Exchange health stats
+  async getExchangeHealth(): Promise<ExchangeHealth> {
+    return request('/api/analytics/exchange-stats');
+  },
+
+  // Live open interest from BULK API
+  async getLiveOpenInterest(symbol: string): Promise<OpenInterestLive> {
+    return request(`/api/analytics/open-interest-live/${symbol}`);
+  },
+
+  // All tickers
+  async getTickers(): Promise<unknown> {
+    return request('/api/analytics/tickers');
+  },
+
+  // Long/short ratio
+  async getLongShortRatio(symbol: string, hours: number = 24): Promise<LongShortDataPoint[]> {
+    const data = await request<{ data: LongShortDataPoint[] }>(
+      `/api/analytics/long-short/${symbol}?hours=${hours}`
     );
     return data.data;
   },
