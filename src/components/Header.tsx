@@ -54,9 +54,31 @@ export function Header() {
           if (token) {
             setAuthToken(token);
             
+            // Authenticate with backend
             const response = await userApi.authenticate(token, walletAddress) as { user?: any };
             if (response?.user) {
               setUser(response.user);
+              
+              // If Privy has Twitter data but backend doesn't, sync it
+              if (twitterAccount && !response.user.twitter_handle) {
+                console.log('[Header] Syncing Twitter data to backend...');
+                try {
+                  const twitterData = {
+                    twitterId: twitterAccount.subject || '',
+                    twitterHandle: twitterAccount.username || '',
+                    twitterName: twitterAccount.name || '',
+                    twitterAvatar: twitterAccount.profilePictureUrl || '',
+                  };
+                  
+                  const linkResponse = await userApi.linkTwitter(token, twitterData) as { user?: any };
+                  if (linkResponse?.user) {
+                    setUser(linkResponse.user);
+                    console.log('[Header] Twitter data synced successfully');
+                  }
+                } catch (linkError) {
+                  console.error('[Header] Failed to sync Twitter:', linkError);
+                }
+              }
             }
 
             // Load following
@@ -74,7 +96,7 @@ export function Header() {
     }
 
     syncAuth();
-  }, [authenticated, walletAddress, ready]);
+  }, [authenticated, walletAddress, ready, twitterAccount?.username]);
 
   const handleLogout = async () => {
     try {
