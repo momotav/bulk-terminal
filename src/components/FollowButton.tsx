@@ -12,8 +12,8 @@ interface FollowButtonProps {
 }
 
 export function FollowButton({ walletAddress, className }: FollowButtonProps) {
-  const { ready, authenticated, login } = usePrivy();
-  const { authToken, following, addFollowing, removeFollowing, user } = useStore();
+  const { ready, authenticated, login, getAccessToken } = usePrivy();
+  const { following, addFollowing, removeFollowing, user } = useStore();
   
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,16 +34,24 @@ export function FollowButton({ walletAddress, className }: FollowButtonProps) {
       return;
     }
 
-    if (!authToken) return;
-
     setLoading(true);
     try {
+      // Get fresh Privy access token (ES256 signed)
+      const accessToken = await getAccessToken();
+      
+      if (!accessToken) {
+        console.error('Failed to get Privy access token');
+        return;
+      }
+
+      console.log('Using Privy access token:', accessToken.slice(0, 30) + '...');
+      
       if (isFollowing) {
-        await userApi.unfollowWallet(authToken, walletAddress);
+        await userApi.unfollowWallet(accessToken, walletAddress);
         removeFollowing(walletAddress);
         setIsFollowing(false);
       } else {
-        const response = await userApi.followWallet(authToken, walletAddress) as { follow?: any };
+        const response = await userApi.followWallet(accessToken, walletAddress) as { follow?: any };
         if (response?.follow) {
           addFollowing({
             wallet_address: walletAddress,
