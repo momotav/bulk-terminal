@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { Flame, TrendingUp, TrendingDown, Zap } from 'lucide-react';
-import { leaderboard, formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
+import { formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
 interface ActivityItem {
-  id: number;
   type: 'liquidation' | 'trade';
   wallet_address: string | null;
   symbol: string;
   side: string;
-  size: number;
-  price: number;
-  value: number;
+  size: string | number;
+  price: string | number;
+  value: string | number;
   timestamp: string;
 }
 
@@ -24,29 +25,19 @@ export function RecentActivity() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [liqs, trades] = await Promise.all([
-          leaderboard.getRecentLiquidations(20),
-          leaderboard.getRecentTrades(20),
-        ]);
-
-        const combined: ActivityItem[] = [
-          ...(liqs as ActivityItem[]).map((l) => ({ 
-            ...l, 
-            type: 'liquidation' as const,
-            price: parseFloat(l.price as any) || 0,
-            value: parseFloat(l.value as any) || 0,
-            size: parseFloat(l.size as any) || 0,
-          })),
-          ...(trades as ActivityItem[]).map((t) => ({ 
-            ...t, 
-            type: 'trade' as const,
-            price: parseFloat(t.price as any) || 0,
-            value: parseFloat(t.value as any) || 0,
-            size: parseFloat(t.size as any) || 0,
-          })),
-        ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-        setActivities(combined);
+        const response = await fetch(`${API_BASE}/api/analytics/recent-activity?limit=40`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data = await response.json();
+        
+        // Parse numeric values
+        const parsed: ActivityItem[] = (data.data || []).map((item: any) => ({
+          ...item,
+          price: parseFloat(item.price) || 0,
+          value: parseFloat(item.value) || 0,
+          size: parseFloat(item.size) || 0,
+        }));
+        
+        setActivities(parsed);
       } catch (error) {
         console.error('Failed to fetch activity:', error);
       } finally {
@@ -110,9 +101,9 @@ export function RecentActivity() {
           </div>
         ) : (
           <div className="divide-y divide-dark-border/30">
-            {filtered.slice(0, 20).map((item) => (
+            {filtered.slice(0, 20).map((item, index) => (
               <div
-                key={`${item.type}-${item.id}`}
+                key={`${item.type}-${item.wallet_address}-${item.timestamp}-${index}`}
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-dark-tertiary/50 transition-colors"
               >
                 {/* Icon */}
@@ -162,7 +153,7 @@ export function RecentActivity() {
                     ${formatCompact(item.value)}
                   </p>
                   <p className="text-[9px] text-text-secondary">
-                    @ ${item.price.toLocaleString()}
+                    @ ${Number(item.price).toLocaleString()}
                   </p>
                 </div>
               </div>
