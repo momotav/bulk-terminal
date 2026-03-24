@@ -363,6 +363,58 @@ export const analytics = {
       return [];
     }
   },
+
+  // ============ NEW: BULK API DIRECT (no PostgreSQL) ============
+
+  // Volume chart directly from BULK /klines endpoint
+  async getVolumeChartBulk(interval: string = '1h'): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; XRP: number; GOLD: number; total: number }[]> {
+    try {
+      const response = await request<{ 
+        data: { timestamp: string; BTC: number; ETH: number; SOL: number; XRP: number; GOLD: number; total: number }[];
+        source: string;
+        interval: string;
+      }>(`/api/analytics/volume-chart-bulk?interval=${interval}`);
+      console.log('Volume BULK API response:', response);
+      return response.data || [];
+    } catch (error) {
+      console.error('Volume BULK API error:', error);
+      return [];
+    }
+  },
+
+  // Current market stats from BULK /stats endpoint
+  async getMarketStatsBulk(): Promise<{
+    timestamp: number;
+    totalVolume24h: number;
+    totalOpenInterest: number;
+    markets: Array<{
+      symbol: string;
+      volume24h: number;
+      openInterest: number;
+      openInterestCoins: number;
+      fundingRate: number;
+      price: number;
+    }>;
+  }> {
+    return request('/api/analytics/market-stats-bulk');
+  },
+
+  // All tickers from BULK /ticker endpoints
+  async getTickersBulk(): Promise<{
+    tickers: Array<{
+      symbol: string;
+      lastPrice: number;
+      markPrice: number;
+      volume: number;
+      quoteVolume: number;
+      openInterest: number;
+      fundingRate: number;
+      priceChange: number;
+      priceChangePercent: number;
+    }>;
+  }> {
+    return request('/api/analytics/tickers-bulk');
+  },
 };
 
 // Wallet API
