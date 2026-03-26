@@ -241,6 +241,7 @@ export default function FollowingPage() {
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/whales/${w.wallet_address}`}
+                    prefetch={false}
                     className="p-2 hover:bg-dark-tertiary rounded-lg transition-colors"
                     title="View wallet"
                   >
