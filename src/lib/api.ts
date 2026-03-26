@@ -522,6 +522,24 @@ export const userApi = {
     }
   },
 
+  // Get multiple wallet profiles in one request (batch)
+  async getWalletProfilesBatch(addresses: string[]): Promise<Record<string, { profile: any; stats: any }>> {
+    if (!addresses || addresses.length === 0) return {};
+    try {
+      const data = await request<{ profiles: Record<string, { profile: any; stats: any }> }>(
+        '/api/users/wallets/batch',
+        {
+          method: 'POST',
+          body: JSON.stringify({ addresses }),
+        }
+      );
+      return data.profiles || {};
+    } catch (error) {
+      console.error('Batch wallet profiles error:', error);
+      return {};
+    }
+  },
+
   // Authenticate with backend after Privy login
   async authenticate(token: string, walletAddress: string) {
     return request('/api/users/auth', {
