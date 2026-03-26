@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Trophy, Flame, Anchor, Activity } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { WalletRankSearch } from '@/components/leaderboard/WalletRankSearch';
 import { cn } from '@/lib/api';
 
 type LeaderboardType = 'pnl' | 'liquidated' | 'whales' | 'active';
@@ -30,6 +31,9 @@ export default function LeaderboardPage() {
             Track the top performers, biggest liquidations, and most active traders.
           </p>
         </div>
+
+        {/* Wallet Rank Search */}
+        <WalletRankSearch />
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6">
