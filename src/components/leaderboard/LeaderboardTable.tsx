@@ -145,6 +145,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
               <Link
                 key={entry.wallet_address}
                 href={`/whales/${entry.wallet_address}`}
+                prefetch={false}
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-dark-tertiary/50 transition-colors"
               >
                 {/* Rank */}
