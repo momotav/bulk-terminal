@@ -18,6 +18,24 @@ export interface LeaderboardEntry {
   positions?: number;
 }
 
+export interface WalletRankData {
+  wallet_address: string;
+  found: boolean;
+  rankings: {
+    volume: { rank: number; total: number; value: number } | null;
+    pnl: { rank: number; total: number; value: number } | null;
+    trades: { rank: number; total: number; value: number } | null;
+    liquidations: { rank: number; total: number; value: number } | null;
+  };
+  stats: {
+    total_volume: number;
+    total_trades: number;
+    total_pnl: number;
+    total_liquidations: number;
+    liquidation_value: number;
+  } | null;
+}
+
 export interface ChartDataPoint {
   timestamp: string;
   value: number;
@@ -238,6 +256,13 @@ export const leaderboard = {
       `/api/leaderboard/trades/recent?limit=${limit}`
     );
     return data.data;
+  },
+
+  async getWalletRank(walletAddress: string): Promise<WalletRankData> {
+    const data = await request<WalletRankData>(
+      `/api/leaderboard/rank/${walletAddress}`
+    );
+    return data;
   },
 };
 
