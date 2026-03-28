@@ -587,12 +587,19 @@ export default function WalletPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={history.map(h => ({ 
                         ...h, 
-                        displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0) 
+                        displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
+                        // Split into positive and negative for dual coloring
+                        positivePnl: Math.max(0, (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0)),
+                        negativePnl: Math.min(0, (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0)),
                       }))}>
                         <defs>
-                          <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="pnlGradientGreen" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
                             <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="pnlGradientRed" x1="0" y1="1" x2="0" y2="0">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
                         <XAxis 
@@ -612,11 +619,21 @@ export default function WalletPage() {
                           labelFormatter={(ts) => new Date(ts).toLocaleString()}
                           formatter={(v: number) => [`$${formatNumber(v, 2)}`, 'Total PnL']}
                         />
+                        {/* Green area for positive PnL */}
                         <Area 
                           type="monotone" 
-                          dataKey="displayPnl" 
+                          dataKey="positivePnl" 
                           stroke="#22c55e" 
-                          fill="url(#pnlGradient)" 
+                          fill="url(#pnlGradientGreen)"
+                          baseValue={0}
+                        />
+                        {/* Red area for negative PnL */}
+                        <Area 
+                          type="monotone" 
+                          dataKey="negativePnl" 
+                          stroke="#ef4444" 
+                          fill="url(#pnlGradientRed)"
+                          baseValue={0}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
