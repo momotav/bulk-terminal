@@ -171,9 +171,18 @@ export default function WalletPage() {
   const tracked = data?.tracked;
   const history = data?.history || [];
 
+  // Get the most recent PnL from history (snapshots) if available
+  const latestSnapshot = history.length > 0 ? history[history.length - 1] : null;
+  const latestSnapshotPnL = latestSnapshot 
+    ? (parseFloat(String(latestSnapshot.pnl)) || 0) + (parseFloat(String(latestSnapshot.unrealized_pnl)) || 0)
+    : null;
+
+  // Priority: Live margin data > Latest snapshot > Tracked (DB) value
   const totalPnL = margin 
     ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
-    : (tracked?.total_pnl || 0);
+    : latestSnapshotPnL !== null 
+      ? latestSnapshotPnL
+      : (tracked?.total_pnl || 0);
 
   const hasLiveData = margin !== null && margin !== undefined;
   const hasTrackedData = tracked !== null && tracked !== undefined;
