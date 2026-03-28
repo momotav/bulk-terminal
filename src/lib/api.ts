@@ -541,13 +541,13 @@ export const userApi = {
   },
 
   // Authenticate with backend after Privy login
-  async authenticate(token: string, walletAddress: string) {
+  async authenticate(token: string, walletAddress?: string, email?: string) {
     return request('/api/users/auth', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ walletAddress }),
+      body: JSON.stringify({ walletAddress, email }),
     });
   },
 
@@ -579,6 +579,27 @@ export const userApi = {
   // Unlink Twitter account
   async unlinkTwitter(token: string) {
     return request('/api/users/link/twitter', {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  },
+
+  // Claim a wallet (for email users)
+  async claimWallet(token: string, walletAddress: string) {
+    return request('/api/users/claim-wallet', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ walletAddress }),
+    });
+  },
+
+  // Unclaim wallet
+  async unclaimWallet(token: string) {
+    return request('/api/users/claim-wallet', {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
