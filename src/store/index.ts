@@ -8,6 +8,8 @@ export interface User {
   id: number;
   wallet_address: string;
   privy_id?: string;
+  email?: string;
+  claimed_wallet?: string; // Wallet claimed by email users
   twitter_id?: string;
   twitter_handle?: string;
   twitter_name?: string;
@@ -47,6 +49,10 @@ interface AppState {
   authToken: string | null;
   setAuthToken: (token: string | null) => void;
 
+  // Claimed wallet for email users
+  claimedWallet: string | null;
+  setClaimedWallet: (wallet: string | null) => void;
+
   following: FollowedWallet[];
   setFollowing: (following: FollowedWallet[]) => void;
   addFollowing: (wallet: FollowedWallet) => void;
@@ -76,6 +82,9 @@ export const useStore = create<AppState>()(
       authToken: null,
       setAuthToken: (authToken) => set({ authToken }),
 
+      claimedWallet: null,
+      setClaimedWallet: (claimedWallet) => set({ claimedWallet }),
+
       following: [],
       setFollowing: (following) => set({ following }),
       addFollowing: (wallet) => set((state) => ({
@@ -95,6 +104,7 @@ export const useStore = create<AppState>()(
         user: null,
         isAuthenticated: false,
         authToken: null,
+        claimedWallet: null,
         following: [],
       }),
     }),
