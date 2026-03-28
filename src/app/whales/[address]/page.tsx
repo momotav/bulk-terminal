@@ -171,17 +171,17 @@ export default function WalletPage() {
   const tracked = data?.tracked;
   const history = data?.history || [];
 
-  // Get the most recent PnL from history (snapshots) if available
+  // Get the most recent PnL from history (snapshots) - this matches the chart
   const latestSnapshot = history.length > 0 ? history[history.length - 1] : null;
   const latestSnapshotPnL = latestSnapshot 
     ? (parseFloat(String(latestSnapshot.pnl)) || 0) + (parseFloat(String(latestSnapshot.unrealized_pnl)) || 0)
     : null;
 
-  // Priority: Live margin data > Latest snapshot > Tracked (DB) value
-  const totalPnL = margin 
-    ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
-    : latestSnapshotPnL !== null 
-      ? latestSnapshotPnL
+  // For Total PnL stat: Use latest snapshot to match chart, fallback to live or tracked
+  const totalPnL = latestSnapshotPnL !== null 
+    ? latestSnapshotPnL
+    : margin 
+      ? (margin.realizedPnl || 0) + (margin.unrealizedPnl || 0)
       : (tracked?.total_pnl || 0);
 
   const hasLiveData = margin !== null && margin !== undefined;
