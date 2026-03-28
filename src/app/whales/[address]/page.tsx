@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { 
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
   TrendingUp, TrendingDown, Wallet, Activity, Flame,
-  AlertCircle, BarChart3, Clock, Loader2, DollarSign, Shield, PiggyBank
+  AlertCircle, BarChart3, Clock, Loader2, DollarSign, Shield, PiggyBank, UserCheck
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
 import { useStore } from '@/store';
@@ -49,7 +49,7 @@ export default function WalletPage() {
   const router = useRouter();
   const address = params.address as string;
   
-  const { following, addFollowing, removeFollowing, user } = useStore();
+  const { following, addFollowing, removeFollowing, user, claimedWallet, setClaimedWallet, setUser } = useStore();
   const { authenticated, login, getAccessToken, user: privyUser } = usePrivy();
   const { wallets: solanaWallets } = useSolanaWallets();
   
@@ -58,6 +58,7 @@ export default function WalletPage() {
   const [profile, setProfile] = useState<WalletProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -70,11 +71,28 @@ export default function WalletPage() {
   const linkedWalletAddress = linkedSolanaWallet?.address;
   const storeWalletAddress = user?.wallet_address;
   
-  const currentUserWallet = solanaWalletAddress || privyWalletAddress || linkedWalletAddress || storeWalletAddress || '';
+  // Connected wallet (via Phantom etc)
+  const connectedWallet = solanaWalletAddress || privyWalletAddress || linkedWalletAddress || '';
   
-  // Check if viewing own wallet
+  // User's effective wallet (connected OR claimed)
+  const currentUserWallet = connectedWallet || claimedWallet || user?.claimed_wallet || storeWalletAddress || '';
+  
+  // Check if user logged in via email (no connected wallet)
+  const emailAccount = privyUser?.linkedAccounts?.find(
+    (account): account is any => account.type === 'email'
+  );
+  const isEmailUser = authenticated && !connectedWallet && !!emailAccount;
+  
+  // Check if this is user's claimed wallet
+  const isClaimedWallet = !!(claimedWallet && address && 
+    claimedWallet.toLowerCase() === address.toLowerCase());
+  
+  // Check if viewing own wallet (connected OR claimed)
   const isOwnWallet = !!(currentUserWallet && address && 
     currentUserWallet.toLowerCase() === address.toLowerCase());
+  
+  // Can claim: email user, no claimed wallet yet, not viewing already claimed wallet
+  const canClaimWallet = isEmailUser && !claimedWallet && !user?.claimed_wallet;
   
   // Check if following this wallet
   const isFollowing = following.some(w => 
@@ -162,6 +180,38 @@ export default function WalletPage() {
       }
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  const handleClaimWallet = async () => {
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    setClaimLoading(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        alert('Please log in again');
+        return;
+      }
+
+      console.log('[Claim] Claiming wallet:', address);
+      const response = await userApi.claimWallet(token, address) as { user?: any; success?: boolean };
+      
+      if (response?.success) {
+        setClaimedWallet(address);
+        if (response.user) {
+          setUser(response.user);
+        }
+        console.log('[Claim] Wallet claimed successfully');
+      }
+    } catch (err: any) {
+      console.error('[Claim] Failed to claim wallet:', err);
+      alert(err.message || 'Failed to claim wallet');
+    } finally {
+      setClaimLoading(false);
     }
   };
 
@@ -307,33 +357,62 @@ export default function WalletPage() {
                   </div>
                 </div>
 
-                {/* Follow button - ONLY show if NOT own wallet */}
-                {!isOwnWallet && (
-                  <button
-                    onClick={toggleFollow}
-                    disabled={followLoading}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
-                      isFollowing
-                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
-                        : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
-                    )}
-                  >
-                    {followLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : isFollowing ? (
-                      <>
-                        <StarOff className="w-4 h-4" />
-                        Unfollow
-                      </>
-                    ) : (
-                      <>
-                        <Star className="w-4 h-4" />
-                        Follow
-                      </>
-                    )}
-                  </button>
-                )}
+                {/* Action buttons */}
+                <div className="flex items-center gap-2">
+                  {/* Claim Wallet button - only for email users who haven't claimed yet */}
+                  {canClaimWallet && (
+                    <button
+                      onClick={handleClaimWallet}
+                      disabled={claimLoading}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 disabled:opacity-50"
+                    >
+                      {claimLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <UserCheck className="w-4 h-4" />
+                          This is my wallet
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
+                  {/* Show "Your Wallet" badge if this is claimed wallet */}
+                  {isClaimedWallet && (
+                    <span className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-sm font-medium">
+                      <UserCheck className="w-4 h-4" />
+                      Your Claimed Wallet
+                    </span>
+                  )}
+
+                  {/* Follow button - ONLY show if NOT own wallet */}
+                  {!isOwnWallet && (
+                    <button
+                      onClick={toggleFollow}
+                      disabled={followLoading}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
+                        isFollowing
+                          ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
+                          : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
+                      )}
+                    >
+                      {followLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : isFollowing ? (
+                        <>
+                          <StarOff className="w-4 h-4" />
+                          Unfollow
+                        </>
+                      ) : (
+                        <>
+                          <Star className="w-4 h-4" />
+                          Follow
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
