@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { 
   User, Wallet, ExternalLink, Copy, Check, 
   TrendingUp, TrendingDown, Activity, Users, Calendar,
-  Loader2
+  Loader2, Mail, UserCheck
 } from 'lucide-react';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore, FollowedWallet } from '@/store';
@@ -21,16 +21,30 @@ const XIcon = ({ className }: { className?: string }) => (
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, setUser, following, setFollowing, authToken } = useStore();
+  const { user, setUser, following, setFollowing, authToken, claimedWallet, setClaimedWallet } = useStore();
   const { ready, authenticated, linkTwitter, unlinkTwitter, user: privyUser } = usePrivy();
   const { wallets: solanaWallets } = useSolanaWallets();
   
   const [copied, setCopied] = useState(false);
+  const [copiedClaimed, setCopiedClaimed] = useState(false);
   const [linkingTwitter, setLinkingTwitter] = useState(false);
   const [loadingFollowing, setLoadingFollowing] = useState(false);
+  const [unclaimLoading, setUnclaimLoading] = useState(false);
 
   // Get wallet address from Solana wallets or Privy user
-  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
+  const connectedWalletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
+  
+  // Get email from Privy user
+  const emailAccount = privyUser?.linkedAccounts?.find(
+    (account): account is any => account.type === 'email'
+  );
+  const userEmail = emailAccount?.address || privyUser?.email?.address || user?.email;
+  
+  // Check if user logged in via email (no connected wallet)
+  const isEmailUser = authenticated && !connectedWalletAddress && !!userEmail;
+  
+  // Effective wallet for display
+  const effectiveClaimedWallet = claimedWallet || user?.claimed_wallet;
 
   // Get Twitter info from Privy user's linked accounts
   const twitterAccount = privyUser?.linkedAccounts?.find(
@@ -90,11 +104,11 @@ export default function ProfilePage() {
     loadFollowing();
   }, [authToken, setFollowing]);
 
-  const copyAddress = () => {
-    if (walletAddress) {
-      navigator.clipboard.writeText(walletAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const copyAddress = (address: string, setCopiedFn: (v: boolean) => void) => {
+    if (address) {
+      navigator.clipboard.writeText(address);
+      setCopiedFn(true);
+      setTimeout(() => setCopiedFn(false), 2000);
     }
   };
 
@@ -128,6 +142,25 @@ export default function ProfilePage() {
     }
   };
 
+  const handleUnclaimWallet = async () => {
+    if (!authToken) return;
+    
+    setUnclaimLoading(true);
+    try {
+      const response = await userApi.unclaimWallet(authToken) as { user?: any; success?: boolean };
+      if (response?.success) {
+        setClaimedWallet(null);
+        if (response.user) {
+          setUser(response.user);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to unclaim wallet:', error);
+    } finally {
+      setUnclaimLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -149,8 +182,8 @@ export default function ProfilePage() {
     );
   }
 
-  // Display name priority: Twitter name > display name > Anonymous
-  const displayName = twitterName || user?.display_name || 'Anonymous Trader';
+  // Display name priority: Twitter name > email > display name > Anonymous
+  const displayName = twitterName || userEmail || user?.display_name || 'Anonymous Trader';
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -171,7 +204,11 @@ export default function ProfilePage() {
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-dark-tertiary flex items-center justify-center">
-                <User className="w-10 h-10 text-text-tertiary" />
+                {userEmail ? (
+                  <Mail className="w-10 h-10 text-bulk-green" />
+                ) : (
+                  <User className="w-10 h-10 text-text-tertiary" />
+                )}
               </div>
             )}
           </div>
@@ -194,23 +231,48 @@ export default function ProfilePage() {
               </a>
             )}
 
-            <div className="flex items-center gap-2 mb-4">
-              <Wallet className="w-4 h-4 text-text-tertiary" />
-              <code className="text-sm text-text-secondary font-mono">
-                {formatAddress(walletAddress)}
-              </code>
-              <button
-                onClick={copyAddress}
-                className="p-1 hover:bg-dark-tertiary rounded transition-colors"
-                title="Copy full address"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-bulk-green" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-tertiary hover:text-text-primary" />
-                )}
-              </button>
-            </div>
+            {/* Show connected wallet if exists */}
+            {connectedWalletAddress && (
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet className="w-4 h-4 text-text-tertiary" />
+                <code className="text-sm text-text-secondary font-mono">
+                  {formatAddress(connectedWalletAddress)}
+                </code>
+                <button
+                  onClick={() => copyAddress(connectedWalletAddress, setCopied)}
+                  className="p-1 hover:bg-dark-tertiary rounded transition-colors"
+                  title="Copy full address"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 text-bulk-green" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-text-tertiary hover:text-text-primary" />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Show claimed wallet if email user */}
+            {effectiveClaimedWallet && (
+              <div className="flex items-center gap-2 mb-2">
+                <UserCheck className="w-4 h-4 text-purple-400" />
+                <span className="text-xs text-purple-400 mr-1">Claimed:</span>
+                <code className="text-sm text-text-secondary font-mono">
+                  {formatAddress(effectiveClaimedWallet)}
+                </code>
+                <button
+                  onClick={() => copyAddress(effectiveClaimedWallet, setCopiedClaimed)}
+                  className="p-1 hover:bg-dark-tertiary rounded transition-colors"
+                  title="Copy full address"
+                >
+                  {copiedClaimed ? (
+                    <Check className="w-4 h-4 text-bulk-green" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-text-tertiary hover:text-text-primary" />
+                  )}
+                </button>
+              </div>
+            )}
 
             {user?.created_at && (
               <div className="flex items-center gap-2 text-sm text-text-tertiary">
@@ -267,9 +329,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {walletAddress && (
+          {(connectedWalletAddress || effectiveClaimedWallet) && (
             <Link
-              href={`/whales/${walletAddress}`}
+              href={`/whales/${connectedWalletAddress || effectiveClaimedWallet}`}
               className="inline-flex items-center gap-2 mt-4 text-sm text-bulk-green hover:underline"
             >
               View detailed wallet stats
@@ -324,25 +386,100 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Wallet */}
-        <div className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-bulk-green/10 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-bulk-green" />
+        {/* Connected Wallet */}
+        {connectedWalletAddress && (
+          <div className="flex items-center justify-between py-4 border-b border-dark-border">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-bulk-green/10 flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-bulk-green" />
+              </div>
+              <div>
+                <p className="font-medium text-text-primary">Solana Wallet</p>
+                <p className="text-sm text-text-secondary font-mono">
+                  {formatAddress(connectedWalletAddress)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium text-text-primary">Solana Wallet</p>
-              <p className="text-sm text-text-secondary font-mono">
-                {formatAddress(walletAddress)}
-              </p>
-            </div>
+            
+            <span className="flex items-center gap-2 px-3 py-1.5 rounded bg-bulk-green/10 text-bulk-green text-sm">
+              <Check className="w-4 h-4" />
+              Connected
+            </span>
           </div>
-          
-          <span className="flex items-center gap-2 px-3 py-1.5 rounded bg-bulk-green/10 text-bulk-green text-sm">
-            <Check className="w-4 h-4" />
-            Connected
-          </span>
-        </div>
+        )}
+
+        {/* Claimed Wallet */}
+        {effectiveClaimedWallet && (
+          <div className="flex items-center justify-between py-4 border-b border-dark-border">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="font-medium text-text-primary">Claimed Wallet</p>
+                <p className="text-sm text-text-secondary font-mono">
+                  {formatAddress(effectiveClaimedWallet)}
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleUnclaimWallet}
+              disabled={unclaimLoading}
+              className="px-4 py-2 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-sm disabled:opacity-50"
+            >
+              {unclaimLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Unclaim'
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Email (if no wallet connected) */}
+        {isEmailUser && (
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Mail className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="font-medium text-text-primary">Email</p>
+                <p className="text-sm text-text-secondary">
+                  {userEmail}
+                </p>
+              </div>
+            </div>
+            
+            <span className="flex items-center gap-2 px-3 py-1.5 rounded bg-blue-500/10 text-blue-400 text-sm">
+              <Check className="w-4 h-4" />
+              Verified
+            </span>
+          </div>
+        )}
+
+        {/* Show wallet section for email users without connected wallet */}
+        {isEmailUser && !effectiveClaimedWallet && (
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-dark-tertiary flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-text-tertiary" />
+              </div>
+              <div>
+                <p className="font-medium text-text-primary">Wallet</p>
+                <p className="text-sm text-text-tertiary">No wallet claimed yet</p>
+              </div>
+            </div>
+            
+            <Link
+              href="/whales"
+              className="px-4 py-2 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm"
+            >
+              Find & Claim
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Following */}
