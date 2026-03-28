@@ -582,71 +582,71 @@ export default function WalletPage() {
                       <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex-1 p-4 min-h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={history.map(h => ({ 
-                        ...h, 
-                        displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
-                        // Split into positive and negative for dual coloring
-                        positivePnl: Math.max(0, (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0)),
-                        negativePnl: Math.min(0, (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0)),
-                      }))}>
-                        <defs>
-                          <linearGradient id="pnlGradientGreen" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="pnlGradientRed" x1="0" y1="1" x2="0" y2="0">
-                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <XAxis 
-                          dataKey="timestamp" 
-                          tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                          tick={{ fill: '#666', fontSize: 10 }}
-                          axisLine={{ stroke: '#333' }}
-                        />
-                        <YAxis 
-                          tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
-                          tick={{ fill: '#666', fontSize: 10 }}
-                          axisLine={{ stroke: '#333' }}
-                          domain={['auto', 'auto']}
-                        />
-                        <Tooltip 
-                          contentStyle={{ background: 'rgb(27, 26, 19)', border: '1px solid #333', borderRadius: 8 }}
-                          labelStyle={{ color: '#888' }}
-                          labelFormatter={(ts) => new Date(ts).toLocaleString()}
-                          formatter={(value: number, name: string, props: any) => {
-                            // Only show for positivePnl, skip negativePnl entirely
-                            if (name === 'negativePnl') return null;
-                            const pnl = props.payload.displayPnl;
-                            const color = pnl >= 0 ? '#22c55e' : '#ef4444';
-                            return [<span style={{ color }}>${formatNumber(pnl, 2)}</span>, 'Total PnL'];
-                          }}
-                          filterNull={true}
-                        />
-                        {/* Green area for positive PnL */}
-                        <Area 
-                          type="monotone" 
-                          dataKey="positivePnl" 
-                          stroke="#22c55e" 
-                          fill="url(#pnlGradientGreen)"
-                          baseValue={0}
-                        />
-                        {/* Red area for negative PnL */}
-                        <Area 
-                          type="monotone" 
-                          dataKey="negativePnl" 
-                          stroke="#ef4444" 
-                          fill="url(#pnlGradientRed)"
-                          baseValue={0}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+                ) : (() => {
+                  const chartData = history.map(h => ({ 
+                    ...h, 
+                    displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
+                  }));
+                  
+                  // Find min/max for gradient stop calculation
+                  const pnlValues = chartData.map(d => d.displayPnl);
+                  const minPnl = Math.min(...pnlValues);
+                  const maxPnl = Math.max(...pnlValues);
+                  
+                  // Calculate where zero line falls in the gradient (0 = top, 1 = bottom)
+                  const zeroPosition = maxPnl <= 0 ? 0 : minPnl >= 0 ? 1 : maxPnl / (maxPnl - minPnl);
+                  
+                  return (
+                    <div className="flex-1 p-4 min-h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="pnlLineGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#22c55e" />
+                              <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" />
+                              <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" />
+                              <stop offset="100%" stopColor="#ef4444" />
+                            </linearGradient>
+                            <linearGradient id="pnlFillGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
+                              <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" stopOpacity={0.1} />
+                              <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" stopOpacity={0.1} />
+                              <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                            tick={{ fill: '#666', fontSize: 10 }}
+                            axisLine={{ stroke: '#333' }}
+                          />
+                          <YAxis 
+                            tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
+                            tick={{ fill: '#666', fontSize: 10 }}
+                            axisLine={{ stroke: '#333' }}
+                            domain={['auto', 'auto']}
+                          />
+                          <Tooltip 
+                            contentStyle={{ background: 'rgb(27, 26, 19)', border: '1px solid #333', borderRadius: 8 }}
+                            labelStyle={{ color: '#888' }}
+                            labelFormatter={(ts) => new Date(ts).toLocaleString()}
+                            formatter={(value: number) => {
+                              const color = value >= 0 ? '#22c55e' : '#ef4444';
+                              return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="displayPnl" 
+                            stroke="url(#pnlLineGradient)"
+                            strokeWidth={2}
+                            fill="url(#pnlFillGradient)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
