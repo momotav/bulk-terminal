@@ -23,7 +23,7 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
           logo: '/bulkstats.png',
           walletChainType: 'solana-only',
         },
-        loginMethods: ['wallet'],
+        loginMethods: ['email', 'wallet'],
         embeddedWallets: {
           createOnLogin: 'off',
         },
