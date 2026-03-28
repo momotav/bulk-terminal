@@ -18,8 +18,18 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
       appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || 'cmmx4hqnz00oe0dl2ley8mak1'}
       config={{
         appearance: {
-          theme: 'dark',
-          accentColor: '#B8FF04',
+          theme: {
+            colors: {
+              background: '#1b1a14',
+              backgroundSecondary: '#252419',
+              text: '#ffffff',
+              textSecondary: '#a0a0a0',
+              accent: '#ffffff',
+              border: '#3a3930',
+              error: '#ff6b6b',
+              success: '#B8FF04',
+            },
+          },
           logo: '/bulkstats.png',
           walletChainType: 'solana-only',
         },
