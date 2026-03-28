@@ -316,7 +316,7 @@ export function Header() {
                 className="flex items-center gap-2 px-4 py-2 rounded bg-bulk-green hover:bg-bulk-green/90 transition-colors"
               >
                 <Wallet className="w-4 h-4 text-dark-primary" />
-                <span className="text-sm font-medium text-dark-primary">Connect</span>
+                <span className="text-sm font-medium text-dark-primary">Login</span>
               </button>
             ) : (
               <div className="w-32 h-9 bg-dark-secondary rounded animate-pulse" />
