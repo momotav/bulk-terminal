@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { User, LogOut, Menu, X, ChevronDown, Wallet, Users } from 'lucide-react';
+import { User, LogOut, Menu, X, ChevronDown, Wallet, Users, Mail } from 'lucide-react';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
@@ -18,7 +18,7 @@ const navItems = [
 
 export function Header() {
   const pathname = usePathname();
-  const { user, setUser, logout: storeLogout, setAuthToken, following, setFollowing } = useStore();
+  const { user, setUser, logout: storeLogout, setAuthToken, following, setFollowing, claimedWallet, setClaimedWallet } = useStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -34,7 +34,19 @@ export function Header() {
   const { wallets: solanaWallets } = useSolanaWallets();
 
   // Get the first connected Solana wallet address
-  const walletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
+  const connectedWalletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
+  
+  // Get email from Privy user
+  const emailAccount = privyUser?.linkedAccounts?.find(
+    (account): account is any => account.type === 'email'
+  );
+  const userEmail = emailAccount?.address || privyUser?.email?.address;
+  
+  // Determine if user logged in via email (no connected wallet)
+  const isEmailUser = authenticated && !connectedWalletAddress && !!userEmail;
+  
+  // Effective wallet is either connected wallet or claimed wallet
+  const effectiveWallet = connectedWalletAddress || claimedWallet || user?.claimed_wallet || '';
 
   // Get Twitter info from Privy user's linked accounts
   const twitterAccount = privyUser?.linkedAccounts?.find(
@@ -48,16 +60,21 @@ export function Header() {
   // Sync Privy auth with backend
   useEffect(() => {
     async function syncAuth() {
-      if (authenticated && walletAddress && ready) {
+      if (authenticated && ready) {
         try {
           const token = await getAccessToken();
           if (token) {
             setAuthToken(token);
             
-            // Authenticate with backend
-            const response = await userApi.authenticate(token, walletAddress) as { user?: any };
+            // Authenticate with backend (wallet may be null for email users)
+            const response = await userApi.authenticate(token, connectedWalletAddress || '', userEmail) as { user?: any };
             if (response?.user) {
               setUser(response.user);
+              
+              // Set claimed wallet from backend
+              if (response.user.claimed_wallet) {
+                setClaimedWallet(response.user.claimed_wallet);
+              }
               
               // If Privy has Twitter data but backend doesn't, sync it
               if (twitterAccount && !response.user.twitter_handle) {
@@ -96,12 +113,13 @@ export function Header() {
     }
 
     syncAuth();
-  }, [authenticated, walletAddress, ready, twitterAccount?.username]);
+  }, [authenticated, connectedWalletAddress, userEmail, ready, twitterAccount?.username]);
 
   const handleLogout = async () => {
     try {
       await privyLogout();
       storeLogout();
+      setClaimedWallet(null);
       setProfileMenuOpen(false);
     } catch (error) {
       console.error('Logout error:', error);
@@ -130,12 +148,14 @@ export function Header() {
     };
   }, [profileMenuOpen]);
 
-  // Display name priority: Twitter handle > Twitter name > wallet address
+  // Display name priority: Twitter handle > Twitter name > email > wallet address
   const displayName = twitterHandle 
     ? `@${twitterHandle}` 
     : twitterName 
       ? twitterName
-      : formatAddress(walletAddress);
+      : userEmail
+        ? userEmail.split('@')[0]
+        : formatAddress(effectiveWallet);
 
   return (
     <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
@@ -189,7 +209,7 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
-            {ready && authenticated && walletAddress ? (
+            {ready && authenticated ? (
               <div className="relative profile-menu-container">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
@@ -201,6 +221,8 @@ export function Header() {
                       alt="" 
                       className="w-5 h-5 rounded-full"
                     />
+                  ) : isEmailUser ? (
+                    <Mail className="w-4 h-4 text-bulk-green" />
                   ) : (
                     <Wallet className="w-4 h-4 text-bulk-green" />
                   )}
@@ -217,10 +239,27 @@ export function Header() {
                 {profileMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-64 py-2 bg-dark-secondary border border-dark-border rounded-lg shadow-xl">
                     <div className="px-4 py-2 border-b border-dark-border">
-                      <p className="text-xs text-text-tertiary">Connected Wallet</p>
-                      <p className="text-sm text-text-primary font-mono">
-                        {formatAddress(walletAddress)}
-                      </p>
+                      {isEmailUser ? (
+                        <>
+                          <p className="text-xs text-text-tertiary">Logged in as</p>
+                          <p className="text-sm text-text-primary">{userEmail}</p>
+                          {effectiveWallet && (
+                            <>
+                              <p className="text-xs text-text-tertiary mt-2">Claimed Wallet</p>
+                              <p className="text-sm text-text-primary font-mono">
+                                {formatAddress(effectiveWallet)}
+                              </p>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs text-text-tertiary">Connected Wallet</p>
+                          <p className="text-sm text-text-primary font-mono">
+                            {formatAddress(connectedWalletAddress)}
+                          </p>
+                        </>
+                      )}
                     </div>
 
                     <div className="py-1">
@@ -233,14 +272,16 @@ export function Header() {
                         My Profile
                       </Link>
                       
-                      <Link
-                        href={`/whales/${walletAddress}`}
-                        onClick={() => setProfileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-dark-tertiary transition-colors"
-                      >
-                        <Wallet className="w-4 h-4 text-text-secondary" />
-                        My Wallet Stats
-                      </Link>
+                      {effectiveWallet && (
+                        <Link
+                          href={`/whales/${effectiveWallet}`}
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-dark-tertiary transition-colors"
+                        >
+                          <Wallet className="w-4 h-4 text-text-secondary" />
+                          My Wallet Stats
+                        </Link>
+                      )}
                       
                       <Link
                         href="/following"
@@ -275,7 +316,7 @@ export function Header() {
                 className="flex items-center gap-2 px-4 py-2 rounded bg-bulk-green hover:bg-bulk-green/90 transition-colors"
               >
                 <Wallet className="w-4 h-4 text-dark-primary" />
-                <span className="text-sm font-medium text-dark-primary">Connect Wallet</span>
+                <span className="text-sm font-medium text-dark-primary">Connect</span>
               </button>
             ) : (
               <div className="w-32 h-9 bg-dark-secondary rounded animate-pulse" />
