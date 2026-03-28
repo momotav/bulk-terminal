@@ -615,9 +615,18 @@ export default function WalletPage() {
                           domain={['auto', 'auto']}
                         />
                         <Tooltip 
-                          contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8 }}
+                          contentStyle={{ background: '#0f0f1a', border: '1px solid #1e1e2e', borderRadius: 8 }}
+                          labelStyle={{ color: '#888' }}
                           labelFormatter={(ts) => new Date(ts).toLocaleString()}
-                          formatter={(v: number) => [`$${formatNumber(v, 2)}`, 'Total PnL']}
+                          formatter={(value: number, name: string, props: any) => {
+                            // Only show one value - use displayPnl from the data
+                            if (name === 'positivePnl') {
+                              const pnl = props.payload.displayPnl;
+                              const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+                              return [<span style={{ color }}>${formatNumber(pnl, 2)}</span>, 'Total PnL'];
+                            }
+                            return null; // Hide the negativePnl entry
+                          }}
                         />
                         {/* Green area for positive PnL */}
                         <Area 
