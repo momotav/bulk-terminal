@@ -36,6 +36,7 @@ const InteractiveRangeSlider = ({
   rangeStart,
   rangeEnd,
   onRangeChange,
+  onDraggingChange,
   chartType = 'bar',
   dataKeys = ['BTC', 'ETH', 'SOL'],
   colors = {},
@@ -45,14 +46,31 @@ const InteractiveRangeSlider = ({
   rangeStart: number;
   rangeEnd: number;
   onRangeChange: (start: number, end: number) => void;
+  onDraggingChange?: (isDragging: boolean) => void;
   chartType?: 'bar' | 'line' | 'area';
   dataKeys?: string[];
   colors?: Record<string, string>;
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
+  // Local preview state - updates live during drag without re-rendering main chart
+  const [previewStart, setPreviewStart] = useState(rangeStart);
+  const [previewEnd, setPreviewEnd] = useState(rangeEnd);
   const dragOffset = useRef(0);
   const rangeWidth = useRef(0);
+
+  // Sync preview with actual range when not dragging
+  useEffect(() => {
+    if (!dragging) {
+      setPreviewStart(rangeStart);
+      setPreviewEnd(rangeEnd);
+    }
+  }, [rangeStart, rangeEnd, dragging]);
+
+  // Notify parent of dragging state
+  useEffect(() => {
+    onDraggingChange?.(!!dragging);
+  }, [dragging, onDraggingChange]);
 
   const isDisabled = data.length <= 1;
 
@@ -66,15 +84,15 @@ const InteractiveRangeSlider = ({
     if (isDisabled) return;
     const pct = clientXToPercent(clientX);
     if (type === 'left') {
-      dragOffset.current = pct - rangeStart;
+      dragOffset.current = pct - previewStart;
     } else if (type === 'right') {
-      dragOffset.current = pct - rangeEnd;
+      dragOffset.current = pct - previewEnd;
     } else {
-      rangeWidth.current = rangeEnd - rangeStart;
-      dragOffset.current = pct - rangeStart;
+      rangeWidth.current = previewEnd - previewStart;
+      dragOffset.current = pct - previewStart;
     }
     setDragging(type);
-  }, [isDisabled, rangeStart, rangeEnd, clientXToPercent]);
+  }, [isDisabled, previewStart, previewEnd, clientXToPercent]);
 
   useEffect(() => {
     if (!dragging) return;
@@ -82,23 +100,29 @@ const InteractiveRangeSlider = ({
     const move = (clientX: number) => {
       const pct = clientXToPercent(clientX);
       if (dragging === 'left') {
-        const newStart = Math.max(0, Math.min(pct - dragOffset.current, rangeEnd - 5));
-        onRangeChange(newStart, rangeEnd);
+        const newStart = Math.max(0, Math.min(pct - dragOffset.current, previewEnd - 5));
+        setPreviewStart(newStart);
       } else if (dragging === 'right') {
-        const newEnd = Math.max(rangeStart + 5, Math.min(100, pct - dragOffset.current));
-        onRangeChange(rangeStart, newEnd);
+        const newEnd = Math.max(previewStart + 5, Math.min(100, pct - dragOffset.current));
+        setPreviewEnd(newEnd);
       } else {
         let s = pct - dragOffset.current;
         let e = s + rangeWidth.current;
         if (s < 0) { s = 0; e = rangeWidth.current; }
         if (e > 100) { e = 100; s = 100 - rangeWidth.current; }
-        onRangeChange(s, e);
+        setPreviewStart(s);
+        setPreviewEnd(e);
       }
+    };
+
+    const onEnd = () => {
+      // Only update parent when drag ends
+      setDragging(null);
+      onRangeChange(previewStart, previewEnd);
     };
 
     const onMouseMove = (e: MouseEvent) => move(e.clientX);
     const onTouchMove = (e: TouchEvent) => move(e.touches[0].clientX);
-    const onEnd = () => setDragging(null);
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onEnd);
@@ -111,7 +135,7 @@ const InteractiveRangeSlider = ({
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onEnd);
     };
-  }, [dragging, rangeStart, rangeEnd, onRangeChange, clientXToPercent]);
+  }, [dragging, previewStart, previewEnd, onRangeChange, clientXToPercent]);
 
   // For bar charts: calculate bar heights
   const maxVal = Math.max(...data.map(d => d.total || (d.BTC || 0) + (d.ETH || 0) + (d.SOL || 0) || d.value || 0), 1);
@@ -163,6 +187,10 @@ const InteractiveRangeSlider = ({
     });
   };
 
+  // Use preview values for visual display
+  const displayStart = previewStart;
+  const displayEnd = previewEnd;
+
   return (
     <div 
       ref={sliderRef} 
@@ -177,7 +205,7 @@ const InteractiveRangeSlider = ({
         <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px pointer-events-none">
           {bars.map((h, i) => {
             const pct = (i / bars.length) * 100;
-            const inRange = pct >= rangeStart && pct <= rangeEnd;
+            const inRange = pct >= displayStart && pct <= displayEnd;
             return (
               <div 
                 key={i} 
@@ -206,19 +234,19 @@ const InteractiveRangeSlider = ({
           {/* Dimmed areas */}
           <div 
             className="absolute top-0 bottom-0 left-0 bg-black/50 pointer-events-none" 
-            style={{ width: `${rangeStart}%` }} 
+            style={{ width: `${displayStart}%` }} 
           />
           <div 
             className="absolute top-0 bottom-0 right-0 bg-black/50 pointer-events-none" 
-            style={{ width: `${100 - rangeEnd}%` }} 
+            style={{ width: `${100 - displayEnd}%` }} 
           />
           
           {/* Middle drag area */}
           <div 
             className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing" 
             style={{ 
-              left: `${rangeStart}%`, 
-              width: `${rangeEnd - rangeStart}%`, 
+              left: `${displayStart}%`, 
+              width: `${displayEnd - displayStart}%`, 
               borderLeft: `2px solid ${color}`, 
               borderRight: `2px solid ${color}` 
             }} 
@@ -229,7 +257,7 @@ const InteractiveRangeSlider = ({
           {/* Left handle */}
           <div 
             className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
-            style={{ left: `calc(${rangeStart}% - 10px)` }} 
+            style={{ left: `calc(${displayStart}% - 10px)` }} 
             onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'left'); }} 
             onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'left'); }}
           >
@@ -242,7 +270,7 @@ const InteractiveRangeSlider = ({
           {/* Right handle */}
           <div 
             className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
-            style={{ left: `calc(${rangeEnd}% - 10px)` }} 
+            style={{ left: `calc(${displayEnd}% - 10px)` }} 
             onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'right'); }} 
             onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'right'); }}
           >
@@ -335,6 +363,7 @@ const ChartCard = ({
   timeframe,
   onTimeframeChange,
   loading = false,
+  isDragging = false,
   leftAxisLabel,
   rightAxisLabel,
 }: { 
@@ -344,6 +373,7 @@ const ChartCard = ({
   timeframe: number;
   onTimeframeChange: (hours: number) => void;
   loading?: boolean;
+  isDragging?: boolean;
   leftAxisLabel?: string;
   rightAxisLabel?: string;
 }) => (
@@ -356,7 +386,11 @@ const ChartCard = ({
       <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
     </div>
     {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
-    <div className={cn("relative transition-all duration-300", loading && "blur-sm")}>
+    <div className={cn(
+      "relative transition-all duration-150",
+      loading && "blur-sm",
+      isDragging && "blur-[2px] opacity-70 pointer-events-none"
+    )}>
       {/* Wrapper with axis labels positioned relative to chart height only */}
       <div className="flex">
         {/* Left Y-axis label - positioned to align with chart area (260px height) */}
@@ -426,6 +460,14 @@ export default function AnalyticsPage() {
   const [liquidationsRange, setLiquidationsRange] = useState({ start: 0, end: 100 });
   const [tradesRange, setTradesRange] = useState({ start: 0, end: 100 });
   const [adlRange, setAdlRange] = useState({ start: 0, end: 100 });
+  
+  // Dragging state for blur effect during slider interaction
+  const [volumeDragging, setVolumeDragging] = useState(false);
+  const [oiDragging, setOiDragging] = useState(false);
+  const [fundingDragging, setFundingDragging] = useState(false);
+  const [liquidationsDragging, setLiquidationsDragging] = useState(false);
+  const [tradesDragging, setTradesDragging] = useState(false);
+  const [adlDragging, setAdlDragging] = useState(false);
   
   // Data state - REAL data from ticker_snapshots via WebSocket collection
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
@@ -760,6 +802,7 @@ export default function AnalyticsPage() {
                 timeframe={volumeHours}
                 onTimeframeChange={setVolumeHours}
                 loading={chartLoading.volume}
+                isDragging={volumeDragging}
                 leftAxisLabel="Daily Volume (USD)"
                 rightAxisLabel="Cumulative Volume (USD)"
                 toggles={<>
@@ -799,6 +842,7 @@ export default function AnalyticsPage() {
                       rangeStart={volumeRange.start}
                       rangeEnd={volumeRange.end}
                       onRangeChange={(start, end) => setVolumeRange({ start, end })}
+                      onDraggingChange={setVolumeDragging}
                     />
                   </>
                 ) : <NoDataMessage title="volume" />}
@@ -810,6 +854,7 @@ export default function AnalyticsPage() {
                 timeframe={oiHours}
                 onTimeframeChange={setOiHours}
                 loading={chartLoading.oi}
+                isDragging={oiDragging}
                 leftAxisLabel="Open Interest (USD)"
                 toggles={<>
                   <CoinToggle coin="BTC" coins={oiCoins} setCoins={setOiCoins} />
@@ -864,6 +909,7 @@ export default function AnalyticsPage() {
                       rangeStart={oiRange.start}
                       rangeEnd={oiRange.end}
                       onRangeChange={(start, end) => setOiRange({ start, end })}
+                      onDraggingChange={setOiDragging}
                       chartType="area"
                       dataKeys={oiCoins}
                       colors={COLORS}
@@ -880,6 +926,7 @@ export default function AnalyticsPage() {
                 timeframe={fundingHours}
                 onTimeframeChange={setFundingHours}
                 loading={chartLoading.funding}
+                isDragging={fundingDragging}
                 leftAxisLabel="Funding Rate (%)"
                 toggles={<>
                   <CoinToggle coin="BTC" coins={fundingCoins} setCoins={setFundingCoins} />
@@ -921,6 +968,7 @@ export default function AnalyticsPage() {
                       rangeStart={fundingRange.start}
                       rangeEnd={fundingRange.end}
                       onRangeChange={(start, end) => setFundingRange({ start, end })}
+                      onDraggingChange={setFundingDragging}
                       chartType="line"
                       dataKeys={fundingCoins}
                       colors={COLORS}
@@ -934,6 +982,7 @@ export default function AnalyticsPage() {
                 timeframe={liquidationsHours}
                 onTimeframeChange={setLiquidationsHours}
                 loading={chartLoading.liquidations}
+                isDragging={liquidationsDragging}
                 leftAxisLabel="Daily Liquidations (USD)"
                 rightAxisLabel="Cumulative (USD)"
                 toggles={<>
@@ -973,6 +1022,7 @@ export default function AnalyticsPage() {
                       rangeStart={liquidationsRange.start}
                       rangeEnd={liquidationsRange.end}
                       onRangeChange={(start, end) => setLiquidationsRange({ start, end })}
+                      onDraggingChange={setLiquidationsDragging}
                     />
                   </>
                 ) : <NoDataMessage title="liquidation" />}
@@ -985,6 +1035,7 @@ export default function AnalyticsPage() {
                 timeframe={tradesHours}
                 onTimeframeChange={setTradesHours}
                 loading={chartLoading.trades}
+                isDragging={tradesDragging}
                 leftAxisLabel="Daily Trades"
                 rightAxisLabel="Cumulative Trades"
                 toggles={<>
@@ -1024,6 +1075,7 @@ export default function AnalyticsPage() {
                       rangeStart={tradesRange.start}
                       rangeEnd={tradesRange.end}
                       onRangeChange={(start, end) => setTradesRange({ start, end })}
+                      onDraggingChange={setTradesDragging}
                     />
                   </>
                 ) : <NoDataMessage title="trades" />}
@@ -1034,6 +1086,7 @@ export default function AnalyticsPage() {
                 timeframe={adlHours}
                 onTimeframeChange={setAdlHours}
                 loading={chartLoading.adl}
+                isDragging={adlDragging}
                 leftAxisLabel="Daily ADL (USD)"
                 rightAxisLabel="Cumulative ADL (USD)"
                 toggles={<>
@@ -1065,6 +1118,7 @@ export default function AnalyticsPage() {
                       rangeStart={adlRange.start}
                       rangeEnd={adlRange.end}
                       onRangeChange={(start, end) => setAdlRange({ start, end })}
+                      onDraggingChange={setAdlDragging}
                     />
                   </>
                 ) : <NoDataMessage title="ADL" />}
