@@ -656,22 +656,11 @@ export default function AnalyticsPage() {
   }, []);
 
   // Slice data by range (for range slider)
-  // Instead of slicing, we mask data outside range to null for smooth animations
-  // This keeps array length constant so recharts can animate between states
-  const sliceDataByRange = useCallback(<T extends Record<string, any>>(data: T[], range: { start: number; end: number }): T[] => {
+  const sliceDataByRange = useCallback(<T,>(data: T[], range: { start: number; end: number }): T[] => {
     if (data.length <= 1) return data;
     const startIdx = Math.floor((range.start / 100) * data.length);
     const endIdx = Math.ceil((range.end / 100) * data.length);
-    // Just slice - morphing doesn't work well with recharts when array length changes
     return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
-  }, []);
-  
-  // For line/area charts that need smooth morphing, use domain-based filtering
-  const getVisibleDomain = useCallback((data: any[], range: { start: number; end: number }): [string, string] | undefined => {
-    if (data.length <= 1) return undefined;
-    const startIdx = Math.floor((range.start / 100) * data.length);
-    const endIdx = Math.min(Math.ceil((range.end / 100) * data.length), data.length - 1);
-    return [data[startIdx]?.timestamp, data[endIdx]?.timestamp];
   }, []);
 
   // Generic function to apply coin filter and cumulative
@@ -880,15 +869,12 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart 
-                          data={oiChartData.map(item => ({
-                            ...item,
-                            BTC: oiCoins.includes('BTC') ? item.BTC : 0,
-                            ETH: oiCoins.includes('ETH') ? item.ETH : 0,
-                            SOL: oiCoins.includes('SOL') ? item.SOL : 0,
-                          }))} 
-                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
-                        >
+                        <AreaChart data={sliceDataByRange(oiChartData.map(item => ({
+                          ...item,
+                          BTC: oiCoins.includes('BTC') ? item.BTC : 0,
+                          ETH: oiCoins.includes('ETH') ? item.ETH : 0,
+                          SOL: oiCoins.includes('SOL') ? item.SOL : 0,
+                        })), oiRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                           <defs>
                             <linearGradient id="oiBtcGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={COLORS.BTC} stopOpacity={0.3}/>
@@ -910,15 +896,13 @@ export default function AnalyticsPage() {
                             axisLine={{ stroke: '#333' }} 
                             tickLine={false} 
                             interval={getTickInterval(oiChartData.length, oiHours)}
-                            padding={{ left: 10, right: 10 }}
-                            domain={getVisibleDomain(oiChartData, oiRange)}
-                            allowDataOverflow
+                            padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} domain={['auto', 'auto']} />
+                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
-                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
-                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
+                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} animationDuration={600} animationEasing="ease-in-out" animationBegin={0} />
+                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} animationDuration={600} animationEasing="ease-in-out" animationBegin={100} />
+                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} animationDuration={600} animationEasing="ease-in-out" animationBegin={200} />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -957,15 +941,12 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart 
-                          data={fundingChartData.map(item => ({
-                            ...item,
-                            BTC: fundingCoins.includes('BTC') ? item.BTC : null,
-                            ETH: fundingCoins.includes('ETH') ? item.ETH : null,
-                            SOL: fundingCoins.includes('SOL') ? item.SOL : null,
-                          }))} 
-                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
-                        >
+                        <LineChart data={sliceDataByRange(fundingChartData.map(item => ({
+                          ...item,
+                          BTC: fundingCoins.includes('BTC') ? item.BTC : null,
+                          ETH: fundingCoins.includes('ETH') ? item.ETH : null,
+                          SOL: fundingCoins.includes('SOL') ? item.SOL : null,
+                        })), fundingRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                           <XAxis 
                             dataKey="timestamp" 
                             tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} 
@@ -973,16 +954,14 @@ export default function AnalyticsPage() {
                             axisLine={{ stroke: '#333' }} 
                             tickLine={false} 
                             interval={getTickInterval(fundingChartData.length, fundingHours)}
-                            padding={{ left: 10, right: 10 }}
-                            domain={getVisibleDomain(fundingChartData, fundingRange)}
-                            allowDataOverflow
+                            padding={{ left: 10, right: 10 }} 
                           />
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" isAnimationActive={true} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={600} animationEasing="ease-in-out" animationBegin={0} />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={600} animationEasing="ease-in-out" animationBegin={100} />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={600} animationEasing="ease-in-out" animationBegin={200} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
