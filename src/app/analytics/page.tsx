@@ -36,12 +36,18 @@ const InteractiveRangeSlider = ({
   rangeStart,
   rangeEnd,
   onRangeChange,
+  chartType = 'bar',
+  dataKeys = ['BTC', 'ETH', 'SOL'],
+  colors = {},
 }: { 
   data: any[];
   color?: string;
   rangeStart: number;
   rangeEnd: number;
   onRangeChange: (start: number, end: number) => void;
+  chartType?: 'bar' | 'line' | 'area';
+  dataKeys?: string[];
+  colors?: Record<string, string>;
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
@@ -107,10 +113,55 @@ const InteractiveRangeSlider = ({
     };
   }, [dragging, rangeStart, rangeEnd, onRangeChange, clientXToPercent]);
 
-  const maxVal = Math.max(...data.map(d => d.total || d.BTC + d.ETH + d.SOL || d.value || 0), 1);
+  // For bar charts: calculate bar heights
+  const maxVal = Math.max(...data.map(d => d.total || (d.BTC || 0) + (d.ETH || 0) + (d.SOL || 0) || d.value || 0), 1);
   const bars = data.length > 0 
-    ? data.map(d => ((d.total || d.BTC + d.ETH + d.SOL || d.value || 0) / maxVal) * 100) 
+    ? data.map(d => ((d.total || (d.BTC || 0) + (d.ETH || 0) + (d.SOL || 0) || d.value || 0) / maxVal) * 100) 
     : Array(30).fill(20);
+
+  // For line/area charts: generate SVG paths for each dataKey
+  const generateLinePaths = () => {
+    if (data.length === 0) return null;
+    
+    const height = 32; // Mini chart height in px
+    const width = 100; // We'll use percentage
+    
+    return dataKeys.map((key) => {
+      const values = data.map(d => d[key] || 0);
+      const maxKeyVal = Math.max(...values, 1);
+      
+      // Generate path points
+      const points = values.map((v, i) => {
+        const x = (i / (values.length - 1)) * 100;
+        const y = height - (v / maxKeyVal) * (height - 4); // Leave 4px padding
+        return `${x},${y}`;
+      });
+      
+      const linePath = `M ${points.join(' L ')}`;
+      const areaPath = `M 0,${height} L ${points.join(' L ')} L 100,${height} Z`;
+      
+      const lineColor = colors[key] || color;
+      
+      return (
+        <g key={key}>
+          {chartType === 'area' && (
+            <path 
+              d={areaPath} 
+              fill={`${lineColor}30`}
+              stroke="none"
+            />
+          )}
+          <path 
+            d={linePath} 
+            fill="none" 
+            stroke={lineColor} 
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+          />
+        </g>
+      );
+    });
+  };
 
   return (
     <div 
@@ -121,23 +172,34 @@ const InteractiveRangeSlider = ({
       )} 
       style={{ touchAction: 'none' }}
     >
-      {/* Mini bar chart background */}
-      <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px pointer-events-none">
-        {bars.map((h, i) => {
-          const pct = (i / bars.length) * 100;
-          const inRange = pct >= rangeStart && pct <= rangeEnd;
-          return (
-            <div 
-              key={i} 
-              className="flex-1 rounded-t" 
-              style={{ 
-                height: `${Math.max(8, h)}%`, 
-                backgroundColor: inRange ? `${color}50` : `${color}20` 
-              }} 
-            />
-          );
-        })}
-      </div>
+      {/* Mini chart background */}
+      {chartType === 'bar' ? (
+        <div className="absolute inset-y-1 left-1 right-1 flex items-end gap-px pointer-events-none">
+          {bars.map((h, i) => {
+            const pct = (i / bars.length) * 100;
+            const inRange = pct >= rangeStart && pct <= rangeEnd;
+            return (
+              <div 
+                key={i} 
+                className="flex-1 rounded-t" 
+                style={{ 
+                  height: `${Math.max(8, h)}%`, 
+                  backgroundColor: inRange ? `${color}50` : `${color}20` 
+                }} 
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <svg 
+          className="absolute inset-1 pointer-events-none" 
+          viewBox="0 0 100 32" 
+          preserveAspectRatio="none"
+          style={{ width: 'calc(100% - 8px)', height: 'calc(100% - 8px)' }}
+        >
+          {generateLinePaths()}
+        </svg>
+      )}
 
       {!isDisabled && (
         <>
@@ -798,10 +860,13 @@ export default function AnalyticsPage() {
                     </div>
                     <InteractiveRangeSlider 
                       data={oiChartData} 
-                      color={COLORS.cumulative}
+                      color={COLORS.BTC}
                       rangeStart={oiRange.start}
                       rangeEnd={oiRange.end}
                       onRangeChange={(start, end) => setOiRange({ start, end })}
+                      chartType="area"
+                      dataKeys={oiCoins}
+                      colors={COLORS}
                     />
                   </>
                 ) : <NoDataMessage title="open interest" />}
@@ -856,6 +921,9 @@ export default function AnalyticsPage() {
                       rangeStart={fundingRange.start}
                       rangeEnd={fundingRange.end}
                       onRangeChange={(start, end) => setFundingRange({ start, end })}
+                      chartType="line"
+                      dataKeys={fundingCoins}
+                      colors={COLORS}
                     />
                   </>
                 ) : <NoDataMessage title="funding rate" />}
