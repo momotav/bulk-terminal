@@ -53,20 +53,17 @@ const InteractiveRangeSlider = ({
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
-  // Local preview state - updates live during drag
+  // Local preview state - updates live during drag without re-rendering main chart
   const [previewStart, setPreviewStart] = useState(rangeStart);
   const [previewEnd, setPreviewEnd] = useState(rangeEnd);
   const dragOffset = useRef(0);
   const rangeWidth = useRef(0);
-  const throttleRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUpdateRef = useRef<{ start: number; end: number }>({ start: rangeStart, end: rangeEnd });
 
   // Sync preview with actual range when not dragging
   useEffect(() => {
     if (!dragging) {
       setPreviewStart(rangeStart);
       setPreviewEnd(rangeEnd);
-      lastUpdateRef.current = { start: rangeStart, end: rangeEnd };
     }
   }, [rangeStart, rangeEnd, dragging]);
 
@@ -74,32 +71,6 @@ const InteractiveRangeSlider = ({
   useEffect(() => {
     onDraggingChange?.(!!dragging);
   }, [dragging, onDraggingChange]);
-
-  // Throttled update function - updates chart every 150ms during drag
-  const throttledUpdate = useCallback((start: number, end: number) => {
-    // Only update if values changed significantly (> 2%)
-    const startDiff = Math.abs(start - lastUpdateRef.current.start);
-    const endDiff = Math.abs(end - lastUpdateRef.current.end);
-    
-    if (startDiff > 2 || endDiff > 2) {
-      if (!throttleRef.current) {
-        throttleRef.current = setTimeout(() => {
-          onRangeChange(start, end);
-          lastUpdateRef.current = { start, end };
-          throttleRef.current = null;
-        }, 150);
-      }
-    }
-  }, [onRangeChange]);
-
-  // Cleanup throttle on unmount
-  useEffect(() => {
-    return () => {
-      if (throttleRef.current) {
-        clearTimeout(throttleRef.current);
-      }
-    };
-  }, []);
 
   const isDisabled = data.length <= 1;
 
@@ -128,17 +99,12 @@ const InteractiveRangeSlider = ({
 
     const move = (clientX: number) => {
       const pct = clientXToPercent(clientX);
-      let newStart = previewStart;
-      let newEnd = previewEnd;
-      
       if (dragging === 'left') {
-        newStart = Math.max(0, Math.min(pct - dragOffset.current, previewEnd - 5));
+        const newStart = Math.max(0, Math.min(pct - dragOffset.current, previewEnd - 5));
         setPreviewStart(newStart);
-        newEnd = previewEnd;
       } else if (dragging === 'right') {
-        newEnd = Math.max(previewStart + 5, Math.min(100, pct - dragOffset.current));
+        const newEnd = Math.max(previewStart + 5, Math.min(100, pct - dragOffset.current));
         setPreviewEnd(newEnd);
-        newStart = previewStart;
       } else {
         let s = pct - dragOffset.current;
         let e = s + rangeWidth.current;
@@ -146,21 +112,11 @@ const InteractiveRangeSlider = ({
         if (e > 100) { e = 100; s = 100 - rangeWidth.current; }
         setPreviewStart(s);
         setPreviewEnd(e);
-        newStart = s;
-        newEnd = e;
       }
-      
-      // Throttled live update
-      throttledUpdate(newStart, newEnd);
     };
 
     const onEnd = () => {
-      // Clear any pending throttle
-      if (throttleRef.current) {
-        clearTimeout(throttleRef.current);
-        throttleRef.current = null;
-      }
-      // Final update with exact values
+      // Only update parent when drag ends
       setDragging(null);
       onRangeChange(previewStart, previewEnd);
     };
@@ -179,7 +135,7 @@ const InteractiveRangeSlider = ({
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onEnd);
     };
-  }, [dragging, previewStart, previewEnd, onRangeChange, clientXToPercent, throttledUpdate]);
+  }, [dragging, previewStart, previewEnd, onRangeChange, clientXToPercent]);
 
   // For bar charts: calculate bar heights
   const maxVal = Math.max(...data.map(d => d.total || (d.BTC || 0) + (d.ETH || 0) + (d.SOL || 0) || d.value || 0), 1);
@@ -433,7 +389,9 @@ const ChartCard = ({
     <div className={cn(
       "relative",
       loading && "blur-sm opacity-60",
-      // Smooth transition for chart updates - applies to opacity/transform changes
+      // During drag: slight blur and fade
+      isDragging && "blur-[1px] opacity-80",
+      // Smooth transition for both entering and exiting drag state
       "transition-all duration-300 ease-out"
     )}>
       {/* Wrapper with axis labels positioned relative to chart height only */}
