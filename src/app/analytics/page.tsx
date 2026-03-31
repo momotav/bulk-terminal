@@ -900,9 +900,9 @@ export default function AnalyticsPage() {
                           />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} />
-                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} />
-                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} />
+                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" />
+                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} animationDuration={400} animationEasing="ease-out" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -959,9 +959,9 @@ export default function AnalyticsPage() {
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="#333" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={400} animationEasing="ease-out" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
