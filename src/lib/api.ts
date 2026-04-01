@@ -440,6 +440,45 @@ export const analytics = {
   }> {
     return request('/api/analytics/tickers-bulk');
   },
+
+  // Unique traders by coin (daily breakdown)
+  async getUniqueTradersByCoin(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+    try {
+      const response = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+        `/api/analytics/unique-traders-by-coin?hours=${hours}`
+      );
+      return response.data || [];
+    } catch (error) {
+      console.error('Unique traders by coin error:', error);
+      return [];
+    }
+  },
+
+  // Daily Active Users
+  async getDailyActiveUsers(hours: number = 720): Promise<{ timestamp: string; dau: number }[]> {
+    try {
+      const response = await request<{ data: { timestamp: string; dau: number }[] }>(
+        `/api/analytics/daily-active-users?hours=${hours}`
+      );
+      return response.data || [];
+    } catch (error) {
+      console.error('DAU error:', error);
+      return [];
+    }
+  },
+
+  // Cumulative New Users
+  async getCumulativeNewUsers(hours: number = 720): Promise<{ timestamp: string; newUsers: number; cumulative: number }[]> {
+    try {
+      const response = await request<{ data: { timestamp: string; newUsers: number; cumulative: number }[] }>(
+        `/api/analytics/cumulative-new-users?hours=${hours}`
+      );
+      return response.data || [];
+    } catch (error) {
+      console.error('Cumulative new users error:', error);
+      return [];
+    }
+  },
 };
 
 // Wallet API
