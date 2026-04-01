@@ -483,6 +483,21 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
+  // NEW: User statistics charts
+  const [uniqueTradersHours, setUniqueTradersHours] = useState(720); // Default 30 days
+  const [dauHours, setDauHours] = useState(720);
+  const [newUsersHours, setNewUsersHours] = useState(720);
+  const [uniqueTradersData, setUniqueTradersData] = useState<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]>([]);
+  const [dauData, setDauData] = useState<{ timestamp: string; dau: number }[]>([]);
+  const [newUsersData, setNewUsersData] = useState<{ timestamp: string; newUsers: number; cumulative: number }[]>([]);
+  const [uniqueTradersCoins, setUniqueTradersCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [uniqueTradersRange, setUniqueTradersRange] = useState({ start: 0, end: 100 });
+  const [dauRange, setDauRange] = useState({ start: 0, end: 100 });
+  const [newUsersRange, setNewUsersRange] = useState({ start: 0, end: 100 });
+  const [uniqueTradersDragging, setUniqueTradersDragging] = useState(false);
+  const [dauDragging, setDauDragging] = useState(false);
+  const [newUsersDragging, setNewUsersDragging] = useState(false);
+
   // Fetch LIVE OI directly from BULK API for stats card
   useEffect(() => {
     const fetchLiveOI = async () => {
@@ -618,6 +633,57 @@ export default function AnalyticsPage() {
     if (!loading) fetchAdlData();
   }, [adlHours, loading]);
 
+  // Fetch Unique Traders by Coin
+  useEffect(() => {
+    const fetchData = async () => {
+      setChartLoading(prev => ({ ...prev, uniqueTraders: true }));
+      try {
+        const data = await analytics.getUniqueTradersByCoin(uniqueTradersHours);
+        setUniqueTradersData(data);
+        setUniqueTradersRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch unique traders:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, uniqueTraders: false }));
+      }
+    };
+    if (!loading) fetchData();
+  }, [uniqueTradersHours, loading]);
+
+  // Fetch Daily Active Users
+  useEffect(() => {
+    const fetchData = async () => {
+      setChartLoading(prev => ({ ...prev, dau: true }));
+      try {
+        const data = await analytics.getDailyActiveUsers(dauHours);
+        setDauData(data);
+        setDauRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch DAU:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, dau: false }));
+      }
+    };
+    if (!loading) fetchData();
+  }, [dauHours, loading]);
+
+  // Fetch Cumulative New Users
+  useEffect(() => {
+    const fetchData = async () => {
+      setChartLoading(prev => ({ ...prev, newUsers: true }));
+      try {
+        const data = await analytics.getCumulativeNewUsers(newUsersHours);
+        setNewUsersData(data);
+        setNewUsersRange({ start: 0, end: 100 });
+      } catch (error) {
+        console.error('Failed to fetch new users:', error);
+      } finally {
+        setChartLoading(prev => ({ ...prev, newUsers: false }));
+      }
+    };
+    if (!loading) fetchData();
+  }, [newUsersHours, loading]);
+
   // Initial data fetch - REAL DATA ONLY
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -632,6 +698,9 @@ export default function AnalyticsPage() {
           leaderboard.getMostActive('all', 100),
           analytics.getOIChart(oiHours),
           analytics.getFundingChart(fundingHours),
+          analytics.getUniqueTradersByCoin(uniqueTradersHours),
+          analytics.getDailyActiveUsers(dauHours),
+          analytics.getCumulativeNewUsers(newUsersHours),
         ]);
 
         const getValue = <T,>(result: PromiseSettledResult<T>, defaultValue: T): T => {
@@ -646,6 +715,9 @@ export default function AnalyticsPage() {
         setTopUsers(getValue(results[5], []));
         setOiChartData(getValue(results[6], []));
         setFundingChartData(getValue(results[7], []));
+        setUniqueTradersData(getValue(results[8], []));
+        setDauData(getValue(results[9], []));
+        setNewUsersData(getValue(results[10], []));
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
       } finally {
@@ -1125,6 +1197,142 @@ export default function AnalyticsPage() {
                     />
                   </>
                 ) : <NoDataMessage title="ADL" />}
+              </ChartCard>
+            </div>
+
+            {/* New Row: Unique Traders by Coin + Cumulative New Users (side by side) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Unique Traders by Coin */}
+              <ChartCard 
+                title="Unique Traders By Coin"
+                timeframe={uniqueTradersHours}
+                onTimeframeChange={setUniqueTradersHours}
+                loading={chartLoading.uniqueTraders}
+                isDragging={uniqueTradersDragging}
+                leftAxisLabel="Traders per Coin"
+                rightAxisLabel="Total Unique"
+                toggles={<>
+                  <CoinToggle coin="BTC" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
+                  <CoinToggle coin="ETH" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
+                  <CoinToggle coin="SOL" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
+                  <CumulativeToggle label="Total Unique" />
+                </>}
+              >
+                {uniqueTradersData.length > 0 ? (
+                  <>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={sliceDataByRange(uniqueTradersData.map(d => ({
+                          ...d,
+                          BTC: uniqueTradersCoins.includes('BTC') ? d.BTC : 0,
+                          ETH: uniqueTradersCoins.includes('ETH') ? d.ETH : 0,
+                          SOL: uniqueTradersCoins.includes('SOL') ? d.SOL : 0,
+                        })), uniqueTradersRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, uniqueTradersHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} maxBarSize={80} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} maxBarSize={80} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} maxBarSize={80} />
+                          <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} animationDuration={300} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <InteractiveRangeSlider 
+                      data={uniqueTradersData} 
+                      color={COLORS.BTC}
+                      rangeStart={uniqueTradersRange.start}
+                      rangeEnd={uniqueTradersRange.end}
+                      onRangeChange={(start, end) => setUniqueTradersRange({ start, end })}
+                      onDraggingChange={setUniqueTradersDragging}
+                    />
+                  </>
+                ) : <NoDataMessage title="unique traders" />}
+              </ChartCard>
+
+              {/* Cumulative New Users */}
+              <ChartCard 
+                title="Cumulative New Users"
+                timeframe={newUsersHours}
+                onTimeframeChange={setNewUsersHours}
+                loading={chartLoading.newUsers}
+                isDragging={newUsersDragging}
+                leftAxisLabel="Daily New Users"
+                rightAxisLabel="Cumulative"
+                toggles={<>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#1f1f1f] border border-[#333] text-xs text-white">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
+                    Daily New
+                  </div>
+                  <CumulativeToggle label="Cumulative" />
+                </>}
+              >
+                {newUsersData.length > 0 ? (
+                  <>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={sliceDataByRange(newUsersData, newUsersRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, newUsersHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={300} maxBarSize={80} radius={[2, 2, 0, 0]} />
+                          <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <InteractiveRangeSlider 
+                      data={newUsersData} 
+                      color={COLORS.BTC}
+                      rangeStart={newUsersRange.start}
+                      rangeEnd={newUsersRange.end}
+                      onRangeChange={(start, end) => setNewUsersRange({ start, end })}
+                      onDraggingChange={setNewUsersDragging}
+                    />
+                  </>
+                ) : <NoDataMessage title="new users" />}
+              </ChartCard>
+            </div>
+
+            {/* Full Width: Daily Active Users */}
+            <div className="grid grid-cols-1 gap-4">
+              <ChartCard 
+                title="Daily Active Users"
+                timeframe={dauHours}
+                onTimeframeChange={setDauHours}
+                loading={chartLoading.dau}
+                isDragging={dauDragging}
+                leftAxisLabel="Active Users"
+                toggles={<>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#1f1f1f] border border-[#333] text-xs text-white">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
+                    Daily Active Users
+                  </div>
+                </>}
+              >
+                {dauData.length > 0 ? (
+                  <>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={sliceDataByRange(dauData, dauRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="15%">
+                          <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, dauHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
+                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={300} maxBarSize={60} radius={[2, 2, 0, 0]} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <InteractiveRangeSlider 
+                      data={dauData} 
+                      color={COLORS.BTC}
+                      rangeStart={dauRange.start}
+                      rangeEnd={dauRange.end}
+                      onRangeChange={(start, end) => setDauRange({ start, end })}
+                      onDraggingChange={setDauDragging}
+                    />
+                  </>
+                ) : <NoDataMessage title="daily active users" />}
               </ChartCard>
             </div>
 
