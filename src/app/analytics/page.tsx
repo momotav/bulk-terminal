@@ -290,6 +290,18 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   const date = new Date(label);
   const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+  // Map dataKey names to display names
+  const formatName = (name: string) => {
+    const nameMap: Record<string, string> = {
+      'newUsers': 'New Users',
+      'cumulative': 'Cumulative',
+      'dau': 'Daily Active Users',
+      'total': 'Total Unique',
+      'Cumulative': 'Cumulative',
+    };
+    return nameMap[name] || name;
+  };
+
   return (
     <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-gray-400 mb-2 border-b border-[#333] pb-2">{formattedDate}</p>
@@ -297,9 +309,46 @@ const ChartTooltip = ({ active, payload, label }: any) => {
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
-            <span className="text-gray-400">{entry.name}</span>
+            <span className="text-gray-400">{formatName(entry.name)}</span>
           </div>
-          <span className="text-white font-medium">${formatCompact(entry.value)}</span>
+          <span className="text-white font-medium">
+            {/* Don't show $ for user count metrics */}
+            {['newUsers', 'cumulative', 'dau', 'total', 'BTC', 'ETH', 'SOL'].includes(entry.dataKey) && entry.value < 1000000
+              ? formatCompact(entry.value)
+              : `$${formatCompact(entry.value)}`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Tooltip specifically for user statistics (no $ prefix)
+const UserStatsTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const date = new Date(label);
+  const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const formatName = (name: string) => {
+    const nameMap: Record<string, string> = {
+      'newUsers': 'New Users',
+      'cumulative': 'Cumulative',
+      'dau': 'Daily Active Users',
+      'total': 'Total Unique',
+    };
+    return nameMap[name] || name;
+  };
+
+  return (
+    <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 shadow-xl min-w-[160px]">
+      <p className="text-xs text-gray-400 mb-2 border-b border-[#333] pb-2">{formattedDate}</p>
+      {payload.map((entry: any, i: number) => (
+        <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+            <span className="text-gray-400">{formatName(entry.name)}</span>
+          </div>
+          <span className="text-white font-medium">{formatCompact(entry.value)}</span>
         </div>
       ))}
     </div>
@@ -1222,19 +1271,23 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={sliceDataByRange(uniqueTradersData.map(d => ({
-                          ...d,
-                          BTC: uniqueTradersCoins.includes('BTC') ? d.BTC : 0,
-                          ETH: uniqueTradersCoins.includes('ETH') ? d.ETH : 0,
-                          SOL: uniqueTradersCoins.includes('SOL') ? d.SOL : 0,
-                        })), uniqueTradersRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          data={sliceDataByRange(uniqueTradersData.map(d => ({
+                            ...d,
+                            BTC: uniqueTradersCoins.includes('BTC') ? d.BTC : 0,
+                            ETH: uniqueTradersCoins.includes('ETH') ? d.ETH : 0,
+                            SOL: uniqueTradersCoins.includes('SOL') ? d.SOL : 0,
+                          })), uniqueTradersRange)} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 5 ? "30%" : "20%"}
+                        >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, uniqueTradersHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} maxBarSize={80} />
+                          <Tooltip content={<UserStatsTooltip />} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={300} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={300} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={300} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
                           <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1272,12 +1325,16 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={sliceDataByRange(newUsersData, newUsersRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          data={sliceDataByRange(newUsersData, newUsersRange)} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap={sliceDataByRange(newUsersData, newUsersRange).length <= 5 ? "30%" : "20%"}
+                        >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, newUsersHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={65} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={300} maxBarSize={80} radius={[2, 2, 0, 0]} />
+                          <Tooltip content={<UserStatsTooltip />} />
+                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={300} maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]} />
                           <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={300} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1315,11 +1372,15 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={sliceDataByRange(dauData, dauRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="15%">
+                        <ComposedChart 
+                          data={sliceDataByRange(dauData, dauRange)} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap={sliceDataByRange(dauData, dauRange).length <= 5 ? "25%" : "15%"}
+                        >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, dauHours)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: '#888', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: '#333' }} tickLine={false} width={60} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={300} maxBarSize={60} radius={[2, 2, 0, 0]} />
+                          <Tooltip content={<UserStatsTooltip />} />
+                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={300} maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
