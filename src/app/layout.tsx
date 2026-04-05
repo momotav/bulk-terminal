@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 import './globals.css';
 import { PrivyProvider } from '@/components/PrivyProvider';
-import { ThemeProvider } from '@/components/ThemeProvider';
 import { Header } from '@/components/Header';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -60,32 +59,30 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.variable} ${bulkFont.variable} font-sans antialiased`}>
-        <ThemeProvider>
-          <PrivyProvider>
-            <div className="min-h-screen flex flex-col">
-              <Header />
-              <main className="flex-1">
-                {children}
-              </main>
-              <footer className="border-t border-[var(--border-color)] py-6 transition-colors">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-sm text-[var(--text-tertiary)]">
-                  <p>BULK Stats - Community Analytics Dashboard</p>
-                  <p className="mt-1">
-                    Built for{' '}
-                    <a 
-                      href="https://bulk.trade" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-bulk-green hover:underline"
-                    >
-                      BULK Exchange
-                    </a>
-                  </p>
-                </div>
-              </footer>
-            </div>
-          </PrivyProvider>
-        </ThemeProvider>
+        <PrivyProvider>
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main className="flex-1">
+              {children}
+            </main>
+            <footer className="border-t border-[var(--border-color)] py-6 transition-colors">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-sm text-[var(--text-tertiary)]">
+                <p>BULK Stats - Community Analytics Dashboard</p>
+                <p className="mt-1">
+                  Built for{' '}
+                  <a 
+                    href="https://bulk.trade" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-bulk-green hover:underline"
+                  >
+                    BULK Exchange
+                  </a>
+                </p>
+              </div>
+            </footer>
+          </div>
+        </PrivyProvider>
       </body>
     </html>
   );
