@@ -156,6 +156,25 @@
 }
 
 @layer base {
+  html {
+    /* Scale up on very large screens to maintain visual density */
+    font-size: 16px;
+  }
+  
+  /* 2K monitors (2560px+) */
+  @media (min-width: 2560px) {
+    html {
+      font-size: 20px;
+    }
+  }
+  
+  /* 4K monitors (3840px+) */
+  @media (min-width: 3840px) {
+    html {
+      font-size: 24px;
+    }
+  }
+  
   html, body {
     background-color: var(--bg-base);
     color: var(--text-primary);
@@ -462,4 +481,22 @@
   
   .theme-border { border-color: var(--border-color); }
   .theme-divider { border-color: var(--divider); }
+  
+  /* Responsive container that scales with screen size */
+  .responsive-container {
+    @apply max-w-7xl mx-auto w-full px-4 sm:px-6;
+  }
+  
+  /* On 2K+ screens, increase max-width */
+  @media (min-width: 2560px) {
+    .responsive-container {
+      max-width: 1600px;
+    }
+  }
+  
+  @media (min-width: 3840px) {
+    .responsive-container {
+      max-width: 2200px;
+    }
+  }
 }
