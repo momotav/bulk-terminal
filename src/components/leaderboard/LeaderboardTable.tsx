@@ -88,18 +88,18 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Crown className="w-4 h-4 text-bulk-orange" />;
-    if (rank === 2) return <Medal className="w-4 h-4 text-text-secondary" />;
+    if (rank === 2) return <Medal className="w-4 h-4 text-[var(--text-secondary)]" />;
     if (rank === 3) return <Medal className="w-4 h-4 text-bulk-orange/70" />;
-    return <span className="text-text-secondary font-mono text-xs">#{rank}</span>;
+    return <span className="text-[var(--text-secondary)] font-mono text-xs">#{rank}</span>;
   };
 
   return (
     <div className="glass-card h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
         <div className="flex items-center gap-2">
           <config.icon className={cn("w-4 h-4", config.color)} />
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">{config.title}</h2>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">{config.title}</h2>
           </div>
         </div>
 
@@ -126,16 +126,16 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
           <div className="p-3 space-y-2">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 animate-pulse p-2">
-                <div className="w-6 h-6 bg-dark-tertiary rounded" />
+                <div className="w-6 h-6 bg-[var(--bg-secondary-20)] rounded" />
                 <div className="flex-1">
-                  <div className="h-3 w-20 bg-dark-tertiary rounded" />
+                  <div className="h-3 w-20 bg-[var(--bg-secondary-20)] rounded" />
                 </div>
-                <div className="h-4 w-16 bg-dark-tertiary rounded" />
+                <div className="h-4 w-16 bg-[var(--bg-secondary-20)] rounded" />
               </div>
             ))}
           </div>
         ) : data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-text-secondary">
+          <div className="flex flex-col items-center justify-center py-12 text-[var(--text-secondary)]">
             <config.icon className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm">No data yet</p>
           </div>
@@ -146,7 +146,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
                 key={entry.wallet_address}
                 href={`/whales/${entry.wallet_address}`}
                 prefetch={false}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-dark-tertiary/50 transition-colors"
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
               >
                 {/* Rank */}
                 <div className="w-6 flex justify-center">
@@ -155,11 +155,11 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
 
                 {/* Address */}
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-xs text-text-primary truncate">
+                  <span className="font-mono text-xs text-[var(--text-primary)] truncate">
                     {formatAddress(entry.wallet_address)}
                   </span>
                   {entry.trades && (
-                    <p className="text-[10px] text-text-secondary">
+                    <p className="text-[10px] text-[var(--text-secondary)]">
                       {entry.trades} trades
                     </p>
                   )}
@@ -178,7 +178,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
       </div>
 
       {data.length > 0 && (
-        <div className="px-4 py-2.5 border-t border-dark-border">
+        <div className="px-4 py-2.5 border-t border-[var(--border-color)]">
           <Link
             href={`/leaderboard?type=${type}`}
             className="text-xs text-bulk-green hover:text-bulk-green/80 transition-colors"
