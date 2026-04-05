@@ -58,14 +58,14 @@ export function WalletRankSearch() {
     if (percentile <= 5) return 'text-bulk-green'; // Top 5%
     if (percentile <= 10) return 'text-bulk-blue'; // Top 10%
     if (percentile <= 25) return 'text-bulk-purple'; // Top 25%
-    return 'text-text-secondary';
+    return 'text-[var(--text-secondary)]';
   };
 
   return (
     <div className="glass-card p-4 mb-6">
       <div className="flex items-center gap-2 mb-3">
         <Search className="w-4 h-4 text-bulk-green" />
-        <h3 className="text-sm font-semibold text-text-primary">Find Your Rank</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Find Your Rank</h3>
       </div>
 
       {/* Search Input */}
@@ -77,12 +77,12 @@ export function WalletRankSearch() {
             onChange={(e) => setWallet(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Enter wallet address..."
-            className="w-full bg-dark-tertiary border border-dark-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-bulk-green/50 font-mono"
+            className="w-full bg-[var(--bg-secondary-20)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-text-secondary focus:outline-none focus:border-bulk-green/50 font-mono"
           />
           {wallet && (
             <button
               onClick={clearSearch}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -113,9 +113,9 @@ export function WalletRankSearch() {
       {result && result.found && (
         <div className="space-y-4">
           {/* Wallet Info */}
-          <div className="flex items-center justify-between pb-3 border-b border-dark-border">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
             <div>
-              <p className="text-xs text-text-secondary mb-1">Wallet</p>
+              <p className="text-xs text-[var(--text-secondary)] mb-1">Wallet</p>
               <Link 
                 href={`/whales/${result.wallet_address}`}
                 className="font-mono text-sm text-bulk-green hover:underline"
@@ -125,7 +125,7 @@ export function WalletRankSearch() {
             </div>
             <Link
               href={`/whales/${result.wallet_address}`}
-              className="text-xs text-text-secondary hover:text-bulk-green transition-colors"
+              className="text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors"
             >
               View Profile →
             </Link>
@@ -135,18 +135,18 @@ export function WalletRankSearch() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* Volume Rank */}
             {result.rankings.volume && (
-              <div className="bg-dark-tertiary rounded-lg p-3">
+              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <TrendingUp className="w-3.5 h-3.5 text-bulk-green" />
-                  <span className="text-xs text-text-secondary">Volume</span>
+                  <span className="text-xs text-[var(--text-secondary)]">Volume</span>
                 </div>
                 <p className={cn("text-lg font-bold", getRankColor(result.rankings.volume.rank, result.rankings.volume.total))}>
                   #{result.rankings.volume.rank.toLocaleString()}
                 </p>
-                <p className="text-xs text-text-secondary">
+                <p className="text-xs text-[var(--text-secondary)]">
                   of {result.rankings.volume.total.toLocaleString()} • Top {getPercentile(result.rankings.volume.rank, result.rankings.volume.total)}%
                 </p>
-                <p className="text-xs text-text-secondary mt-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
                   ${formatCompact(result.rankings.volume.value)}
                 </p>
               </div>
@@ -154,15 +154,15 @@ export function WalletRankSearch() {
 
             {/* PnL Rank */}
             {result.rankings.pnl && (
-              <div className="bg-dark-tertiary rounded-lg p-3">
+              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-                  <span className="text-xs text-text-secondary">PnL</span>
+                  <span className="text-xs text-[var(--text-secondary)]">PnL</span>
                 </div>
                 <p className={cn("text-lg font-bold", getRankColor(result.rankings.pnl.rank, result.rankings.pnl.total))}>
                   #{result.rankings.pnl.rank.toLocaleString()}
                 </p>
-                <p className="text-xs text-text-secondary">
+                <p className="text-xs text-[var(--text-secondary)]">
                   of {result.rankings.pnl.total.toLocaleString()} • Top {getPercentile(result.rankings.pnl.rank, result.rankings.pnl.total)}%
                 </p>
                 <p className={cn("text-xs mt-1", result.rankings.pnl.value >= 0 ? 'text-bulk-green' : 'text-bulk-red')}>
@@ -173,18 +173,18 @@ export function WalletRankSearch() {
 
             {/* Trades Rank */}
             {result.rankings.trades && (
-              <div className="bg-dark-tertiary rounded-lg p-3">
+              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Activity className="w-3.5 h-3.5 text-bulk-purple" />
-                  <span className="text-xs text-text-secondary">Trades</span>
+                  <span className="text-xs text-[var(--text-secondary)]">Trades</span>
                 </div>
                 <p className={cn("text-lg font-bold", getRankColor(result.rankings.trades.rank, result.rankings.trades.total))}>
                   #{result.rankings.trades.rank.toLocaleString()}
                 </p>
-                <p className="text-xs text-text-secondary">
+                <p className="text-xs text-[var(--text-secondary)]">
                   of {result.rankings.trades.total.toLocaleString()} • Top {getPercentile(result.rankings.trades.rank, result.rankings.trades.total)}%
                 </p>
-                <p className="text-xs text-text-secondary mt-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
                   {result.rankings.trades.value.toLocaleString()} trades
                 </p>
               </div>
@@ -192,15 +192,15 @@ export function WalletRankSearch() {
 
             {/* Liquidations Rank */}
             {result.rankings.liquidations ? (
-              <div className="bg-dark-tertiary rounded-lg p-3">
+              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Flame className="w-3.5 h-3.5 text-bulk-red" />
-                  <span className="text-xs text-text-secondary">Liquidations</span>
+                  <span className="text-xs text-[var(--text-secondary)]">Liquidations</span>
                 </div>
                 <p className={cn("text-lg font-bold", getRankColor(result.rankings.liquidations.rank, result.rankings.liquidations.total))}>
                   #{result.rankings.liquidations.rank.toLocaleString()}
                 </p>
-                <p className="text-xs text-text-secondary">
+                <p className="text-xs text-[var(--text-secondary)]">
                   of {result.rankings.liquidations.total.toLocaleString()} rekt
                 </p>
                 <p className="text-xs text-bulk-red mt-1">
@@ -208,13 +208,13 @@ export function WalletRankSearch() {
                 </p>
               </div>
             ) : (
-              <div className="bg-dark-tertiary rounded-lg p-3">
+              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Flame className="w-3.5 h-3.5 text-text-secondary" />
-                  <span className="text-xs text-text-secondary">Liquidations</span>
+                  <Flame className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                  <span className="text-xs text-[var(--text-secondary)]">Liquidations</span>
                 </div>
                 <p className="text-lg font-bold text-bulk-green">None! 🎉</p>
-                <p className="text-xs text-text-secondary">No liquidations yet</p>
+                <p className="text-xs text-[var(--text-secondary)]">No liquidations yet</p>
               </div>
             )}
           </div>
