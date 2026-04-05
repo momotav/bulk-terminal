@@ -59,10 +59,10 @@ export function RecentActivity() {
 
   return (
     <div className="glass-card h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-bulk-orange" />
-          <h2 className="text-sm font-semibold text-text-primary">Live Activity</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Live Activity</h2>
         </div>
 
         <div className="toggle-group">
@@ -86,16 +86,16 @@ export function RecentActivity() {
           <div className="p-3 space-y-2">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 animate-pulse p-2">
-                <div className="w-8 h-8 bg-dark-tertiary rounded" />
+                <div className="w-8 h-8 bg-[var(--bg-secondary-20)] rounded" />
                 <div className="flex-1">
-                  <div className="h-3 w-24 bg-dark-tertiary rounded mb-1" />
-                  <div className="h-2 w-16 bg-dark-tertiary rounded" />
+                  <div className="h-3 w-24 bg-[var(--bg-secondary-20)] rounded mb-1" />
+                  <div className="h-2 w-16 bg-[var(--bg-secondary-20)] rounded" />
                 </div>
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-text-secondary">
+          <div className="flex flex-col items-center justify-center py-12 text-[var(--text-secondary)]">
             <Zap className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm">No recent activity</p>
           </div>
@@ -104,7 +104,7 @@ export function RecentActivity() {
             {filtered.slice(0, 20).map((item, index) => (
               <div
                 key={`${item.type}-${item.wallet_address}-${item.timestamp}-${index}`}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-dark-tertiary/50 transition-colors"
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
               >
                 {/* Icon */}
                 <div className={cn(
@@ -137,9 +137,9 @@ export function RecentActivity() {
                     )}>
                       {item.type === 'liquidation' ? 'REKT' : item.side.toUpperCase()}
                     </span>
-                    <span className="font-medium text-xs text-text-primary">{item.symbol}</span>
+                    <span className="font-medium text-xs text-[var(--text-primary)]">{item.symbol}</span>
                   </div>
-                  <p className="text-[10px] text-text-secondary">
+                  <p className="text-[10px] text-[var(--text-secondary)]">
                     {item.wallet_address ? formatAddress(item.wallet_address) : 'Unknown'} • {timeAgo(item.timestamp)}
                   </p>
                 </div>
@@ -148,11 +148,11 @@ export function RecentActivity() {
                 <div className="text-right shrink-0">
                   <p className={cn(
                     "font-display font-bold text-xs",
-                    item.type === 'liquidation' ? "text-bulk-red" : "text-text-primary"
+                    item.type === 'liquidation' ? "text-bulk-red" : "text-[var(--text-primary)]"
                   )}>
                     ${formatCompact(item.value)}
                   </p>
-                  <p className="text-[9px] text-text-secondary">
+                  <p className="text-[9px] text-[var(--text-secondary)]">
                     @ ${Number(item.price).toLocaleString()}
                   </p>
                 </div>
