@@ -182,52 +182,52 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14">
-          {/* Logo - switches based on theme */}
-          <Link href="/" className="flex items-center shrink-0">
-            <Image 
-              src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
-              alt="BULK Stats" 
-              width={140} 
-              height={36} 
-              className="h-8 w-auto"
-              priority
-            />
-          </Link>
+      {/* Full-width header with logo/buttons at edges, nav centered */}
+      <div className="flex items-center justify-between h-14 px-4 sm:px-6 lg:px-8">
+        {/* Logo - truly left aligned */}
+        <Link href="/" className="flex items-center shrink-0">
+          <Image 
+            src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
+            alt="BULK Stats" 
+            width={140} 
+            height={36} 
+            className="h-8 w-auto"
+            priority
+          />
+        </Link>
 
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center justify-center gap-1 absolute left-1/2 -translate-x-1/2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                  pathname === item.href
-                    ? "text-bulk-green"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-            {authenticated && (
-              <Link
-                href="/following"
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                  pathname === '/following'
-                    ? "text-bulk-green"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                Following
-                {following.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
-                    {following.length}
-                  </span>
-                )}
-              </Link>
-            )}
+        {/* Desktop Nav - centered absolutely */}
+        <nav className="hidden md:flex items-center justify-center gap-1 absolute left-1/2 -translate-x-1/2">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                pathname === item.href
+                  ? "text-bulk-green"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+          {authenticated && (
+            <Link
+              href="/following"
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                pathname === '/following'
+                  ? "text-bulk-green"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Following
+              {following.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
+                  {following.length}
+                </span>
+              )}
+            </Link>
+          )}
           </nav>
 
           {/* Right side */}
@@ -355,11 +355,10 @@ export function Header() {
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
-        </div>
 
         {/* Mobile Nav */}
         {mobileMenuOpen && (
-          <nav className="md:hidden py-3 border-t border-[var(--border-color)]">
+          <nav className="md:hidden py-3 border-t border-[var(--border-color)] px-4 sm:px-6 lg:px-8">
             {navItems.map((item) => (
               <Link
                 key={item.href}
