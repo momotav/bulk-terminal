@@ -1,6 +1,6 @@
 'use client';
 
-import { useTheme } from './ThemeProvider';
+import { useState, useEffect } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 interface ThemeToggleProps {
@@ -8,7 +8,34 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ className = '' }: ThemeToggleProps) {
-  const { theme, toggleTheme } = useTheme();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('bulkstats-theme') as 'dark' | 'light';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('bulkstats-theme', newTheme);
+    
+    const root = document.documentElement;
+    root.classList.remove('dark', 'light');
+    root.classList.add(newTheme);
+    root.setAttribute('data-theme', newTheme);
+  };
+
+  // Don't render anything until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className={`w-9 h-9 ${className}`} />
+    );
+  }
 
   return (
     <button
@@ -28,7 +55,31 @@ export function ThemeToggle({ className = '' }: ThemeToggleProps) {
 
 // Compact version for mobile
 export function ThemeToggleCompact({ className = '' }: ThemeToggleProps) {
-  const { theme, toggleTheme } = useTheme();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('bulkstats-theme') as 'dark' | 'light';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('bulkstats-theme', newTheme);
+    
+    const root = document.documentElement;
+    root.classList.remove('dark', 'light');
+    root.classList.add(newTheme);
+    root.setAttribute('data-theme', newTheme);
+  };
+
+  if (!mounted) {
+    return <div className={`w-7 h-7 ${className}`} />;
+  }
 
   return (
     <button
