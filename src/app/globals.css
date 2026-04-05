@@ -84,6 +84,11 @@
   --volume-bids: rgba(0, 180, 129, 0.2);
   --volume-asks: rgba(239, 74, 60, 0.2);
   
+  /* Scrollbar colors for dark theme */
+  --scrollbar-track: #141310;
+  --scrollbar-thumb: #544A4C;
+  --scrollbar-thumb-hover: #807678;
+  
   /* Button styles */
   --button-stroke: rgba(198, 182, 186, 0.2);
   
@@ -119,9 +124,15 @@
   --text-secondary: #736A6C;
   --text-tertiary: #9C9092;
   
-  --border-color: #EDECE3;
-  --border-secondary: rgba(115, 106, 108, 0.2);
-  --divider: #EDECE3;
+  /* Fixed: Visible borders for light theme */
+  --border-color: #C6B6BA;
+  --border-secondary: rgba(115, 106, 108, 0.3);
+  --divider: #D5D4CB;
+  
+  /* Scrollbar colors for light theme */
+  --scrollbar-track: #E5E4DB;
+  --scrollbar-thumb: #C6B6BA;
+  --scrollbar-thumb-hover: #9C9092;
   
   --accent: #5A2C40;
   --accent-text: #FFFEEF;
@@ -329,22 +340,49 @@
     @apply text-sm font-medium mb-4;
   }
 
-  /* Custom scrollbar */
+  /* Custom scrollbar - theme aware */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background-color: var(--bg-base);
+    background-color: var(--scrollbar-track);
+    border-radius: 3px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: var(--border-color);
-    @apply rounded-full;
+    background-color: var(--scrollbar-thumb);
+    border-radius: 3px;
   }
   
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-secondary);
+    background-color: var(--scrollbar-thumb-hover);
+  }
+  
+  /* Global scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+  
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 
   /* Badge styles */
