@@ -8,6 +8,7 @@ import { User, LogOut, Menu, X, ChevronDown, Wallet, Users, Mail } from 'lucide-
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
+import { ThemeToggle } from './ThemeToggle';
 
 const navItems = [
   { href: '/', label: 'Dashboard' },
@@ -158,7 +159,7 @@ export function Header() {
         : formatAddress(effectiveWallet);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-dark-border bg-dark-primary">
+    <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
@@ -182,7 +183,7 @@ export function Header() {
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
                   pathname === item.href
                     ? "text-bulk-green"
-                    : "text-text-secondary hover:text-text-primary"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 {item.label}
@@ -194,7 +195,7 @@ export function Header() {
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
                   pathname === '/following'
                     ? "text-bulk-green"
-                    : "text-text-secondary hover:text-text-primary"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 Following
@@ -209,11 +210,14 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+            
             {ready && authenticated ? (
               <div className="relative profile-menu-container">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded border border-dark-border bg-dark-secondary hover:bg-dark-tertiary transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
                 >
                   {twitterAvatar ? (
                     <img 
@@ -227,26 +231,26 @@ export function Header() {
                     <Wallet className="w-4 h-4 text-bulk-green" />
                   )}
                   
-                  <span className="text-sm text-text-primary hidden sm:block">
+                  <span className="text-sm text-[var(--text-primary)] hidden sm:block">
                     {displayName}
                   </span>
                   
-                  <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform ${
+                  <ChevronDown className={`w-4 h-4 text-[var(--text-secondary)] transition-transform ${
                     profileMenuOpen ? "rotate-180" : ""
                   }`} />
                 </button>
 
                 {profileMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-64 py-2 bg-dark-secondary border border-dark-border rounded-lg shadow-xl">
-                    <div className="px-4 py-2 border-b border-dark-border">
+                  <div className="absolute right-0 top-full mt-2 w-64 py-2 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl">
+                    <div className="px-4 py-2 border-b border-[var(--border-color)]">
                       {isEmailUser ? (
                         <>
-                          <p className="text-xs text-text-tertiary">Logged in as</p>
-                          <p className="text-sm text-text-primary">{userEmail}</p>
+                          <p className="text-xs text-[var(--text-tertiary)]">Logged in as</p>
+                          <p className="text-sm text-[var(--text-primary)]">{userEmail}</p>
                           {effectiveWallet && (
                             <>
-                              <p className="text-xs text-text-tertiary mt-2">Claimed Wallet</p>
-                              <p className="text-sm text-text-primary font-mono">
+                              <p className="text-xs text-[var(--text-tertiary)] mt-2">Claimed Wallet</p>
+                              <p className="text-sm text-[var(--text-primary)] font-mono">
                                 {formatAddress(effectiveWallet)}
                               </p>
                             </>
@@ -254,8 +258,8 @@ export function Header() {
                         </>
                       ) : (
                         <>
-                          <p className="text-xs text-text-tertiary">Connected Wallet</p>
-                          <p className="text-sm text-text-primary font-mono">
+                          <p className="text-xs text-[var(--text-tertiary)]">Connected Wallet</p>
+                          <p className="text-sm text-[var(--text-primary)] font-mono">
                             {formatAddress(connectedWalletAddress)}
                           </p>
                         </>
@@ -266,9 +270,9 @@ export function Header() {
                       <Link
                         href="/profile"
                         onClick={() => setProfileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-dark-tertiary transition-colors"
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
                       >
-                        <User className="w-4 h-4 text-text-secondary" />
+                        <User className="w-4 h-4 text-[var(--text-secondary)]" />
                         My Profile
                       </Link>
                       
@@ -276,9 +280,9 @@ export function Header() {
                         <Link
                           href={`/whales/${effectiveWallet}`}
                           onClick={() => setProfileMenuOpen(false)}
-                          className="flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-dark-tertiary transition-colors"
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
                         >
-                          <Wallet className="w-4 h-4 text-text-secondary" />
+                          <Wallet className="w-4 h-4 text-[var(--text-secondary)]" />
                           My Wallet Stats
                         </Link>
                       )}
@@ -286,9 +290,9 @@ export function Header() {
                       <Link
                         href="/following"
                         onClick={() => setProfileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-dark-tertiary transition-colors"
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
                       >
-                        <Users className="w-4 h-4 text-text-secondary" />
+                        <Users className="w-4 h-4 text-[var(--text-secondary)]" />
                         Following
                         {following.length > 0 && (
                           <span className="ml-auto px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
@@ -298,10 +302,10 @@ export function Header() {
                       </Link>
                     </div>
 
-                    <div className="border-t border-dark-border pt-1">
+                    <div className="border-t border-[var(--border-color)] pt-1">
                       <button
                         onClick={handleLogout}
-                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-dark-tertiary transition-colors"
+                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-[var(--bg-secondary-20)] transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
                         Disconnect
@@ -319,12 +323,12 @@ export function Header() {
                 <span className="text-sm font-medium text-dark-primary">Login</span>
               </button>
             ) : (
-              <div className="w-32 h-9 bg-dark-secondary rounded animate-pulse" />
+              <div className="w-32 h-9 bg-[var(--bg-muted)] rounded animate-pulse" />
             )}
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded hover:bg-dark-tertiary text-text-secondary"
+              className="md:hidden p-2 rounded hover:bg-[var(--bg-secondary-20)] text-[var(--text-secondary)]"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -333,7 +337,7 @@ export function Header() {
 
         {/* Mobile Nav */}
         {mobileMenuOpen && (
-          <nav className="md:hidden py-3 border-t border-dark-border">
+          <nav className="md:hidden py-3 border-t border-[var(--border-color)]">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -342,7 +346,7 @@ export function Header() {
                 className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
                   pathname === item.href
                     ? "text-bulk-green bg-bulk-green/10"
-                    : "text-text-secondary hover:text-text-primary"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 {item.label}
@@ -356,7 +360,7 @@ export function Header() {
                   className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
                     pathname === '/following'
                       ? "text-bulk-green bg-bulk-green/10"
-                      : "text-text-secondary hover:text-text-primary"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                 >
                   Following {following.length > 0 && `(${following.length})`}
@@ -367,7 +371,7 @@ export function Header() {
                   className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
                     pathname === '/profile'
                       ? "text-bulk-green bg-bulk-green/10"
-                      : "text-text-secondary hover:text-text-primary"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                 >
                   Profile
