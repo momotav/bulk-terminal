@@ -158,14 +158,36 @@ export function Header() {
         ? userEmail.split('@')[0]
         : formatAddress(effectiveWallet);
 
+  // Theme state for logo switching
+  const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>('dark');
+  
+  useEffect(() => {
+    // Check initial theme
+    const theme = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+    if (theme) setCurrentTheme(theme);
+    
+    // Watch for theme changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          const newTheme = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+          if (newTheme) setCurrentTheme(newTheme);
+        }
+      });
+    });
+    
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
-          {/* Logo */}
+          {/* Logo - switches based on theme */}
           <Link href="/" className="flex items-center shrink-0">
             <Image 
-              src="/bulkstats.png" 
+              src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
               alt="BULK Stats" 
               width={140} 
               height={36} 
