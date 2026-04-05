@@ -108,9 +108,9 @@ export function ExchangeHealthStats() {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-dark-secondary border border-dark-border rounded-lg p-4 animate-pulse">
-            <div className="h-4 w-24 bg-dark-tertiary rounded mb-2" />
-            <div className="h-8 w-32 bg-dark-tertiary rounded" />
+          <div key={i} className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 animate-pulse">
+            <div className="h-4 w-24 bg-[var(--bg-secondary-20)] rounded mb-2" />
+            <div className="h-8 w-32 bg-[var(--bg-secondary-20)] rounded" />
           </div>
         ))}
       </div>
@@ -120,10 +120,10 @@ export function ExchangeHealthStats() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {/* 24H Volume */}
-      <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
           <DollarSign className="w-4 h-4 text-bulk-green" />
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">24H Volume</span>
+          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">24H Volume</span>
         </div>
         <p className="text-2xl font-bold text-bulk-green">
           {formatNumber(stats?.volume24h)}
@@ -131,10 +131,10 @@ export function ExchangeHealthStats() {
       </div>
 
       {/* Open Interest */}
-      <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="w-4 h-4 text-blue-400" />
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">Open Interest</span>
+          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Open Interest</span>
         </div>
         <p className="text-2xl font-bold text-blue-400">
           {formatNumber(stats?.openInterest)}
@@ -142,21 +142,21 @@ export function ExchangeHealthStats() {
       </div>
 
       {/* Active Traders */}
-      <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
           <Users className="w-4 h-4 text-purple-400" />
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">Active Traders</span>
+          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Active Traders</span>
         </div>
-        <p className="text-2xl font-bold text-text-primary">
+        <p className="text-2xl font-bold text-[var(--text-primary)]">
           {formatCount(stats?.activeTraders)}
         </p>
       </div>
 
       {/* 24H Liquidations */}
-      <div className="bg-dark-secondary border border-dark-border rounded-lg p-4">
+      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
           <Flame className="w-4 h-4 text-red-400" />
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">24H Liquidations</span>
+          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">24H Liquidations</span>
         </div>
         <p className="text-2xl font-bold text-red-400">
           {formatNumber(stats?.liquidations24h)}
