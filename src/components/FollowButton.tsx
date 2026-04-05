@@ -73,7 +73,7 @@ export function FollowButton({ walletAddress, className }: FollowButtonProps) {
       disabled={loading}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
         isFollowing
-          ? "border border-dark-border bg-dark-secondary text-text-secondary hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
+          ? "border border-[var(--border-color)] bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
           : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
       } ${loading ? "opacity-50 cursor-not-allowed" : ""} ${className || ""}`}
     >
