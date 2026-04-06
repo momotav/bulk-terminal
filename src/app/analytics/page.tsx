@@ -563,6 +563,30 @@ export default function AnalyticsPage() {
   const [uniqueTradersDragging, setUniqueTradersDragging] = useState(false);
   const [dauDragging, setDauDragging] = useState(false);
   const [newUsersDragging, setNewUsersDragging] = useState(false);
+  
+  // Animation keys for user stats charts
+  const [uniqueTradersAnimKey, setUniqueTradersAnimKey] = useState(0);
+  const [newUsersAnimKey, setNewUsersAnimKey] = useState(0);
+  const [dauAnimKey, setDauAnimKey] = useState(0);
+  
+  // Update animation keys when dragging stops
+  useEffect(() => {
+    if (!uniqueTradersDragging) {
+      setUniqueTradersAnimKey(k => k + 1);
+    }
+  }, [uniqueTradersDragging]);
+  
+  useEffect(() => {
+    if (!newUsersDragging) {
+      setNewUsersAnimKey(k => k + 1);
+    }
+  }, [newUsersDragging]);
+  
+  useEffect(() => {
+    if (!dauDragging) {
+      setDauAnimKey(k => k + 1);
+    }
+  }, [dauDragging]);
 
   // Fetch LIVE OI directly from BULK API for stats card
   useEffect(() => {
@@ -1314,6 +1338,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
+                          key={`unique-traders-${uniqueTradersAnimKey}`}
                           data={sliceDataByRange(uniqueTradersData.map(d => ({
                             ...d,
                             BTC: uniqueTradersCoins.includes('BTC') ? d.BTC : 0,
@@ -1368,6 +1393,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
+                          key={`new-users-${newUsersAnimKey}`}
                           data={sliceDataByRange(newUsersData, newUsersRange)} 
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
                           barCategoryGap={sliceDataByRange(newUsersData, newUsersRange).length <= 5 ? "30%" : "20%"}
@@ -1415,6 +1441,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
+                          key={`dau-${dauAnimKey}`}
                           data={sliceDataByRange(dauData, dauRange)} 
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
                           barCategoryGap={sliceDataByRange(dauData, dauRange).length <= 5 ? "25%" : "15%"}
