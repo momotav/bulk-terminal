@@ -940,7 +940,11 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={volumeDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          data={volumeDataFiltered} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap="20%"
+                        >
                           <XAxis 
                             dataKey="timestamp" 
                             tickFormatter={(ts) => formatDateForChart(ts, volumeHours)} 
@@ -953,10 +957,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={600} animationEasing="ease-out" animationBegin={50} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={600} animationEasing="ease-out" animationBegin={100} maxBarSize={80} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -990,12 +994,15 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={sliceDataByRange(oiChartData.map(item => ({
-                          ...item,
-                          BTC: oiCoins.includes('BTC') ? item.BTC : 0,
-                          ETH: oiCoins.includes('ETH') ? item.ETH : 0,
-                          SOL: oiCoins.includes('SOL') ? item.SOL : 0,
-                        })), oiRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                        <AreaChart 
+                          data={sliceDataByRange(oiChartData.map(item => ({
+                            ...item,
+                            BTC: oiCoins.includes('BTC') ? item.BTC : 0,
+                            ETH: oiCoins.includes('ETH') ? item.ETH : 0,
+                            SOL: oiCoins.includes('SOL') ? item.SOL : 0,
+                          })), oiRange)} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
+                        >
                           <defs>
                             <linearGradient id="oiBtcGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={COLORS.BTC} stopOpacity={0.3}/>
@@ -1021,9 +1028,9 @@ export default function AnalyticsPage() {
                           />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} animationDuration={1000} animationEasing="ease-in-out" animationBegin={0} />
-                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} animationDuration={1000} animationEasing="ease-in-out" animationBegin={150} />
-                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} animationDuration={1000} animationEasing="ease-in-out" animationBegin={300} />
+                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1062,12 +1069,15 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={sliceDataByRange(fundingChartData.map(item => ({
-                          ...item,
-                          BTC: fundingCoins.includes('BTC') ? item.BTC : null,
-                          ETH: fundingCoins.includes('ETH') ? item.ETH : null,
-                          SOL: fundingCoins.includes('SOL') ? item.SOL : null,
-                        })), fundingRange)} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                        <LineChart 
+                          data={sliceDataByRange(fundingChartData.map(item => ({
+                            ...item,
+                            BTC: fundingCoins.includes('BTC') ? item.BTC : null,
+                            ETH: fundingCoins.includes('ETH') ? item.ETH : null,
+                            SOL: fundingCoins.includes('SOL') ? item.SOL : null,
+                          })), fundingRange)} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
+                        >
                           <XAxis 
                             dataKey="timestamp" 
                             tickFormatter={(ts) => formatDateForChart(ts, fundingHours)} 
@@ -1080,9 +1090,9 @@ export default function AnalyticsPage() {
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={0} />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={150} />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={300} />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -1120,7 +1130,11 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={liquidationsDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          data={liquidationsDataFiltered} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap="20%"
+                        >
                           <XAxis 
                             dataKey="timestamp" 
                             tickFormatter={(ts) => formatDateForChart(ts, liquidationsHours)} 
@@ -1133,10 +1147,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={600} animationEasing="ease-out" animationBegin={50} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={600} animationEasing="ease-out" animationBegin={100} maxBarSize={80} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1173,7 +1187,11 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={tradesDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          data={tradesDataFiltered} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap="20%"
+                        >
                           <XAxis 
                             dataKey="timestamp" 
                             tickFormatter={(ts) => formatDateForChart(ts, tradesHours)} 
@@ -1186,10 +1204,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={600} animationEasing="ease-out" animationBegin={50} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={600} animationEasing="ease-out" animationBegin={100} maxBarSize={80} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1224,15 +1242,20 @@ export default function AnalyticsPage() {
                   <>
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={adlDataFiltered} margin={{ top: 5, right: 5, bottom: 5, left: 5 }} barCategoryGap="20%">
+                        <ComposedChart 
+                          
+                          data={adlDataFiltered} 
+                          margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
+                          barCategoryGap="20%"
+                        >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, adlHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={600} animationEasing="ease-out" animationBegin={50} maxBarSize={80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={600} animationEasing="ease-out" animationBegin={100} maxBarSize={80} />
-                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1285,10 +1308,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={600} animationEasing="ease-out" animationBegin={50} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={600} animationEasing="ease-out" animationBegin={100} maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
-                          <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1334,8 +1357,8 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={1000} animationEasing="ease-in-out" animationBegin={200} />
+                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]} />
+                          <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1380,7 +1403,7 @@ export default function AnalyticsPage() {
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, dauHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={600} animationEasing="ease-out" animationBegin={0} maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
