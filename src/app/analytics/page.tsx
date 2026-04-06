@@ -1070,9 +1070,9 @@ export default function AnalyticsPage() {
                           />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
-                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
-                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1133,9 +1133,9 @@ export default function AnalyticsPage() {
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
+                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
