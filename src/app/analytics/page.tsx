@@ -521,6 +521,23 @@ export default function AnalyticsPage() {
   const [tradesDragging, setTradesDragging] = useState(false);
   const [adlDragging, setAdlDragging] = useState(false);
   
+  // Animation keys - increment when dragging stops to trigger smooth animation
+  const [oiAnimKey, setOiAnimKey] = useState(0);
+  const [fundingAnimKey, setFundingAnimKey] = useState(0);
+  
+  // Update animation keys when dragging stops
+  useEffect(() => {
+    if (!oiDragging) {
+      setOiAnimKey(k => k + 1);
+    }
+  }, [oiDragging]);
+  
+  useEffect(() => {
+    if (!fundingDragging) {
+      setFundingAnimKey(k => k + 1);
+    }
+  }, [fundingDragging]);
+  
   // Data state - REAL data from ticker_snapshots via WebSocket collection
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
@@ -995,6 +1012,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
+                          key={`oi-${oiAnimKey}`}
                           data={sliceDataByRange(oiChartData.map(item => ({
                             ...item,
                             BTC: oiCoins.includes('BTC') ? item.BTC : 0,
@@ -1070,6 +1088,7 @@ export default function AnalyticsPage() {
                     <div className="h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
+                          key={`funding-${fundingAnimKey}`}
                           data={sliceDataByRange(fundingChartData.map(item => ({
                             ...item,
                             BTC: fundingCoins.includes('BTC') ? item.BTC : null,
