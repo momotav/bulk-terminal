@@ -479,6 +479,81 @@ export const analytics = {
       return [];
     }
   },
+
+  // ============ LIQUIDATIONS DASHBOARD ============
+
+  // Treemap data - liquidations by coin and side
+  async getLiquidationsTreemap(period: string = '24h'): Promise<{
+    period: string;
+    data: { symbol: string; side: string; value: number; count: number }[];
+    totalValue: number;
+    assets: number;
+  }> {
+    return request(`/api/analytics/liquidations/treemap?period=${period}`);
+  },
+
+  // Chart data - long vs short over time
+  async getLiquidationsChart(period: string = 'all'): Promise<{
+    period: string;
+    data: { timestamp: string; longValue: number; shortValue: number; longCount: number; shortCount: number }[];
+  }> {
+    return request(`/api/analytics/liquidations/chart?period=${period}`);
+  },
+
+  // Summary for a specific coin
+  async getLiquidationsSummary(symbol: string, period: string = '7d'): Promise<{
+    symbol: string;
+    period: string;
+    totalValue: number;
+    totalCount: number;
+    longValue: number;
+    shortValue: number;
+    longCount: number;
+    shortCount: number;
+    longPercent: number;
+    shortPercent: number;
+    largestValue: number;
+    largestSize: number;
+  }> {
+    return request(`/api/analytics/liquidations/summary/${symbol}?period=${period}`);
+  },
+
+  // Market summary for a specific coin
+  async getLiquidationsMarket(symbol: string, period: string = 'all'): Promise<{
+    symbol: string;
+    period: string;
+    markPrice: number;
+    priceChange24h: number;
+    totalValue: number;
+    longValue: number;
+    shortValue: number;
+    longCount: number;
+    shortCount: number;
+    longPercent: number;
+    shortPercent: number;
+    dominant: 'LONGS' | 'SHORTS' | 'NEUTRAL';
+  }> {
+    return request(`/api/analytics/liquidations/market/${symbol}?period=${period}`);
+  },
+
+  // Featured/Recent large liquidations
+  async getLiquidationsFeatured(limit: number = 10, symbol?: string): Promise<{
+    data: {
+      id: number;
+      wallet: string;
+      symbol: string;
+      side: string;
+      size: number;
+      price: number;
+      value: number;
+      timestamp: string;
+      isHighImpact: boolean;
+    }[];
+  }> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (symbol) params.append('symbol', symbol);
+    return request(`/api/analytics/liquidations/featured?${params}`);
+  },
 };
 
 // Wallet API
