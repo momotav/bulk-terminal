@@ -81,7 +81,7 @@ function LiquidationTreemap({
       </div>
       
       {/* Treemap - proportional boxes */}
-      <div className="relative w-full h-80 flex gap-1">
+      <div className="relative w-full h-64 flex gap-1">
         {symbolGroups.map((group, index) => {
           const widthPct = totalValue > 0 ? (group.total / totalValue) * 100 : 33;
           const longPct = group.total > 0 ? (group.long / group.total) * 100 : 50;
@@ -287,86 +287,90 @@ export default function LiquidationsPage() {
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">Liquidations</h1>
       </div>
 
-      {/* Treemap Section */}
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
-          <PeriodSelector value={treemapPeriod} onChange={setTreemapPeriod} />
-        </div>
-        
-        {loading.treemap ? (
-          <div className="h-64 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
+      {/* Two Column Section: Treemap + Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Treemap Section */}
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
+            <PeriodSelector value={treemapPeriod} onChange={setTreemapPeriod} />
           </div>
-        ) : treemapData ? (
-          <LiquidationTreemap 
-            data={treemapData.data} 
-            totalValue={treemapData.totalValue} 
-            assets={treemapData.assets} 
-          />
-        ) : null}
-      </div>
-
-      {/* Chart Section */}
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Total Liquidations Chart</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.long }} />
-                <span className="text-[var(--text-secondary)]">Long Liquidations</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.short }} />
-                <span className="text-[var(--text-secondary)]">Short Liquidations</span>
-              </div>
+          
+          {loading.treemap ? (
+            <div className="h-64 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
+          ) : treemapData ? (
+            <LiquidationTreemap 
+              data={treemapData.data} 
+              totalValue={treemapData.totalValue} 
+              assets={treemapData.assets} 
+            />
+          ) : null}
+        </div>
+
+        {/* Chart Section */}
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Total Liquidations Chart</h2>
             <PeriodSelector value={chartPeriod} onChange={setChartPeriod} />
           </div>
+          
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-sm mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.long }} />
+              <span className="text-[var(--text-secondary)]">Long Liquidations</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.short }} />
+              <span className="text-[var(--text-secondary)]">Short Liquidations</span>
+            </div>
+          </div>
+          
+          {loading.chart ? (
+            <div className="h-64 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
+            </div>
+          ) : chartData?.data?.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={chartData.data.map((d: any) => ({
+                    ...d,
+                    shortValueNegative: -d.shortValue
+                  }))} 
+                  margin={{ top: 10, right: 10, bottom: 20, left: 10 }}
+                  barGap={-16}
+                  barSize={16}
+                >
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+                    axisLine={{ stroke: 'var(--border-color)' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tickFormatter={(v) => formatCompact(Math.abs(v))}
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+                    axisLine={{ stroke: 'var(--border-color)' }}
+                    tickLine={false}
+                    width={50}
+                  />
+                  <Tooltip content={<ChartTooltip />} cursor={false} />
+                  <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
+                  <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
+                  <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-[var(--text-secondary)]">
+              No chart data available
+            </div>
+          )}
         </div>
-        
-        {loading.chart ? (
-          <div className="h-80 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
-          </div>
-        ) : chartData?.data?.length > 0 ? (
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={chartData.data.map((d: any) => ({
-                  ...d,
-                  shortValueNegative: -d.shortValue
-                }))} 
-                margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                barGap={-20}
-                barSize={20}
-              >
-                <XAxis 
-                  dataKey="timestamp" 
-                  tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                  axisLine={{ stroke: 'var(--border-color)' }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  tickFormatter={(v) => formatCompact(Math.abs(v))}
-                  tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                  axisLine={{ stroke: 'var(--border-color)' }}
-                  tickLine={false}
-                />
-                <Tooltip content={<ChartTooltip />} cursor={false} />
-                <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
-                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="h-80 flex items-center justify-center text-[var(--text-secondary)]">
-            No chart data available
-          </div>
-        )}
       </div>
 
       {/* Two Column Section: Summary + Market */}
