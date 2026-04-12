@@ -661,14 +661,14 @@ export default function LiquidationsPage() {
               {/* Main Chart - uses sliced data */}
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart 
+                  <BarChart 
                     data={slicedChartData.map((d: any) => ({
                       ...d,
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
-                    barCategoryGap="20%"
-                    barGap={0}
+                    barGap={-20}
+                    barSize={20}
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -692,7 +692,7 @@ export default function LiquidationsPage() {
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
                     <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
                     <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
-                  </ComposedChart>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
               
