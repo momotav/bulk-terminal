@@ -40,25 +40,35 @@ function LiquidationTreemap({
   totalValue: number;
   assets: number;
 }) {
-  // Create treemap items - each long/short for each coin is a separate rectangle
+  // Group by symbol - one rectangle per coin with dominant color
   const treemapItems = useMemo(() => {
-    const items: { symbol: string; side: string; value: number; color: string }[] = [];
+    const groups: Record<string, { long: number; short: number; total: number }> = {};
     const allowedSymbols = ['BTC', 'ETH', 'SOL'];
     
     for (const item of data) {
       if (!allowedSymbols.includes(item.symbol)) continue;
-      if (item.value <= 0) continue;
       
-      items.push({
-        symbol: item.symbol,
-        side: item.side,
-        value: item.value,
-        color: item.side === 'long' ? COLORS.long : COLORS.short
-      });
+      if (!groups[item.symbol]) {
+        groups[item.symbol] = { long: 0, short: 0, total: 0 };
+      }
+      if (item.side === 'long') {
+        groups[item.symbol].long += item.value;
+      } else {
+        groups[item.symbol].short += item.value;
+      }
+      groups[item.symbol].total += item.value;
     }
     
-    // Sort by value descending
-    return items.sort((a, b) => b.value - a.value);
+    return Object.entries(groups)
+      .map(([symbol, values]) => ({
+        symbol,
+        value: values.total,
+        // Color based on dominant side
+        color: values.short >= values.long ? COLORS.short : COLORS.long,
+        dominantSide: values.short >= values.long ? 'short' : 'long'
+      }))
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value);
   }, [data]);
 
   // Calculate total for percentage
@@ -66,13 +76,10 @@ function LiquidationTreemap({
     return treemapItems.reduce((sum, item) => sum + item.value, 0);
   }, [treemapItems]);
 
-  // Squarified treemap algorithm
+  // Squarified treemap algorithm - slice and dice
   const calculateTreemap = useMemo(() => {
     if (treemapItems.length === 0 || total === 0) return [];
 
-    const width = 100; // percentage
-    const height = 100; // percentage
-    
     interface TreemapRect {
       x: number;
       y: number;
@@ -82,83 +89,62 @@ function LiquidationTreemap({
     }
     
     const rects: TreemapRect[] = [];
+    const items = [...treemapItems];
     
-    // Simple row-based layout (squarified approximation)
-    let currentY = 0;
-    let remainingItems = [...treemapItems];
-    let remainingHeight = height;
-    
-    while (remainingItems.length > 0) {
-      // Calculate how much value to put in this row
-      const rowValue = remainingItems.reduce((sum, item) => sum + item.value, 0);
+    // Recursive squarify function
+    function squarify(
+      items: typeof treemapItems,
+      x: number,
+      y: number,
+      width: number,
+      height: number
+    ) {
+      if (items.length === 0) return;
       
-      // Take items for this row (greedy approach)
-      let rowItems: typeof treemapItems = [];
-      let rowSum = 0;
+      if (items.length === 1) {
+        rects.push({ x, y, width, height, item: items[0] });
+        return;
+      }
       
-      // Decide row height based on first item's proportion
-      const firstItemPct = remainingItems[0].value / total;
-      let rowHeight: number;
+      const totalValue = items.reduce((sum, item) => sum + item.value, 0);
       
-      if (remainingItems.length <= 2) {
-        // Last items - use remaining height
-        rowHeight = remainingHeight;
-        rowItems = remainingItems;
-        rowSum = rowItems.reduce((sum, item) => sum + item.value, 0);
-        remainingItems = [];
-      } else {
-        // Calculate optimal row height
-        // Take items until aspect ratio starts getting worse
-        let bestAspectRatio = Infinity;
-        let bestCount = 1;
-        
-        for (let count = 1; count <= Math.min(remainingItems.length, 4); count++) {
-          const items = remainingItems.slice(0, count);
-          const sum = items.reduce((s, item) => s + item.value, 0);
-          const pct = sum / total;
-          const h = pct * height;
-          
-          // Calculate worst aspect ratio in this row
-          let worstRatio = 0;
-          let x = 0;
-          for (const item of items) {
-            const w = (item.value / sum) * width;
-            const ratio = Math.max(w / h, h / w);
-            worstRatio = Math.max(worstRatio, ratio);
-          }
-          
-          if (worstRatio <= bestAspectRatio) {
-            bestAspectRatio = worstRatio;
-            bestCount = count;
-          } else {
-            break;
-          }
+      // Determine if we split horizontally or vertically
+      const isHorizontal = width > height;
+      
+      if (items.length === 2) {
+        // Split into two
+        const ratio = items[0].value / totalValue;
+        if (isHorizontal) {
+          const splitWidth = width * ratio;
+          rects.push({ x, y, width: splitWidth, height, item: items[0] });
+          rects.push({ x: x + splitWidth, y, width: width - splitWidth, height, item: items[1] });
+        } else {
+          const splitHeight = height * ratio;
+          rects.push({ x, y, width, height: splitHeight, item: items[0] });
+          rects.push({ x, y: y + splitHeight, width, height: height - splitHeight, item: items[1] });
         }
-        
-        rowItems = remainingItems.slice(0, bestCount);
-        rowSum = rowItems.reduce((sum, item) => sum + item.value, 0);
-        rowHeight = (rowSum / total) * height;
-        remainingItems = remainingItems.slice(bestCount);
-        remainingHeight -= rowHeight;
+        return;
       }
       
-      // Layout items in this row
-      let currentX = 0;
-      for (const item of rowItems) {
-        const itemWidth = (item.value / rowSum) * width;
-        rects.push({
-          x: currentX,
-          y: currentY,
-          width: itemWidth,
-          height: rowHeight,
-          item
-        });
-        currentX += itemWidth;
-      }
+      // For 3+ items, take the largest and recurse
+      const firstItem = items[0];
+      const firstRatio = firstItem.value / totalValue;
+      const remaining = items.slice(1);
       
-      currentY += rowHeight;
+      if (isHorizontal) {
+        // First item takes left portion
+        const splitWidth = width * firstRatio;
+        rects.push({ x, y, width: splitWidth, height, item: firstItem });
+        squarify(remaining, x + splitWidth, y, width - splitWidth, height);
+      } else {
+        // First item takes top portion
+        const splitHeight = height * firstRatio;
+        rects.push({ x, y, width, height: splitHeight, item: firstItem });
+        squarify(remaining, x, y + splitHeight, width, height - splitHeight);
+      }
     }
     
+    squarify(items, 0, 0, 100, 100);
     return rects;
   }, [treemapItems, total]);
 
@@ -173,41 +159,50 @@ function LiquidationTreemap({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-[var(--text-secondary)]">Assets: <span className="text-[var(--text-primary)] font-medium">{assets}</span></span>
-        <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(totalValue)}</span></span>
+        <span className="text-[var(--text-secondary)]">Assets: <span className="text-[var(--text-primary)] font-medium">{treemapItems.length}</span></span>
+        <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(total)}</span></span>
       </div>
       
       {/* Treemap container */}
-      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-[var(--border-color)]">
-        {calculateTreemap.map((rect, index) => (
-          <div
-            key={`${rect.item.symbol}-${rect.item.side}-${index}`}
-            className="absolute flex flex-col items-center justify-center text-white transition-opacity hover:opacity-90"
-            style={{
-              left: `${rect.x}%`,
-              top: `${rect.y}%`,
-              width: `${rect.width}%`,
-              height: `${rect.height}%`,
-              backgroundColor: rect.item.color,
-              borderRight: '1px solid rgba(0,0,0,0.2)',
-              borderBottom: '1px solid rgba(0,0,0,0.2)',
-            }}
-          >
-            <div className="font-bold text-lg drop-shadow-md">{rect.item.symbol}</div>
-            <div className="font-semibold drop-shadow-md">{formatCurrency(rect.item.value)}</div>
-          </div>
-        ))}
+      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]">
+        {calculateTreemap.map((rect, index) => {
+          // Calculate font size based on rectangle size
+          const area = rect.width * rect.height;
+          const fontSize = area > 2000 ? 'text-2xl' : area > 500 ? 'text-lg' : area > 200 ? 'text-base' : 'text-sm';
+          const showValue = area > 150;
+          
+          return (
+            <div
+              key={`${rect.item.symbol}-${index}`}
+              className="absolute flex flex-col items-center justify-center text-white transition-all hover:brightness-110 cursor-default"
+              style={{
+                left: `${rect.x}%`,
+                top: `${rect.y}%`,
+                width: `${rect.width}%`,
+                height: `${rect.height}%`,
+                backgroundColor: rect.item.color,
+                borderRight: '2px solid rgba(20,19,16,0.8)',
+                borderBottom: '2px solid rgba(20,19,16,0.8)',
+              }}
+            >
+              <div className={`font-bold ${fontSize} drop-shadow-md`}>{rect.item.symbol}</div>
+              {showValue && (
+                <div className="font-semibold drop-shadow-md">{formatCurrency(rect.item.value)}</div>
+              )}
+            </div>
+          );
+        })}
       </div>
       
       {/* Legend */}
       <div className="flex items-center justify-center gap-6 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.long }} />
-          <span className="text-[var(--text-secondary)]">Long Liquidations</span>
+          <span className="text-[var(--text-secondary)]">Longs Dominant</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.short }} />
-          <span className="text-[var(--text-secondary)]">Short Liquidations</span>
+          <span className="text-[var(--text-secondary)]">Shorts Dominant</span>
         </div>
       </div>
     </div>
