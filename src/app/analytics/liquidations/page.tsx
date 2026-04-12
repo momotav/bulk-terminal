@@ -661,13 +661,14 @@ export default function LiquidationsPage() {
               {/* Main Chart - uses sliced data */}
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart 
+                  <ComposedChart 
                     data={slicedChartData.map((d: any) => ({
                       ...d,
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
                     barCategoryGap="20%"
+                    barGap={0}
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -684,11 +685,14 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       width={55}
                     />
-                    <Tooltip content={<ChartTooltip />} cursor={false} />
+                    <Tooltip 
+                      content={<ChartTooltip />} 
+                      cursor={{ fill: 'var(--bg-secondary)', opacity: 0.3 }}
+                    />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} stackId="stack" />
-                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} stackId="stack" />
-                  </BarChart>
+                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
+                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
               
