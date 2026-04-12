@@ -653,13 +653,13 @@ export default function LiquidationsPage() {
           </div>
           
           {loading.chart ? (
-            <div className="h-72 flex items-center justify-center">
+            <div className="h-80 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : chartData?.data?.length > 0 ? (
             <div className="space-y-0">
               {/* Main Chart - uses sliced data */}
-              <div className="h-52">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
                     data={slicedChartData.map((d: any) => ({
@@ -667,8 +667,7 @@ export default function LiquidationsPage() {
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
-                    barGap={-12}
-                    barSize={Math.max(4, Math.min(16, 400 / slicedChartData.length))}
+                    barCategoryGap="20%"
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -687,8 +686,8 @@ export default function LiquidationsPage() {
                     />
                     <Tooltip content={<ChartTooltip />} cursor={false} />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
-                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} stackId="stack" />
+                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} stackId="stack" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -702,7 +701,7 @@ export default function LiquidationsPage() {
               />
             </div>
           ) : (
-            <div className="h-72 flex items-center justify-center text-[var(--text-secondary)]">
+            <div className="h-80 flex items-center justify-center text-[var(--text-secondary)]">
               No chart data available
             </div>
           )}
