@@ -504,17 +504,17 @@ function CoinSelector({ value, onChange }: { value: string; onChange: (v: string
   );
 }
 
-// Custom tooltip for charts
+// Custom tooltip for charts - compact version
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
   
   return (
-    <div className="bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-3 shadow-lg">
-      <div className="text-xs text-[var(--text-secondary)] mb-2">
-        {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+    <div className="bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-2 shadow-lg text-xs">
+      <div className="text-[var(--text-secondary)] mb-1">
+        {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
       </div>
       {payload.map((entry: any, index: number) => (
-        <div key={index} className="flex items-center justify-between gap-4 text-sm">
+        <div key={index} className="flex items-center justify-between gap-3">
           <span style={{ color: entry.color }}>{entry.name}:</span>
           <span className="font-medium text-[var(--text-primary)]">{formatCurrency(Math.abs(entry.value))}</span>
         </div>
@@ -689,8 +689,8 @@ export default function LiquidationsPage() {
                     <Tooltip 
                       content={<ChartTooltip />} 
                       cursor={{ fill: 'var(--bg-secondary)', opacity: 0.3 }}
-                      allowEscapeViewBox={{ x: true, y: true }}
                       wrapperStyle={{ zIndex: 100 }}
+                      allowEscapeViewBox={{ x: false, y: false }}
                     />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
                     <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
