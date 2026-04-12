@@ -605,19 +605,19 @@ export default function LiquidationsPage() {
   }, [featuredFilter]);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <Flame className="text-[var(--asks)]" size={28} />
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Liquidations</h1>
+      <div className="flex items-center gap-3 mb-4 md:mb-8">
+        <Flame className="text-[var(--asks)]" size={24} />
+        <h1 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">Liquidations</h1>
       </div>
 
       {/* Two Column Section: Treemap + Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Treemap Section */}
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4 md:mb-6">
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
             <PeriodSelector value={treemapPeriod} onChange={setTreemapPeriod} />
           </div>
           
@@ -635,21 +635,21 @@ export default function LiquidationsPage() {
         </div>
 
         {/* Chart Section */}
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Total Liquidations Chart</h2>
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Total Liquidations Chart</h2>
             <PeriodSelector value={chartPeriod} onChange={setChartPeriod} />
           </div>
           
           {/* Legend */}
-          <div className="flex items-center justify-center gap-6 text-sm mb-4">
+          <div className="flex items-center justify-center gap-4 md:gap-6 text-xs md:text-sm mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.long }} />
-              <span className="text-[var(--text-secondary)]">Long Liquidations</span>
+              <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded" style={{ backgroundColor: COLORS.long }} />
+              <span className="text-[var(--text-secondary)]">Long</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.short }} />
-              <span className="text-[var(--text-secondary)]">Short Liquidations</span>
+              <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded" style={{ backgroundColor: COLORS.short }} />
+              <span className="text-[var(--text-secondary)]">Short</span>
             </div>
           </div>
           
@@ -716,12 +716,12 @@ export default function LiquidationsPage() {
       </div>
 
       {/* Two Column Section: Summary + Market */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Liquidations Summary */}
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
-            <div className="flex items-center gap-3">
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
+            <div className="flex items-center gap-2 md:gap-3">
               <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
               <PeriodSelector value={summaryPeriod} onChange={setSummaryPeriod} />
             </div>
