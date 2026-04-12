@@ -197,7 +197,7 @@ function ChartTooltip({ active, payload, label }: any) {
       {payload.map((entry: any, index: number) => (
         <div key={index} className="flex items-center justify-between gap-4 text-sm">
           <span style={{ color: entry.color }}>{entry.name}:</span>
-          <span className="font-medium text-[var(--text-primary)]">{formatCurrency(entry.value)}</span>
+          <span className="font-medium text-[var(--text-primary)]">{formatCurrency(Math.abs(entry.value))}</span>
         </div>
       ))}
     </div>
@@ -328,7 +328,14 @@ export default function LiquidationsPage() {
         ) : chartData?.data?.length > 0 ? (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData.data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <ComposedChart 
+                data={chartData.data.map((d: any) => ({
+                  ...d,
+                  shortValueNegative: -d.shortValue // Make shorts negative for mirrored effect
+                }))} 
+                margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                stackOffset="sign"
+              >
                 <XAxis 
                   dataKey="timestamp" 
                   tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -343,9 +350,9 @@ export default function LiquidationsPage() {
                   tickLine={false}
                 />
                 <Tooltip content={<ChartTooltip />} />
-                <ReferenceLine y={0} stroke="var(--border-color)" />
+                <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
                 <Bar dataKey="longValue" name="Long" fill={COLORS.long} radius={[2, 2, 0, 0]} />
-                <Bar dataKey="shortValue" name="Short" fill={COLORS.short} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} radius={[0, 0, 2, 2]} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
