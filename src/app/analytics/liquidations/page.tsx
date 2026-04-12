@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber } from '@/lib/api';
 import { 
-  ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  ComposedChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Cell, ReferenceLine, Legend
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ChevronDown, ExternalLink } from 'lucide-react';
@@ -328,12 +328,13 @@ export default function LiquidationsPage() {
         ) : chartData?.data?.length > 0 ? (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart 
+              <BarChart 
                 data={chartData.data.map((d: any) => ({
                   ...d,
                   shortValueNegative: -d.shortValue
                 }))} 
                 margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                barCategoryGap="20%"
               >
                 <XAxis 
                   dataKey="timestamp" 
@@ -347,13 +348,12 @@ export default function LiquidationsPage() {
                   tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                   axisLine={{ stroke: 'var(--border-color)' }}
                   tickLine={false}
-                  domain={['auto', 'auto']}
                 />
                 <Tooltip content={<ChartTooltip />} />
                 <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                <Bar dataKey="longValue" name="Long" fill={COLORS.long} stackId="a" />
-                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} stackId="a" />
-              </ComposedChart>
+                <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
+                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
