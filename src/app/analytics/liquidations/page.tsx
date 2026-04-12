@@ -334,7 +334,8 @@ export default function LiquidationsPage() {
                   shortValueNegative: -d.shortValue
                 }))} 
                 margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                barCategoryGap="20%"
+                barGap={-20}
+                barSize={20}
               >
                 <XAxis 
                   dataKey="timestamp" 
@@ -349,7 +350,7 @@ export default function LiquidationsPage() {
                   axisLine={{ stroke: 'var(--border-color)' }}
                   tickLine={false}
                 />
-                <Tooltip content={<ChartTooltip />} />
+                <Tooltip content={<ChartTooltip />} cursor={false} />
                 <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
                 <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
                 <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
