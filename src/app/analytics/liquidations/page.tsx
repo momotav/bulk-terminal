@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber } from '@/lib/api';
 import { 
   ComposedChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Cell, ReferenceLine, Legend
+  Cell, ReferenceLine, Legend, Area, AreaChart
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ChevronDown, ExternalLink } from 'lucide-react';
 
@@ -40,6 +40,8 @@ function LiquidationTreemap({
   totalValue: number;
   assets: number;
 }) {
+  const [hoveredItem, setHoveredItem] = useState<{ symbol: string; total: number; long: number; short: number; dominantSide: string; x: number; y: number } | null>(null);
+
   // Group by symbol - one rectangle per coin with dominant color
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
@@ -63,9 +65,11 @@ function LiquidationTreemap({
       .map(([symbol, values]) => ({
         symbol,
         value: values.total,
+        long: values.long,
+        short: values.short,
         // Color based on dominant side
         color: values.short >= values.long ? COLORS.short : COLORS.long,
-        dominantSide: values.short >= values.long ? 'short' : 'long'
+        dominantSide: values.short >= values.long ? 'SHORT' : 'LONG'
       }))
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
@@ -164,7 +168,10 @@ function LiquidationTreemap({
       </div>
       
       {/* Treemap container */}
-      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]">
+      <div 
+        className="relative w-full h-64 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
+        onMouseLeave={() => setHoveredItem(null)}
+      >
         {calculateTreemap.map((rect, index) => {
           // Calculate font size based on rectangle size
           const area = rect.width * rect.height;
@@ -184,6 +191,21 @@ function LiquidationTreemap({
                 borderRight: '2px solid rgba(20,19,16,0.8)',
                 borderBottom: '2px solid rgba(20,19,16,0.8)',
               }}
+              onMouseEnter={(e) => {
+                const containerRect = e.currentTarget.parentElement?.getBoundingClientRect();
+                const elemRect = e.currentTarget.getBoundingClientRect();
+                if (containerRect) {
+                  setHoveredItem({
+                    symbol: rect.item.symbol,
+                    total: rect.item.value,
+                    long: rect.item.long,
+                    short: rect.item.short,
+                    dominantSide: rect.item.dominantSide,
+                    x: elemRect.left - containerRect.left + elemRect.width / 2,
+                    y: elemRect.top - containerRect.top + elemRect.height / 2
+                  });
+                }
+              }}
             >
               <div className={`font-bold ${fontSize} drop-shadow-md`}>{rect.item.symbol}</div>
               {showValue && (
@@ -192,6 +214,40 @@ function LiquidationTreemap({
             </div>
           );
         })}
+        
+        {/* Hover Tooltip */}
+        {hoveredItem && (
+          <div 
+            className="absolute z-20 pointer-events-none bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]"
+            style={{
+              left: hoveredItem.x,
+              top: hoveredItem.y,
+              transform: 'translate(-50%, -50%)'
+            }}
+          >
+            <div className="font-bold text-[var(--text-primary)] text-lg mb-2">{hoveredItem.symbol}</div>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--text-secondary)]">Total Value:</span>
+                <span className="text-[var(--text-primary)] font-medium">{formatCurrency(hoveredItem.total)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--text-secondary)]">Long:</span>
+                <span className="font-medium" style={{ color: COLORS.long }}>{formatCurrency(hoveredItem.long)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--text-secondary)]">Short:</span>
+                <span className="font-medium" style={{ color: COLORS.short }}>{formatCurrency(hoveredItem.short)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--text-secondary)]">Type:</span>
+                <span className="font-medium" style={{ color: hoveredItem.dominantSide === 'SHORT' ? COLORS.short : COLORS.long }}>
+                  {hoveredItem.dominantSide}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Legend */}
@@ -387,13 +443,13 @@ export default function LiquidationsPage() {
 
         {/* Chart Section */}
         <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Total Liquidations Chart</h2>
             <PeriodSelector value={chartPeriod} onChange={setChartPeriod} />
           </div>
           
           {/* Legend */}
-          <div className="flex items-center gap-4 text-sm mb-4">
+          <div className="flex items-center justify-center gap-6 text-sm mb-4">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.long }} />
               <span className="text-[var(--text-secondary)]">Long Liquidations</span>
@@ -405,44 +461,76 @@ export default function LiquidationsPage() {
           </div>
           
           {loading.chart ? (
-            <div className="h-64 flex items-center justify-center">
+            <div className="h-72 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : chartData?.data?.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={chartData.data.map((d: any) => ({
-                    ...d,
-                    shortValueNegative: -d.shortValue
-                  }))} 
-                  margin={{ top: 10, right: 10, bottom: 20, left: 10 }}
-                  barGap={-16}
-                  barSize={16}
-                >
-                  <XAxis 
-                    dataKey="timestamp" 
-                    tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
-                    axisLine={{ stroke: 'var(--border-color)' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tickFormatter={(v) => formatCompact(Math.abs(v))}
-                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
-                    axisLine={{ stroke: 'var(--border-color)' }}
-                    tickLine={false}
-                    width={50}
-                  />
-                  <Tooltip content={<ChartTooltip />} cursor={false} />
-                  <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                  <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
-                  <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="space-y-2">
+              {/* Main Chart */}
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={chartData.data.map((d: any) => ({
+                      ...d,
+                      shortValueNegative: -d.shortValue
+                    }))} 
+                    margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
+                    barGap={-12}
+                    barSize={12}
+                  >
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
+                      axisLine={{ stroke: 'var(--border-color)' }}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis 
+                      tickFormatter={(v) => formatCompact(Math.abs(v))}
+                      tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
+                      axisLine={{ stroke: 'var(--border-color)' }}
+                      tickLine={false}
+                      width={55}
+                    />
+                    <Tooltip content={<ChartTooltip />} cursor={false} />
+                    <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
+                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
+                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              
+              {/* Mini Overview Chart (brush) */}
+              <div className="h-12 px-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart 
+                    data={chartData.data.map((d: any) => ({
+                      timestamp: d.timestamp,
+                      long: d.longValue,
+                      short: -d.shortValue
+                    }))} 
+                    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="longGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={COLORS.long} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={COLORS.long} stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="shortGradient" x1="0" y1="1" x2="0" y2="0">
+                        <stop offset="0%" stopColor={COLORS.short} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={COLORS.short} stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="long" stroke={COLORS.long} fill="url(#longGradient)" strokeWidth={1} />
+                    <Area type="monotone" dataKey="short" stroke={COLORS.short} fill="url(#shortGradient)" strokeWidth={1} />
+                    <ReferenceLine y={0} stroke="var(--border-color)" strokeWidth={1} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-[var(--text-secondary)]">
+            <div className="h-72 flex items-center justify-center text-[var(--text-secondary)]">
               No chart data available
             </div>
           )}
