@@ -57,6 +57,12 @@ export function RecentActivity() {
     return true;
   });
 
+  // Debug logging
+  console.log('[RecentActivity] Tab:', tab);
+  console.log('[RecentActivity] Total activities:', activities.length);
+  console.log('[RecentActivity] Liquidations count:', activities.filter(a => a.type === 'liquidation').length);
+  console.log('[RecentActivity] Filtered count:', filtered.length);
+
   return (
     <div className="glass-card h-full flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
