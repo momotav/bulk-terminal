@@ -492,8 +492,8 @@ export const analytics = {
     return request(`/api/analytics/liquidations/treemap?period=${period}`);
   },
 
-  // Chart data - long vs short over time
-  async getLiquidationsChart(period: string = 'all'): Promise<{
+  // Chart data - long vs short over time (for liquidations dashboard)
+  async getLiquidationsLongShortChart(period: string = 'all'): Promise<{
     period: string;
     data: { timestamp: string; longValue: number; shortValue: number; longCount: number; shortCount: number }[];
   }> {
