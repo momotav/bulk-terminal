@@ -331,10 +331,9 @@ export default function LiquidationsPage() {
               <ComposedChart 
                 data={chartData.data.map((d: any) => ({
                   ...d,
-                  shortValueNegative: -d.shortValue // Make shorts negative for mirrored effect
+                  shortValueNegative: -d.shortValue
                 }))} 
                 margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                stackOffset="sign"
               >
                 <XAxis 
                   dataKey="timestamp" 
@@ -348,11 +347,12 @@ export default function LiquidationsPage() {
                   tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                   axisLine={{ stroke: 'var(--border-color)' }}
                   tickLine={false}
+                  domain={['auto', 'auto']}
                 />
                 <Tooltip content={<ChartTooltip />} />
-                <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
-                <Bar dataKey="longValue" name="Long" fill={COLORS.long} radius={[2, 2, 0, 0]} />
-                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} radius={[0, 0, 2, 2]} />
+                <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
+                <Bar dataKey="longValue" name="Long" fill={COLORS.long} stackId="a" />
+                <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} stackId="a" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
