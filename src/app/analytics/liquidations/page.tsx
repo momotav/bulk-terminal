@@ -356,8 +356,9 @@ function LiquidationTreemap({
         {calculateTreemap.map((rect, index) => {
           // Calculate font size based on rectangle size
           const area = rect.width * rect.height;
-          const fontSize = area > 2000 ? 'text-2xl' : area > 500 ? 'text-lg' : area > 200 ? 'text-base' : 'text-sm';
-          const showValue = area > 150;
+          const symbolSize = area > 2000 ? 'text-4xl' : area > 500 ? 'text-2xl' : area > 200 ? 'text-xl' : 'text-lg';
+          const valueSize = area > 2000 ? 'text-2xl' : area > 500 ? 'text-xl' : area > 200 ? 'text-lg' : 'text-base';
+          const showValue = area > 100;
           
           return (
             <div
@@ -388,9 +389,9 @@ function LiquidationTreemap({
                 }
               }}
             >
-              <div className={`font-bold ${fontSize} drop-shadow-md`}>{rect.item.symbol}</div>
+              <div className={`font-bold ${symbolSize} drop-shadow-md`}>{rect.item.symbol}</div>
               {showValue && (
-                <div className="font-semibold drop-shadow-md">{formatCurrency(rect.item.value)}</div>
+                <div className={`font-semibold ${valueSize} drop-shadow-md`}>{formatCurrency(rect.item.value)}</div>
               )}
             </div>
           );
@@ -688,6 +689,8 @@ export default function LiquidationsPage() {
                     <Tooltip 
                       content={<ChartTooltip />} 
                       cursor={{ fill: 'var(--bg-secondary)', opacity: 0.3 }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                      wrapperStyle={{ zIndex: 100 }}
                     />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
                     <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
