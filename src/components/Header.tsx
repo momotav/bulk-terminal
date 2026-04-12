@@ -13,7 +13,7 @@ import { ThemeToggle } from './ThemeToggle';
 const navItems = [
   { href: '/', label: 'Dashboard' },
   { href: '/leaderboard', label: 'Leaderboard' },
-  { href: '/analytics/general', label: 'Analytics' },
+  { href: '/analytics', label: 'Analytics' },
   { href: '/whales', label: 'Whale Tracker' },
 ];
 
@@ -34,22 +34,16 @@ export function Header() {
   
   const { wallets: solanaWallets } = useSolanaWallets();
 
-  // Get the first connected Solana wallet address
   const connectedWalletAddress = solanaWallets?.[0]?.address || privyUser?.wallet?.address || '';
   
-  // Get email from Privy user
   const emailAccount = privyUser?.linkedAccounts?.find(
     (account): account is any => account.type === 'email'
   );
   const userEmail = emailAccount?.address || privyUser?.email?.address;
   
-  // Determine if user logged in via email (no connected wallet)
   const isEmailUser = authenticated && !connectedWalletAddress && !!userEmail;
-  
-  // Effective wallet is either connected wallet or claimed wallet
   const effectiveWallet = connectedWalletAddress || claimedWallet || user?.claimed_wallet || '';
 
-  // Get Twitter info from Privy user's linked accounts
   const twitterAccount = privyUser?.linkedAccounts?.find(
     (account): account is any => account.type === 'twitter_oauth'
   );
@@ -58,7 +52,6 @@ export function Header() {
   const twitterName = twitterAccount?.name || user?.twitter_name;
   const twitterAvatar = twitterAccount?.profilePictureUrl || user?.twitter_avatar;
 
-  // Sync Privy auth with backend
   useEffect(() => {
     async function syncAuth() {
       if (authenticated && ready) {
@@ -67,19 +60,15 @@ export function Header() {
           if (token) {
             setAuthToken(token);
             
-            // Authenticate with backend (wallet may be null for email users)
             const response = await userApi.authenticate(token, connectedWalletAddress || '', userEmail) as { user?: any };
             if (response?.user) {
               setUser(response.user);
               
-              // Set claimed wallet from backend
               if (response.user.claimed_wallet) {
                 setClaimedWallet(response.user.claimed_wallet);
               }
               
-              // If Privy has Twitter data but backend doesn't, sync it
               if (twitterAccount && !response.user.twitter_handle) {
-                console.log('[Header] Syncing Twitter data to backend...');
                 try {
                   const twitterData = {
                     twitterId: twitterAccount.subject || '',
@@ -91,7 +80,6 @@ export function Header() {
                   const linkResponse = await userApi.linkTwitter(token, twitterData) as { user?: any };
                   if (linkResponse?.user) {
                     setUser(linkResponse.user);
-                    console.log('[Header] Twitter data synced successfully');
                   }
                 } catch (linkError) {
                   console.error('[Header] Failed to sync Twitter:', linkError);
@@ -99,7 +87,6 @@ export function Header() {
               }
             }
 
-            // Load following
             const followingResponse = await userApi.getFollowing(token) as { following?: any[] };
             if (followingResponse?.following) {
               setFollowing(followingResponse.following);
@@ -122,6 +109,7 @@ export function Header() {
       storeLogout();
       setClaimedWallet(null);
       setProfileMenuOpen(false);
+      setMobileMenuOpen(false);
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -149,7 +137,23 @@ export function Header() {
     };
   }, [profileMenuOpen]);
 
-  // Display name priority: Twitter handle > Twitter name > email > wallet address
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   const displayName = twitterHandle 
     ? `@${twitterHandle}` 
     : twitterName 
@@ -158,15 +162,12 @@ export function Header() {
         ? userEmail.split('@')[0]
         : formatAddress(effectiveWallet);
 
-  // Theme state for logo switching
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>('dark');
   
   useEffect(() => {
-    // Check initial theme
     const theme = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
     if (theme) setCurrentTheme(theme);
     
-    // Watch for theme changes
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.attributeName === 'data-theme') {
@@ -181,89 +182,94 @@ export function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
-      {/* Full-width header with logo/buttons at edges, nav centered */}
-      <div className="flex items-center justify-between h-14 px-4 sm:px-6 lg:px-8">
-        {/* Logo - truly left aligned */}
-        <Link href="/" className="flex items-center shrink-0">
-          <Image 
-            src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
-            alt="BULK Stats" 
-            width={140} 
-            height={36} 
-            className="h-8 w-auto"
-            priority
-          />
-        </Link>
+    <>
+      <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
+        <div className="flex items-center justify-between h-14 px-4">
+          {/* Left: Menu button (mobile) + Logo */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 -ml-2 rounded hover:bg-[var(--bg-muted)] text-[var(--text-secondary)]"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            
+            <Link href="/" className="flex items-center shrink-0">
+              <Image 
+                src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
+                alt="BULK Stats" 
+                width={140} 
+                height={36} 
+                className="h-7 w-auto"
+                priority
+              />
+            </Link>
+          </div>
 
-        {/* Desktop Nav - centered absolutely */}
-        <nav className="hidden md:flex items-center justify-center gap-1 absolute left-1/2 -translate-x-1/2">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                pathname === item.href
-                  ? "text-bulk-green"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-          {authenticated && (
-            <Link
-              href="/following"
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                pathname === '/following'
-                  ? "text-bulk-green"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Following
-              {following.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
-                  {following.length}
-                </span>
-              )}
-            </Link>
-          )}
+          {/* Desktop Nav - centered */}
+          <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                  pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+                    ? "text-bulk-green"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+            {authenticated && (
+              <Link
+                href="/following"
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                  pathname === '/following'
+                    ? "text-bulk-green"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Following
+                {following.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
+                    {following.length}
+                  </span>
+                )}
+              </Link>
+            )}
           </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Theme Toggle */}
-            <ThemeToggle />
+            {/* Theme Toggle - hidden on mobile */}
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
             
             {ready && authenticated ? (
               <div className="relative profile-menu-container">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
                 >
                   {twitterAvatar ? (
-                    <img 
-                      src={twitterAvatar} 
-                      alt="" 
-                      className="w-5 h-5 rounded-full"
-                    />
+                    <img src={twitterAvatar} alt="" className="w-5 h-5 rounded-full" />
                   ) : isEmailUser ? (
                     <Mail className="w-4 h-4 text-bulk-green" />
                   ) : (
                     <Wallet className="w-4 h-4 text-bulk-green" />
                   )}
                   
-                  <span className="text-sm text-[var(--text-primary)] hidden sm:block">
+                  <span className="text-sm text-[var(--text-primary)] hidden sm:block max-w-[100px] truncate">
                     {displayName}
                   </span>
                   
-                  <ChevronDown className={`w-4 h-4 text-[var(--text-secondary)] transition-transform ${
-                    profileMenuOpen ? "rotate-180" : ""
-                  }`} />
+                  <ChevronDown className={`w-3 h-3 text-[var(--text-secondary)] transition-transform ${profileMenuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {profileMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-64 py-2 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl">
+                  <div className="absolute right-0 top-full mt-2 w-64 py-2 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl z-50">
                     <div className="px-4 py-2 border-b border-[var(--border-color)]">
                       {isEmailUser ? (
                         <>
@@ -272,63 +278,42 @@ export function Header() {
                           {effectiveWallet && (
                             <>
                               <p className="text-xs text-[var(--text-tertiary)] mt-2">Claimed Wallet</p>
-                              <p className="text-sm text-[var(--text-primary)] font-mono">
-                                {formatAddress(effectiveWallet)}
-                              </p>
+                              <p className="text-sm text-[var(--text-primary)] font-mono">{formatAddress(effectiveWallet)}</p>
                             </>
                           )}
                         </>
                       ) : (
                         <>
                           <p className="text-xs text-[var(--text-tertiary)]">Connected Wallet</p>
-                          <p className="text-sm text-[var(--text-primary)] font-mono">
-                            {formatAddress(connectedWalletAddress)}
-                          </p>
+                          <p className="text-sm text-[var(--text-primary)] font-mono">{formatAddress(connectedWalletAddress)}</p>
                         </>
                       )}
                     </div>
 
                     <div className="py-1">
-                      <Link
-                        href="/profile"
-                        onClick={() => setProfileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
-                      >
+                      <Link href="/profile" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors">
                         <User className="w-4 h-4 text-[var(--text-secondary)]" />
                         My Profile
                       </Link>
                       
                       {effectiveWallet && (
-                        <Link
-                          href={`/whales/${effectiveWallet}`}
-                          onClick={() => setProfileMenuOpen(false)}
-                          className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
-                        >
+                        <Link href={`/whales/${effectiveWallet}`} onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors">
                           <Wallet className="w-4 h-4 text-[var(--text-secondary)]" />
                           My Wallet Stats
                         </Link>
                       )}
                       
-                      <Link
-                        href="/following"
-                        onClick={() => setProfileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors"
-                      >
+                      <Link href="/following" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors">
                         <Users className="w-4 h-4 text-[var(--text-secondary)]" />
                         Following
                         {following.length > 0 && (
-                          <span className="ml-auto px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
-                            {following.length}
-                          </span>
+                          <span className="ml-auto px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">{following.length}</span>
                         )}
                       </Link>
                     </div>
 
                     <div className="border-t border-[var(--border-color)] pt-1">
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-[var(--bg-secondary-20)] transition-colors"
-                      >
+                      <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-[var(--bg-secondary-20)] transition-colors">
                         <LogOut className="w-4 h-4" />
                         Disconnect
                       </button>
@@ -337,71 +322,118 @@ export function Header() {
                 )}
               </div>
             ) : ready ? (
-              <button
-                onClick={login}
-                className="flex items-center gap-2 px-4 py-2 rounded bg-bulk-green hover:bg-bulk-green/90 transition-colors"
-              >
+              <button onClick={login} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bulk-green hover:bg-bulk-green/90 transition-colors">
                 <Wallet className="w-4 h-4 text-dark-primary" />
                 <span className="text-sm font-medium text-dark-primary">Login</span>
               </button>
             ) : (
-              <div className="w-32 h-9 bg-[var(--bg-muted)] rounded animate-pulse" />
+              <div className="w-20 h-8 bg-[var(--bg-muted)] rounded animate-pulse" />
             )}
-
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded hover:bg-[var(--bg-secondary-20)] text-[var(--text-secondary)]"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
           </div>
+        </div>
+      </header>
 
-        {/* Mobile Nav */}
-        {mobileMenuOpen && (
-          <nav className="md:hidden py-3 border-t border-[var(--border-color)] px-4 sm:px-6 lg:px-8">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
-                  pathname === item.href
-                    ? "text-bulk-green bg-bulk-green/10"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                {item.label}
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop with blur */}
+          <div 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          
+          {/* Slide-in menu */}
+          <div className="fixed top-0 left-0 bottom-0 z-50 w-72 bg-[var(--bg-base)] border-r border-[var(--border-color)] md:hidden overflow-y-auto">
+            {/* Menu Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
+              <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+                <Image 
+                  src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
+                  alt="BULK Stats" 
+                  width={120} 
+                  height={32} 
+                  className="h-6 w-auto"
+                />
               </Link>
-            ))}
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded hover:bg-[var(--bg-muted)] text-[var(--text-secondary)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Navigation */}
+            <nav className="p-4 space-y-1">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? "text-bulk-green bg-bulk-green/10"
+                        : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+              
+              {authenticated && (
+                <>
+                  <Link
+                    href="/following"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      pathname === '/following'
+                        ? "text-bulk-green bg-bulk-green/10"
+                        : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
+                    }`}
+                  >
+                    Following {following.length > 0 && `(${following.length})`}
+                  </Link>
+                  <Link
+                    href="/profile"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      pathname === '/profile'
+                        ? "text-bulk-green bg-bulk-green/10"
+                        : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
+                    }`}
+                  >
+                    Profile
+                  </Link>
+                </>
+              )}
+            </nav>
+            
+            {/* Theme toggle in mobile menu */}
+            <div className="px-4 py-3 border-t border-[var(--border-color)]">
+              <div className="flex items-center justify-between px-4">
+                <span className="text-sm text-[var(--text-secondary)]">Theme</span>
+                <ThemeToggle />
+              </div>
+            </div>
+            
+            {/* Logout in mobile menu */}
             {authenticated && (
-              <>
-                <Link
-                  href="/following"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
-                    pathname === '/following'
-                      ? "text-bulk-green bg-bulk-green/10"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
+              <div className="px-4 py-3 border-t border-[var(--border-color)]">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-[var(--bg-muted)] rounded-lg transition-colors"
                 >
-                  Following {following.length > 0 && `(${following.length})`}
-                </Link>
-                <Link
-                  href="/profile"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`block px-4 py-2.5 rounded text-sm font-medium transition-all ${
-                    pathname === '/profile'
-                      ? "text-bulk-green bg-bulk-green/10"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  Profile
-                </Link>
-              </>
+                  <LogOut className="w-4 h-4" />
+                  Disconnect
+                </button>
+              </div>
             )}
-          </nav>
-        )}
-      </div>
-    </header>
+          </div>
+        </>
+      )}
+    </>
   );
 }
