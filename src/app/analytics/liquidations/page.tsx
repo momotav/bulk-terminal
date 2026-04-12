@@ -450,12 +450,12 @@ function LiquidationTreemap({
 // Period selector component
 function PeriodSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div className="flex items-center gap-1 bg-[var(--bg-muted)] rounded-lg p-1">
+    <div className="flex items-center gap-0.5 md:gap-1 bg-[var(--bg-muted)] rounded-lg p-0.5 md:p-1 shrink-0">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           onClick={() => onChange(p.value)}
-          className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+          className={`px-2 md:px-3 py-1 text-xs md:text-sm font-medium rounded transition-colors ${
             value === p.value
               ? 'bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -781,13 +781,13 @@ export default function LiquidationsPage() {
         </div>
 
         {/* Market Summary */}
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Market Summary – {selectedCoin}
-            </h2>
-            <div className="flex items-center gap-3">
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 overflow-hidden">
+          <div className="flex flex-col gap-3 mb-4 md:mb-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Market Summary</h2>
               <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
+            </div>
+            <div className="overflow-x-auto -mx-1 px-1">
               <PeriodSelector value={marketPeriod} onChange={setMarketPeriod} />
             </div>
           </div>
