@@ -241,7 +241,7 @@ export default function LiquidationsPage() {
   // Fetch chart data
   useEffect(() => {
     setLoading(l => ({ ...l, chart: true }));
-    analytics.getLiquidationsChart(chartPeriod)
+    analytics.getLiquidationsLongShortChart(chartPeriod)
       .then(setChartData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, chart: false })));
