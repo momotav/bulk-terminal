@@ -13,7 +13,7 @@ import { ThemeToggle } from './ThemeToggle';
 const navItems = [
   { href: '/', label: 'Dashboard' },
   { href: '/leaderboard', label: 'Leaderboard' },
-  { href: '/analytics', label: 'Analytics' },
+  { href: '/analytics/general', label: 'Analytics' },
   { href: '/whales', label: 'Whale Tracker' },
 ];
 
