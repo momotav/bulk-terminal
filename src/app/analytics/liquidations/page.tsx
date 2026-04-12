@@ -17,7 +17,7 @@ const PERIODS = [
   { label: 'ALL', value: 'all' },
 ];
 
-const COINS = ['BTC', 'ETH', 'SOL', 'XRP', 'GOLD'];
+const COINS = ['BTC', 'ETH', 'SOL'];
 
 // Colors
 const COLORS = {
@@ -43,8 +43,12 @@ function LiquidationTreemap({
   // Group by symbol and calculate layout
   const symbolGroups = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
+    const allowedSymbols = ['BTC', 'ETH', 'SOL'];
     
     for (const item of data) {
+      // Filter to only BTC, ETH, SOL
+      if (!allowedSymbols.includes(item.symbol)) continue;
+      
       if (!groups[item.symbol]) {
         groups[item.symbol] = { long: 0, short: 0, total: 0 };
       }
@@ -76,35 +80,36 @@ function LiquidationTreemap({
         <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(totalValue)}</span></span>
       </div>
       
-      {/* Simple grid treemap */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-        {symbolGroups.map((group) => {
+      {/* Treemap - proportional boxes */}
+      <div className="relative w-full h-80 flex gap-1">
+        {symbolGroups.map((group, index) => {
+          const widthPct = totalValue > 0 ? (group.total / totalValue) * 100 : 33;
           const longPct = group.total > 0 ? (group.long / group.total) * 100 : 50;
           const shortPct = 100 - longPct;
           
           return (
             <div 
               key={group.symbol}
-              className="relative rounded-lg overflow-hidden border border-[var(--border-color)]"
-              style={{ minHeight: Math.max(80, Math.min(150, (group.total / totalValue) * 400)) }}
+              className="relative h-full rounded-lg overflow-hidden border border-[var(--border-color)]"
+              style={{ width: `${widthPct}%`, minWidth: '80px' }}
             >
-              {/* Background split */}
+              {/* Background split - vertical for long/short */}
               <div className="absolute inset-0 flex">
                 <div 
-                  className="h-full" 
-                  style={{ width: `${longPct}%`, backgroundColor: COLORS.long, opacity: 0.8 }}
+                  className="h-full transition-all duration-300" 
+                  style={{ width: `${longPct}%`, backgroundColor: COLORS.long }}
                 />
                 <div 
-                  className="h-full" 
-                  style={{ width: `${shortPct}%`, backgroundColor: COLORS.short, opacity: 0.8 }}
+                  className="h-full transition-all duration-300" 
+                  style={{ width: `${shortPct}%`, backgroundColor: COLORS.short }}
                 />
               </div>
               
               {/* Content */}
-              <div className="relative z-10 p-3 h-full flex flex-col justify-center items-center text-white">
-                <div className="font-bold text-lg">{group.symbol}</div>
-                <div className="font-medium">{formatCurrency(group.total)}</div>
-                <div className="text-xs opacity-80 mt-1">
+              <div className="relative z-10 p-4 h-full flex flex-col justify-center items-center text-white">
+                <div className="font-bold text-2xl">{group.symbol}</div>
+                <div className="font-semibold text-xl mt-1">{formatCurrency(group.total)}</div>
+                <div className="text-sm opacity-90 mt-2">
                   L: {formatCompact(group.long)} | S: {formatCompact(group.short)}
                 </div>
               </div>
