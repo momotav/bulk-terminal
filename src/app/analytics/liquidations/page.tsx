@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber } from '@/lib/api';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber, cn } from '@/lib/api';
 import { 
   ComposedChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Cell, ReferenceLine, Legend, Area, AreaChart
+  Cell, ReferenceLine, Legend
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ChevronDown, ExternalLink } from 'lucide-react';
 
@@ -28,6 +28,187 @@ const COLORS = {
   SOL: '#00FFA3',
   XRP: '#23292F',
   GOLD: '#FFD700',
+};
+
+// Interactive Range Slider for liquidations chart
+const LiquidationRangeSlider = ({ 
+  data, 
+  rangeStart,
+  rangeEnd,
+  onRangeChange,
+}: { 
+  data: { longValue: number; shortValue: number }[];
+  rangeStart: number;
+  rangeEnd: number;
+  onRangeChange: (start: number, end: number) => void;
+}) => {
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<'left' | 'right' | 'middle' | null>(null);
+  const [previewStart, setPreviewStart] = useState(rangeStart);
+  const [previewEnd, setPreviewEnd] = useState(rangeEnd);
+  const dragOffset = useRef(0);
+  const rangeWidth = useRef(0);
+
+  useEffect(() => {
+    if (!dragging) {
+      setPreviewStart(rangeStart);
+      setPreviewEnd(rangeEnd);
+    }
+  }, [rangeStart, rangeEnd, dragging]);
+
+  const isDisabled = data.length <= 1;
+
+  const clientXToPercent = useCallback((clientX: number): number => {
+    if (!sliderRef.current) return 0;
+    const rect = sliderRef.current.getBoundingClientRect();
+    return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+  }, []);
+
+  const handleStart = useCallback((clientX: number, type: 'left' | 'right' | 'middle') => {
+    if (isDisabled) return;
+    const pct = clientXToPercent(clientX);
+    if (type === 'left') {
+      dragOffset.current = pct - previewStart;
+    } else if (type === 'right') {
+      dragOffset.current = pct - previewEnd;
+    } else {
+      rangeWidth.current = previewEnd - previewStart;
+      dragOffset.current = pct - previewStart;
+    }
+    setDragging(type);
+  }, [isDisabled, previewStart, previewEnd, clientXToPercent]);
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const move = (clientX: number) => {
+      const pct = clientXToPercent(clientX);
+      if (dragging === 'left') {
+        const newStart = Math.max(0, Math.min(pct - dragOffset.current, previewEnd - 5));
+        setPreviewStart(newStart);
+      } else if (dragging === 'right') {
+        const newEnd = Math.max(previewStart + 5, Math.min(100, pct - dragOffset.current));
+        setPreviewEnd(newEnd);
+      } else {
+        let s = pct - dragOffset.current;
+        let e = s + rangeWidth.current;
+        if (s < 0) { s = 0; e = rangeWidth.current; }
+        if (e > 100) { e = 100; s = 100 - rangeWidth.current; }
+        setPreviewStart(s);
+        setPreviewEnd(e);
+      }
+    };
+
+    const onEnd = () => {
+      setDragging(null);
+      onRangeChange(previewStart, previewEnd);
+    };
+
+    const onMouseMove = (e: MouseEvent) => move(e.clientX);
+    const onTouchMove = (e: TouchEvent) => move(e.touches[0].clientX);
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onTouchMove);
+    document.addEventListener('touchend', onEnd);
+
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, [dragging, previewStart, previewEnd, onRangeChange, clientXToPercent]);
+
+  // Generate SVG path for mini chart
+  const generatePaths = () => {
+    if (data.length === 0) return null;
+    
+    const height = 32;
+    const maxLong = Math.max(...data.map(d => d.longValue), 1);
+    const maxShort = Math.max(...data.map(d => d.shortValue), 1);
+    const maxVal = Math.max(maxLong, maxShort);
+    
+    const longPoints = data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
+      const y = (height / 2) - (d.longValue / maxVal) * (height / 2 - 2);
+      return `${x},${y}`;
+    });
+    
+    const shortPoints = data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
+      const y = (height / 2) + (d.shortValue / maxVal) * (height / 2 - 2);
+      return `${x},${y}`;
+    });
+    
+    return (
+      <>
+        <path d={`M ${longPoints.join(' L ')}`} fill="none" stroke={COLORS.long} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        <path d={`M ${shortPoints.join(' L ')}`} fill="none" stroke={COLORS.short} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        <line x1="0" y1={height/2} x2="100" y2={height/2} stroke="var(--border-color)" strokeWidth="0.5" />
+      </>
+    );
+  };
+
+  const displayStart = previewStart;
+  const displayEnd = previewEnd;
+
+  return (
+    <div 
+      ref={sliderRef} 
+      className={cn(
+        "mt-2 h-10 bg-[var(--bg-muted)] rounded border border-[var(--border-color)] relative overflow-hidden select-none",
+        isDisabled && "opacity-50 cursor-not-allowed"
+      )} 
+      style={{ touchAction: 'none' }}
+    >
+      {/* Mini chart */}
+      <svg 
+        className="absolute inset-1 pointer-events-none" 
+        viewBox="0 0 100 32" 
+        preserveAspectRatio="none"
+        style={{ width: 'calc(100% - 8px)', height: 'calc(100% - 8px)' }}
+      >
+        {generatePaths()}
+      </svg>
+
+      {!isDisabled && (
+        <>
+          {/* Dimmed areas */}
+          <div className="absolute top-0 bottom-0 left-0 bg-black/50 pointer-events-none" style={{ width: `${displayStart}%` }} />
+          <div className="absolute top-0 bottom-0 right-0 bg-black/50 pointer-events-none" style={{ width: `${100 - displayEnd}%` }} />
+          
+          {/* Middle drag area */}
+          <div 
+            className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing" 
+            style={{ left: `${displayStart}%`, width: `${displayEnd - displayStart}%`, borderLeft: '2px solid var(--accent)', borderRight: '2px solid var(--accent)' }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'middle'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'middle'); }} 
+          />
+          
+          {/* Left handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
+            style={{ left: `calc(${displayStart}% - 10px)` }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'left'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'left'); }}
+          >
+            <div className="w-1.5 h-6 rounded-full transition-colors" style={{ backgroundColor: dragging === 'left' ? 'var(--accent)' : 'var(--text-secondary)' }} />
+          </div>
+          
+          {/* Right handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-5 cursor-ew-resize flex items-center justify-center z-20" 
+            style={{ left: `calc(${displayEnd}% - 10px)` }} 
+            onMouseDown={e => { e.preventDefault(); handleStart(e.clientX, 'right'); }} 
+            onTouchStart={e => { e.preventDefault(); handleStart(e.touches[0].clientX, 'right'); }}
+          >
+            <div className="w-1.5 h-6 rounded-full transition-colors" style={{ backgroundColor: dragging === 'right' ? 'var(--accent)' : 'var(--text-secondary)' }} />
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 // Treemap component - proper squarified layout
@@ -218,28 +399,28 @@ function LiquidationTreemap({
         {/* Hover Tooltip */}
         {hoveredItem && (
           <div 
-            className="absolute z-20 pointer-events-none bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]"
+            className="absolute z-20 pointer-events-none bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs"
             style={{
               left: hoveredItem.x,
               top: hoveredItem.y,
               transform: 'translate(-50%, -50%)'
             }}
           >
-            <div className="font-bold text-[var(--text-primary)] text-lg mb-2">{hoveredItem.symbol}</div>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-[var(--text-secondary)]">Total Value:</span>
+            <div className="font-bold text-[var(--text-primary)] mb-1">{hoveredItem.symbol}</div>
+            <div className="space-y-0.5">
+              <div className="flex justify-between gap-3">
+                <span className="text-[var(--text-secondary)]">Total:</span>
                 <span className="text-[var(--text-primary)] font-medium">{formatCurrency(hoveredItem.total)}</span>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify-between gap-3">
                 <span className="text-[var(--text-secondary)]">Long:</span>
                 <span className="font-medium" style={{ color: COLORS.long }}>{formatCurrency(hoveredItem.long)}</span>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify-between gap-3">
                 <span className="text-[var(--text-secondary)]">Short:</span>
                 <span className="font-medium" style={{ color: COLORS.short }}>{formatCurrency(hoveredItem.short)}</span>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify-between gap-3">
                 <span className="text-[var(--text-secondary)]">Type:</span>
                 <span className="font-medium" style={{ color: hoveredItem.dominantSide === 'SHORT' ? COLORS.short : COLORS.long }}>
                   {hoveredItem.dominantSide}
@@ -349,6 +530,7 @@ export default function LiquidationsPage() {
   const [marketPeriod, setMarketPeriod] = useState('all');
   const [selectedCoin, setSelectedCoin] = useState('BTC');
   const [featuredFilter, setFeaturedFilter] = useState('ALL');
+  const [chartRange, setChartRange] = useState({ start: 0, end: 100 });
   
   // Data state
   const [treemapData, setTreemapData] = useState<any>(null);
@@ -378,11 +560,21 @@ export default function LiquidationsPage() {
   // Fetch chart data
   useEffect(() => {
     setLoading(l => ({ ...l, chart: true }));
+    setChartRange({ start: 0, end: 100 }); // Reset range on period change
     analytics.getLiquidationsLongShortChart(chartPeriod)
       .then(setChartData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, chart: false })));
   }, [chartPeriod]);
+
+  // Slice chart data by range
+  const slicedChartData = useMemo(() => {
+    if (!chartData?.data?.length) return [];
+    const data = chartData.data;
+    const startIdx = Math.floor((chartRange.start / 100) * data.length);
+    const endIdx = Math.ceil((chartRange.end / 100) * data.length);
+    return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
+  }, [chartData, chartRange]);
 
   // Fetch summary data
   useEffect(() => {
@@ -465,18 +657,18 @@ export default function LiquidationsPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : chartData?.data?.length > 0 ? (
-            <div className="space-y-2">
-              {/* Main Chart */}
-              <div className="h-56">
+            <div className="space-y-0">
+              {/* Main Chart - uses sliced data */}
+              <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
-                    data={chartData.data.map((d: any) => ({
+                    data={slicedChartData.map((d: any) => ({
                       ...d,
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
                     barGap={-12}
-                    barSize={12}
+                    barSize={Math.max(4, Math.min(16, 400 / slicedChartData.length))}
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -501,33 +693,13 @@ export default function LiquidationsPage() {
                 </ResponsiveContainer>
               </div>
               
-              {/* Mini Overview Chart (brush) */}
-              <div className="h-12 px-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart 
-                    data={chartData.data.map((d: any) => ({
-                      timestamp: d.timestamp,
-                      long: d.longValue,
-                      short: -d.shortValue
-                    }))} 
-                    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="longGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={COLORS.long} stopOpacity={0.3} />
-                        <stop offset="100%" stopColor={COLORS.long} stopOpacity={0.05} />
-                      </linearGradient>
-                      <linearGradient id="shortGradient" x1="0" y1="1" x2="0" y2="0">
-                        <stop offset="0%" stopColor={COLORS.short} stopOpacity={0.3} />
-                        <stop offset="100%" stopColor={COLORS.short} stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="long" stroke={COLORS.long} fill="url(#longGradient)" strokeWidth={1} />
-                    <Area type="monotone" dataKey="short" stroke={COLORS.short} fill="url(#shortGradient)" strokeWidth={1} />
-                    <ReferenceLine y={0} stroke="var(--border-color)" strokeWidth={1} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              {/* Interactive Range Slider */}
+              <LiquidationRangeSlider 
+                data={chartData.data}
+                rangeStart={chartRange.start}
+                rangeEnd={chartRange.end}
+                onRangeChange={(start, end) => setChartRange({ start, end })}
+              />
             </div>
           ) : (
             <div className="h-72 flex items-center justify-center text-[var(--text-secondary)]">
