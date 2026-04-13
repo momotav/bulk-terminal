@@ -429,9 +429,9 @@ function LiquidationTreemap({
         <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(total)}</span></span>
       </div>
       
-      {/* Treemap container - Square */}
+      {/* Treemap container */}
       <div 
-        className="relative w-full aspect-square rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
+        className="relative w-full h-72 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
         onMouseLeave={() => setHoveredItem(null)}
       >
         {calculateTreemap.map((rect, index) => {
@@ -725,7 +725,7 @@ export default function LiquidationsPage() {
 
       {/* Row 1: Treemap + Liquidations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Treemap Section - Square */}
+        {/* Treemap Section */}
         <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
@@ -733,7 +733,7 @@ export default function LiquidationsPage() {
           </div>
           
           {loading.treemap ? (
-            <div className="aspect-square flex items-center justify-center">
+            <div className="h-72 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : treemapData ? (
@@ -756,15 +756,15 @@ export default function LiquidationsPage() {
           </div>
           
           {loading.summary ? (
-            <div className="h-64 flex items-center justify-center">
+            <div className="h-72 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : summaryData ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               {/* Total Liquidations */}
               <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
                 <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">TOTAL LIQUIDATIONS</div>
-                <div className="text-lg md:text-xl font-bold text-[var(--text-primary)]">
+                <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
                   {formatNumber(summaryData.totalCount, 0)} trades
                 </div>
                 <div className="text-xs md:text-sm text-[var(--text-secondary)]">
@@ -772,21 +772,10 @@ export default function LiquidationsPage() {
                 </div>
               </div>
 
-              {/* Largest Liquidation */}
-              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LARGEST LIQUIDATION</div>
-                <div className="text-lg md:text-xl font-bold text-[var(--text-primary)]">
-                  {formatNumber(summaryData.largestSize, 2)} {selectedCoin}
-                </div>
-                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
-                  {formatCurrency(summaryData.largestValue)}
-                </div>
-              </div>
-
               {/* Long Liquidations */}
               <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
                 <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LONG LIQUIDATIONS</div>
-                <div className="text-lg md:text-xl font-bold" style={{ color: COLORS.long }}>
+                <div className="text-xl md:text-2xl font-bold" style={{ color: COLORS.long }}>
                   {formatCurrency(summaryData.longValue)}
                 </div>
                 <div className="text-xs md:text-sm text-[var(--text-secondary)]">
@@ -797,11 +786,22 @@ export default function LiquidationsPage() {
               {/* Short Liquidations */}
               <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
                 <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">SHORT LIQUIDATIONS</div>
-                <div className="text-lg md:text-xl font-bold" style={{ color: COLORS.short }}>
+                <div className="text-xl md:text-2xl font-bold" style={{ color: COLORS.short }}>
                   {formatCurrency(summaryData.shortValue)}
                 </div>
                 <div className="text-xs md:text-sm text-[var(--text-secondary)]">
                   {summaryData.shortPercent.toFixed(2)}%
+                </div>
+              </div>
+
+              {/* Largest Liquidation */}
+              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LARGEST LIQUIDATION</div>
+                <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
+                  {formatNumber(summaryData.largestSize, 2)} {selectedCoin}
+                </div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
+                  {formatCurrency(summaryData.largestValue)}
                 </div>
               </div>
             </div>
