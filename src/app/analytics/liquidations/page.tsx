@@ -261,7 +261,7 @@ function LiquidationTreemap({
     return treemapItems.reduce((sum, item) => sum + item.value, 0);
   }, [treemapItems]);
 
-  // Squarified treemap algorithm - slice and dice
+  // Proper squarified treemap algorithm
   const calculateTreemap = useMemo(() => {
     if (treemapItems.length === 0 || total === 0) return [];
 
@@ -274,62 +274,143 @@ function LiquidationTreemap({
     }
     
     const rects: TreemapRect[] = [];
-    const items = [...treemapItems];
+    const items = [...treemapItems]; // Already sorted by value descending
     
-    // Recursive squarify function
+    // Calculate aspect ratio (closer to 1 is better)
+    function aspectRatio(w: number, h: number): number {
+      return Math.max(w / h, h / w);
+    }
+    
+    // Lay out a row of items along the shorter side
+    function layoutRow(
+      row: typeof treemapItems,
+      rowValue: number,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      totalAreaValue: number
+    ) {
+      const isHorizontal = width >= height;
+      const rowArea = (rowValue / totalAreaValue) * width * height;
+      
+      if (isHorizontal) {
+        // Row goes vertically on left side
+        const rowWidth = rowArea / height;
+        let currentY = y;
+        
+        for (const item of row) {
+          const itemHeight = (item.value / rowValue) * height;
+          rects.push({
+            x,
+            y: currentY,
+            width: rowWidth,
+            height: itemHeight,
+            item
+          });
+          currentY += itemHeight;
+        }
+        
+        return { x: x + rowWidth, y, width: width - rowWidth, height };
+      } else {
+        // Row goes horizontally on top
+        const rowHeight = rowArea / width;
+        let currentX = x;
+        
+        for (const item of row) {
+          const itemWidth = (item.value / rowValue) * width;
+          rects.push({
+            x: currentX,
+            y,
+            width: itemWidth,
+            height: rowHeight,
+            item
+          });
+          currentX += itemWidth;
+        }
+        
+        return { x, y: y + rowHeight, width, height: height - rowHeight };
+      }
+    }
+    
+    // Squarify algorithm
     function squarify(
       items: typeof treemapItems,
       x: number,
       y: number,
       width: number,
-      height: number
+      height: number,
+      totalValue: number
     ) {
-      if (items.length === 0) return;
+      if (items.length === 0 || width <= 0 || height <= 0) return;
       
       if (items.length === 1) {
         rects.push({ x, y, width, height, item: items[0] });
         return;
       }
       
-      const totalValue = items.reduce((sum, item) => sum + item.value, 0);
+      const isHorizontal = width >= height;
+      const side = isHorizontal ? height : width;
       
-      // Determine if we split horizontally or vertically
-      const isHorizontal = width > height;
+      let row: typeof treemapItems = [];
+      let rowValue = 0;
+      let remaining = [...items];
       
-      if (items.length === 2) {
-        // Split into two
-        const ratio = items[0].value / totalValue;
-        if (isHorizontal) {
-          const splitWidth = width * ratio;
-          rects.push({ x, y, width: splitWidth, height, item: items[0] });
-          rects.push({ x: x + splitWidth, y, width: width - splitWidth, height, item: items[1] });
-        } else {
-          const splitHeight = height * ratio;
-          rects.push({ x, y, width, height: splitHeight, item: items[0] });
-          rects.push({ x, y: y + splitHeight, width, height: height - splitHeight, item: items[1] });
+      // Greedily add items to row while aspect ratio improves
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const newRowValue = rowValue + item.value;
+        const newRow = [...row, item];
+        
+        // Calculate worst aspect ratio in current row vs new row
+        const currentArea = (rowValue / totalValue) * width * height;
+        const newArea = (newRowValue / totalValue) * width * height;
+        
+        const currentRowSide = isHorizontal ? currentArea / side : currentArea / side;
+        const newRowSide = isHorizontal ? newArea / side : newArea / side;
+        
+        if (row.length === 0) {
+          row = [item];
+          rowValue = item.value;
+          remaining = items.slice(i + 1);
+          continue;
         }
-        return;
+        
+        // Calculate aspect ratios for items in row
+        const getWorstAspect = (r: typeof treemapItems, rValue: number, rSide: number) => {
+          if (rSide === 0) return Infinity;
+          let worst = 0;
+          for (const it of r) {
+            const itemArea = (it.value / rValue) * rSide * side;
+            const itemSide = isHorizontal ? itemArea / rSide : itemArea / rSide;
+            const otherSide = isHorizontal ? rSide : rSide;
+            const ar = aspectRatio(itemSide, otherSide);
+            if (ar > worst) worst = ar;
+          }
+          return worst;
+        };
+        
+        const currentWorst = getWorstAspect(row, rowValue, currentRowSide);
+        const newWorst = getWorstAspect(newRow, newRowValue, newRowSide);
+        
+        if (newWorst <= currentWorst) {
+          // Adding improves or maintains aspect ratio
+          row = newRow;
+          rowValue = newRowValue;
+          remaining = items.slice(i + 1);
+        } else {
+          // Adding makes aspect ratio worse, layout current row
+          break;
+        }
       }
       
-      // For 3+ items, take the largest and recurse
-      const firstItem = items[0];
-      const firstRatio = firstItem.value / totalValue;
-      const remaining = items.slice(1);
-      
-      if (isHorizontal) {
-        // First item takes left portion
-        const splitWidth = width * firstRatio;
-        rects.push({ x, y, width: splitWidth, height, item: firstItem });
-        squarify(remaining, x + splitWidth, y, width - splitWidth, height);
-      } else {
-        // First item takes top portion
-        const splitHeight = height * firstRatio;
-        rects.push({ x, y, width, height: splitHeight, item: firstItem });
-        squarify(remaining, x, y + splitHeight, width, height - splitHeight);
-      }
+      // Layout the row and recurse on remaining space
+      const newBounds = layoutRow(row, rowValue, x, y, width, height, totalValue);
+      const remainingValue = totalValue - rowValue;
+      squarify(remaining, newBounds.x, newBounds.y, newBounds.width, newBounds.height, remainingValue);
     }
     
-    squarify(items, 0, 0, 100, 100);
+    squarify(items, 0, 0, 100, 100, total);
     return rects;
   }, [treemapItems, total]);
 
@@ -354,16 +435,44 @@ function LiquidationTreemap({
         onMouseLeave={() => setHoveredItem(null)}
       >
         {calculateTreemap.map((rect, index) => {
-          // Calculate font size based on rectangle size
+          // Calculate font size based on rectangle dimensions (not just area)
           const area = rect.width * rect.height;
-          const symbolSize = area > 2000 ? 'text-4xl' : area > 500 ? 'text-2xl' : area > 200 ? 'text-xl' : 'text-lg';
-          const valueSize = area > 2000 ? 'text-2xl' : area > 500 ? 'text-xl' : area > 200 ? 'text-lg' : 'text-base';
-          const showValue = area > 100;
+          const minDim = Math.min(rect.width, rect.height);
+          
+          // Dynamic font sizing based on both area and smallest dimension
+          let symbolSize = 'text-sm';
+          let valueSize = 'text-xs';
+          let showValue = true;
+          let showSymbol = true;
+          
+          if (area > 3000 && minDim > 30) {
+            symbolSize = 'text-4xl';
+            valueSize = 'text-xl';
+          } else if (area > 1500 && minDim > 25) {
+            symbolSize = 'text-3xl';
+            valueSize = 'text-lg';
+          } else if (area > 800 && minDim > 20) {
+            symbolSize = 'text-2xl';
+            valueSize = 'text-base';
+          } else if (area > 400 && minDim > 15) {
+            symbolSize = 'text-xl';
+            valueSize = 'text-sm';
+          } else if (area > 150 && minDim > 10) {
+            symbolSize = 'text-lg';
+            valueSize = 'text-xs';
+          } else if (area > 50) {
+            symbolSize = 'text-base';
+            showValue = false;
+          } else {
+            symbolSize = 'text-xs';
+            showValue = false;
+            if (area < 20) showSymbol = false;
+          }
           
           return (
             <div
               key={`${rect.item.symbol}-${index}`}
-              className="absolute flex flex-col items-center justify-center text-white transition-all hover:brightness-110 cursor-default"
+              className="absolute flex flex-col items-center justify-center text-white transition-all hover:brightness-110 cursor-default overflow-hidden"
               style={{
                 left: `${rect.x}%`,
                 top: `${rect.y}%`,
@@ -389,9 +498,11 @@ function LiquidationTreemap({
                 }
               }}
             >
-              <div className={`font-bold ${symbolSize} drop-shadow-md`}>{rect.item.symbol}</div>
+              {showSymbol && (
+                <div className={`font-bold ${symbolSize} drop-shadow-md truncate max-w-full px-1`}>{rect.item.symbol}</div>
+              )}
               {showValue && (
-                <div className={`font-semibold ${valueSize} drop-shadow-md`}>{formatCurrency(rect.item.value)}</div>
+                <div className={`font-semibold ${valueSize} drop-shadow-md truncate max-w-full px-1`}>{formatCurrency(rect.item.value)}</div>
               )}
             </div>
           );
