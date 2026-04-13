@@ -261,7 +261,7 @@ function LiquidationTreemap({
     return treemapItems.reduce((sum, item) => sum + item.value, 0);
   }, [treemapItems]);
 
-  // Proper squarified treemap algorithm
+  // Treemap algorithm - slice and dice with better layout
   const calculateTreemap = useMemo(() => {
     if (treemapItems.length === 0 || total === 0) return [];
 
@@ -276,141 +276,82 @@ function LiquidationTreemap({
     const rects: TreemapRect[] = [];
     const items = [...treemapItems]; // Already sorted by value descending
     
-    // Calculate aspect ratio (closer to 1 is better)
-    function aspectRatio(w: number, h: number): number {
-      return Math.max(w / h, h / w);
-    }
-    
-    // Lay out a row of items along the shorter side
-    function layoutRow(
-      row: typeof treemapItems,
-      rowValue: number,
+    // Simple slice-and-dice algorithm
+    function subdivide(
+      itemsToLayout: typeof treemapItems,
       x: number,
       y: number,
       width: number,
-      height: number,
-      totalAreaValue: number
+      height: number
     ) {
-      const isHorizontal = width >= height;
-      const rowArea = (rowValue / totalAreaValue) * width * height;
+      if (itemsToLayout.length === 0 || width <= 0 || height <= 0) return;
       
-      if (isHorizontal) {
-        // Row goes vertically on left side
-        const rowWidth = rowArea / height;
-        let currentY = y;
-        
-        for (const item of row) {
-          const itemHeight = (item.value / rowValue) * height;
-          rects.push({
-            x,
-            y: currentY,
-            width: rowWidth,
-            height: itemHeight,
-            item
-          });
-          currentY += itemHeight;
-        }
-        
-        return { x: x + rowWidth, y, width: width - rowWidth, height };
-      } else {
-        // Row goes horizontally on top
-        const rowHeight = rowArea / width;
-        let currentX = x;
-        
-        for (const item of row) {
-          const itemWidth = (item.value / rowValue) * width;
-          rects.push({
-            x: currentX,
-            y,
-            width: itemWidth,
-            height: rowHeight,
-            item
-          });
-          currentX += itemWidth;
-        }
-        
-        return { x, y: y + rowHeight, width, height: height - rowHeight };
-      }
-    }
-    
-    // Squarify algorithm
-    function squarify(
-      items: typeof treemapItems,
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      totalValue: number
-    ) {
-      if (items.length === 0 || width <= 0 || height <= 0) return;
-      
-      if (items.length === 1) {
-        rects.push({ x, y, width, height, item: items[0] });
+      if (itemsToLayout.length === 1) {
+        rects.push({ x, y, width, height, item: itemsToLayout[0] });
         return;
       }
       
-      const isHorizontal = width >= height;
-      const side = isHorizontal ? height : width;
+      const totalValue = itemsToLayout.reduce((sum, item) => sum + item.value, 0);
       
-      let row: typeof treemapItems = [];
-      let rowValue = 0;
-      let remaining = [...items];
-      
-      // Greedily add items to row while aspect ratio improves
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const newRowValue = rowValue + item.value;
-        const newRow = [...row, item];
-        
-        // Calculate worst aspect ratio in current row vs new row
-        const currentArea = (rowValue / totalValue) * width * height;
-        const newArea = (newRowValue / totalValue) * width * height;
-        
-        const currentRowSide = isHorizontal ? currentArea / side : currentArea / side;
-        const newRowSide = isHorizontal ? newArea / side : newArea / side;
-        
-        if (row.length === 0) {
-          row = [item];
-          rowValue = item.value;
-          remaining = items.slice(i + 1);
-          continue;
-        }
-        
-        // Calculate aspect ratios for items in row
-        const getWorstAspect = (r: typeof treemapItems, rValue: number, rSide: number) => {
-          if (rSide === 0) return Infinity;
-          let worst = 0;
-          for (const it of r) {
-            const itemArea = (it.value / rValue) * rSide * side;
-            const itemSide = isHorizontal ? itemArea / rSide : itemArea / rSide;
-            const otherSide = isHorizontal ? rSide : rSide;
-            const ar = aspectRatio(itemSide, otherSide);
-            if (ar > worst) worst = ar;
-          }
-          return worst;
-        };
-        
-        const currentWorst = getWorstAspect(row, rowValue, currentRowSide);
-        const newWorst = getWorstAspect(newRow, newRowValue, newRowSide);
-        
-        if (newWorst <= currentWorst) {
-          // Adding improves or maintains aspect ratio
-          row = newRow;
-          rowValue = newRowValue;
-          remaining = items.slice(i + 1);
+      if (itemsToLayout.length === 2) {
+        const ratio = itemsToLayout[0].value / totalValue;
+        // Always split along the longer axis
+        if (width >= height) {
+          const splitW = width * ratio;
+          rects.push({ x, y, width: splitW, height, item: itemsToLayout[0] });
+          rects.push({ x: x + splitW, y, width: width - splitW, height, item: itemsToLayout[1] });
         } else {
-          // Adding makes aspect ratio worse, layout current row
-          break;
+          const splitH = height * ratio;
+          rects.push({ x, y, width, height: splitH, item: itemsToLayout[0] });
+          rects.push({ x, y: y + splitH, width, height: height - splitH, item: itemsToLayout[1] });
+        }
+        return;
+      }
+      
+      // For 3+ items: split into two groups
+      // Find the best split point
+      let bestSplit = 1;
+      let bestRatio = 0;
+      let runningSum = 0;
+      
+      for (let i = 0; i < itemsToLayout.length - 1; i++) {
+        runningSum += itemsToLayout[i].value;
+        const ratio = runningSum / totalValue;
+        // We want the first group to be around 50-70% for a nice layout
+        if (ratio >= 0.4 && ratio <= 0.75) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            bestSplit = i + 1;
+          }
         }
       }
       
-      // Layout the row and recurse on remaining space
-      const newBounds = layoutRow(row, rowValue, x, y, width, height, totalValue);
-      const remainingValue = totalValue - rowValue;
-      squarify(remaining, newBounds.x, newBounds.y, newBounds.width, newBounds.height, remainingValue);
+      // If no good split found, just take the first item
+      if (bestRatio === 0) {
+        bestSplit = 1;
+        bestRatio = itemsToLayout[0].value / totalValue;
+      }
+      
+      const firstGroup = itemsToLayout.slice(0, bestSplit);
+      const secondGroup = itemsToLayout.slice(bestSplit);
+      const firstValue = firstGroup.reduce((sum, item) => sum + item.value, 0);
+      const firstRatio = firstValue / totalValue;
+      
+      // Split along the longer axis
+      if (width >= height) {
+        // Horizontal split - first group on left
+        const splitW = width * firstRatio;
+        subdivide(firstGroup, x, y, splitW, height);
+        subdivide(secondGroup, x + splitW, y, width - splitW, height);
+      } else {
+        // Vertical split - first group on top
+        const splitH = height * firstRatio;
+        subdivide(firstGroup, x, y, width, splitH);
+        subdivide(secondGroup, x, y + splitH, width, height - splitH);
+      }
     }
     
-    squarify(items, 0, 0, 100, 100, total);
+    subdivide(items, 0, 0, 100, 100);
     return rects;
   }, [treemapItems, total]);
 
@@ -431,7 +372,7 @@ function LiquidationTreemap({
       
       {/* Treemap container */}
       <div 
-        className="relative w-full h-72 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
+        className="relative w-full h-80 md:h-[400px] rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
         onMouseLeave={() => setHoveredItem(null)}
       >
         {calculateTreemap.map((rect, index) => {
@@ -733,7 +674,7 @@ export default function LiquidationsPage() {
           </div>
           
           {loading.treemap ? (
-            <div className="h-72 flex items-center justify-center">
+            <div className="h-80 md:h-[400px] flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : treemapData ? (
