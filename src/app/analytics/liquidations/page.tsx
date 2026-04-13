@@ -429,9 +429,9 @@ function LiquidationTreemap({
         <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(total)}</span></span>
       </div>
       
-      {/* Treemap container */}
+      {/* Treemap container - Square */}
       <div 
-        className="relative w-full h-64 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
+        className="relative w-full aspect-square rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
         onMouseLeave={() => setHoveredItem(null)}
       >
         {calculateTreemap.map((rect, index) => {
@@ -718,22 +718,22 @@ export default function LiquidationsPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4 md:mb-8">
+      <div className="flex items-center gap-3">
         <Flame className="text-[var(--asks)]" size={24} />
         <h1 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">Liquidations</h1>
       </div>
 
-      {/* Two Column Section: Treemap + Chart */}
+      {/* Row 1: Treemap + Liquidations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Treemap Section */}
+        {/* Treemap Section - Square */}
         <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4 md:mb-6">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations by Asset</h2>
             <PeriodSelector value={treemapPeriod} onChange={setTreemapPeriod} />
           </div>
           
           {loading.treemap ? (
-            <div className="h-64 flex items-center justify-center">
+            <div className="aspect-square flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : treemapData ? (
@@ -745,6 +745,72 @@ export default function LiquidationsPage() {
           ) : null}
         </div>
 
+        {/* Liquidations Summary */}
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
+            <div className="flex items-center gap-2">
+              <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
+              <PeriodSelector value={summaryPeriod} onChange={setSummaryPeriod} />
+            </div>
+          </div>
+          
+          {loading.summary ? (
+            <div className="h-64 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
+            </div>
+          ) : summaryData ? (
+            <div className="grid grid-cols-2 gap-3">
+              {/* Total Liquidations */}
+              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">TOTAL LIQUIDATIONS</div>
+                <div className="text-lg md:text-xl font-bold text-[var(--text-primary)]">
+                  {formatNumber(summaryData.totalCount, 0)} trades
+                </div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
+                  {formatCurrency(summaryData.totalValue)}
+                </div>
+              </div>
+
+              {/* Largest Liquidation */}
+              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LARGEST LIQUIDATION</div>
+                <div className="text-lg md:text-xl font-bold text-[var(--text-primary)]">
+                  {formatNumber(summaryData.largestSize, 2)} {selectedCoin}
+                </div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
+                  {formatCurrency(summaryData.largestValue)}
+                </div>
+              </div>
+
+              {/* Long Liquidations */}
+              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LONG LIQUIDATIONS</div>
+                <div className="text-lg md:text-xl font-bold" style={{ color: COLORS.long }}>
+                  {formatCurrency(summaryData.longValue)}
+                </div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
+                  {summaryData.longPercent.toFixed(2)}%
+                </div>
+              </div>
+
+              {/* Short Liquidations */}
+              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">SHORT LIQUIDATIONS</div>
+                <div className="text-lg md:text-xl font-bold" style={{ color: COLORS.short }}>
+                  {formatCurrency(summaryData.shortValue)}
+                </div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
+                  {summaryData.shortPercent.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Row 2: Chart + Market Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Chart Section */}
         <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
@@ -804,96 +870,32 @@ export default function LiquidationsPage() {
                       allowEscapeViewBox={{ x: false, y: false }}
                     />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} />
-                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} />
+                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} barSize={20} />
+                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} barSize={20} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               
               {/* Interactive Range Slider */}
-              <LiquidationRangeSlider 
-                data={chartData.data}
-                rangeStart={chartRange.start}
-                rangeEnd={chartRange.end}
-                onRangeChange={(start, end) => setChartRange({ start, end })}
-              />
+              <div className="pt-2">
+                <LiquidationRangeSlider 
+                  data={chartData.data}
+                  rangeStart={chartRange.start}
+                  rangeEnd={chartRange.end}
+                  onRangeChange={(start, end) => setChartRange({ start, end })}
+                />
+              </div>
             </div>
           ) : (
-            <div className="h-80 flex items-center justify-center text-[var(--text-secondary)]">
+            <div className="h-64 flex items-center justify-center text-[var(--text-secondary)]">
               No chart data available
             </div>
           )}
         </div>
-      </div>
-
-      {/* Two Column Section: Summary + Market */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Liquidations Summary */}
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
-            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
-            <div className="flex items-center gap-2 md:gap-3">
-              <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
-              <PeriodSelector value={summaryPeriod} onChange={setSummaryPeriod} />
-            </div>
-          </div>
-          
-          {loading.summary ? (
-            <div className="h-64 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
-            </div>
-          ) : summaryData ? (
-            <div className="space-y-4">
-              {/* Total Liquidations */}
-              <div className="p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-sm text-[var(--text-secondary)] mb-1">TOTAL LIQUIDATIONS</div>
-                <div className="text-2xl font-bold text-[var(--text-primary)]">
-                  {formatNumber(summaryData.totalCount, 0)} trades
-                </div>
-                <div className="text-sm text-[var(--text-secondary)]">
-                  {formatCurrency(summaryData.totalValue)}
-                </div>
-              </div>
-
-              {/* Long Liquidations */}
-              <div className="p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-sm text-[var(--text-secondary)] mb-1">LONG LIQUIDATIONS</div>
-                <div className="text-2xl font-bold" style={{ color: COLORS.long }}>
-                  {formatCurrency(summaryData.longValue)}
-                </div>
-                <div className="text-sm text-[var(--text-secondary)]">
-                  {summaryData.longPercent.toFixed(2)}%
-                </div>
-              </div>
-
-              {/* Short Liquidations */}
-              <div className="p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-sm text-[var(--text-secondary)] mb-1">SHORT LIQUIDATIONS</div>
-                <div className="text-2xl font-bold" style={{ color: COLORS.short }}>
-                  {formatCurrency(summaryData.shortValue)}
-                </div>
-                <div className="text-sm text-[var(--text-secondary)]">
-                  {summaryData.shortPercent.toFixed(2)}%
-                </div>
-              </div>
-
-              {/* Largest Liquidation */}
-              <div className="p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-sm text-[var(--text-secondary)] mb-1">LARGEST LIQUIDATION</div>
-                <div className="text-2xl font-bold text-[var(--text-primary)]">
-                  {formatNumber(summaryData.largestSize, 2)} {selectedCoin}
-                </div>
-                <div className="text-sm text-[var(--text-secondary)]">
-                  {formatCurrency(summaryData.largestValue)}
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
 
         {/* Market Summary */}
         <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 overflow-hidden">
-          <div className="flex flex-col gap-3 mb-4 md:mb-6">
+          <div className="flex flex-col gap-3 mb-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Market Summary</h2>
               <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
@@ -908,7 +910,7 @@ export default function LiquidationsPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
             </div>
           ) : marketData ? (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {/* Dominant badge */}
               <div 
                 className="inline-block px-3 py-1 rounded-md text-sm font-medium"
@@ -921,40 +923,40 @@ export default function LiquidationsPage() {
               </div>
 
               {/* Price and Value row */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="text-sm text-[var(--text-secondary)] mb-1">Current Market Price</div>
-                  <div className="text-2xl font-bold text-[var(--text-primary)]">
+                  <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">Current Market Price</div>
+                  <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
                     ${formatNumber(marketData.markPrice, 0)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-[var(--text-secondary)] mb-1">USD Value of Liquidations</div>
-                  <div className="text-2xl font-bold text-[var(--text-primary)]">
+                  <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">USD Value of Liquidations</div>
+                  <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
                     {formatCurrency(marketData.totalValue)}
                   </div>
                 </div>
               </div>
 
               {/* Density and Trend row */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="text-sm text-[var(--text-secondary)] mb-2">Liquidation Density</div>
+                  <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-2">Liquidation Density</div>
                   <div className="space-y-1">
-                    <div className="text-sm" style={{ color: COLORS.long }}>
+                    <div className="text-xs md:text-sm" style={{ color: COLORS.long }}>
                       LONGS: {formatNumber(marketData.longCount, 0)} liquidations
                     </div>
-                    <div className="text-sm" style={{ color: COLORS.short }}>
+                    <div className="text-xs md:text-sm" style={{ color: COLORS.short }}>
                       SHORTS: {formatNumber(marketData.shortCount, 0)} liquidations
                     </div>
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-[var(--text-secondary)] mb-1">Price Trend (24h)</div>
-                  <div className={`text-2xl font-bold flex items-center gap-2 ${
+                  <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">Price Trend (24h)</div>
+                  <div className={`text-xl md:text-2xl font-bold flex items-center gap-2 ${
                     marketData.priceChange24h >= 0 ? 'text-[var(--bids)]' : 'text-[var(--asks)]'
                   }`}>
-                    {marketData.priceChange24h >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+                    {marketData.priceChange24h >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                     {marketData.priceChange24h >= 0 ? '+' : ''}{marketData.priceChange24h.toFixed(2)}%
                   </div>
                 </div>
@@ -962,7 +964,7 @@ export default function LiquidationsPage() {
 
               {/* L/S Distribution bar */}
               <div>
-                <div className="text-sm text-[var(--text-secondary)] mb-2">L/S Notional Distribution</div>
+                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-2">L/S Notional Distribution</div>
                 <div className="h-3 rounded-full overflow-hidden flex">
                   <div 
                     style={{ width: `${marketData.longPercent}%`, backgroundColor: COLORS.long }}
@@ -973,7 +975,7 @@ export default function LiquidationsPage() {
                     className="transition-all duration-500"
                   />
                 </div>
-                <div className="flex justify-between mt-2 text-sm">
+                <div className="flex justify-between mt-1 text-xs">
                   <div style={{ color: COLORS.long }}>
                     {marketData.longPercent.toFixed(2)}% LONGS<br />
                     <span className="text-[var(--text-secondary)]">{formatCurrency(marketData.longValue)}</span>
@@ -989,10 +991,10 @@ export default function LiquidationsPage() {
         </div>
       </div>
 
-      {/* Featured Liquidations Table */}
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Featured Liquidations</h2>
+      {/* Row 3: Featured Liquidations Table */}
+      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Featured Liquidations</h2>
           <div className="flex items-center gap-2 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] px-3 py-1.5">
             <select
               value={featuredFilter}
@@ -1008,14 +1010,14 @@ export default function LiquidationsPage() {
         </div>
         
         {loading.featured ? (
-          <div className="h-64 flex items-center justify-center">
+          <div className="h-48 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
           </div>
         ) : featuredData?.data?.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-color)]">
+                <tr className="text-left text-xs md:text-sm text-[var(--text-secondary)] border-b border-[var(--border-color)]">
                   <th className="pb-3 font-medium">ASSET</th>
                   <th className="pb-3 font-medium">POSITION SIZE</th>
                   <th className="pb-3 font-medium">LIQUIDATION PRICE</th>
@@ -1025,16 +1027,16 @@ export default function LiquidationsPage() {
               <tbody>
                 {featuredData.data.map((liq: any) => (
                   <tr key={liq.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-base)] transition-colors">
-                    <td className="py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[var(--bg-base)] flex items-center justify-center text-sm font-medium">
+                    <td className="py-3 md:py-4">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-[var(--bg-base)] flex items-center justify-center text-xs md:text-sm font-medium">
                           {liq.symbol.charAt(0)}
                         </div>
-                        <span className="font-medium text-[var(--text-primary)]">{liq.symbol}</span>
+                        <span className="font-medium text-sm md:text-base text-[var(--text-primary)]">{liq.symbol}</span>
                       </div>
                     </td>
-                    <td className="py-4">
-                      <div className="font-medium text-[var(--text-primary)]">{formatCurrency(liq.value)}</div>
+                    <td className="py-3 md:py-4">
+                      <div className="font-medium text-sm md:text-base text-[var(--text-primary)]">{formatCurrency(liq.value)}</div>
                       {liq.isHighImpact && (
                         <div className="flex items-center gap-1 text-xs text-[var(--asks)]">
                           <span className="w-1.5 h-1.5 rounded-full bg-[var(--asks)]" />
@@ -1042,16 +1044,16 @@ export default function LiquidationsPage() {
                         </div>
                       )}
                     </td>
-                    <td className="py-4">
-                      <div className={`font-medium ${liq.side === 'long' ? 'text-[var(--bids)]' : 'text-[var(--asks)]'}`}>
+                    <td className="py-3 md:py-4">
+                      <div className={`font-medium text-sm md:text-base ${liq.side === 'long' ? 'text-[var(--bids)]' : 'text-[var(--asks)]'}`}>
                         ${formatNumber(liq.price, 2)}
                       </div>
                       <div className="text-xs text-[var(--text-secondary)] uppercase">{liq.side}</div>
                     </td>
-                    <td className="py-4">
+                    <td className="py-3 md:py-4">
                       <a 
                         href={`/whales/${liq.wallet}`}
-                        className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-1"
+                        className="text-xs md:text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-1"
                       >
                         {formatAddress(liq.wallet)}
                         <ExternalLink size={12} />
@@ -1063,16 +1065,10 @@ export default function LiquidationsPage() {
             </table>
           </div>
         ) : (
-          <div className="h-64 flex items-center justify-center text-[var(--text-secondary)]">
+          <div className="h-48 flex items-center justify-center text-[var(--text-secondary)]">
             No featured liquidations available
           </div>
         )}
-      </div>
-
-      {/* Footer note */}
-      <div className="text-center text-sm text-[var(--text-secondary)] py-4">
-        Data sourced from BULK Exchange. Updated in real-time via WebSocket. 
-        For informational purposes only.
       </div>
     </div>
   );
