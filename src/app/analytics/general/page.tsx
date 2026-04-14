@@ -689,12 +689,12 @@ export default function AnalyticsPage() {
     if (!loading) fetchLiquidationsData();
   }, [liquidationsHours, loading]);
 
-  // Fetch trades data when timeframe changes - from PostgreSQL database
+  // Fetch trades data when timeframe changes - from BULK API
   useEffect(() => {
     const fetchTradesData = async () => {
       setChartLoading(prev => ({ ...prev, trades: true }));
       try {
-        const data = await analytics.getTradesChart(tradesHours);
+        const data = await analytics.getTradesFromBulkAPI(tradesHours);
         setTradesChart(data);
         setTradesRange({ start: 0, end: 100 });
       } catch (error) {
@@ -780,7 +780,7 @@ export default function AnalyticsPage() {
       setLoading(true);
       try {
         const results = await Promise.allSettled([
-          analytics.getTradesChart(tradesHours),
+          analytics.getTradesFromBulkAPI(tradesHours),
           analytics.getLiquidationsChart(liquidationsHours),
           analytics.getADLChart(adlHours),
           analytics.getVolumeFromBulkAPI(volumeHours),
