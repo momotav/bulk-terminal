@@ -80,24 +80,24 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
 
 // Heatmap Cell Component
 const HeatmapCell = ({ value, label }: { value: number; label?: string }) => {
-  // Value ranges from -1 (negative correlation) to +1 (positive correlation)
-  // Or for volatility, higher values = more intense color
+  // Value ranges from 0 to 1 for correlation
+  // High (close to 1) = green, Low (close to 0) = red
   const getColor = (v: number) => {
-    if (v >= 0.8) return 'bg-[#00B482]';
-    if (v >= 0.6) return 'bg-[#00B482]/80';
-    if (v >= 0.4) return 'bg-[#00B482]/60';
-    if (v >= 0.2) return 'bg-[#FFB548]/60';
-    if (v >= 0) return 'bg-[#FFB548]/40';
-    if (v >= -0.2) return 'bg-[#EF4A3C]/40';
-    if (v >= -0.4) return 'bg-[#EF4A3C]/60';
-    return 'bg-[#EF4A3C]/80';
+    if (v >= 0.95) return 'bg-[#00B482]'; // Perfect correlation (self)
+    if (v >= 0.85) return 'bg-[#00B482]/90';
+    if (v >= 0.75) return 'bg-[#00B482]/70';
+    if (v >= 0.65) return 'bg-[#4ADE80]/60';
+    if (v >= 0.55) return 'bg-[#FFB548]/50';
+    if (v >= 0.45) return 'bg-[#FB923C]/60';
+    if (v >= 0.35) return 'bg-[#EF4A3C]/60';
+    return 'bg-[#EF4A3C]/80'; // Low correlation
   };
   
   return (
     <div className={cn(
       "flex items-center justify-center p-3 rounded text-sm font-mono font-medium",
       getColor(value),
-      value > 0.5 || value < -0.5 ? "text-white" : "text-[var(--text-primary)]"
+      value >= 0.9 ? "text-white" : "text-[var(--text-primary)]"
     )}>
       {label || (value >= 0 ? '+' : '')}{typeof value === 'number' ? value.toFixed(2) : value}
     </div>
@@ -267,8 +267,7 @@ export default function RiskPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Risk Metrics</h1>
-        <p className="text-[var(--text-tertiary)] mb-6">Market regime, volatility, and correlation analysis</p>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">Risk</h1>
 
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
