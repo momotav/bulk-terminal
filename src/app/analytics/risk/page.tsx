@@ -291,34 +291,98 @@ export default function RiskFeesPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Market Regime Section */}
+            {/* Market Regime Section - Enhanced */}
             <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
                 <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
+                <span className="text-xs text-[var(--text-tertiary)] ml-auto">Live from BULK API</span>
               </div>
               
               {regimeData ? (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {/* Aggregate Regime */}
-                  <div className="col-span-1 md:col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
-                    <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
-                    <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
-                      {regimeData.aggregateRegime > 0 ? '+' : ''}{regimeData.aggregateRegime.toFixed(1)}
-                    </p>
-                    <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                      {getRegimeLabel(Math.round(regimeData.aggregateRegime)).label}
-                    </p>
+                <div className="space-y-4">
+                  {/* Top row: Aggregate + Gauges */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Aggregate Regime */}
+                    <div className="col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
+                      <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
+                      <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
+                        {regimeData.aggregateRegime > 0 ? '+' : ''}{regimeData.aggregateRegime.toFixed(1)}
+                      </p>
+                      <p className="text-sm text-[var(--text-tertiary)] mt-1">
+                        {getRegimeLabel(Math.round(regimeData.aggregateRegime)).label}
+                      </p>
+                    </div>
+                    
+                    {/* Per-asset gauges */}
+                    {regimeData.markets.map(market => (
+                      <RegimeGauge 
+                        key={market.symbol} 
+                        value={market.regime} 
+                        symbol={market.symbol.replace('-USD', '')} 
+                      />
+                    ))}
                   </div>
-                  
-                  {/* Per-asset gauges */}
-                  {regimeData.markets.map(market => (
-                    <RegimeGauge 
-                      key={market.symbol} 
-                      value={market.regime} 
-                      symbol={market.symbol.replace('-USD', '')} 
-                    />
-                  ))}
+
+                  {/* Bottom row: Detailed metrics table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[var(--border-color)]">
+                          <th className="text-left py-2 px-3 text-[var(--text-tertiary)] font-medium">Asset</th>
+                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Mark Price</th>
+                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Fair Price</th>
+                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Spread</th>
+                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Volatility</th>
+                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Regime Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {regimeData.markets.map(market => {
+                          const spread = market.fairBookPx > 0 
+                            ? ((market.markPrice - market.fairBookPx) / market.fairBookPx) * 10000 
+                            : 0;
+                          const durationMins = Math.floor(market.regimeDt / 60);
+                          const durationHrs = Math.floor(durationMins / 60);
+                          const durationStr = durationHrs > 0 
+                            ? `${durationHrs}h ${durationMins % 60}m` 
+                            : `${durationMins}m`;
+                          
+                          return (
+                            <tr key={market.symbol} className="border-b border-[var(--border-color)]/50 hover:bg-[var(--bg-muted)]/50">
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-2 h-2 rounded-full" 
+                                    style={{ backgroundColor: COLORS[market.symbol.replace('-USD', '') as keyof typeof COLORS] || COLORS.BTC }} 
+                                  />
+                                  <span className="font-medium text-[var(--text-primary)]">{market.symbol.replace('-USD', '')}</span>
+                                </div>
+                              </td>
+                              <td className="text-right py-2 px-3 text-[var(--text-primary)] font-mono">
+                                ${market.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="text-right py-2 px-3 text-[var(--text-secondary)] font-mono">
+                                ${market.fairBookPx.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={cn(
+                                "text-right py-2 px-3 font-mono",
+                                spread >= 0 ? "text-[#00B482]" : "text-[#EF4A3C]"
+                              )}>
+                                {spread >= 0 ? '+' : ''}{spread.toFixed(2)} bps
+                              </td>
+                              <td className="text-right py-2 px-3 text-[var(--text-primary)] font-mono">
+                                {market.regimeVol.toFixed(2)}%
+                              </td>
+                              <td className="text-right py-2 px-3 text-[var(--text-secondary)]">
+                                {durationStr}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div className="h-32 flex items-center justify-center text-[var(--text-tertiary)]">
