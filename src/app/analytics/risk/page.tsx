@@ -327,7 +327,7 @@ export default function RiskFeesPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-[var(--border-color)]">
+                        <tr className="border-b border-[var(--border-color)]/30">
                           <th className="text-left py-2 px-3 text-[var(--text-tertiary)] font-medium">Asset</th>
                           <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Mark Price</th>
                           <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Fair Price</th>
@@ -348,7 +348,7 @@ export default function RiskFeesPage() {
                             : `${durationMins}m`;
                           
                           return (
-                            <tr key={market.symbol} className="border-b border-[var(--border-color)]/50 hover:bg-[var(--bg-muted)]/50">
+                            <tr key={market.symbol} className="border-b border-[var(--border-color)]/20 hover:bg-[var(--bg-muted)]/50">
                               <td className="py-2 px-3">
                                 <div className="flex items-center gap-2">
                                   <div 
