@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Header } from '@/components/Header';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Line, LineChart, Area, AreaChart, ReferenceLine
 } from 'recharts';
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Gauge } from 'lucide-react';
+import { TrendingUp, Activity, Gauge } from 'lucide-react';
 
 const COLORS = {
   BTC: '#00B482',
@@ -16,7 +15,6 @@ const COLORS = {
   positive: '#00B482',
   negative: '#EF4A3C',
   neutral: '#FFB548',
-  accent: '#FFB548',
 };
 
 // Regime labels based on value
@@ -33,13 +31,12 @@ const getRegimeLabel = (regime: number): { label: string; color: string } => {
 // Market Regime Gauge Component
 const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
   const { label, color } = getRegimeLabel(value);
-  const percentage = ((value + 12) / 24) * 100; // Convert -12 to +12 range to 0-100%
+  const percentage = ((value + 12) / 24) * 100;
   
   return (
     <div className="flex flex-col items-center p-4 bg-[var(--bg-muted)] rounded-lg">
       <p className="text-sm text-[var(--text-tertiary)] mb-2">{symbol}</p>
       <div className="relative w-32 h-16 overflow-hidden">
-        {/* Background arc */}
         <div className="absolute inset-0">
           <svg viewBox="0 0 100 50" className="w-full h-full">
             <defs>
@@ -67,7 +64,6 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
             />
           </svg>
         </div>
-        {/* Needle */}
         <div 
           className="absolute bottom-0 left-1/2 w-1 h-12 origin-bottom transition-transform duration-500"
           style={{ 
@@ -82,31 +78,31 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
   );
 };
 
-// Fee Tier Card
-const FeeTierCard = ({ tier, isActive }: { tier: { thresholdVolume: number; makerBps: number; takerBps: number }; isActive?: boolean }) => (
-  <div className={cn(
-    "p-3 rounded-lg border transition-all",
-    isActive 
-      ? "bg-[var(--accent-muted)] border-[var(--accent-primary)]" 
-      : "bg-[var(--bg-muted)] border-[var(--border-color)]"
-  )}>
-    <p className="text-xs text-[var(--text-tertiary)] mb-1">
-      {tier.thresholdVolume === 0 ? 'Base Tier' : `≥ $${formatCompact(tier.thresholdVolume)}`}
-    </p>
-    <div className="flex justify-between items-center">
-      <div>
-        <p className="text-xs text-[var(--text-tertiary)]">Maker</p>
-        <p className={cn("text-sm font-medium", tier.makerBps <= 0 ? "text-[#00B482]" : "text-[var(--text-primary)]")}>
-          {tier.makerBps <= 0 ? `${tier.makerBps}` : tier.makerBps} bps
-        </p>
-      </div>
-      <div className="text-right">
-        <p className="text-xs text-[var(--text-tertiary)]">Taker</p>
-        <p className="text-sm font-medium text-[var(--text-primary)]">{tier.takerBps} bps</p>
-      </div>
+// Heatmap Cell Component
+const HeatmapCell = ({ value, label }: { value: number; label?: string }) => {
+  // Value ranges from -1 (negative correlation) to +1 (positive correlation)
+  // Or for volatility, higher values = more intense color
+  const getColor = (v: number) => {
+    if (v >= 0.8) return 'bg-[#00B482]';
+    if (v >= 0.6) return 'bg-[#00B482]/80';
+    if (v >= 0.4) return 'bg-[#00B482]/60';
+    if (v >= 0.2) return 'bg-[#FFB548]/60';
+    if (v >= 0) return 'bg-[#FFB548]/40';
+    if (v >= -0.2) return 'bg-[#EF4A3C]/40';
+    if (v >= -0.4) return 'bg-[#EF4A3C]/60';
+    return 'bg-[#EF4A3C]/80';
+  };
+  
+  return (
+    <div className={cn(
+      "flex items-center justify-center p-3 rounded text-sm font-mono font-medium",
+      getColor(value),
+      value > 0.5 || value < -0.5 ? "text-white" : "text-[var(--text-primary)]"
+    )}>
+      {label || (value >= 0 ? '+' : '')}{typeof value === 'number' ? value.toFixed(2) : value}
     </div>
-  </div>
-);
+  );
+};
 
 // Custom tooltip
 const ChartTooltip = ({ active, payload, label }: any) => {
@@ -130,11 +126,9 @@ const ChartTooltip = ({ active, payload, label }: any) => {
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
           <span className="text-[var(--text-secondary)]">{entry.name}:</span>
           <span className="text-[var(--text-primary)] font-medium">
-            {entry.name.includes('Price') || entry.name.includes('Revenue') 
-              ? `$${formatCompact(entry.value)}` 
-              : entry.name.includes('bps') || entry.name.includes('Spread')
-              ? `${entry.value.toFixed(2)} bps`
-              : formatCompact(entry.value)}
+            {entry.name.includes('Price') ? `$${formatCompact(entry.value)}` : 
+             entry.name.includes('bps') || entry.name.includes('Spread') ? `${entry.value.toFixed(2)} bps` :
+             formatCompact(entry.value)}
           </span>
         </div>
       ))}
@@ -142,7 +136,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export default function RiskFeesPage() {
+export default function RiskPage() {
   const [loading, setLoading] = useState(true);
   
   // Regime data
@@ -160,17 +154,6 @@ export default function RiskFeesPage() {
   const [fairSpreadHours, setFairSpreadHours] = useState(24);
   const [fairSpreadSymbol, setFairSpreadSymbol] = useState('BTC-USD');
   const [fairSpreadData, setFairSpreadData] = useState<{ timestamp: string; markPrice: number; fairPrice: number; spreadBps: number }[]>([]);
-  
-  // Fee data
-  const [feeTiers, setFeeTiers] = useState<{
-    tiers: { thresholdVolume: number; makerBps: number; takerBps: number }[];
-    totalProtocolSettlement: number;
-    settledFills: number;
-  } | null>(null);
-  
-  // Protocol revenue chart
-  const [revenueHours, setRevenueHours] = useState(168);
-  const [revenueData, setRevenueData] = useState<{ timestamp: string; cumulativeRevenue: number; periodRevenue: number }[]>([]);
 
   // Fetch regime data (live)
   useEffect(() => {
@@ -184,7 +167,7 @@ export default function RiskFeesPage() {
     };
     
     fetchRegime();
-    const interval = setInterval(fetchRegime, 10000); // Refresh every 10s
+    const interval = setInterval(fetchRegime, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -214,33 +197,6 @@ export default function RiskFeesPage() {
     fetchFairSpread();
   }, [fairSpreadHours, fairSpreadSymbol]);
 
-  // Fetch fee tiers
-  useEffect(() => {
-    const fetchFees = async () => {
-      try {
-        const data = await analytics.getFeeTiers();
-        setFeeTiers(data);
-      } catch (error) {
-        console.error('Failed to fetch fees:', error);
-      }
-    };
-    fetchFees();
-  }, []);
-
-  // Fetch protocol revenue chart
-  useEffect(() => {
-    const fetchRevenue = async () => {
-      try {
-        const data = await analytics.getProtocolRevenueChart(revenueHours);
-        setRevenueData(data.data || []);
-      } catch (error) {
-        console.error('Failed to fetch revenue:', error);
-      }
-    };
-    fetchRevenue();
-  }, [revenueHours]);
-
-  // Initial load
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1000);
     return () => clearTimeout(timer);
@@ -277,11 +233,42 @@ export default function RiskFeesPage() {
     </button>
   );
 
+  // Calculate heatmap data from regime data
+  const heatmapData = useMemo(() => {
+    if (!regimeData?.markets) return null;
+    
+    const assets = regimeData.markets.map(m => m.symbol.replace('-USD', ''));
+    const volData = regimeData.markets.map(m => m.regimeVol);
+    
+    // Normalize volatility to 0-1 scale for color intensity
+    const maxVol = Math.max(...volData, 10);
+    const normalizedVol = volData.map(v => v / maxVol);
+    
+    // Create correlation-like matrix (using spread similarity as proxy)
+    // In reality, you'd calculate actual correlation from price data
+    const matrix: number[][] = [];
+    for (let i = 0; i < assets.length; i++) {
+      matrix[i] = [];
+      for (let j = 0; j < assets.length; j++) {
+        if (i === j) {
+          matrix[i][j] = 1; // Perfect correlation with self
+        } else {
+          // Use volatility similarity as proxy for correlation
+          const volDiff = Math.abs(volData[i] - volData[j]);
+          const similarity = 1 - (volDiff / maxVol);
+          matrix[i][j] = Math.max(0.3, Math.min(0.95, similarity)); // Clamp between 0.3-0.95
+        }
+      }
+    }
+    
+    return { assets, matrix, normalizedVol };
+  }, [regimeData]);
+
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Risk & Fees</h1>
-        <p className="text-[var(--text-tertiary)] mb-6">Market regime, volatility metrics, and fee structure</p>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Risk Metrics</h1>
+        <p className="text-[var(--text-tertiary)] mb-6">Market regime, volatility, and correlation analysis</p>
 
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -291,7 +278,7 @@ export default function RiskFeesPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Market Regime Section - Enhanced */}
+            {/* Market Regime Section */}
             <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -300,9 +287,7 @@ export default function RiskFeesPage() {
               
               {regimeData ? (
                 <div className="space-y-4">
-                  {/* Top row: Aggregate + Gauges */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {/* Aggregate Regime */}
                     <div className="col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
                       <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
                       <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
@@ -313,7 +298,6 @@ export default function RiskFeesPage() {
                       </p>
                     </div>
                     
-                    {/* Per-asset gauges */}
                     {regimeData.markets.map(market => (
                       <RegimeGauge 
                         key={market.symbol} 
@@ -323,7 +307,6 @@ export default function RiskFeesPage() {
                     ))}
                   </div>
 
-                  {/* Bottom row: Detailed metrics table */}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -390,14 +373,89 @@ export default function RiskFeesPage() {
               )}
             </div>
 
-            {/* Row 2: Volatility + Fair Spread */}
+            {/* Row 2: Heatmap + Volatility */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Volatility Heatmap */}
+              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility Heatmap</h3>
+                </div>
+                
+                {heatmapData ? (
+                  <div className="space-y-4">
+                    {/* Volatility bars */}
+                    <div className="space-y-3">
+                      {heatmapData.assets.map((asset, i) => {
+                        const vol = regimeData?.markets[i]?.regimeVol || 0;
+                        const maxVol = 15; // Assume max 15% vol for scaling
+                        const width = Math.min(100, (vol / maxVol) * 100);
+                        
+                        return (
+                          <div key={asset} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-sm" 
+                                  style={{ backgroundColor: COLORS[asset as keyof typeof COLORS] }} 
+                                />
+                                <span className="text-[var(--text-primary)]">{asset}</span>
+                              </div>
+                              <span className="text-[var(--text-secondary)] font-mono">{vol.toFixed(2)}%</span>
+                            </div>
+                            <div className="h-3 bg-[var(--bg-muted)] rounded-full overflow-hidden">
+                              <div 
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${width}%`,
+                                  backgroundColor: COLORS[asset as keyof typeof COLORS]
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Correlation Matrix */}
+                    <div className="mt-6">
+                      <p className="text-sm text-[var(--text-tertiary)] mb-3">Correlation Matrix</p>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${heatmapData.assets.length}, 1fr)` }}>
+                        {/* Header row */}
+                        <div></div>
+                        {heatmapData.assets.map(asset => (
+                          <div key={`h-${asset}`} className="text-center text-xs text-[var(--text-tertiary)] py-1">
+                            {asset}
+                          </div>
+                        ))}
+                        
+                        {/* Data rows */}
+                        {heatmapData.assets.map((rowAsset, i) => (
+                          <>
+                            <div key={`r-${rowAsset}`} className="text-xs text-[var(--text-tertiary)] flex items-center pr-2">
+                              {rowAsset}
+                            </div>
+                            {heatmapData.matrix[i].map((val, j) => (
+                              <HeatmapCell key={`${i}-${j}`} value={val} />
+                            ))}
+                          </>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
+                    Loading heatmap data...
+                  </div>
+                )}
+              </div>
+
               {/* Volatility Chart */}
               <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility</h3>
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility History</h3>
                   </div>
                   <div className="flex items-center gap-2">
                     <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
@@ -423,7 +481,7 @@ export default function RiskFeesPage() {
                 </div>
                 
                 {volatilityData.length > 0 ? (
-                  <div className="h-[250px]">
+                  <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData}>
                         <XAxis 
@@ -437,6 +495,7 @@ export default function RiskFeesPage() {
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
+                          tickFormatter={(v) => `${v}%`}
                         />
                         <Tooltip content={<ChartTooltip />} />
                         {volatilityCoins.includes('BTC') && <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} />}
@@ -446,150 +505,38 @@ export default function RiskFeesPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
+                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
                     <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Fair Price vs Mark Price Spread */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fair vs Mark Spread</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={fairSpreadSymbol}
-                      onChange={(e) => setFairSpreadSymbol(e.target.value)}
-                      className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
-                    >
-                      <option value="BTC-USD">BTC</option>
-                      <option value="ETH-USD">ETH</option>
-                      <option value="SOL-USD">SOL</option>
-                    </select>
-                    <div className="flex gap-1">
-                      {timeRanges.map(r => (
-                        <button
-                          key={r.label}
-                          onClick={() => setFairSpreadHours(r.hours)}
-                          className={cn(
-                            "px-2 py-1 text-xs rounded",
-                            fairSpreadHours === r.hours 
-                              ? "bg-[var(--accent-primary)] text-white" 
-                              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-                          )}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                {fairSpreadData.length > 0 ? (
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={fairSpreadData}>
-                        <defs>
-                          <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
-                            <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <XAxis 
-                          dataKey="timestamp" 
-                          tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                        />
-                        <YAxis 
-                          tickFormatter={(v) => `${v.toFixed(1)}`}
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                          domain={['auto', 'auto']}
-                        />
-                        <Tooltip content={<ChartTooltip />} />
-                        <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
-                        <Area 
-                          type="monotone"
-                          dataKey="spreadBps" 
-                          name="Spread (bps)"
-                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
-                          fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
-                          strokeWidth={2}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Row 3: Fee Tiers + Protocol Revenue */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Fee Tiers */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Percent className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fee Tiers</h3>
+            {/* Row 3: Fair Spread Chart - Full Width */}
+            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fair vs Mark Spread</h3>
                 </div>
-                
-                {feeTiers ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {feeTiers.tiers.slice(0, 8).map((tier, i) => (
-                        <FeeTierCard key={i} tier={tier} isActive={i === 0} />
-                      ))}
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-[var(--text-tertiary)]">Total Settled Fills</span>
-                        <span className="text-sm font-medium text-[var(--text-primary)]">
-                          {feeTiers.settledFills.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-sm text-[var(--text-tertiary)]">Protocol Revenue</span>
-                        <span className="text-sm font-medium text-[#00B482]">
-                          ${formatCompact(feeTiers.totalProtocolSettlement)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[200px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    Loading fee data...
-                  </div>
-                )}
-              </div>
-
-              {/* Protocol Revenue Chart */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Protocol Revenue</h3>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={fairSpreadSymbol}
+                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
+                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
+                  >
+                    <option value="BTC-USD">BTC</option>
+                    <option value="ETH-USD">ETH</option>
+                    <option value="SOL-USD">SOL</option>
+                  </select>
                   <div className="flex gap-1">
                     {timeRanges.map(r => (
                       <button
                         key={r.label}
-                        onClick={() => setRevenueHours(r.hours)}
+                        onClick={() => setFairSpreadHours(r.hours)}
                         className={cn(
                           "px-2 py-1 text-xs rounded",
-                          revenueHours === r.hours 
+                          fairSpreadHours === r.hours 
                             ? "bg-[var(--accent-primary)] text-white" 
                             : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                         )}
@@ -599,48 +546,54 @@ export default function RiskFeesPage() {
                     ))}
                   </div>
                 </div>
-                
-                {revenueData.length > 0 ? (
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={revenueData}>
-                        <defs>
-                          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <XAxis 
-                          dataKey="timestamp" 
-                          tickFormatter={(ts) => formatDateForChart(ts, revenueHours)}
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                        />
-                        <YAxis 
-                          tickFormatter={(v) => `$${formatCompact(v)}`}
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                        />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Area 
-                          type="monotone" 
-                          dataKey="cumulativeRevenue" 
-                          name="Cumulative Revenue"
-                          stroke="#00B482" 
-                          fill="url(#revenueGradient)" 
-                          strokeWidth={2}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    <p className="text-sm">No revenue data yet. Data will appear as it&apos;s collected.</p>
-                  </div>
-                )}
               </div>
+              
+              {fairSpreadData.length > 0 ? (
+                <div className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={fairSpreadData}>
+                      <defs>
+                        <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
+                          <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis 
+                        dataKey="timestamp" 
+                        tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
+                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                        axisLine={{ stroke: 'var(--border-color)' }}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tickFormatter={(v) => `${v.toFixed(1)}`}
+                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                        axisLine={{ stroke: 'var(--border-color)' }}
+                        tickLine={false}
+                        domain={['auto', 'auto']}
+                      />
+                      <Tooltip content={<ChartTooltip />} />
+                      <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
+                      <Area 
+                        type="monotone"
+                        dataKey="spreadBps" 
+                        name="Spread (bps)"
+                        stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
+                        fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
+                  <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
