@@ -36,7 +36,7 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
   const percentage = ((value + 12) / 24) * 100; // Convert -12 to +12 range to 0-100%
   
   return (
-    <div className="flex flex-col items-center p-4">
+    <div className="flex flex-col items-center p-4 bg-[var(--bg-muted)] rounded-lg">
       <p className="text-sm text-[var(--text-tertiary)] mb-2">{symbol}</p>
       <div className="relative w-32 h-16 overflow-hidden">
         {/* Background arc */}
