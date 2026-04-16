@@ -296,7 +296,6 @@ export default function RiskFeesPage() {
               <div className="flex items-center gap-2 mb-4">
                 <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
                 <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
-                <span className="text-xs text-[var(--text-tertiary)] ml-auto">Live from BULK API</span>
               </div>
               
               {regimeData ? (
