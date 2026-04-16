@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Bar, ComposedChart, Line, LineChart, Area, AreaChart, Cell, ReferenceLine
+  Line, LineChart, Area, AreaChart, ReferenceLine
 } from 'recharts';
 import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Gauge } from 'lucide-react';
 
@@ -428,7 +428,17 @@ export default function RiskFeesPage() {
                 {fairSpreadData.length > 0 ? (
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={fairSpreadData}>
+                      <AreaChart data={fairSpreadData}>
+                        <defs>
+                          <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
+                            <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
                         <XAxis 
                           dataKey="timestamp" 
                           tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
@@ -437,29 +447,23 @@ export default function RiskFeesPage() {
                           tickLine={false}
                         />
                         <YAxis 
-                          yAxisId="spread"
                           tickFormatter={(v) => `${v.toFixed(1)}`}
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
+                          domain={['auto', 'auto']}
                         />
                         <Tooltip content={<ChartTooltip />} />
-                        <ReferenceLine yAxisId="spread" y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
-                        <Bar 
-                          yAxisId="spread" 
+                        <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
+                        <Area 
+                          type="monotone"
                           dataKey="spreadBps" 
                           name="Spread (bps)"
-                          radius={[2, 2, 0, 0]}
-                        >
-                          {fairSpreadData.map((entry, index) => (
-                            <Cell 
-                              key={index} 
-                              fill={entry.spreadBps >= 0 ? COLORS.positive : COLORS.negative} 
-                              fillOpacity={0.7}
-                            />
-                          ))}
-                        </Bar>
-                      </ComposedChart>
+                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
+                          fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
