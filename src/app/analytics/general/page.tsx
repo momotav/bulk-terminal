@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
+import { FeeTiersWidget } from '@/components/FeeTiersWidget';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -1521,6 +1522,11 @@ export default function AnalyticsPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Fee Tiers Widget */}
+            <div className="grid grid-cols-1 gap-4">
+              <FeeTiersWidget />
             </div>
           </div>
         )}
