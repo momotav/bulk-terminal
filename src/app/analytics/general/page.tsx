@@ -936,7 +936,7 @@ export default function AnalyticsPage() {
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
      
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">Analytics</h1>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">General</h1>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] mb-6 rounded-lg overflow-hidden">
           {[
@@ -1209,6 +1209,11 @@ export default function AnalyticsPage() {
                   </>
                 ) : <NoDataMessage title="liquidation" />}
               </ChartCard>
+            </div>
+
+            {/* Row 3: Fee Tiers Widget */}
+            <div className="grid grid-cols-1 gap-4">
+              <FeeTiersWidget />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1522,11 +1527,6 @@ export default function AnalyticsPage() {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Fee Tiers Widget */}
-            <div className="grid grid-cols-1 gap-4">
-              <FeeTiersWidget />
             </div>
           </div>
         )}
