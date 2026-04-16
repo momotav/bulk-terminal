@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
-import { FeeTiersWidget } from '@/components/FeeTiersWidget';
+import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -1211,9 +1211,9 @@ export default function AnalyticsPage() {
               </ChartCard>
             </div>
 
-            {/* Row 3: Fee Tiers Widget */}
+            {/* Row 3: Protocol Revenue Chart */}
             <div className="grid grid-cols-1 gap-4">
-              <FeeTiersWidget />
+              <ProtocolRevenueChart />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
