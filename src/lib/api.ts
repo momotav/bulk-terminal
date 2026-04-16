@@ -554,6 +554,85 @@ export const analytics = {
     if (symbol) params.append('symbol', symbol);
     return request(`/api/analytics/liquidations/featured?${params}`);
   },
+
+  // ============ NEW: REGIME & SENTIMENT ============
+
+  // Live market regime data
+  async getRegimeData(): Promise<{
+    timestamp: number;
+    aggregateRegime: number;
+    markets: {
+      symbol: string;
+      regime: number;
+      regimeDt: number;
+      regimeVol: number;
+      fairBookPx: number;
+      markPrice: number;
+      fairBias: number;
+    }[];
+  }> {
+    return request('/api/analytics/regime');
+  },
+
+  // Volatility chart
+  async getVolatilityChart(hours: number = 24): Promise<{
+    period: number;
+    data: { timestamp: string; BTC: number; ETH: number; SOL: number }[];
+  }> {
+    return request(`/api/analytics/volatility-chart?hours=${hours}`);
+  },
+
+  // Fair price vs mark price spread chart
+  async getFairSpreadChart(symbol: string = 'BTC-USD', hours: number = 24): Promise<{
+    symbol: string;
+    period: number;
+    data: { timestamp: string; markPrice: number; fairPrice: number; spreadBps: number }[];
+  }> {
+    return request(`/api/analytics/fair-spread-chart?symbol=${symbol}&hours=${hours}`);
+  },
+
+  // ============ FEE DATA ============
+
+  // Fee tiers and protocol revenue
+  async getFeeTiers(): Promise<{
+    timestamp: number;
+    windowDays: number;
+    tiers: { thresholdVolume: number; makerBps: number; takerBps: number }[];
+    totalMakerFees: number;
+    totalTakerFees: number;
+    totalProtocolSettlement: number;
+    settledFills: number;
+  }> {
+    return request('/api/analytics/fee-tiers');
+  },
+
+  // Protocol revenue chart
+  async getProtocolRevenueChart(hours: number = 168): Promise<{
+    period: number;
+    data: { timestamp: string; cumulativeRevenue: number; periodRevenue: number; makerFees: number; takerFees: number }[];
+  }> {
+    return request(`/api/analytics/protocol-revenue-chart?hours=${hours}`);
+  },
+
+  // ============ ADL DATA ============
+
+  // ADL events chart
+  async getADLChartNew(hours: number = 168): Promise<{
+    period: number;
+    data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number; count: number; Cumulative: number }[];
+  }> {
+    return request(`/api/analytics/adl-chart?hours=${hours}`);
+  },
+
+  // ADL summary stats
+  async getADLSummary(period: string = '7d'): Promise<{
+    period: string;
+    totalValue: number;
+    totalCount: number;
+    byAsset: { BTC: number; ETH: number; SOL: number };
+  }> {
+    return request(`/api/analytics/adl-summary?period=${period}`);
+  },
 };
 
 // Wallet API
