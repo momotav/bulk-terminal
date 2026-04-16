@@ -17,7 +17,7 @@ const menuItems = [
     icon: Flame,
   },
   {
-    name: 'Risk & Fees',
+    name: 'Risk',
     href: '/analytics/risk',
     icon: Gauge,
   },
