@@ -659,10 +659,7 @@ export default function LiquidationsPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Flame className="text-[var(--asks)]" size={24} />
-        <h1 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">Liquidations</h1>
-      </div>
+      <h1 className="text-3xl font-bold text-[var(--text-primary)]">Liquidations</h1>
 
       {/* Row 1: Treemap + Liquidations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
