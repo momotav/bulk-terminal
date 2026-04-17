@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -21,16 +21,24 @@ const timeRanges = [
 ];
 
 // Custom tooltip
-const RevenueTooltip = ({ active, payload, label }: any) => {
+const RevenueTooltip = ({ active, payload, label, showTime }: any) => {
   if (!active || !payload?.length) return null;
   
   const formatDate = (ts: string) => {
     const date = new Date(ts);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    if (showTime) {
+      return date.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    }
+    // Aggregated daily bucket — day only
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
     });
   };
 
@@ -121,8 +129,10 @@ export function ProtocolRevenueChart() {
     if (revenueHours <= 24) {
       return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     } else if (revenueHours <= 168) {
+      // W: daily buckets → show weekday (Mon, Tue, ...)
       return date.toLocaleDateString('en-US', { weekday: 'short' });
     }
+    // M: daily buckets → show month + day
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -140,6 +150,58 @@ export function ProtocolRevenueChart() {
       {label}
     </button>
   );
+
+  // For W and M: aggregate hourly data into daily buckets so we get 1 bar per day.
+  // For 1D: keep the raw hourly resolution.
+  // cumulativeRevenue is a running total, so we take the LAST value of each day
+  // (not the sum). periodRevenue, makerFees, takerFees are per-period flows, so we sum them.
+  const displayData = useMemo(() => {
+    if (revenueHours <= 24) return revenueData;
+    if (revenueData.length === 0) return revenueData;
+
+    const buckets = new Map<string, {
+      timestamp: string;
+      periodRevenue: number;
+      makerFees: number;
+      takerFees: number;
+      cumulativeRevenue: number;
+      lastTs: number;
+    }>();
+
+    for (const d of revenueData) {
+      const date = new Date(d.timestamp);
+      // Day key in UTC so it matches how the backend stores timestamps
+      const dayKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+      const existing = buckets.get(dayKey);
+      const ts = date.getTime();
+
+      if (!existing) {
+        // Normalize the bucket timestamp to start-of-day UTC so bars are evenly spaced
+        const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
+        buckets.set(dayKey, {
+          timestamp: dayStart,
+          periodRevenue: d.periodRevenue,
+          makerFees: d.makerFees,
+          takerFees: d.takerFees,
+          cumulativeRevenue: d.cumulativeRevenue,
+          lastTs: ts,
+        });
+      } else {
+        existing.periodRevenue += d.periodRevenue;
+        existing.makerFees += d.makerFees;
+        existing.takerFees += d.takerFees;
+        // cumulative is a running total — take the latest sample in the bucket
+        if (ts >= existing.lastTs) {
+          existing.cumulativeRevenue = d.cumulativeRevenue;
+          existing.lastTs = ts;
+        }
+      }
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map(({ lastTs, ...rest }) => rest);
+  }, [revenueData, revenueHours]);
 
   // Count active bar series for bar size calculation
   const activeBarCount = [showProtocol, showMaker, showTaker].filter(Boolean).length;
@@ -179,99 +241,118 @@ export function ProtocolRevenueChart() {
         <div className="h-[350px] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
         </div>
-      ) : revenueData.length > 0 ? (
-        <div className="relative">
-          {/* Left axis label */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 -rotate-90 origin-center z-10">
-            <span className="text-xs text-[var(--text-tertiary)] whitespace-nowrap">Fees (USD)</span>
-          </div>
-          {/* Right axis label - positioned to align with chart area */}
-          {showCumulative && (
-            <div className="absolute right-0 top-[60%] -translate-y-1/2 translate-x-1 rotate-90 origin-center z-10">
-              <span className="text-xs text-[var(--text-tertiary)] whitespace-nowrap">Cumulative (USD)</span>
-            </div>
-          )}
-          <div className="h-[350px] ml-4 mr-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart 
-                data={revenueData} 
-                margin={{ top: 5, right: 10, bottom: 5, left: 5 }}
-                barGap={4}
-                barCategoryGap="20%"
+      ) : displayData.length > 0 ? (
+        <div className="flex">
+          {/* Left Y-axis label - aligned with chart area (350px) */}
+          <div className="relative w-6 shrink-0">
+            <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
+              <span 
+                className="transform -rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
+                style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
               >
-                <XAxis 
-                  dataKey="timestamp" 
-                  tickFormatter={formatDateForChart}
-                  tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                  axisLine={{ stroke: 'var(--border-color)' }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  yAxisId="left"
-                  tickFormatter={(v) => formatCompact(v)}
-                  tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                  axisLine={{ stroke: 'var(--border-color)' }}
-                  tickLine={false}
-                  width={60}
-                />
-                {showCumulative && (
+                Fees (USD)
+              </span>
+            </div>
+          </div>
+
+          {/* Chart content */}
+          <div className="flex-1 min-w-0">
+            <div className="h-[350px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart 
+                  data={displayData} 
+                  margin={{ top: 5, right: 10, bottom: 5, left: 5 }}
+                  barGap={4}
+                  barCategoryGap="20%"
+                >
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tickFormatter={formatDateForChart}
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                    axisLine={{ stroke: 'var(--border-color)' }}
+                    tickLine={false}
+                  />
                   <YAxis 
-                    yAxisId="right"
-                    orientation="right"
+                    yAxisId="left"
                     tickFormatter={(v) => formatCompact(v)}
                     tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                     axisLine={{ stroke: 'var(--border-color)' }}
                     tickLine={false}
-                    width={65}
+                    width={60}
                   />
-                )}
-                <Tooltip content={<RevenueTooltip />} />
-                
-                {/* Grouped bars - NOT stacked, side by side with gaps */}
-                {showMaker && (
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="makerFees" 
-                    name="Maker Rebates"
-                    fill={COLORS.maker}
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
-                  />
-                )}
-                {showTaker && (
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="takerFees" 
-                    name="Taker Fees"
-                    fill={COLORS.taker}
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
-                  />
-                )}
-                {showProtocol && (
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="periodRevenue" 
-                    name="Protocol Revenue"
-                    fill={COLORS.protocol}
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
-                  />
-                )}
-                {showCumulative && (
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="cumulativeRevenue" 
-                    name="Cumulative Protocol Revenue"
-                    stroke={COLORS.cumulative} 
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
+                  {showCumulative && (
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      tickFormatter={(v) => formatCompact(v)}
+                      tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                      axisLine={{ stroke: 'var(--border-color)' }}
+                      tickLine={false}
+                      width={65}
+                    />
+                  )}
+                  <Tooltip content={<RevenueTooltip showTime={revenueHours <= 24} />} />
+                  
+                  {/* Grouped bars - NOT stacked, side by side with gaps */}
+                  {showMaker && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="makerFees" 
+                      name="Maker Rebates"
+                      fill={COLORS.maker}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                    />
+                  )}
+                  {showTaker && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="takerFees" 
+                      name="Taker Fees"
+                      fill={COLORS.taker}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                    />
+                  )}
+                  {showProtocol && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="periodRevenue" 
+                      name="Protocol Revenue"
+                      fill={COLORS.protocol}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                    />
+                  )}
+                  {showCumulative && (
+                    <Line 
+                      yAxisId="right"
+                      type="monotone" 
+                      dataKey="cumulativeRevenue" 
+                      name="Cumulative Protocol Revenue"
+                      stroke={COLORS.cumulative} 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
+
+          {/* Right Y-axis label - only visible when cumulative toggle is on */}
+          {showCumulative && (
+            <div className="relative w-6 shrink-0">
+              <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
+                <span 
+                  className="transform rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
+                  style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
+                >
+                  Cumulative (USD)
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="h-[350px] flex items-center justify-center text-[var(--text-tertiary)]">
@@ -283,20 +364,20 @@ export function ProtocolRevenueChart() {
       {feeState && (
         <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
-            <p className="text-xs text-[var(--text-tertiary)]">Protocol Revenue</p>
-            <p className="text-sm font-medium text-[#00B482]">{formatCompact(feeState.totalProtocolSettlement)}</p>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Protocol Revenue</p>
+            <p className="text-xl font-bold text-[#00B482]">{formatCompact(feeState.totalProtocolSettlement)}</p>
           </div>
           <div>
-            <p className="text-xs text-[var(--text-tertiary)]">Maker Rebates</p>
-            <p className="text-sm font-medium text-[#2271B5]">{formatCompact(Math.abs(feeState.totalMakerFees))}</p>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Maker Rebates</p>
+            <p className="text-xl font-bold text-[#2271B5]">{formatCompact(Math.abs(feeState.totalMakerFees))}</p>
           </div>
           <div>
-            <p className="text-xs text-[var(--text-tertiary)]">Taker Fees</p>
-            <p className="text-sm font-medium text-[#EF4A3C]">{formatCompact(Math.abs(feeState.totalTakerFees))}</p>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Taker Fees</p>
+            <p className="text-xl font-bold text-[#EF4A3C]">{formatCompact(Math.abs(feeState.totalTakerFees))}</p>
           </div>
           <div>
-            <p className="text-xs text-[var(--text-tertiary)]">Settled Fills</p>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{feeState.settledFills.toLocaleString()}</p>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Settled Fills</p>
+            <p className="text-xl font-bold text-[var(--text-primary)]">{feeState.settledFills.toLocaleString()}</p>
           </div>
         </div>
       )}
