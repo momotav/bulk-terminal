@@ -225,7 +225,7 @@ export function ProtocolRevenueChart() {
                     width={65}
                   />
                 )}
-                <Tooltip content={<RevenueTooltip />} cursor={{ fill: 'var(--bg-muted)', fillOpacity: 0.6 }} />
+                <Tooltip content={<RevenueTooltip />} />
                 
                 {/* Grouped bars - NOT stacked, side by side with gaps */}
                 {showMaker && (
