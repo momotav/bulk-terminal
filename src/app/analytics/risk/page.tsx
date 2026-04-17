@@ -496,7 +496,7 @@ export default function RiskPage() {
                           tickLine={false}
                           tickFormatter={(v) => `${v}%`}
                         />
-                        <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--bg-muted)', fillOpacity: 0.6 }} />
+                        <Tooltip content={<ChartTooltip />} />
                         {volatilityCoins.includes('BTC') && <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} />}
                         {volatilityCoins.includes('ETH') && <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} />}
                         {volatilityCoins.includes('SOL') && <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} />}
@@ -575,7 +575,7 @@ export default function RiskPage() {
                         tickLine={false}
                         domain={['auto', 'auto']}
                       />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--bg-muted)', fillOpacity: 0.6 }} />
+                      <Tooltip content={<ChartTooltip />} />
                       <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
                       <Area 
                         type="monotone"
