@@ -550,6 +550,13 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
 
+  // ALL-time reference datasets (fetched once) — used to anchor the Cumulative line
+  // so that it continues from the previous period's total instead of resetting to 0
+  // when the timeframe changes. Volume, Trades, and Liquidations each need their own.
+  const [volumeAllTime, setVolumeAllTime] = useState<ChartData[]>([]);
+  const [tradesAllTime, setTradesAllTime] = useState<ChartData[]>([]);
+  const [liquidationsAllTime, setLiquidationsAllTime] = useState<ChartData[]>([]);
+
   // NEW: User statistics charts
   const [uniqueTradersHours, setUniqueTradersHours] = useState(720); // Default 30 days
   const [dauHours, setDauHours] = useState(720);
@@ -620,6 +627,32 @@ export default function AnalyticsPage() {
     fetchLiveOI();
     const interval = setInterval(fetchLiveOI, 30000); // Refresh every 30s
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch ALL-time reference datasets once (and refresh every 5 minutes so new days appear).
+  // These are used purely as a source of per-coin historical totals — they anchor the
+  // Cumulative line for the three charts that show cumulative (Volume / Trades / Liquidations),
+  // so switching to 1D/W/M keeps the line continuous instead of restarting at zero.
+  useEffect(() => {
+    const fetchAllTimeReferences = async () => {
+      const ALL_HOURS = 8760 * 2; // matches the 'ALL' timeframe
+      try {
+        const [vol, trd, liq] = await Promise.allSettled([
+          analytics.getVolumeFromBulkAPI(ALL_HOURS),
+          analytics.getTradesChart(ALL_HOURS),
+          analytics.getLiquidationsChart(ALL_HOURS),
+        ]);
+        if (vol.status === 'fulfilled') setVolumeAllTime(vol.value);
+        if (trd.status === 'fulfilled') setTradesAllTime(trd.value);
+        if (liq.status === 'fulfilled') setLiquidationsAllTime(liq.value);
+      } catch (error) {
+        console.error('Failed to fetch all-time reference data:', error);
+      }
+    };
+
+    fetchAllTimeReferences();
+    const id = setInterval(fetchAllTimeReferences, 5 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   // Fetch volume data when timeframe changes - now from BULK API klines
@@ -838,6 +871,47 @@ export default function AnalyticsPage() {
     });
   }, []);
 
+  // Like withCumulativeForCoins, but anchors the Cumulative line to the selected coins'
+  // historical total *before* the visible window. Used for Volume / Trades / Liquidations
+  // so the cumulative keeps rising instead of resetting to 0 when you switch to 1D/W/M.
+  //
+  // allTime: the ALL-timeframe dataset for the same metric. Baseline per coin is the sum
+  // of that coin's values across allTime points that fall strictly before the visible
+  // window's first timestamp.
+  const withContinuousCumulative = useCallback((
+    visible: ChartData[],
+    coins: string[],
+    allTime: ChartData[],
+  ) => {
+    if (visible.length === 0) return visible;
+
+    // If the all-time dataset is empty or still loading, fall back to plain cumulative.
+    if (allTime.length === 0) {
+      return withCumulativeForCoins(visible, coins);
+    }
+
+    // Find the historical baseline: sum of selected-coin values across allTime points
+    // strictly before the visible window's first timestamp.
+    const firstVisibleTs = new Date(visible[0].timestamp).getTime();
+    let baseline = 0;
+    for (const point of allTime) {
+      const ts = new Date(point.timestamp).getTime();
+      if (ts >= firstVisibleTs) break; // allTime is already sorted ascending
+      if (coins.includes('BTC')) baseline += point.BTC || 0;
+      if (coins.includes('ETH')) baseline += point.ETH || 0;
+      if (coins.includes('SOL')) baseline += point.SOL || 0;
+    }
+
+    let cumulative = baseline;
+    return visible.map(item => {
+      const btc = coins.includes('BTC') ? item.BTC : 0;
+      const eth = coins.includes('ETH') ? item.ETH : 0;
+      const sol = coins.includes('SOL') ? item.SOL : 0;
+      cumulative += btc + eth + sol;
+      return { ...item, BTC: btc, ETH: eth, SOL: sol, Cumulative: cumulative };
+    });
+  }, [withCumulativeForCoins]);
+
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
     setCopiedAddress(address);
@@ -913,22 +987,30 @@ export default function AnalyticsPage() {
   const totalPages = Math.ceil(sortedTopUsers.length / 10) || 1;
 
   // Filtered data for each chart (each with its own coin selection)
-  const volumeDataFull = useMemo(() => withCumulativeForCoins(volumeChart, volumeCoins), [volumeChart, volumeCoins, withCumulativeForCoins]);
+  // Volume, Trades, Liquidations: cumulative is CONTINUOUS across timeframes (seeded from all-time baseline)
+  const volumeDataFull = useMemo(() => withContinuousCumulative(volumeChart, volumeCoins, volumeAllTime), [volumeChart, volumeCoins, volumeAllTime, withContinuousCumulative]);
   const volumeDataFiltered = useMemo(() => sliceDataByRange(volumeDataFull, volumeRange), [volumeDataFull, volumeRange, sliceDataByRange]);
 
-  // Get total cumulative volume from the last data point of the volume chart (from BULK API /klines)
+  // Get total cumulative volume for the stats card at the top of the page.
+  // This MUST match the cumulative line's endpoint regardless of timeframe, so we
+  // compute it from the ALL-time dataset (summing all three coins) rather than the
+  // currently visible window.
   const totalCumulativeVolume = useMemo(() => {
-    if (volumeDataFull.length === 0) return 0;
-    const lastPoint = volumeDataFull[volumeDataFull.length - 1];
-    return lastPoint.Cumulative || 0;
-  }, [volumeDataFull]);
+    if (volumeAllTime.length === 0) {
+      // Fallback: use the current window's Cumulative endpoint if all-time hasn't loaded yet
+      if (volumeDataFull.length === 0) return 0;
+      return volumeDataFull[volumeDataFull.length - 1].Cumulative || 0;
+    }
+    return volumeAllTime.reduce((sum, p) => sum + (p.BTC || 0) + (p.ETH || 0) + (p.SOL || 0), 0);
+  }, [volumeAllTime, volumeDataFull]);
   
-  const tradesDataFull = useMemo(() => withCumulativeForCoins(tradesChart, tradesCoins), [tradesChart, tradesCoins, withCumulativeForCoins]);
+  const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
   
-  const liquidationsDataFull = useMemo(() => withCumulativeForCoins(liquidationsChart, liquidationsCoins), [liquidationsChart, liquidationsCoins, withCumulativeForCoins]);
+  const liquidationsDataFull = useMemo(() => withContinuousCumulative(liquidationsChart, liquidationsCoins, liquidationsAllTime), [liquidationsChart, liquidationsCoins, liquidationsAllTime, withContinuousCumulative]);
   const liquidationsDataFiltered = useMemo(() => sliceDataByRange(liquidationsDataFull, liquidationsRange), [liquidationsDataFull, liquidationsRange, sliceDataByRange]);
   
+  // ADL keeps the per-window cumulative (resets at each timeframe)
   const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
 
