@@ -783,8 +783,6 @@ export default function LiquidationsPage() {
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
-                    barGap={-20}
-                    barSize={20}
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -801,10 +799,16 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       width={55}
                     />
-                    <Tooltip content={<ChartTooltip />} />
+                    <Tooltip 
+                      content={<ChartTooltip />} 
+                      cursor={{ fill: 'var(--bg-secondary-20)' }}
+                    />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    <Bar dataKey="longValue" name="Long" fill={COLORS.long} barSize={20} />
-                    <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} barSize={20} />
+                    {/* Both bars share the same stackId so they render in one column,
+                        both emanating from y=0 — Long upward, Short downward.
+                        Works at any density (sparse ALL view or dense 4H view). */}
+                    <Bar dataKey="longValue" name="Long" stackId="ls" fill={COLORS.long} maxBarSize={30} />
+                    <Bar dataKey="shortValueNegative" name="Short" stackId="ls" fill={COLORS.short} maxBarSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
