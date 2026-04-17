@@ -800,6 +800,7 @@ export default function LiquidationsPage() {
                       shortValueNegative: -d.shortValue
                     }))} 
                     margin={{ top: 10, right: 10, bottom: 5, left: 10 }}
+                    stackOffset="sign"
                   >
                     <XAxis 
                       dataKey="timestamp" 
@@ -809,9 +810,7 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       interval="preserveStartEnd"
                     />
-                    {/* Visible Y-axis with tick labels */}
                     <YAxis 
-                      yAxisId="left"
                       domain={chartYDomain}
                       tickFormatter={(v) => formatCompact(Math.abs(v))}
                       tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
@@ -819,24 +818,17 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       width={55}
                     />
-                    {/* Hidden second Y-axis on the right, sharing the same domain.
-                        Letting each bar live on its own yAxisId with the SAME symmetric
-                        domain forces Recharts to render them independently from y=0,
-                        sharing the same x-column — so Long (positive) goes UP from 0
-                        and Short (negative) goes DOWN from 0, visually aligned. */}
-                    <YAxis 
-                      yAxisId="right"
-                      orientation="right"
-                      domain={chartYDomain}
-                      hide
-                    />
                     <Tooltip 
                       content={<ChartTooltip />} 
                       cursor={{ fill: 'var(--bg-secondary-20)' }}
                     />
-                    <ReferenceLine yAxisId="left" y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    <Bar yAxisId="left"  dataKey="longValue"          name="Long"  fill={COLORS.long}  maxBarSize={30} />
-                    <Bar yAxisId="right" dataKey="shortValueNegative" name="Short" fill={COLORS.short} maxBarSize={30} />
+                    <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
+                    {/* stackOffset="sign" on the chart tells Recharts to split stacks by sign:
+                        positive values stack up from 0, negative values stack down from 0.
+                        Combined with matching stackId, each bar in its own column emanates
+                        from the 0 baseline — Long goes UP, Short goes DOWN, same x-slot. */}
+                    <Bar dataKey="longValue"          name="Long"  stackId="ls" fill={COLORS.long}  maxBarSize={30} />
+                    <Bar dataKey="shortValueNegative" name="Short" stackId="ls" fill={COLORS.short} maxBarSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
