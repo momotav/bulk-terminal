@@ -460,16 +460,16 @@ export default function RiskPage() {
                     <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
                     <CoinToggle coin="ETH" coins={volatilityCoins} setCoins={setVolatilityCoins} />
                     <CoinToggle coin="SOL" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                    <div className="flex gap-1 ml-2">
+                    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5 ml-2">
                       {timeRanges.map(r => (
                         <button
                           key={r.label}
                           onClick={() => setVolatilityHours(r.hours)}
                           className={cn(
-                            "px-2 py-1 text-xs rounded",
+                            "px-3 py-1 text-xs font-medium rounded transition-colors",
                             volatilityHours === r.hours 
-                              ? "bg-[var(--accent-primary)] text-white" 
-                              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                              ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
+                              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                           )}
                         >
                           {r.label}
@@ -528,16 +528,16 @@ export default function RiskPage() {
                     <option value="ETH-USD">ETH</option>
                     <option value="SOL-USD">SOL</option>
                   </select>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
                     {timeRanges.map(r => (
                       <button
                         key={r.label}
                         onClick={() => setFairSpreadHours(r.hours)}
                         className={cn(
-                          "px-2 py-1 text-xs rounded",
+                          "px-3 py-1 text-xs font-medium rounded transition-colors",
                           fairSpreadHours === r.hours 
-                            ? "bg-[var(--accent-primary)] text-white" 
-                            : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                         )}
                       >
                         {r.label}
