@@ -629,6 +629,23 @@ export default function LiquidationsPage() {
     return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
   }, [chartData, chartRange]);
 
+  // Symmetric Y-axis domain so the Long (positive) and Short (negative) bars
+  // share the same zero baseline and the same visual scale, regardless of which
+  // side has larger values. Used by both yAxisIds below.
+  const chartYDomain = useMemo((): [number, number] => {
+    if (!slicedChartData.length) return [-1, 1];
+    let max = 0;
+    for (const d of slicedChartData) {
+      const l = Math.abs(d.longValue || 0);
+      const s = Math.abs(d.shortValue || 0);
+      if (l > max) max = l;
+      if (s > max) max = s;
+    }
+    // Add 10% headroom so bars don't touch the top/bottom
+    const padded = max * 1.1 || 1;
+    return [-padded, padded];
+  }, [slicedChartData]);
+
   // Fetch summary data
   useEffect(() => {
     setLoading(l => ({ ...l, summary: true }));
@@ -792,23 +809,34 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       interval="preserveStartEnd"
                     />
+                    {/* Visible Y-axis with tick labels */}
                     <YAxis 
+                      yAxisId="left"
+                      domain={chartYDomain}
                       tickFormatter={(v) => formatCompact(Math.abs(v))}
                       tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
                       axisLine={{ stroke: 'var(--border-color)' }}
                       tickLine={false}
                       width={55}
                     />
+                    {/* Hidden second Y-axis on the right, sharing the same domain.
+                        Letting each bar live on its own yAxisId with the SAME symmetric
+                        domain forces Recharts to render them independently from y=0,
+                        sharing the same x-column — so Long (positive) goes UP from 0
+                        and Short (negative) goes DOWN from 0, visually aligned. */}
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      domain={chartYDomain}
+                      hide
+                    />
                     <Tooltip 
                       content={<ChartTooltip />} 
                       cursor={{ fill: 'var(--bg-secondary-20)' }}
                     />
-                    <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
-                    {/* Both bars share the same stackId so they render in one column,
-                        both emanating from y=0 — Long upward, Short downward.
-                        Works at any density (sparse ALL view or dense 4H view). */}
-                    <Bar dataKey="longValue" name="Long" stackId="ls" fill={COLORS.long} maxBarSize={30} />
-                    <Bar dataKey="shortValueNegative" name="Short" stackId="ls" fill={COLORS.short} maxBarSize={30} />
+                    <ReferenceLine yAxisId="left" y={0} stroke="var(--text-secondary)" strokeWidth={1} />
+                    <Bar yAxisId="left"  dataKey="longValue"          name="Long"  fill={COLORS.long}  maxBarSize={30} />
+                    <Bar yAxisId="right" dataKey="shortValueNegative" name="Short" fill={COLORS.short} maxBarSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
