@@ -452,7 +452,7 @@ function LiquidationTreemap({
         {/* Hover Tooltip */}
         {hoveredItem && (
           <div 
-            className="absolute z-20 pointer-events-none bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs"
+            className="absolute z-20 pointer-events-none bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs"
             style={{
               left: hoveredItem.x,
               top: hoveredItem.y,
@@ -561,7 +561,7 @@ function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
   
   return (
-    <div className="bg-[var(--bg-overlay)] border border-[var(--border-color)] rounded-lg p-2 shadow-lg text-xs">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs min-w-[160px]">
       <div className="text-[var(--text-secondary)] mb-1">
         {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
       </div>
