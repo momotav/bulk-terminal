@@ -387,16 +387,16 @@ const TimeframeSelector = ({
   value: number; 
   onChange: (hours: number) => void;
 }) => (
-  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5 border border-[var(--border-color)]">
+  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
     {timeRanges.map((t) => (
       <button
         key={t.hours}
         onClick={() => onChange(t.hours)}
         className={cn(
-          "px-2 py-1 text-xs font-medium rounded transition-all duration-200",
+          "px-3 py-1 text-xs font-medium rounded transition-colors",
           value === t.hours
-            ? "bg-[#00B482] text-[var(--text-primary)] shadow-sm"
-            : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[#252525]"
+            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         )}
       >
         {t.label}
