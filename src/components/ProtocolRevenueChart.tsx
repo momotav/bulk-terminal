@@ -206,6 +206,36 @@ export function ProtocolRevenueChart() {
   // Count active bar series for bar size calculation
   const activeBarCount = [showProtocol, showMaker, showTaker].filter(Boolean).length;
 
+  // Dynamic bar size + category gap based on how many day buckets we have.
+  // Goal: when few days (e.g. 2), bars should be FAT and groups close together;
+  // when many days (30), bars are thin with more breathing room.
+  const { dynamicBarSize, dynamicCategoryGap } = useMemo(() => {
+    const n = displayData.length || 1;
+    const series = Math.max(1, activeBarCount);
+
+    // Max bar width in px — shrinks as data count grows
+    let maxBar: number;
+    if (n <= 2) maxBar = 80;
+    else if (n <= 3) maxBar = 65;
+    else if (n <= 5) maxBar = 50;
+    else if (n <= 7) maxBar = 40;
+    else if (n <= 14) maxBar = 28;
+    else maxBar = 20;
+
+    // With fewer bar series visible, each can be a bit fatter
+    if (series === 1) maxBar = Math.round(maxBar * 1.4);
+    else if (series === 2) maxBar = Math.round(maxBar * 1.15);
+
+    // Category gap (percentage of a group's slot) — smaller when fewer days
+    let gap: string;
+    if (n <= 2) gap = '10%';
+    else if (n <= 3) gap = '15%';
+    else if (n <= 7) gap = '25%';
+    else gap = '30%';
+
+    return { dynamicBarSize: maxBar, dynamicCategoryGap: gap };
+  }, [displayData.length, activeBarCount]);
+
   return (
     <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -263,7 +293,7 @@ export function ProtocolRevenueChart() {
                   data={displayData} 
                   margin={{ top: 5, right: 10, bottom: 5, left: 5 }}
                   barGap={4}
-                  barCategoryGap="20%"
+                  barCategoryGap={dynamicCategoryGap}
                 >
                   <XAxis 
                     dataKey="timestamp" 
@@ -301,7 +331,7 @@ export function ProtocolRevenueChart() {
                       name="Maker Rebates"
                       fill={COLORS.maker}
                       radius={[2, 2, 0, 0]}
-                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                      maxBarSize={dynamicBarSize}
                     />
                   )}
                   {showTaker && (
@@ -311,7 +341,7 @@ export function ProtocolRevenueChart() {
                       name="Taker Fees"
                       fill={COLORS.taker}
                       radius={[2, 2, 0, 0]}
-                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                      maxBarSize={dynamicBarSize}
                     />
                   )}
                   {showProtocol && (
@@ -321,7 +351,7 @@ export function ProtocolRevenueChart() {
                       name="Protocol Revenue"
                       fill={COLORS.protocol}
                       radius={[2, 2, 0, 0]}
-                      maxBarSize={activeBarCount === 1 ? 60 : activeBarCount === 2 ? 40 : 30}
+                      maxBarSize={dynamicBarSize}
                     />
                   )}
                   {showCumulative && (
