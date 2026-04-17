@@ -119,7 +119,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   };
 
   return (
-    <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-lg p-3 shadow-lg">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-[var(--text-tertiary)] mb-2">{formatDate(label)}</p>
       {payload.map((entry: any, i: number) => (
         <div key={i} className="flex items-center gap-2 text-sm">
