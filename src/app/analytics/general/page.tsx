@@ -633,21 +633,23 @@ export default function AnalyticsPage() {
   // These are used purely as a source of per-coin historical totals — they anchor the
   // Cumulative line for the three charts that show cumulative (Volume / Trades / Liquidations),
   // so switching to 1D/W/M keeps the line continuous instead of restarting at zero.
+  //
+  // Each endpoint sets its own state independently the instant it resolves, so the stats
+  // card doesn't wait for the slowest of the three. This prevents the Total Volume card
+  // from showing a stale or wrong number while trades/liquidations are still in flight.
   useEffect(() => {
-    const fetchAllTimeReferences = async () => {
-      const ALL_HOURS = 8760 * 2; // matches the 'ALL' timeframe
-      try {
-        const [vol, trd, liq] = await Promise.allSettled([
-          analytics.getVolumeFromBulkAPI(ALL_HOURS),
-          analytics.getTradesChart(ALL_HOURS),
-          analytics.getLiquidationsChart(ALL_HOURS),
-        ]);
-        if (vol.status === 'fulfilled') setVolumeAllTime(vol.value);
-        if (trd.status === 'fulfilled') setTradesAllTime(trd.value);
-        if (liq.status === 'fulfilled') setLiquidationsAllTime(liq.value);
-      } catch (error) {
-        console.error('Failed to fetch all-time reference data:', error);
-      }
+    const ALL_HOURS = 8760 * 2;
+
+    const fetchAllTimeReferences = () => {
+      analytics.getVolumeFromBulkAPI(ALL_HOURS)
+        .then(setVolumeAllTime)
+        .catch(err => console.error('Failed to fetch volume all-time:', err));
+      analytics.getTradesChart(ALL_HOURS)
+        .then(setTradesAllTime)
+        .catch(err => console.error('Failed to fetch trades all-time:', err));
+      analytics.getLiquidationsChart(ALL_HOURS)
+        .then(setLiquidationsAllTime)
+        .catch(err => console.error('Failed to fetch liquidations all-time:', err));
     };
 
     fetchAllTimeReferences();
@@ -994,15 +996,12 @@ export default function AnalyticsPage() {
   // Get total cumulative volume for the stats card at the top of the page.
   // This MUST match the cumulative line's endpoint regardless of timeframe, so we
   // compute it from the ALL-time dataset (summing all three coins) rather than the
-  // currently visible window.
-  const totalCumulativeVolume = useMemo(() => {
-    if (volumeAllTime.length === 0) {
-      // Fallback: use the current window's Cumulative endpoint if all-time hasn't loaded yet
-      if (volumeDataFull.length === 0) return 0;
-      return volumeDataFull[volumeDataFull.length - 1].Cumulative || 0;
-    }
+  // currently visible window. Returns null while the all-time fetch is in flight so
+  // the card can render a neutral placeholder instead of the wrong (window-only) number.
+  const totalCumulativeVolume = useMemo((): number | null => {
+    if (volumeAllTime.length === 0) return null;
     return volumeAllTime.reduce((sum, p) => sum + (p.BTC || 0) + (p.ETH || 0) + (p.SOL || 0), 0);
-  }, [volumeAllTime, volumeDataFull]);
+  }, [volumeAllTime]);
   
   const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
@@ -1026,14 +1025,31 @@ export default function AnalyticsPage() {
             { label: 'Total Volume', value: totalCumulativeVolume, format: 'currency' },
             { label: 'Open Interest', value: liveOI, format: 'currency' },
             { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
-          ].map((stat, i) => (
-            <div key={i} className="bg-[var(--bg-base)] p-4">
-              <p className="text-xs text-[var(--text-tertiary)] mb-1">{stat.label}</p>
-              <p className="text-2xl font-bold text-[var(--text-primary)]">
-                {stat.format === 'currency' ? `$${formatCompact(stat.value)}` : stat.value.toLocaleString()}
-              </p>
-            </div>
-          ))}
+          ].map((stat, i) => {
+            // Show a placeholder dash while the value is still loading (null).
+            // This prevents Total Volume from briefly flashing a wrong (window-only)
+            // number before the all-time dataset finishes loading.
+            const isLoading = stat.value === null || stat.value === undefined;
+            let display: string;
+            if (isLoading) {
+              display = '—';
+            } else if (stat.format === 'currency') {
+              display = `$${formatCompact(stat.value as number)}`;
+            } else {
+              display = (stat.value as number).toLocaleString();
+            }
+            return (
+              <div key={i} className="bg-[var(--bg-base)] p-4">
+                <p className="text-xs text-[var(--text-tertiary)] mb-1">{stat.label}</p>
+                <p className={cn(
+                  "text-2xl font-bold text-[var(--text-primary)]",
+                  isLoading && "text-[var(--text-tertiary)]"
+                )}>
+                  {display}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         {loading ? (
