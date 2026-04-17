@@ -801,12 +801,7 @@ export default function LiquidationsPage() {
                       tickLine={false}
                       width={55}
                     />
-                    <Tooltip 
-                      content={<ChartTooltip />} 
-                      cursor={{ fill: 'var(--bg-secondary)', opacity: 0.3 }}
-                      wrapperStyle={{ zIndex: 100 }}
-                      allowEscapeViewBox={{ x: false, y: false }}
-                    />
+                    <Tooltip content={<ChartTooltip />} />
                     <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1} />
                     <Bar dataKey="longValue" name="Long" fill={COLORS.long} barSize={20} />
                     <Bar dataKey="shortValueNegative" name="Short" fill={COLORS.short} barSize={20} />
