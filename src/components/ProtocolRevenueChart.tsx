@@ -147,14 +147,7 @@ export function ProtocolRevenueChart() {
   return (
     <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fees</h3>
-          {feeState && (
-            <span className="text-sm text-[#00B482] font-medium ml-2">
-              {formatCompact(feeState.totalProtocolSettlement)}
-            </span>
-          )}
-        </div>
+        <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fees</h3>
         
         <div className="flex flex-wrap items-center gap-2">
           <Toggle label="Protocol" color={COLORS.protocol} active={showProtocol} onClick={() => setShowProtocol(!showProtocol)} />
@@ -162,16 +155,17 @@ export function ProtocolRevenueChart() {
           <Toggle label="Taker" color={COLORS.taker} active={showTaker} onClick={() => setShowTaker(!showTaker)} />
           <Toggle label="Cumulative Protocol Revenue" color={COLORS.cumulative} active={showCumulative} onClick={() => setShowCumulative(!showCumulative)} />
           
-          <div className="flex gap-1 ml-2 border-l border-[var(--border-color)] pl-2">
+          {/* Time range selector - pill style like liquidations */}
+          <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5 ml-2">
             {timeRanges.map(r => (
               <button
                 key={r.label}
                 onClick={() => setRevenueHours(r.hours)}
                 className={cn(
-                  "px-2 py-1 text-xs rounded",
+                  "px-3 py-1 text-xs font-medium rounded transition-colors",
                   revenueHours === r.hours 
-                    ? "bg-[var(--accent-primary)] text-white" 
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {r.label}
@@ -188,12 +182,12 @@ export function ProtocolRevenueChart() {
       ) : revenueData.length > 0 ? (
         <div className="relative">
           {/* Left axis label */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 -rotate-90 origin-center">
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 -rotate-90 origin-center z-10">
             <span className="text-xs text-[var(--text-tertiary)] whitespace-nowrap">Fees (USD)</span>
           </div>
-          {/* Right axis label */}
+          {/* Right axis label - positioned to align with chart area */}
           {showCumulative && (
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 rotate-90 origin-center">
+            <div className="absolute right-0 top-[60%] -translate-y-1/2 translate-x-1 rotate-90 origin-center z-10">
               <span className="text-xs text-[var(--text-tertiary)] whitespace-nowrap">Cumulative (USD)</span>
             </div>
           )}
