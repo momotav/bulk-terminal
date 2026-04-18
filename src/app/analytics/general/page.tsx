@@ -431,11 +431,18 @@ const ChartCard = ({
     "bg-transparent rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300",
     loading && "opacity-60"
   )}>
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
-      <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
+    {/* Header: title on the left; timeframe + toggles stack on the right */}
+    <div className="flex items-start justify-between gap-3 mb-4">
+      <h3 className="text-lg font-semibold text-[var(--text-primary)] pt-1">{title}</h3>
+      <div className="flex flex-col items-end gap-2 min-w-0">
+        <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
+        {toggles && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {toggles}
+          </div>
+        )}
+      </div>
     </div>
-    {toggles && <div className="flex flex-wrap items-center gap-2 mb-3">{toggles}</div>}
     <div className={cn(
       "relative",
       loading && "blur-sm opacity-60",
