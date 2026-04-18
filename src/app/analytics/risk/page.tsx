@@ -451,16 +451,13 @@ export default function RiskPage() {
 
               {/* Volatility Chart */}
               <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2 pt-1">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
                     <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility History</h3>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                    <CoinToggle coin="ETH" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                    <CoinToggle coin="SOL" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5 ml-2">
+                  <div className="flex flex-col items-end gap-2 min-w-0">
+                    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
                       {timeRanges.map(r => (
                         <button
                           key={r.label}
@@ -475,6 +472,11 @@ export default function RiskPage() {
                           {r.label}
                         </button>
                       ))}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
+                      <CoinToggle coin="ETH" coins={volatilityCoins} setCoins={setVolatilityCoins} />
+                      <CoinToggle coin="SOL" coins={volatilityCoins} setCoins={setVolatilityCoins} />
                     </div>
                   </div>
                 </div>
@@ -513,21 +515,12 @@ export default function RiskPage() {
 
             {/* Row 3: Fair Spread Chart - Full Width */}
             <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2 pt-1">
                   <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
                   <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fair vs Mark Spread</h3>
                 </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={fairSpreadSymbol}
-                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
-                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
-                  >
-                    <option value="BTC-USD">BTC</option>
-                    <option value="ETH-USD">ETH</option>
-                    <option value="SOL-USD">SOL</option>
-                  </select>
+                <div className="flex flex-col items-end gap-2 min-w-0">
                   <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
                     {timeRanges.map(r => (
                       <button
@@ -544,6 +537,15 @@ export default function RiskPage() {
                       </button>
                     ))}
                   </div>
+                  <select
+                    value={fairSpreadSymbol}
+                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
+                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
+                  >
+                    <option value="BTC-USD">BTC</option>
+                    <option value="ETH-USD">ETH</option>
+                    <option value="SOL-USD">SOL</option>
+                  </select>
                 </div>
               </div>
               
