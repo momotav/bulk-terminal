@@ -4,117 +4,41 @@ import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Line, LineChart, Area, AreaChart, ReferenceLine
+  Bar, BarChart, Line, ComposedChart
 } from 'recharts';
-import { TrendingUp, Activity, Gauge } from 'lucide-react';
 
 const COLORS = {
-  BTC: '#00B482',
-  ETH: '#2271B5',
-  SOL: '#7570B3',
-  positive: '#00B482',
-  negative: '#EF4A3C',
-  neutral: '#FFB548',
+  protocol: '#00B482',
+  maker: '#2271B5',
+  taker: '#EF4A3C',
+  cumulative: '#FFB548',
 };
 
-// Regime labels based on value
-const getRegimeLabel = (regime: number): { label: string; color: string } => {
-  if (regime <= -8) return { label: 'Strong Bearish', color: '#EF4A3C' };
-  if (regime <= -4) return { label: 'Bearish', color: '#F87171' };
-  if (regime <= -1) return { label: 'Slightly Bearish', color: '#FBBF24' };
-  if (regime === 0) return { label: 'Neutral', color: '#9CA3AF' };
-  if (regime <= 3) return { label: 'Slightly Bullish', color: '#86EFAC' };
-  if (regime <= 7) return { label: 'Bullish', color: '#4ADE80' };
-  return { label: 'Strong Bullish', color: '#00B482' };
-};
-
-// Market Regime Gauge Component
-const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
-  const { label, color } = getRegimeLabel(value);
-  const percentage = ((value + 12) / 24) * 100;
-  
-  return (
-    <div className="flex flex-col items-center p-4 bg-[var(--bg-muted)] rounded-lg">
-      <p className="text-sm text-[var(--text-tertiary)] mb-2">{symbol}</p>
-      <div className="relative w-32 h-16 overflow-hidden">
-        <div className="absolute inset-0">
-          <svg viewBox="0 0 100 50" className="w-full h-full">
-            <defs>
-              <linearGradient id={`gauge-gradient-${symbol}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#EF4A3C" />
-                <stop offset="50%" stopColor="#FFB548" />
-                <stop offset="100%" stopColor="#00B482" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M 10 50 A 40 40 0 0 1 90 50"
-              fill="none"
-              stroke="var(--border-color)"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M 10 50 A 40 40 0 0 1 90 50"
-              fill="none"
-              stroke={`url(#gauge-gradient-${symbol})`}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray="126"
-              strokeDashoffset={126 - (126 * percentage / 100)}
-            />
-          </svg>
-        </div>
-        <div 
-          className="absolute bottom-0 left-1/2 w-1 h-12 origin-bottom transition-transform duration-500"
-          style={{ 
-            transform: `translateX(-50%) rotate(${(percentage - 50) * 1.8}deg)`,
-            background: `linear-gradient(to top, ${color}, transparent)`
-          }}
-        />
-      </div>
-      <p className="text-lg font-bold mt-2" style={{ color }}>{value > 0 ? '+' : ''}{value}</p>
-      <p className="text-xs text-[var(--text-tertiary)]">{label}</p>
-    </div>
-  );
-};
-
-// Heatmap Cell Component
-const HeatmapCell = ({ value, label }: { value: number; label?: string }) => {
-  // Value ranges from 0 to 1 for correlation
-  // High (close to 1) = green, Low (close to 0) = red
-  const getColor = (v: number) => {
-    if (v >= 0.95) return 'bg-[#00B482]'; // Perfect correlation (self)
-    if (v >= 0.85) return 'bg-[#00B482]/90';
-    if (v >= 0.75) return 'bg-[#00B482]/70';
-    if (v >= 0.65) return 'bg-[#4ADE80]/60';
-    if (v >= 0.55) return 'bg-[#FFB548]/50';
-    if (v >= 0.45) return 'bg-[#FB923C]/60';
-    if (v >= 0.35) return 'bg-[#EF4A3C]/60';
-    return 'bg-[#EF4A3C]/80'; // Low correlation
-  };
-  
-  return (
-    <div className={cn(
-      "flex items-center justify-center p-3 rounded text-sm font-mono font-medium",
-      getColor(value),
-      value >= 0.9 ? "text-white" : "text-[var(--text-primary)]"
-    )}>
-      {label || (value >= 0 ? '+' : '')}{typeof value === 'number' ? value.toFixed(2) : value}
-    </div>
-  );
-};
+const timeRanges = [
+  { label: '1D', hours: 24 },
+  { label: 'W', hours: 168 },
+  { label: 'M', hours: 720 },
+];
 
 // Custom tooltip
-const ChartTooltip = ({ active, payload, label }: any) => {
+const RevenueTooltip = ({ active, payload, label, showTime }: any) => {
   if (!active || !payload?.length) return null;
   
   const formatDate = (ts: string) => {
     const date = new Date(ts);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    if (showTime) {
+      return date.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    }
+    // Aggregated daily bucket — day only
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
     });
   };
 
@@ -126,9 +50,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
           <span className="text-[var(--text-secondary)]">{entry.name}:</span>
           <span className="text-[var(--text-primary)] font-medium">
-            {entry.name.includes('Price') ? `$${formatCompact(entry.value)}` : 
-             entry.name.includes('bps') || entry.name.includes('Spread') ? `${entry.value.toFixed(2)} bps` :
-             formatCompact(entry.value)}
+            {formatCompact(Math.abs(entry.value))}
           </span>
         </div>
       ))}
@@ -136,469 +58,364 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export default function RiskPage() {
+export function ProtocolRevenueChart() {
+  const [revenueHours, setRevenueHours] = useState(168);
+  const [revenueData, setRevenueData] = useState<{ 
+    timestamp: string; 
+    cumulativeRevenue: number; 
+    periodRevenue: number;
+    makerFees: number;
+    takerFees: number;
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Regime data
-  const [regimeData, setRegimeData] = useState<{
-    aggregateRegime: number;
-    markets: { symbol: string; regime: number; regimeDt: number; regimeVol: number; fairBookPx: number; markPrice: number }[];
-  } | null>(null);
-  
-  // Volatility chart
-  const [volatilityHours, setVolatilityHours] = useState(24);
-  const [volatilityData, setVolatilityData] = useState<{ timestamp: string; BTC: number; ETH: number; SOL: number }[]>([]);
-  const [volatilityCoins, setVolatilityCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  
-  // Fair spread chart
-  const [fairSpreadHours, setFairSpreadHours] = useState(24);
-  const [fairSpreadSymbol, setFairSpreadSymbol] = useState('BTC-USD');
-  const [fairSpreadData, setFairSpreadData] = useState<{ timestamp: string; markPrice: number; fairPrice: number; spreadBps: number }[]>([]);
+  // Toggle state for which series to show
+  const [showProtocol, setShowProtocol] = useState(true);
+  const [showMaker, setShowMaker] = useState(true);
+  const [showTaker, setShowTaker] = useState(true);
+  const [showCumulative, setShowCumulative] = useState(true);
 
-  // Fetch regime data (live)
+  // Fetch fee state for current totals
+  const [feeState, setFeeState] = useState<{
+    totalProtocolSettlement: number;
+    totalMakerFees: number;
+    totalTakerFees: number;
+    settledFills: number;
+  } | null>(null);
+
   useEffect(() => {
-    const fetchRegime = async () => {
+    const fetchRevenue = async () => {
+      setLoading(true);
       try {
-        const data = await analytics.getRegimeData();
-        setRegimeData(data);
+        const data = await analytics.getProtocolRevenueChart(revenueHours);
+        // Transform data to make all values positive for display
+        const transformed = (data.data || []).map(d => ({
+          ...d,
+          makerFees: Math.abs(d.makerFees),
+          takerFees: Math.abs(d.takerFees),
+          periodRevenue: Math.abs(d.periodRevenue),
+        }));
+        setRevenueData(transformed);
       } catch (error) {
-        console.error('Failed to fetch regime:', error);
+        console.error('Failed to fetch revenue:', error);
+      } finally {
+        setLoading(false);
       }
     };
-    
-    fetchRegime();
-    const interval = setInterval(fetchRegime, 10000);
+    fetchRevenue();
+  }, [revenueHours]);
+
+  useEffect(() => {
+    const fetchFeeState = async () => {
+      try {
+        const data = await analytics.getFeeTiers();
+        setFeeState({
+          totalProtocolSettlement: data.totalProtocolSettlement,
+          totalMakerFees: data.totalMakerFees,
+          totalTakerFees: data.totalTakerFees,
+          settledFills: data.settledFills,
+        });
+      } catch (error) {
+        console.error('Failed to fetch fee state:', error);
+      }
+    };
+    fetchFeeState();
+    const interval = setInterval(fetchFeeState, 60000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch volatility chart
-  useEffect(() => {
-    const fetchVolatility = async () => {
-      try {
-        const data = await analytics.getVolatilityChart(volatilityHours);
-        setVolatilityData(data.data || []);
-      } catch (error) {
-        console.error('Failed to fetch volatility:', error);
-      }
-    };
-    fetchVolatility();
-  }, [volatilityHours]);
-
-  // Fetch fair spread chart
-  useEffect(() => {
-    const fetchFairSpread = async () => {
-      try {
-        const data = await analytics.getFairSpreadChart(fairSpreadSymbol, fairSpreadHours);
-        setFairSpreadData(data.data || []);
-      } catch (error) {
-        console.error('Failed to fetch fair spread:', error);
-      }
-    };
-    fetchFairSpread();
-  }, [fairSpreadHours, fairSpreadSymbol]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const timeRanges = [
-    { label: '1D', hours: 24 },
-    { label: 'W', hours: 168 },
-    { label: 'M', hours: 720 },
-  ];
-
-  const formatDateForChart = (ts: string, hours: number) => {
+  const formatDateForChart = (ts: string) => {
     const date = new Date(ts);
-    if (hours <= 24) {
+    if (revenueHours <= 24) {
       return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    } else if (hours <= 168) {
-      return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', hour12: false });
+    } else if (revenueHours <= 168) {
+      // W: daily buckets → show weekday (Mon, Tue, ...)
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
     }
+    // M: daily buckets → show month + day
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const CoinToggle = ({ coin, coins, setCoins }: { coin: string; coins: string[]; setCoins: (c: string[]) => void }) => (
+  const Toggle = ({ label, color, active, onClick }: { label: string; color: string; active: boolean; onClick: () => void }) => (
     <button
-      onClick={() => setCoins(coins.includes(coin) ? coins.filter(c => c !== coin) : [...coins, coin])}
+      onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all",
-        coins.includes(coin)
+        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all duration-200",
+        active
           ? "bg-[var(--bg-muted)] border-[var(--border-color)] text-[var(--text-primary)]"
-          : "bg-transparent border-transparent text-[var(--text-tertiary)]"
+          : "bg-transparent border-transparent text-[var(--text-tertiary)] hover:text-gray-300"
       )}
     >
-      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS[coin as keyof typeof COLORS] }} />
-      {coin}
+      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+      {label}
     </button>
   );
 
-  // Calculate heatmap data from regime data
-  const heatmapData = useMemo(() => {
-    if (!regimeData?.markets) return null;
-    
-    const assets = regimeData.markets.map(m => m.symbol.replace('-USD', ''));
-    const volData = regimeData.markets.map(m => m.regimeVol);
-    
-    // Normalize volatility to 0-1 scale for color intensity
-    const maxVol = Math.max(...volData, 10);
-    const normalizedVol = volData.map(v => v / maxVol);
-    
-    // Create correlation-like matrix (using spread similarity as proxy)
-    // In reality, you'd calculate actual correlation from price data
-    const matrix: number[][] = [];
-    for (let i = 0; i < assets.length; i++) {
-      matrix[i] = [];
-      for (let j = 0; j < assets.length; j++) {
-        if (i === j) {
-          matrix[i][j] = 1; // Perfect correlation with self
-        } else {
-          // Use volatility similarity as proxy for correlation
-          const volDiff = Math.abs(volData[i] - volData[j]);
-          const similarity = 1 - (volDiff / maxVol);
-          matrix[i][j] = Math.max(0.3, Math.min(0.95, similarity)); // Clamp between 0.3-0.95
+  // For W and M: aggregate hourly data into daily buckets so we get 1 bar per day.
+  // For 1D: keep the raw hourly resolution.
+  // cumulativeRevenue is a running total, so we take the LAST value of each day
+  // (not the sum). periodRevenue, makerFees, takerFees are per-period flows, so we sum them.
+  const displayData = useMemo(() => {
+    if (revenueHours <= 24) return revenueData;
+    if (revenueData.length === 0) return revenueData;
+
+    const buckets = new Map<string, {
+      timestamp: string;
+      periodRevenue: number;
+      makerFees: number;
+      takerFees: number;
+      cumulativeRevenue: number;
+      lastTs: number;
+    }>();
+
+    for (const d of revenueData) {
+      const date = new Date(d.timestamp);
+      // Day key in UTC so it matches how the backend stores timestamps
+      const dayKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+      const existing = buckets.get(dayKey);
+      const ts = date.getTime();
+
+      if (!existing) {
+        // Normalize the bucket timestamp to start-of-day UTC so bars are evenly spaced
+        const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
+        buckets.set(dayKey, {
+          timestamp: dayStart,
+          periodRevenue: d.periodRevenue,
+          makerFees: d.makerFees,
+          takerFees: d.takerFees,
+          cumulativeRevenue: d.cumulativeRevenue,
+          lastTs: ts,
+        });
+      } else {
+        existing.periodRevenue += d.periodRevenue;
+        existing.makerFees += d.makerFees;
+        existing.takerFees += d.takerFees;
+        // cumulative is a running total — take the latest sample in the bucket
+        if (ts >= existing.lastTs) {
+          existing.cumulativeRevenue = d.cumulativeRevenue;
+          existing.lastTs = ts;
         }
       }
     }
-    
-    return { assets, matrix, normalizedVol };
-  }, [regimeData]);
+
+    return Array.from(buckets.values())
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map(({ lastTs, ...rest }) => rest);
+  }, [revenueData, revenueHours]);
+
+  // Count active bar series for bar size calculation
+  const activeBarCount = [showProtocol, showMaker, showTaker].filter(Boolean).length;
+
+  // Dynamic bar size + category gap based on how many day buckets we have.
+  // Goal: when few days (e.g. 2), bars should be FAT and groups close together;
+  // when many days (30), bars are thin with more breathing room.
+  const { dynamicBarSize, dynamicCategoryGap } = useMemo(() => {
+    const n = displayData.length || 1;
+    const series = Math.max(1, activeBarCount);
+
+    // Max bar width in px — shrinks as data count grows
+    let maxBar: number;
+    if (n <= 2) maxBar = 80;
+    else if (n <= 3) maxBar = 65;
+    else if (n <= 5) maxBar = 50;
+    else if (n <= 7) maxBar = 40;
+    else if (n <= 14) maxBar = 28;
+    else maxBar = 20;
+
+    // With fewer bar series visible, each can be a bit fatter
+    if (series === 1) maxBar = Math.round(maxBar * 1.4);
+    else if (series === 2) maxBar = Math.round(maxBar * 1.15);
+
+    // Category gap (percentage of a group's slot) — smaller when fewer days
+    let gap: string;
+    if (n <= 2) gap = '10%';
+    else if (n <= 3) gap = '15%';
+    else if (n <= 7) gap = '25%';
+    else gap = '30%';
+
+    return { dynamicBarSize: maxBar, dynamicCategoryGap: gap };
+  }, [displayData.length, activeBarCount]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
-      <main className="flex-1 w-full px-6 lg:px-10 py-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">Risk</h1>
+    <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
+      {/* Header: title left, timeframe + toggles stacked on the right */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)] pt-1">Fees</h3>
 
-        {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-[350px] animate-pulse" />
+        <div className="flex flex-col items-end gap-2 min-w-0">
+          {/* Time range selector - pill style like liquidations */}
+          <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
+            {timeRanges.map(r => (
+              <button
+                key={r.label}
+                onClick={() => setRevenueHours(r.hours)}
+                className={cn(
+                  "px-3 py-1 text-xs font-medium rounded transition-colors",
+                  revenueHours === r.hours 
+                    ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                )}
+              >
+                {r.label}
+              </button>
             ))}
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Market Regime Section */}
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
-              </div>
-              
-              {regimeData ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
-                      <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
-                      <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
-                        {regimeData.aggregateRegime > 0 ? '+' : ''}{regimeData.aggregateRegime.toFixed(1)}
-                      </p>
-                      <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                        {getRegimeLabel(Math.round(regimeData.aggregateRegime)).label}
-                      </p>
-                    </div>
-                    
-                    {regimeData.markets.map(market => (
-                      <RegimeGauge 
-                        key={market.symbol} 
-                        value={market.regime} 
-                        symbol={market.symbol.replace('-USD', '')} 
-                      />
-                    ))}
-                  </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-[var(--border-color)]">
-                          <th className="text-left py-2 px-3 text-[var(--text-tertiary)] font-medium">Asset</th>
-                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Mark Price</th>
-                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Fair Price</th>
-                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Spread</th>
-                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Volatility</th>
-                          <th className="text-right py-2 px-3 text-[var(--text-tertiary)] font-medium">Regime Duration</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {regimeData.markets.map(market => {
-                          const spread = market.fairBookPx > 0 
-                            ? ((market.markPrice - market.fairBookPx) / market.fairBookPx) * 10000 
-                            : 0;
-                          const durationMins = Math.floor(market.regimeDt / 60);
-                          const durationHrs = Math.floor(durationMins / 60);
-                          const durationStr = durationHrs > 0 
-                            ? `${durationHrs}h ${durationMins % 60}m` 
-                            : `${durationMins}m`;
-                          
-                          return (
-                            <tr key={market.symbol} className="border-b border-[var(--border-color)] last:border-b-0 hover:bg-[var(--bg-muted)]/50">
-                              <td className="py-2 px-3">
-                                <div className="flex items-center gap-2">
-                                  <div 
-                                    className="w-2 h-2 rounded-full" 
-                                    style={{ backgroundColor: COLORS[market.symbol.replace('-USD', '') as keyof typeof COLORS] || COLORS.BTC }} 
-                                  />
-                                  <span className="font-medium text-[var(--text-primary)]">{market.symbol.replace('-USD', '')}</span>
-                                </div>
-                              </td>
-                              <td className="text-right py-2 px-3 text-[var(--text-primary)] font-mono">
-                                ${market.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="text-right py-2 px-3 text-[var(--text-secondary)] font-mono">
-                                ${market.fairBookPx.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className={cn(
-                                "text-right py-2 px-3 font-mono",
-                                spread >= 0 ? "text-[#00B482]" : "text-[#EF4A3C]"
-                              )}>
-                                {spread >= 0 ? '+' : ''}{spread.toFixed(2)} bps
-                              </td>
-                              <td className="text-right py-2 px-3 text-[var(--text-primary)] font-mono">
-                                {market.regimeVol.toFixed(2)}%
-                              </td>
-                              <td className="text-right py-2 px-3 text-[var(--text-secondary)]">
-                                {durationStr}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-32 flex items-center justify-center text-[var(--text-tertiary)]">
-                  Loading regime data...
-                </div>
-              )}
-            </div>
-
-            {/* Row 2: Heatmap + Volatility */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Volatility Heatmap */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility Heatmap</h3>
-                </div>
-                
-                {heatmapData ? (
-                  <div className="space-y-4">
-                    {/* Volatility bars */}
-                    <div className="space-y-3">
-                      {heatmapData.assets.map((asset, i) => {
-                        const vol = regimeData?.markets[i]?.regimeVol || 0;
-                        const maxVol = 15; // Assume max 15% vol for scaling
-                        const width = Math.min(100, (vol / maxVol) * 100);
-                        
-                        return (
-                          <div key={asset} className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="w-3 h-3 rounded-sm" 
-                                  style={{ backgroundColor: COLORS[asset as keyof typeof COLORS] }} 
-                                />
-                                <span className="text-[var(--text-primary)]">{asset}</span>
-                              </div>
-                              <span className="text-[var(--text-secondary)] font-mono">{vol.toFixed(2)}%</span>
-                            </div>
-                            <div className="h-3 bg-[var(--bg-muted)] rounded-full overflow-hidden">
-                              <div 
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{ 
-                                  width: `${width}%`,
-                                  backgroundColor: COLORS[asset as keyof typeof COLORS]
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Correlation Matrix */}
-                    <div className="mt-6">
-                      <p className="text-sm text-[var(--text-tertiary)] mb-3">Correlation Matrix</p>
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${heatmapData.assets.length}, 1fr)` }}>
-                        {/* Header row */}
-                        <div></div>
-                        {heatmapData.assets.map(asset => (
-                          <div key={`h-${asset}`} className="text-center text-xs text-[var(--text-tertiary)] py-1">
-                            {asset}
-                          </div>
-                        ))}
-                        
-                        {/* Data rows */}
-                        {heatmapData.assets.map((rowAsset, i) => (
-                          <>
-                            <div key={`r-${rowAsset}`} className="text-xs text-[var(--text-tertiary)] flex items-center pr-2">
-                              {rowAsset}
-                            </div>
-                            {heatmapData.matrix[i].map((val, j) => (
-                              <HeatmapCell key={`${i}-${j}`} value={val} />
-                            ))}
-                          </>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    Loading heatmap data...
-                  </div>
-                )}
-              </div>
-
-              {/* Volatility Chart */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2 pt-1">
-                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility History</h3>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 min-w-0">
-                    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
-                      {timeRanges.map(r => (
-                        <button
-                          key={r.label}
-                          onClick={() => setVolatilityHours(r.hours)}
-                          className={cn(
-                            "px-3 py-1 text-xs font-medium rounded transition-colors",
-                            volatilityHours === r.hours 
-                              ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
-                              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                          )}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                      <CoinToggle coin="ETH" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                      <CoinToggle coin="SOL" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                    </div>
-                  </div>
-                </div>
-                
-                {volatilityData.length > 0 ? (
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={volatilityData}>
-                        <XAxis 
-                          dataKey="timestamp" 
-                          tickFormatter={(ts) => formatDateForChart(ts, volatilityHours)}
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                        />
-                        <YAxis 
-                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                          axisLine={{ stroke: 'var(--border-color)' }}
-                          tickLine={false}
-                          tickFormatter={(v) => `${v}%`}
-                        />
-                        <Tooltip content={<ChartTooltip />} />
-                        {volatilityCoins.includes('BTC') && <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} />}
-                        {volatilityCoins.includes('ETH') && <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} />}
-                        {volatilityCoins.includes('SOL') && <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} />}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Row 3: Fair Spread Chart - Full Width */}
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2 pt-1">
-                  <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fair vs Mark Spread</h3>
-                </div>
-                <div className="flex flex-col items-end gap-2 min-w-0">
-                  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
-                    {timeRanges.map(r => (
-                      <button
-                        key={r.label}
-                        onClick={() => setFairSpreadHours(r.hours)}
-                        className={cn(
-                          "px-3 py-1 text-xs font-medium rounded transition-colors",
-                          fairSpreadHours === r.hours 
-                            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
-                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                        )}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    value={fairSpreadSymbol}
-                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
-                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
-                  >
-                    <option value="BTC-USD">BTC</option>
-                    <option value="ETH-USD">ETH</option>
-                    <option value="SOL-USD">SOL</option>
-                  </select>
-                </div>
-              </div>
-              
-              {fairSpreadData.length > 0 ? (
-                <div className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={fairSpreadData}>
-                      <defs>
-                        <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
-                          <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis 
-                        dataKey="timestamp" 
-                        tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                        tickLine={false}
-                      />
-                      <YAxis 
-                        tickFormatter={(v) => `${v.toFixed(1)}`}
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                        tickLine={false}
-                        domain={['auto', 'auto']}
-                      />
-                      <Tooltip content={<ChartTooltip />} />
-                      <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
-                      <Area 
-                        type="monotone"
-                        dataKey="spreadBps" 
-                        name="Spread (bps)"
-                        stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
-                        fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
-                        strokeWidth={2}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
-                  <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
-                </div>
-              )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Toggle label="Protocol" color={COLORS.protocol} active={showProtocol} onClick={() => setShowProtocol(!showProtocol)} />
+            <Toggle label="Maker" color={COLORS.maker} active={showMaker} onClick={() => setShowMaker(!showMaker)} />
+            <Toggle label="Taker" color={COLORS.taker} active={showTaker} onClick={() => setShowTaker(!showTaker)} />
+            <Toggle label="Cumulative Protocol Revenue" color={COLORS.cumulative} active={showCumulative} onClick={() => setShowCumulative(!showCumulative)} />
+          </div>
+        </div>
+      </div>
+      
+      {loading ? (
+        <div className="h-[350px] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
+        </div>
+      ) : displayData.length > 0 ? (
+        <div className="flex">
+          {/* Left Y-axis label - aligned with chart area (350px) */}
+          <div className="relative w-6 shrink-0">
+            <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
+              <span 
+                className="transform -rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
+                style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
+              >
+                Fees (USD)
+              </span>
             </div>
           </div>
-        )}
-      </main>
+
+          {/* Chart content */}
+          <div className="flex-1 min-w-0">
+            <div className="h-[350px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart 
+                  data={displayData} 
+                  margin={{ top: 5, right: 10, bottom: 5, left: 5 }}
+                  barGap={4}
+                  barCategoryGap={dynamicCategoryGap}
+                >
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tickFormatter={formatDateForChart}
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                    axisLine={{ stroke: 'var(--border-color)' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    tickFormatter={(v) => formatCompact(v)}
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                    axisLine={{ stroke: 'var(--border-color)' }}
+                    tickLine={false}
+                    width={60}
+                  />
+                  {showCumulative && (
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      tickFormatter={(v) => formatCompact(v)}
+                      tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                      axisLine={{ stroke: 'var(--border-color)' }}
+                      tickLine={false}
+                      width={65}
+                    />
+                  )}
+                  <Tooltip content={<RevenueTooltip showTime={revenueHours <= 24} />} />
+                  
+                  {/* Grouped bars - NOT stacked, side by side with gaps */}
+                  {showMaker && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="makerFees" 
+                      name="Maker Rebates"
+                      fill={COLORS.maker}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={dynamicBarSize}
+                    />
+                  )}
+                  {showTaker && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="takerFees" 
+                      name="Taker Fees"
+                      fill={COLORS.taker}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={dynamicBarSize}
+                    />
+                  )}
+                  {showProtocol && (
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="periodRevenue" 
+                      name="Protocol Revenue"
+                      fill={COLORS.protocol}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={dynamicBarSize}
+                    />
+                  )}
+                  {showCumulative && (
+                    <Line 
+                      yAxisId="right"
+                      type="monotone" 
+                      dataKey="cumulativeRevenue" 
+                      name="Cumulative Protocol Revenue"
+                      stroke={COLORS.cumulative} 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Right Y-axis label - only visible when cumulative toggle is on */}
+          {showCumulative && (
+            <div className="relative w-6 shrink-0">
+              <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
+                <span 
+                  className="transform rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
+                  style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
+                >
+                  Cumulative (USD)
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="h-[350px] flex items-center justify-center text-[var(--text-tertiary)]">
+          <p className="text-sm">No fee data yet. Data will appear as it&apos;s collected.</p>
+        </div>
+      )}
+      
+      {/* Stats row */}
+      {feeState && (
+        <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Protocol Revenue</p>
+            <p className="text-xl font-bold text-[#00B482]">{formatCompact(feeState.totalProtocolSettlement)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Maker Rebates</p>
+            <p className="text-xl font-bold text-[#2271B5]">{formatCompact(Math.abs(feeState.totalMakerFees))}</p>
+          </div>
+          <div>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Taker Fees</p>
+            <p className="text-xl font-bold text-[#EF4A3C]">{formatCompact(Math.abs(feeState.totalTakerFees))}</p>
+          </div>
+          <div>
+            <p className="text-sm text-[var(--text-tertiary)] mb-1">Settled Fills</p>
+            <p className="text-xl font-bold text-[var(--text-primary)]">{feeState.settledFills.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default ProtocolRevenueChart;
