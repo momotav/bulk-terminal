@@ -518,53 +518,61 @@ export default function OrderBookPage() {
         </div>
       )}
 
-      {/* Unified stats grid — same styling as the "Total Trades / Total Volume"
-          row on the General page. All 7 cells live inside one rounded container
-          with hairline dividers produced by `gap-px` over the border color.
-          That makes column boundaries line up perfectly and gives a single
-          coherent block rather than floating individual cards. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
-        <StatCell
-          label="Best Bid"
-          value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'}
-          sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : '\u00A0'}
-          accent="bid"
-        />
-        <StatCell
-          label="Best Ask"
-          value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'}
-          sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : '\u00A0'}
-          accent="ask"
-        />
-        <StatCell
-          label="Spread"
-          value={formatBps(stats?.spreadBps ?? null)}
-          unit="bps"
-          sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : '\u00A0'}
-        />
-        <StatCell
-          label="Mid Price"
-          value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
-          sub={'\u00A0'}
-        />
-        <StatCell
-          label="Bid Depth · ±2% of mid"
-          value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
-          sub={'\u00A0'}
-          accent="bid"
-        />
-        <StatCell
-          label="Ask Depth · ±2% of mid"
-          value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
-          sub={'\u00A0'}
-          accent="ask"
-        />
-        <StatCell
-          label="Book Imbalance"
-          value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
-          sub={imbalanceLabel ?? '\u00A0'}
-          accent={imbalanceAccent}
-        />
+      {/* Two stat grids stacked — same styling as the General page's stats row
+          (touching cells, 1px hairline dividers, single rounded container).
+          The top row has 4 cells (quote info), the bottom row has 3 cells
+          (depth summary) stretched evenly to fill the full width. Keeping them
+          as two grids lets the bottom cells grow into thirds instead of fourths,
+          so there's no empty trailing cell. */}
+      <div className="space-y-3">
+        {/* Row 1 — price quote (4 cells) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
+          <StatCell
+            label="Best Bid"
+            value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'}
+            sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : '\u00A0'}
+            accent="bid"
+          />
+          <StatCell
+            label="Best Ask"
+            value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'}
+            sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : '\u00A0'}
+            accent="ask"
+          />
+          <StatCell
+            label="Spread"
+            value={formatBps(stats?.spreadBps ?? null)}
+            unit="bps"
+            sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : '\u00A0'}
+          />
+          <StatCell
+            label="Mid Price"
+            value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
+            sub={'\u00A0'}
+          />
+        </div>
+
+        {/* Row 2 — depth summary (3 cells, stretched evenly) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
+          <StatCell
+            label="Bid Depth · ±2% of mid"
+            value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
+            sub={'\u00A0'}
+            accent="bid"
+          />
+          <StatCell
+            label="Ask Depth · ±2% of mid"
+            value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
+            sub={'\u00A0'}
+            accent="ask"
+          />
+          <StatCell
+            label="Book Imbalance"
+            value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
+            sub={imbalanceLabel ?? '\u00A0'}
+            accent={imbalanceAccent}
+          />
+        </div>
       </div>
 
       {/* Depth chart */}
