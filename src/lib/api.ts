@@ -135,6 +135,37 @@ export interface OpenInterestLive {
   timestamp: string;
 }
 
+// Live order book level: price, size (base), and number of orders at that price.
+export interface OrderbookLevel {
+  px: number;
+  sz: number;
+  n: number;
+}
+
+// Derived stats the backend pre-computes for the order book page — saves the
+// client from redoing the math on every 3-second refresh.
+export interface OrderbookStats {
+  bestBid: OrderbookLevel | null;
+  bestAsk: OrderbookLevel | null;
+  mid: number | null;
+  spreadAbs: number | null;
+  spreadBps: number | null;
+  bidDepth2pctUsd: number;
+  askDepth2pctUsd: number;
+  imbalance: number; // [-1, +1]
+}
+
+// Full order book snapshot returned by /api/analytics/orderbook/:coin.
+// `bids` are sorted DESCENDING by price; `asks` are sorted ASCENDING.
+export interface OrderbookSnapshot {
+  symbol: string;
+  updateType: string;
+  timestamp: number; // milliseconds
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+  stats: OrderbookStats;
+}
+
 // Helper to get auth token (for legacy auth only)
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -268,6 +299,15 @@ export const leaderboard = {
 
 // Analytics API
 export const analytics = {
+  // Live order book snapshot for a market. Backed by BULK's /l2book endpoint,
+  // proxied through our backend with a 2-second cache so many users viewing
+  // the page don't hammer BULK.
+  async getOrderbook(coin: string, nlevels: number = 20): Promise<OrderbookSnapshot> {
+    return request<OrderbookSnapshot>(
+      `/api/analytics/orderbook/${encodeURIComponent(coin)}?nlevels=${nlevels}`
+    );
+  },
+
   // REAL Open Interest history from ticker_snapshots (collected via WebSocket)
   async getOpenInterestHistory(symbol: string, hours: number = 24): Promise<ChartDataPoint[]> {
     const data = await request<{ data: ChartDataPoint[] }>(
