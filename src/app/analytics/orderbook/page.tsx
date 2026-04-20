@@ -440,7 +440,10 @@ export default function OrderBookPage() {
         </div>
       )}
 
-      {/* Top stats — price quote */}
+      {/* All 7 stats in a single aligned grid so column boundaries line up
+          neatly and there are no visual "jumps" between rows. On large screens
+          the top row has 4 cards and the bottom row has the remaining 3 —
+          same column widths, same gaps, consistent rhythm. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Best Bid"
@@ -463,25 +466,27 @@ export default function OrderBookPage() {
         <StatCard
           label="Mid Price"
           value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
+          // Invisible spacer so this card matches the others' height. Using a
+          // non-breaking space keeps the DOM consistent without rendering
+          // anything visible, and tabular-nums ensures spacing is identical.
+          sub={'\u00A0'}
         />
-      </div>
-
-      {/* Second row — depth summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <StatCard
           label="Bid Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
+          sub={'\u00A0'}
           accent="bid"
         />
         <StatCard
           label="Ask Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
+          sub={'\u00A0'}
           accent="ask"
         />
         <StatCard
           label="Book Imbalance"
           value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
-          sub={imbalanceLabel}
+          sub={imbalanceLabel ?? '\u00A0'}
           accent={imbalanceAccent}
         />
       </div>
