@@ -20,27 +20,39 @@ const MARKETS = ['BTC-USD', 'ETH-USD', 'SOL-USD'] as const;
 type Market = (typeof MARKETS)[number];
 
 const COLORS = {
-  bid: '#00B481', // green
-  ask: '#EF4A3C', // red
+  bid: '#00B481',
+  ask: '#EF4A3C',
   mid: 'var(--text-secondary)',
 };
 
-// Auto-refresh every 3 seconds. Backend caches for 2s, so worst case we hit
-// BULK once per user per 3s refresh — fine for page-level use.
+// Auto-refresh every 3 seconds. Backend caches for 2s.
 const REFRESH_INTERVAL_MS = 3000;
 
-function formatPrice(px: number, coin: Market): string {
-  // Use symbol-appropriate decimal places. BTC ticks at $0.50, ETH at $0.01
-  // typically, SOL at $0.001. Best to just pick a reasonable display format
-  // based on the magnitude of the price itself.
-  if (px >= 1000) return px.toFixed(2);
-  if (px >= 10) return px.toFixed(3);
-  return px.toFixed(4);
+// Locale-independent number formatting. Using en-US explicitly prevents the
+// ".toLocaleString()" bug where a German/Russian/Ukrainian browser would render
+// "23,2435" instead of "23.2435" because comma is their decimal separator.
+function formatPrice(px: number): string {
+  // Decimal places vary by magnitude — SOL needs 4 dp, BTC wants 2 dp.
+  let decimals = 2;
+  if (px < 10) decimals = 4;
+  else if (px < 1000) decimals = 3;
+  return px.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+function formatSize(sz: number): string {
+  // Sizes like "4.57" BTC or "108,548.65" SOL — up to 4 decimals, thousands sep.
+  return sz.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  });
 }
 
 function formatBps(bps: number | null): string {
   if (bps === null || !isFinite(bps)) return '—';
-  return `${bps.toFixed(2)} bps`;
+  return `${bps.toFixed(2)}`;
 }
 
 // ----------------------------------------------------------------------------
@@ -75,18 +87,21 @@ function MarketSelector({
 }
 
 // ----------------------------------------------------------------------------
-// Stat card
+// Stat card — cleaner hierarchy, subtle border, tabular nums
 // ----------------------------------------------------------------------------
 
-function Stat({
+function StatCard({
   label,
   value,
   sub,
+  unit,
   accent,
 }: {
   label: string;
   value: string;
   sub?: string;
+  /** Small unit text rendered after the value (e.g. "bps"). */
+  unit?: string;
   accent?: 'bid' | 'ask' | 'muted';
 }) {
   const valueColor =
@@ -96,29 +111,36 @@ function Stat({
       ? 'text-[#EF4A3C]'
       : 'text-[var(--text-primary)]';
   return (
-    <div className="bg-[var(--bg-base)] p-4">
-      <p className="text-xs text-[var(--text-tertiary)] mb-1">{label}</p>
-      <p className={cn('text-xl font-bold', valueColor)}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{sub}</p>}
+    <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] p-4 transition-colors">
+      <p className="text-[11px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+        {label}
+      </p>
+      <div className="flex items-baseline gap-1.5">
+        <span className={cn('text-2xl font-bold tabular-nums tracking-tight', valueColor)}>
+          {value}
+        </span>
+        {unit && (
+          <span className="text-sm text-[var(--text-tertiary)] font-medium">{unit}</span>
+        )}
+      </div>
+      {sub && (
+        <p className="text-xs text-[var(--text-tertiary)] mt-1.5 tabular-nums">{sub}</p>
+      )}
     </div>
   );
 }
 
 // ----------------------------------------------------------------------------
-// Depth chart — "staircase" visualization of cumulative notional
+// Depth chart — staircase visualization of cumulative notional
 // ----------------------------------------------------------------------------
 
 type DepthPoint = { px: number; bid?: number; ask?: number };
 
 function buildDepthSeries(ob: OrderbookSnapshot): DepthPoint[] {
-  // Build two independent cumulative series (bid and ask) in a shared x-axis
-  // by price. Bids cumulate from best (highest) down to worst (lowest).
-  // Asks cumulate from best (lowest) up to worst (highest). We merge into
-  // one sorted-by-price array for Recharts to draw both areas together.
   const bidPoints: DepthPoint[] = [];
   let bidCum = 0;
   for (const l of ob.bids) {
-    bidCum += l.px * l.sz; // USD notional
+    bidCum += l.px * l.sz;
     bidPoints.push({ px: l.px, bid: bidCum });
   }
 
@@ -129,16 +151,78 @@ function buildDepthSeries(ob: OrderbookSnapshot): DepthPoint[] {
     askPoints.push({ px: l.px, ask: askCum });
   }
 
-  // Merge and sort ascending by price for charting.
-  const all = [...bidPoints, ...askPoints].sort((a, b) => a.px - b.px);
-  return all;
+  return [...bidPoints, ...askPoints].sort((a, b) => a.px - b.px);
+}
+
+/**
+ * Custom "mid price" indicator — dashed vertical line with a pill badge at top.
+ * Replaces Recharts' default `label` prop which renders unstyled text.
+ */
+function MidPriceIndicator(props: any) {
+  const { viewBox, midValue } = props;
+  if (!viewBox || midValue == null) return null;
+  const { x, y, height } = viewBox;
+  const lineX = x;
+  const badgeText = `Mid  $${formatPrice(midValue)}`;
+  const badgeWidth = Math.max(90, 7.2 * badgeText.length + 16);
+  const badgeHeight = 20;
+  const badgeY = y - 2;
+  const badgeX = lineX - badgeWidth / 2;
+
+  return (
+    <g>
+      <line
+        x1={lineX}
+        y1={y}
+        x2={lineX}
+        y2={y + height}
+        stroke="var(--text-secondary)"
+        strokeDasharray="3 3"
+        strokeWidth={1}
+        opacity={0.5}
+      />
+      <rect
+        x={badgeX}
+        y={badgeY}
+        width={badgeWidth}
+        height={badgeHeight}
+        rx={badgeHeight / 2}
+        ry={badgeHeight / 2}
+        fill="var(--bg-muted)"
+        stroke="var(--border-color)"
+        strokeWidth={1}
+      />
+      <text
+        x={lineX}
+        y={badgeY + badgeHeight / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={11}
+        fill="var(--text-primary)"
+        style={{ fontFamily: 'inherit', fontWeight: 500 }}
+      >
+        {badgeText}
+      </text>
+    </g>
+  );
 }
 
 function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
   return (
-    <div className="h-[280px] w-full">
+    <div className="h-[320px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, bottom: 5, left: 10 }}>
+        <AreaChart data={data} margin={{ top: 28, right: 10, bottom: 5, left: 10 }}>
+          <defs>
+            {/* Soft vertical gradients give a more premium feel than flat fills */}
+            <linearGradient id="bidGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLORS.bid} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={COLORS.bid} stopOpacity={0.05} />
+            </linearGradient>
+            <linearGradient id="askGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLORS.ask} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={COLORS.ask} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
           <XAxis
             dataKey="px"
             type="number"
@@ -156,23 +240,31 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
             width={60}
           />
           <Tooltip
-            cursor={{ stroke: 'var(--text-secondary)', strokeDasharray: '3 3' }}
+            cursor={{ stroke: 'var(--text-secondary)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
             content={({ active, payload }) => {
               if (!active || !payload || !payload.length) return null;
               const p = payload[0].payload as DepthPoint;
               return (
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-3 py-2 shadow-xl">
-                  <p className="text-xs text-[var(--text-tertiary)] mb-1">
-                    price ${formatCompact(p.px)}
+                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-3 py-2 shadow-xl min-w-[180px]">
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1.5 font-medium">
+                    price ${formatPrice(p.px)}
                   </p>
                   {typeof p.bid === 'number' && (
-                    <p className="text-sm">
-                      <span className="text-[#00B481]">●</span> bid cum ${formatCompact(p.bid)}
+                    <p className="text-sm flex items-center gap-2 tabular-nums">
+                      <span className="inline-block w-2 h-2 rounded-full bg-[#00B481]" />
+                      <span className="text-[var(--text-tertiary)]">bids</span>
+                      <span className="text-[var(--text-primary)] font-medium ml-auto">
+                        ${formatCompact(p.bid)}
+                      </span>
                     </p>
                   )}
                   {typeof p.ask === 'number' && (
-                    <p className="text-sm">
-                      <span className="text-[#EF4A3C]">●</span> ask cum ${formatCompact(p.ask)}
+                    <p className="text-sm flex items-center gap-2 tabular-nums">
+                      <span className="inline-block w-2 h-2 rounded-full bg-[#EF4A3C]" />
+                      <span className="text-[var(--text-tertiary)]">asks</span>
+                      <span className="text-[var(--text-primary)] font-medium ml-auto">
+                        ${formatCompact(p.ask)}
+                      </span>
                     </p>
                   )}
                 </div>
@@ -180,32 +272,32 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
             }}
           />
           {mid !== null && (
-            <ReferenceLine
-              x={mid}
-              stroke={COLORS.mid}
-              strokeDasharray="3 3"
-              label={{ value: 'mid', position: 'top', fill: 'var(--text-secondary)', fontSize: 10 }}
-            />
+            <ReferenceLine x={mid} shape={(props: any) => <MidPriceIndicator {...props} midValue={mid} />} />
           )}
           <Area
             type="stepAfter"
             dataKey="bid"
             stroke={COLORS.bid}
-            fill={COLORS.bid}
-            fillOpacity={0.25}
+            fill="url(#bidGradient)"
             strokeWidth={2}
             connectNulls={false}
-            isAnimationActive={false}
+            // Animate duration tuned to feel smooth but not distracting when
+            // the book updates every 3 seconds. Default is 1500ms which looks
+            // like a re-draw; 600ms is fast-smooth.
+            isAnimationActive={true}
+            animationDuration={600}
+            animationEasing="ease-out"
           />
           <Area
             type="stepBefore"
             dataKey="ask"
             stroke={COLORS.ask}
-            fill={COLORS.ask}
-            fillOpacity={0.25}
+            fill="url(#askGradient)"
             strokeWidth={2}
             connectNulls={false}
-            isAnimationActive={false}
+            isAnimationActive={true}
+            animationDuration={600}
+            animationEasing="ease-out"
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -214,22 +306,18 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
 }
 
 // ----------------------------------------------------------------------------
-// Bid/Ask ladder — classic order book display with fill bars
+// Bid/Ask ladder
 // ----------------------------------------------------------------------------
 
 function Ladder({
   title,
   side,
   levels,
-  coin,
 }: {
   title: string;
   side: 'bid' | 'ask';
   levels: { px: number; sz: number; n: number }[];
-  coin: Market;
 }) {
-  // Normalize size into a percentage fill so we can draw a background bar
-  // proportional to liquidity at each level.
   const maxSz = Math.max(1e-9, ...levels.map((l) => l.sz));
   const bgColor = side === 'bid' ? 'rgba(0, 180, 129, 0.15)' : 'rgba(239, 74, 60, 0.15)';
   const pxColor = side === 'bid' ? 'text-[#00B481]' : 'text-[#EF4A3C]';
@@ -240,7 +328,7 @@ function Ladder({
         <h4 className="text-sm font-medium text-[var(--text-primary)]">{title}</h4>
         <span className="text-xs text-[var(--text-tertiary)]">{levels.length} levels</span>
       </div>
-      <div className="grid grid-cols-3 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1 px-2">
+      <div className="grid grid-cols-3 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1 px-2 font-medium">
         <span>Price</span>
         <span className="text-right">Size</span>
         <span className="text-right">Orders</span>
@@ -254,12 +342,12 @@ function Ladder({
           return (
             <div
               key={`${side}-${i}-${l.px}`}
-              className="grid grid-cols-3 px-2 py-1 text-xs rounded"
+              className="grid grid-cols-3 px-2 py-1 text-xs rounded tabular-nums"
               style={fillStyle}
             >
-              <span className={cn('font-mono', pxColor)}>{formatPrice(l.px, coin)}</span>
+              <span className={cn('font-mono', pxColor)}>{formatPrice(l.px)}</span>
               <span className="text-right font-mono text-[var(--text-primary)]">
-                {l.sz.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                {formatSize(l.sz)}
               </span>
               <span className="text-right font-mono text-[var(--text-tertiary)]">{l.n}</span>
             </div>
@@ -281,19 +369,13 @@ export default function OrderBookPage() {
   const [coin, setCoin] = useState<Market>('BTC-USD');
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Track only the INITIAL load per coin so we can show a loading state the
-  // first time; subsequent refreshes silently update in place.
   const [initialLoading, setInitialLoading] = useState(true);
   const lastFetchedCoinRef = useRef<Market | null>(null);
 
-  // Pull the current snapshot. Wrapped in useCallback so the polling useEffect
-  // can depend on coin without re-declaring the function each render.
   const fetchBook = useCallback(async (target: Market, resetLoading: boolean) => {
     if (resetLoading) setInitialLoading(true);
     try {
       const snap = await analytics.getOrderbook(target, 20);
-      // Guard against stale responses from a previous coin (e.g., user clicked
-      // BTC → ETH quickly; BTC's response may resolve after ETH was selected).
       if (lastFetchedCoinRef.current !== target && lastFetchedCoinRef.current !== null) {
         return;
       }
@@ -307,15 +389,12 @@ export default function OrderBookPage() {
     }
   }, []);
 
-  // When coin changes, clear the old book immediately (so users see the
-  // market selector respond) and kick off a fresh fetch with loading state.
   useEffect(() => {
     lastFetchedCoinRef.current = coin;
     setBook(null);
     fetchBook(coin, true);
   }, [coin, fetchBook]);
 
-  // Polling — refresh every REFRESH_INTERVAL_MS while the page is open.
   useEffect(() => {
     const id = setInterval(() => {
       fetchBook(coin, false);
@@ -324,84 +403,86 @@ export default function OrderBookPage() {
   }, [coin, fetchBook]);
 
   const depthData = useMemo(() => (book ? buildDepthSeries(book) : []), [book]);
-
   const stats = book?.stats;
   const lastUpdated = book ? new Date(book.timestamp).toLocaleTimeString() : '—';
 
+  const imbalanceLabel = stats
+    ? stats.imbalance > 0.05
+      ? 'Bid-heavy'
+      : stats.imbalance < -0.05
+      ? 'Ask-heavy'
+      : 'Balanced'
+    : undefined;
+  const imbalanceAccent: 'bid' | 'ask' | 'muted' | undefined = stats
+    ? stats.imbalance > 0.05
+      ? 'bid'
+      : stats.imbalance < -0.05
+      ? 'ask'
+      : 'muted'
+    : undefined;
+
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Order Book</h1>
-          <p className="text-sm text-[var(--text-tertiary)] mt-1">
-            Live market depth — auto-refreshes every 3 seconds · last update {lastUpdated}
+          <p className="text-sm text-[var(--text-tertiary)] mt-1 tabular-nums">
+            Live market depth · auto-refreshes every 3s · last update {lastUpdated}
           </p>
         </div>
         <MarketSelector value={coin} onChange={setCoin} />
       </div>
 
-      {/* Error banner */}
       {error && !initialLoading && (
         <div className="bg-[#EF4A3C]/10 border border-[#EF4A3C]/30 text-[#EF4A3C] text-sm rounded-lg px-4 py-2">
           {error}
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
-        <Stat
+      {/* Top stats — price quote */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
           label="Best Bid"
-          value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px, coin)}` : '—'}
-          sub={stats?.bestBid ? `${stats.bestBid.sz.toLocaleString(undefined, { maximumFractionDigits: 4 })} @ ${stats.bestBid.n} orders` : undefined}
+          value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'}
+          sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined}
           accent="bid"
         />
-        <Stat
+        <StatCard
           label="Best Ask"
-          value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px, coin)}` : '—'}
-          sub={stats?.bestAsk ? `${stats.bestAsk.sz.toLocaleString(undefined, { maximumFractionDigits: 4 })} @ ${stats.bestAsk.n} orders` : undefined}
+          value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'}
+          sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined}
           accent="ask"
         />
-        <Stat
+        <StatCard
           label="Spread"
           value={formatBps(stats?.spreadBps ?? null)}
+          unit="bps"
           sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined}
         />
-        <Stat
+        <StatCard
           label="Mid Price"
-          value={stats?.mid != null ? `$${formatPrice(stats.mid, coin)}` : '—'}
+          value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
         />
       </div>
 
-      {/* Depth / imbalance row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
-        <Stat
-          label="Bid Depth (±2% of mid)"
+      {/* Second row — depth summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <StatCard
+          label="Bid Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
           accent="bid"
         />
-        <Stat
-          label="Ask Depth (±2% of mid)"
+        <StatCard
+          label="Ask Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
           accent="ask"
         />
-        <Stat
+        <StatCard
           label="Book Imbalance"
-          value={
-            stats
-              ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%`
-              : '—'
-          }
-          sub={
-            stats
-              ? stats.imbalance > 0.05
-                ? 'Bid-heavy'
-                : stats.imbalance < -0.05
-                ? 'Ask-heavy'
-                : 'Balanced'
-              : undefined
-          }
-          accent={stats && stats.imbalance > 0.05 ? 'bid' : stats && stats.imbalance < -0.05 ? 'ask' : 'muted'}
+          value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
+          sub={imbalanceLabel}
+          accent={imbalanceAccent}
         />
       </div>
 
@@ -409,13 +490,13 @@ export default function OrderBookPage() {
       <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
         <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Depth Chart</h3>
         {initialLoading ? (
-          <div className="h-[280px] flex items-center justify-center">
+          <div className="h-[320px] flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
           </div>
         ) : book && depthData.length > 0 ? (
           <DepthChart data={depthData} mid={stats?.mid ?? null} />
         ) : (
-          <div className="h-[280px] flex items-center justify-center text-sm text-[var(--text-tertiary)]">
+          <div className="h-[320px] flex items-center justify-center text-sm text-[var(--text-tertiary)]">
             No depth data available.
           </div>
         )}
@@ -430,8 +511,8 @@ export default function OrderBookPage() {
           </>
         ) : book ? (
           <>
-            <Ladder title="Bids" side="bid" levels={book.bids} coin={coin} />
-            <Ladder title="Asks" side="ask" levels={book.asks} coin={coin} />
+            <Ladder title="Bids" side="bid" levels={book.bids} />
+            <Ladder title="Asks" side="ask" levels={book.asks} />
           </>
         ) : (
           <div className="col-span-full text-sm text-[var(--text-tertiary)] text-center py-8">
