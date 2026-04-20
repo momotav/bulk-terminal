@@ -7,7 +7,17 @@ import {
   Line, LineChart, Area, AreaChart, ReferenceLine
 } from 'recharts';
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
+import { CoinSelector } from '@/components/CoinSelector';
+import {
+  DEFAULT_COINS,
+  OTHER_KEY,
+  getCoinColor,
+  adaptLegacyRow,
+} from '@/lib/coins';
 
+// Legacy COLORS map kept for the non-coin entries (positive/negative/neutral
+// used by regime indicators). All coin colors should come from getCoinColor()
+// so BNB/DOGE/SUI/ZEC etc. render with proper distinct colors.
 const COLORS = {
   BTC: '#00B482',
   ETH: '#2271B5',
@@ -148,7 +158,7 @@ export default function RiskPage() {
   // Volatility chart
   const [volatilityHours, setVolatilityHours] = useState(24);
   const [volatilityData, setVolatilityData] = useState<{ timestamp: string; BTC: number; ETH: number; SOL: number }[]>([]);
-  const [volatilityCoins, setVolatilityCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [volatilityCoins, setVolatilityCoins] = useState<string[]>([...DEFAULT_COINS, OTHER_KEY]);
   
   // Fair spread chart
   const [fairSpreadHours, setFairSpreadHours] = useState(24);
@@ -218,20 +228,9 @@ export default function RiskPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const CoinToggle = ({ coin, coins, setCoins }: { coin: string; coins: string[]; setCoins: (c: string[]) => void }) => (
-    <button
-      onClick={() => setCoins(coins.includes(coin) ? coins.filter(c => c !== coin) : [...coins, coin])}
-      className={cn(
-        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all",
-        coins.includes(coin)
-          ? "bg-[var(--bg-muted)] border-[var(--border-color)] text-[var(--text-primary)]"
-          : "bg-transparent border-transparent text-[var(--text-tertiary)]"
-      )}
-    >
-      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS[coin as keyof typeof COLORS] }} />
-      {coin}
-    </button>
-  );
+  // Note: the legacy local `CoinToggle` was removed. The volatility chart now
+  // uses the shared `<CoinSelector>` which supports BTC/ETH/SOL defaults plus
+  // a dropdown to add any other coin BULK has listed.
 
   // Calculate heatmap data from regime data
   const heatmapData = useMemo(() => {
@@ -335,7 +334,7 @@ export default function RiskPage() {
                                 <div className="flex items-center gap-2">
                                   <div 
                                     className="w-2 h-2 rounded-full" 
-                                    style={{ backgroundColor: COLORS[market.symbol.replace('-USD', '') as keyof typeof COLORS] || COLORS.BTC }} 
+                                    style={{ backgroundColor: getCoinColor(market.symbol.replace('-USD', '')) }} 
                                   />
                                   <span className="font-medium text-[var(--text-primary)]">{market.symbol.replace('-USD', '')}</span>
                                 </div>
@@ -396,7 +395,7 @@ export default function RiskPage() {
                               <div className="flex items-center gap-2">
                                 <div 
                                   className="w-3 h-3 rounded-sm" 
-                                  style={{ backgroundColor: COLORS[asset as keyof typeof COLORS] }} 
+                                  style={{ backgroundColor: getCoinColor(asset) }} 
                                 />
                                 <span className="text-[var(--text-primary)]">{asset}</span>
                               </div>
@@ -407,7 +406,7 @@ export default function RiskPage() {
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{ 
                                   width: `${width}%`,
-                                  backgroundColor: COLORS[asset as keyof typeof COLORS]
+                                  backgroundColor: getCoinColor(asset)
                                 }}
                               />
                             </div>
@@ -474,9 +473,7 @@ export default function RiskPage() {
                       ))}
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      <CoinToggle coin="BTC" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                      <CoinToggle coin="ETH" coins={volatilityCoins} setCoins={setVolatilityCoins} />
-                      <CoinToggle coin="SOL" coins={volatilityCoins} setCoins={setVolatilityCoins} />
+                      <CoinSelector enabled={volatilityCoins} onChange={setVolatilityCoins} />
                     </div>
                   </div>
                 </div>
@@ -484,7 +481,21 @@ export default function RiskPage() {
                 {volatilityData.length > 0 ? (
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={volatilityData}>
+                      <LineChart data={volatilityData.map(row => {
+                        // Normalize to {timestamp, coin1, coin2, ...} shape.
+                        // Backend returns both legacy top-level keys AND a `coins`
+                        // dict — prefer the dict if present, otherwise adapt.
+                        const anyRow = row as any;
+                        const dict = (anyRow.coins && typeof anyRow.coins === 'object')
+                          ? anyRow.coins as Record<string, number>
+                          : adaptLegacyRow(anyRow).coins;
+                        const out: Record<string, unknown> = { timestamp: row.timestamp };
+                        for (const coin of volatilityCoins) {
+                          if (coin === OTHER_KEY) continue; // volatility is a rate — no "Other" aggregate
+                          if (typeof dict[coin] === 'number') out[coin] = dict[coin];
+                        }
+                        return out;
+                      })}>
                         <XAxis 
                           dataKey="timestamp" 
                           tickFormatter={(ts) => formatDateForChart(ts, volatilityHours)}
@@ -499,9 +510,21 @@ export default function RiskPage() {
                           tickFormatter={(v) => `${v}%`}
                         />
                         <Tooltip content={<ChartTooltip />} />
-                        {volatilityCoins.includes('BTC') && <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} />}
-                        {volatilityCoins.includes('ETH') && <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} />}
-                        {volatilityCoins.includes('SOL') && <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} />}
+                        {/* One Line per enabled coin. "Other" is skipped because
+                            volatility is a rate and averaging across coins into
+                            an aggregate would be misleading. */}
+                        {volatilityCoins
+                          .filter(coin => coin !== OTHER_KEY)
+                          .map(coin => (
+                            <Line
+                              key={coin}
+                              type="monotone"
+                              dataKey={coin}
+                              stroke={getCoinColor(coin)}
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          ))}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
