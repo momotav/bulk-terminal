@@ -172,8 +172,9 @@ function getToken(): string | null {
   return localStorage.getItem('bulk_token');
 }
 
-// API request helper
-async function request<T>(
+// API request helper. Exported so other modules (hooks, new feature files)
+// can share the same auth + error-handling behavior instead of duplicating it.
+export async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
