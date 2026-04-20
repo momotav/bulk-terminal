@@ -87,22 +87,84 @@ function MarketSelector({
 }
 
 // ----------------------------------------------------------------------------
-// Stat card — cleaner hierarchy, subtle border, tabular nums
+// FlashingValue — briefly highlights when the value changes, then fades back.
+//
+// The effect is driven by tracking the previous value in a ref. On every render
+// where the incoming value differs from the ref, we flip a `flash` state on
+// for ~500ms (via setTimeout), which applies a colored background. When it
+// times out we go back to neutral. The underlying text is unchanged — this is
+// just a visual cue that "something updated" so the page doesn't feel dead
+// while still being easy on the eyes.
 // ----------------------------------------------------------------------------
 
-function StatCard({
+function FlashingValue({
+  value,
+  className,
+  accent,
+}: {
+  value: string;
+  className?: string;
+  /** Determines the flash color. 'auto' flashes neutral (amber); 'bid' green; 'ask' red. */
+  accent?: 'bid' | 'ask' | 'auto';
+}) {
+  const prevRef = useRef<string>(value);
+  const [flashing, setFlashing] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Skip the flash on the very first render — only animate real changes.
+    if (prevRef.current !== value) {
+      setFlashing(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setFlashing(false), 500);
+      prevRef.current = value;
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [value]);
+
+  const flashBg =
+    accent === 'bid'
+      ? 'bg-[#00B481]/20'
+      : accent === 'ask'
+      ? 'bg-[#EF4A3C]/20'
+      : 'bg-[var(--text-primary)]/10';
+
+  return (
+    <span
+      className={cn(
+        'inline-block rounded px-1 -mx-1 transition-colors duration-500 ease-out',
+        flashing ? flashBg : 'bg-transparent',
+        className
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// StatCell — matches the "Total Trades / Total Volume" row on the General page.
+// Cards have no individual border; they sit inside a single rounded container
+// with gap-px producing hairline dividers between them.
+// ----------------------------------------------------------------------------
+
+function StatCell({
   label,
   value,
   sub,
   unit,
   accent,
+  flashAccent,
 }: {
   label: string;
   value: string;
   sub?: string;
-  /** Small unit text rendered after the value (e.g. "bps"). */
   unit?: string;
   accent?: 'bid' | 'ask' | 'muted';
+  /** Optional accent color for the flash animation — defaults to card accent. */
+  flashAccent?: 'bid' | 'ask' | 'auto';
 }) {
   const valueColor =
     accent === 'bid'
@@ -110,21 +172,24 @@ function StatCard({
       : accent === 'ask'
       ? 'text-[#EF4A3C]'
       : 'text-[var(--text-primary)]';
+  const resolvedFlashAccent =
+    flashAccent ?? (accent === 'bid' ? 'bid' : accent === 'ask' ? 'ask' : 'auto');
+
   return (
-    <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] p-4 transition-colors">
-      <p className="text-[11px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
-        {label}
-      </p>
+    <div className="bg-[var(--bg-base)] p-4">
+      <p className="text-xs text-[var(--text-tertiary)] mb-1">{label}</p>
       <div className="flex items-baseline gap-1.5">
-        <span className={cn('text-2xl font-bold tabular-nums tracking-tight', valueColor)}>
-          {value}
-        </span>
+        <FlashingValue
+          value={value}
+          accent={resolvedFlashAccent}
+          className={cn('text-2xl font-bold tabular-nums tracking-tight', valueColor)}
+        />
         {unit && (
           <span className="text-sm text-[var(--text-tertiary)] font-medium">{unit}</span>
         )}
       </div>
-      {sub && (
-        <p className="text-xs text-[var(--text-tertiary)] mt-1.5 tabular-nums">{sub}</p>
+      {sub !== undefined && (
+        <p className="text-xs text-[var(--text-tertiary)] mt-1 tabular-nums">{sub}</p>
       )}
     </div>
   );
@@ -319,8 +384,8 @@ function Ladder({
   levels: { px: number; sz: number; n: number }[];
 }) {
   const maxSz = Math.max(1e-9, ...levels.map((l) => l.sz));
-  const bgColor = side === 'bid' ? 'rgba(0, 180, 129, 0.15)' : 'rgba(239, 74, 60, 0.15)';
   const pxColor = side === 'bid' ? 'text-[#00B481]' : 'text-[#EF4A3C]';
+  const fillColor = side === 'bid' ? 'rgba(0, 180, 129, 0.15)' : 'rgba(239, 74, 60, 0.15)';
 
   return (
     <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
@@ -336,20 +401,33 @@ function Ladder({
       <div className="space-y-[1px]">
         {levels.map((l, i) => {
           const pct = (l.sz / maxSz) * 100;
-          const fillStyle = side === 'bid'
-            ? { background: `linear-gradient(to left, ${bgColor} ${pct}%, transparent ${pct}%)` }
-            : { background: `linear-gradient(to right, ${bgColor} ${pct}%, transparent ${pct}%)` };
+          // Use a stable key based on price so React reuses DOM nodes across
+          // refreshes. When the same price row just has a new size, the <div>
+          // persists and the fill bar's width animates via CSS transition
+          // instead of snapping from one value to another.
+          const rowKey = `${side}-${l.px}`;
           return (
             <div
-              key={`${side}-${i}-${l.px}`}
-              className="grid grid-cols-3 px-2 py-1 text-xs rounded tabular-nums"
-              style={fillStyle}
+              key={rowKey}
+              className="relative grid grid-cols-3 px-2 py-1 text-xs rounded tabular-nums overflow-hidden"
             >
-              <span className={cn('font-mono', pxColor)}>{formatPrice(l.px)}</span>
-              <span className="text-right font-mono text-[var(--text-primary)]">
+              {/* Fill bar — absolutely positioned so its width can animate
+                  without affecting the grid layout. For bids, anchor to the
+                  right (so it grows leftward); for asks, anchor to the left. */}
+              <div
+                className={cn(
+                  'absolute inset-y-0 pointer-events-none transition-all duration-500 ease-out',
+                  side === 'bid' ? 'right-0' : 'left-0'
+                )}
+                style={{ width: `${pct}%`, background: fillColor }}
+              />
+              <span className={cn('relative font-mono', pxColor)}>{formatPrice(l.px)}</span>
+              <span className="relative text-right font-mono text-[var(--text-primary)]">
                 {formatSize(l.sz)}
               </span>
-              <span className="text-right font-mono text-[var(--text-tertiary)]">{l.n}</span>
+              <span className="relative text-right font-mono text-[var(--text-tertiary)]">
+                {l.n}
+              </span>
             </div>
           );
         })}
@@ -440,50 +518,48 @@ export default function OrderBookPage() {
         </div>
       )}
 
-      {/* All 7 stats in a single aligned grid so column boundaries line up
-          neatly and there are no visual "jumps" between rows. On large screens
-          the top row has 4 cards and the bottom row has the remaining 3 —
-          same column widths, same gaps, consistent rhythm. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
+      {/* Unified stats grid — same styling as the "Total Trades / Total Volume"
+          row on the General page. All 7 cells live inside one rounded container
+          with hairline dividers produced by `gap-px` over the border color.
+          That makes column boundaries line up perfectly and gives a single
+          coherent block rather than floating individual cards. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
+        <StatCell
           label="Best Bid"
           value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'}
-          sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined}
+          sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : '\u00A0'}
           accent="bid"
         />
-        <StatCard
+        <StatCell
           label="Best Ask"
           value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'}
-          sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined}
+          sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : '\u00A0'}
           accent="ask"
         />
-        <StatCard
+        <StatCell
           label="Spread"
           value={formatBps(stats?.spreadBps ?? null)}
           unit="bps"
-          sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined}
+          sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : '\u00A0'}
         />
-        <StatCard
+        <StatCell
           label="Mid Price"
           value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
-          // Invisible spacer so this card matches the others' height. Using a
-          // non-breaking space keeps the DOM consistent without rendering
-          // anything visible, and tabular-nums ensures spacing is identical.
           sub={'\u00A0'}
         />
-        <StatCard
+        <StatCell
           label="Bid Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
           sub={'\u00A0'}
           accent="bid"
         />
-        <StatCard
+        <StatCell
           label="Ask Depth · ±2% of mid"
           value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
           sub={'\u00A0'}
           accent="ask"
         />
-        <StatCard
+        <StatCell
           label="Book Imbalance"
           value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
           sub={imbalanceLabel ?? '\u00A0'}
