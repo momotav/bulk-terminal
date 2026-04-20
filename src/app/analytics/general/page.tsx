@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from '@/components/Header';
-import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
+import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry, type ChartData } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Bar, ComposedChart, Line, LineChart, ReferenceLine, Area, AreaChart
@@ -40,19 +40,11 @@ const COLORS = {
   total: '#FFB548',
 };
 
-// Chart row. Backend now returns additive shape: `coins: { BTC, ETH, SOL, BNB, ... }`
-// alongside legacy top-level BTC/ETH/SOL fields. This type keeps both so existing
-// code that reads row.BTC still works, but new code should consume `row.coins`.
-type ChartData = {
-  timestamp: string;
-  coins?: Record<string, number>;
-  BTC?: number;
-  ETH?: number;
-  SOL?: number;
-  total?: number;
-  Cumulative?: number;
-  [key: string]: unknown;
-};
+// `ChartData` is imported from '@/lib/api' — see that file for the canonical
+// shape. It now includes a `coins: Record<string, number>` field from the
+// Phase 2 additive backend response, plus legacy top-level BTC/ETH/SOL fields
+// for backward compatibility, plus an index signature for arbitrary coin keys
+// (BNB/DOGE/FARTCOIN/SUI/ZEC/etc.).
 
 // Compute the ordered list of coin series to render on a chart. Stacking order
 // matters (rendered bottom-to-top): we put non-default coins first so BTC/ETH/SOL
