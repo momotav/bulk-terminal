@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Flame, Gauge } from 'lucide-react';
+import { BarChart3, Flame, Gauge, BookOpen } from 'lucide-react';
 
 const menuItems = [
   {
@@ -20,6 +20,11 @@ const menuItems = [
     name: 'Risk',
     href: '/analytics/risk',
     icon: Gauge,
+  },
+  {
+    name: 'Order Book',
+    href: '/analytics/orderbook',
+    icon: BookOpen,
   },
 ];
 
