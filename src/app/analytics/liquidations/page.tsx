@@ -7,17 +7,22 @@ import {
   Cell, ReferenceLine, Legend
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ChevronDown, ExternalLink } from 'lucide-react';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { DEFAULT_COINS } from '@/lib/coins';
 
 // Time period options
 const PERIODS = [
   { label: '4H', value: '4h' },
   { label: 'D', value: '24h' },
-  { label: '3D', value: '3d' },
   { label: 'W', value: '7d' },
+  { label: '3D', value: '3d' },
   { label: 'ALL', value: 'all' },
 ];
 
-const COINS = ['BTC', 'ETH', 'SOL'];
+// Note: the old `const COINS = ['BTC', 'ETH', 'SOL']` was removed. This page
+// now pulls the live market list via `useAvailableCoins()` inside the main
+// component and passes it down to the single-coin pickers and featured filter.
+// The period array ordering was kept as-is to match existing UI.
 
 // Colors
 const COLORS = {
@@ -223,14 +228,15 @@ function LiquidationTreemap({
 }) {
   const [hoveredItem, setHoveredItem] = useState<{ symbol: string; total: number; long: number; short: number; dominantSide: string; x: number; y: number } | null>(null);
 
-  // Group by symbol - one rectangle per coin with dominant color
+  // Group by symbol - one rectangle per coin with dominant color.
+  // The old BTC/ETH/SOL filter was removed — the treemap now shows every coin
+  // that had liquidations in the window, with rectangle area proportional to
+  // total value. New BULK markets (BNB, DOGE, FARTCOIN, SUI, ZEC, ...) appear
+  // automatically once the backend reports liquidation data for them.
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
-    const allowedSymbols = ['BTC', 'ETH', 'SOL'];
-    
+
     for (const item of data) {
-      if (!allowedSymbols.includes(item.symbol)) continue;
-      
       if (!groups[item.symbol]) {
         groups[item.symbol] = { long: 0, short: 0, total: 0 };
       }
@@ -520,8 +526,20 @@ function PeriodSelector({ value, onChange }: { value: string; onChange: (v: stri
   );
 }
 
-// Coin selector dropdown
-function CoinSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+// Single-coin dropdown picker. Renamed from `CoinSelector` to avoid confusion
+// with the shared multi-select `<CoinSelector>` (src/components/CoinSelector.tsx)
+// used on the General page. This one just lets the user pick ONE coin to focus
+// the liquidations view on. Takes its coin list as a prop so the parent passes
+// in the live list from `useAvailableCoins()`.
+function SingleCoinDropdown({
+  value,
+  onChange,
+  coins,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  coins: string[];
+}) {
   const [open, setOpen] = useState(false);
   
   return (
@@ -537,8 +555,8 @@ function CoinSelector({ value, onChange }: { value: string; onChange: (v: string
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[120px]">
-            {COINS.map((coin) => (
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[120px] max-h-64 overflow-y-auto">
+            {coins.map((coin) => (
               <button
                 key={coin}
                 onClick={() => { onChange(coin); setOpen(false); }}
@@ -576,6 +594,10 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function LiquidationsPage() {
+  // Live market list for the single-coin pickers and featured-filter select.
+  // Pulled from BULK's /exchangeInfo via useAvailableCoins (module-level cached).
+  const { coins: availableCoins } = useAvailableCoins();
+
   // State
   const [treemapPeriod, setTreemapPeriod] = useState('24h');
   const [chartPeriod, setChartPeriod] = useState('all');
@@ -705,7 +727,7 @@ export default function LiquidationsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
             <div className="flex items-center gap-2">
-              <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
+              <SingleCoinDropdown coins={availableCoins} value={selectedCoin} onChange={setSelectedCoin} />
               <PeriodSelector value={summaryPeriod} onChange={setSummaryPeriod} />
             </div>
           </div>
@@ -855,7 +877,7 @@ export default function LiquidationsPage() {
           <div className="flex flex-col gap-3 mb-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Market Summary</h2>
-              <CoinSelector value={selectedCoin} onChange={setSelectedCoin} />
+              <SingleCoinDropdown coins={availableCoins} value={selectedCoin} onChange={setSelectedCoin} />
             </div>
             <div className="overflow-x-auto -mx-1 px-1">
               <PeriodSelector value={marketPeriod} onChange={setMarketPeriod} />
@@ -959,7 +981,7 @@ export default function LiquidationsPage() {
               className="bg-transparent text-sm text-[var(--text-primary)] outline-none cursor-pointer"
             >
               <option value="ALL">ALL</option>
-              {COINS.map(coin => (
+              {availableCoins.map(coin => (
                 <option key={coin} value={coin}>{coin}</option>
               ))}
             </select>
