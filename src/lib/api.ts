@@ -43,11 +43,20 @@ export interface ChartDataPoint {
 
 export interface ChartData {
   timestamp: string;
-  BTC: number;
-  ETH: number;
-  SOL: number;
+  // Per-coin dictionary from the additive backend shape (Phase 2). Contains
+  // every coin BULK has data for — BTC/ETH/SOL plus any new markets.
+  coins?: Record<string, number>;
+  // Legacy top-level per-coin fields kept for backward compatibility with
+  // components that haven't migrated yet. The backend populates both.
+  BTC?: number;
+  ETH?: number;
+  SOL?: number;
   Cumulative?: number;
   total?: number;
+  // Index signature allows ad-hoc coin keys (BNB, DOGE, FARTCOIN, SUI, ZEC, ...)
+  // to live alongside the named ones. Without this, TS can't accept the full
+  // additive rows the backend returns.
+  [key: string]: unknown;
 }
 
 export interface LongShortDataPoint {
@@ -372,22 +381,22 @@ export const analytics = {
     return data.data;
   },
 
-  async getLiquidationsChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+  async getLiquidationsChart(hours: number = 720): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
       `/api/analytics/liquidations-chart?hours=${hours}`
     );
     return data.data;
   },
 
-  async getADLChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+  async getADLChart(hours: number = 720): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
       `/api/analytics/adl-chart?hours=${hours}`
     );
     return data.data;
   },
 
-  async getVolumeChart(hours: number = 720): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
-    const data = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+  async getVolumeChart(hours: number = 720): Promise<ChartData[]> {
+    const data = await request<{ data: ChartData[] }>(
       `/api/analytics/volume-chart?hours=${hours}`
     );
     return data.data;
@@ -403,9 +412,9 @@ export const analytics = {
   },
 
   // Volume chart from BULK API (via backend proxy)
-  async getVolumeFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+  async getVolumeFromBulkAPI(hours: number = 24): Promise<ChartData[]> {
     try {
-      const response = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      const response = await request<{ data: ChartData[] }>(
         `/api/analytics/volume-chart-api?hours=${hours}`
       );
       console.log('Volume API response:', response);
@@ -417,9 +426,9 @@ export const analytics = {
   },
 
   // Trades count chart from BULK API (via backend proxy)
-  async getTradesFromBulkAPI(hours: number = 24): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]> {
+  async getTradesFromBulkAPI(hours: number = 24): Promise<ChartData[]> {
     try {
-      const response = await request<{ data: { timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[] }>(
+      const response = await request<{ data: ChartData[] }>(
         `/api/analytics/trades-chart-api?hours=${hours}`
       );
       console.log('Trades API response:', response);
@@ -433,10 +442,10 @@ export const analytics = {
   // ============ NEW: BULK API DIRECT (no PostgreSQL) ============
 
   // Volume chart directly from BULK /klines endpoint
-  async getVolumeChartBulk(interval: string = '1h'): Promise<{ timestamp: string; BTC: number; ETH: number; SOL: number; XRP: number; GOLD: number; total: number }[]> {
+  async getVolumeChartBulk(interval: string = '1h'): Promise<ChartData[]> {
     try {
-      const response = await request<{ 
-        data: { timestamp: string; BTC: number; ETH: number; SOL: number; XRP: number; GOLD: number; total: number }[];
+      const response = await request<{
+        data: ChartData[];
         source: string;
         interval: string;
       }>(`/api/analytics/volume-chart-bulk?interval=${interval}`);
