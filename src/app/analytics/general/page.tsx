@@ -10,6 +10,14 @@ import {
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
+import { CoinSelector } from '@/components/CoinSelector';
+import {
+  DEFAULT_COINS,
+  OTHER_KEY,
+  getCoinColor,
+  bucketWithOther,
+  adaptLegacyRow,
+} from '@/lib/coins';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -20,15 +28,50 @@ const timeRanges = [
   { label: 'ALL', hours: 8760 * 2 },
 ];
 
+// Legacy COLORS map — kept for backward compat with InteractiveRangeSlider defaults
+// and a few isolated places. All NEW code should use `getCoinColor(coin)` from
+// '@/lib/coins' instead so every coin gets a color, not just BTC/ETH/SOL.
 const COLORS = {
   BTC: '#00B482',
   ETH: '#2271B5',
   SOL: '#7570B3',
+  [OTHER_KEY]: getCoinColor(OTHER_KEY),
   cumulative: '#FFB548',
   total: '#FFB548',
 };
 
-type ChartData = { timestamp: string; BTC: number; ETH: number; SOL: number; total?: number; Cumulative?: number };
+// Chart row. Backend now returns additive shape: `coins: { BTC, ETH, SOL, BNB, ... }`
+// alongside legacy top-level BTC/ETH/SOL fields. This type keeps both so existing
+// code that reads row.BTC still works, but new code should consume `row.coins`.
+type ChartData = {
+  timestamp: string;
+  coins?: Record<string, number>;
+  BTC?: number;
+  ETH?: number;
+  SOL?: number;
+  total?: number;
+  Cumulative?: number;
+  [key: string]: unknown;
+};
+
+// Compute the ordered list of coin series to render on a chart. Stacking order
+// matters (rendered bottom-to-top): we put non-default coins first so BTC/ETH/SOL
+// sit visually on top like they always did, and Other goes very top.
+//
+// Filters out "Other" if it's not enabled.
+function orderedSeriesFor(enabled: readonly string[]): string[] {
+  const enabledSet = new Set(enabled);
+  const extras = enabled.filter(
+    c => c !== OTHER_KEY && !(DEFAULT_COINS as readonly string[]).includes(c)
+  );
+  const defaults = (DEFAULT_COINS as readonly string[]).filter(c => enabledSet.has(c));
+  // Order (bottom → top in a stack): extras → SOL → ETH → BTC → Other.
+  // Reversing defaults puts BTC on top as it was in the legacy chart.
+  const ordered = [...extras, ...defaults.slice().reverse()];
+  if (enabledSet.has(OTHER_KEY)) ordered.push(OTHER_KEY);
+  return ordered;
+}
+
 
 // Fixed Interactive Range Slider - follows cursor 1:1
 const InteractiveRangeSlider = ({ 
@@ -306,20 +349,28 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   return (
     <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-[var(--text-secondary)] mb-2 border-b border-[var(--border-color)] pb-2">{formattedDate}</p>
-      {payload.map((entry: any, i: number) => (
-        <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
-            <span className="text-[var(--text-secondary)]">{formatName(entry.name)}</span>
+      {payload.map((entry: any, i: number) => {
+        // Detect "count" vs "USD" series. Named specials (newUsers, cumulative,
+        // dau, total) are always counts. Any other series is a coin — we key off
+        // value magnitude: trade counts are typically under 1M; USD volumes are
+        // well above. This keeps the heuristic coin-agnostic (BTC/ETH/SOL/BNB/
+        // DOGE/... all handled the same way) while preserving the original UX.
+        const specials = ['newUsers', 'cumulative', 'dau', 'total', 'Cumulative'];
+        const isSpecialCount = specials.includes(entry.dataKey);
+        const isSmallCoinValue = typeof entry.value === 'number' && entry.value < 1_000_000;
+        const skipDollarSign = isSpecialCount || isSmallCoinValue;
+        return (
+          <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+              <span className="text-[var(--text-secondary)]">{formatName(entry.name)}</span>
+            </div>
+            <span className="text-[var(--text-primary)] font-medium">
+              {skipDollarSign ? formatCompact(entry.value) : `$${formatCompact(entry.value)}`}
+            </span>
           </div>
-          <span className="text-[var(--text-primary)] font-medium">
-            {/* Don't show $ for user count metrics */}
-            {['newUsers', 'cumulative', 'dau', 'total', 'BTC', 'ETH', 'SOL'].includes(entry.dataKey) && entry.value < 1000000
-              ? formatCompact(entry.value)
-              : `$${formatCompact(entry.value)}`}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -505,13 +556,16 @@ export default function AnalyticsPage() {
   const [topUsersPage, setTopUsersPage] = useState(1);
   const [topUsersSortAsc, setTopUsersSortAsc] = useState(false); // false = high to low (default)
   
-  // Per-chart coin selections (independent for each chart)
-  const [volumeCoins, setVolumeCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  const [oiCoins, setOiCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  const [fundingCoins, setFundingCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  const [tradesCoins, setTradesCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  const [liquidationsCoins, setLiquidationsCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
-  const [adlCoins, setAdlCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  // Per-chart coin selections (independent for each chart).
+  // Default is the 3 original coins + "Other" aggregate on. Users can toggle
+  // any coin off, or add more coins via the CoinSelector dropdown.
+  const DEFAULT_ENABLED = [...DEFAULT_COINS, OTHER_KEY];
+  const [volumeCoins, setVolumeCoins] = useState<string[]>(DEFAULT_ENABLED);
+  const [oiCoins, setOiCoins] = useState<string[]>(DEFAULT_ENABLED);
+  const [fundingCoins, setFundingCoins] = useState<string[]>(DEFAULT_ENABLED);
+  const [tradesCoins, setTradesCoins] = useState<string[]>(DEFAULT_ENABLED);
+  const [liquidationsCoins, setLiquidationsCoins] = useState<string[]>(DEFAULT_ENABLED);
+  const [adlCoins, setAdlCoins] = useState<string[]>(DEFAULT_ENABLED);
   
   // Range sliders state
   const [volumeRange, setVolumeRange] = useState({ start: 0, end: 100 });
@@ -571,7 +625,7 @@ export default function AnalyticsPage() {
   const [uniqueTradersData, setUniqueTradersData] = useState<{ timestamp: string; BTC: number; ETH: number; SOL: number; total: number }[]>([]);
   const [dauData, setDauData] = useState<{ timestamp: string; dau: number }[]>([]);
   const [newUsersData, setNewUsersData] = useState<{ timestamp: string; newUsers: number; cumulative: number }[]>([]);
-  const [uniqueTradersCoins, setUniqueTradersCoins] = useState<string[]>(['BTC', 'ETH', 'SOL']);
+  const [uniqueTradersCoins, setUniqueTradersCoins] = useState<string[]>(DEFAULT_ENABLED);
   const [uniqueTradersRange, setUniqueTradersRange] = useState({ start: 0, end: 100 });
   const [dauRange, setDauRange] = useState({ start: 0, end: 100 });
   const [newUsersRange, setNewUsersRange] = useState({ start: 0, end: 100 });
@@ -868,58 +922,105 @@ export default function AnalyticsPage() {
     return data.slice(startIdx, Math.max(startIdx + 1, endIdx));
   }, []);
 
-  // Generic function to apply coin filter and cumulative
-  const withCumulativeForCoins = useCallback((data: ChartData[], coins: string[]) => {
-    let cumulative = 0;
-    return data.map(item => {
-      const btc = coins.includes('BTC') ? item.BTC : 0;
-      const eth = coins.includes('ETH') ? item.ETH : 0;
-      const sol = coins.includes('SOL') ? item.SOL : 0;
-      cumulative += btc + eth + sol;
-      return { ...item, BTC: btc, ETH: eth, SOL: sol, Cumulative: cumulative };
-    });
+  // Given a row from the backend, return its canonical per-coin dictionary.
+  // Handles both the new additive shape (`row.coins = { BTC, ETH, ..., BNB }`)
+  // and the legacy shape (top-level `row.BTC / row.ETH / row.SOL`).
+  //
+  // This is what lets us migrate incrementally — if a chart's API response is
+  // already additive, we use row.coins directly; if it's still legacy-shape,
+  // we fall back to adaptLegacyRow which rebuilds the dict from top-level keys.
+  const coinsFromRow = useCallback((row: ChartData): Record<string, number> => {
+    if (row.coins && typeof row.coins === 'object') {
+      return row.coins as Record<string, number>;
+    }
+    const adapted = adaptLegacyRow(row as Record<string, unknown>);
+    return adapted.coins;
   }, []);
+
+  // Apply coin filter → produce bucketed chart rows → attach cumulative total.
+  //
+  // Output rows are flat: `{ timestamp, BTC, ETH, SOL, Other, total, Cumulative }`
+  // (only the enabled coins + Other appear as keys). Recharts renders each
+  // enabled coin as its own `<Bar>` — see the render code below.
+  const withCumulativeForCoins = useCallback((data: ChartData[], enabled: string[]) => {
+    // Normalize every row to have a `coins` dict so bucketWithOther can run.
+    const normalized = data.map(row => ({
+      ...row,
+      coins: coinsFromRow(row),
+    })) as (ChartData & { coins: Record<string, number> })[];
+
+    // Bucket into enabled + Other aggregate.
+    const bucketed = bucketWithOther(normalized as any, enabled);
+
+    // Attach cumulative — sum of every numeric key in the bucketed row (these
+    // are ONLY enabled coins + Other, no duplicates, no carried extras).
+    let cumulative = 0;
+    return bucketed.map(row => {
+      let rowSum = 0;
+      for (const [k, v] of Object.entries(row)) {
+        if (k === 'timestamp' || k === 'total' || k === 'Cumulative') continue;
+        if (typeof v === 'number') rowSum += v;
+      }
+      cumulative += rowSum;
+      return { ...row, total: rowSum, Cumulative: cumulative };
+    });
+  }, [coinsFromRow]);
 
   // Like withCumulativeForCoins, but anchors the Cumulative line to the selected coins'
   // historical total *before* the visible window. Used for Volume / Trades / Liquidations
   // so the cumulative keeps rising instead of resetting to 0 when you switch to 1D/W/M.
   //
-  // allTime: the ALL-timeframe dataset for the same metric. Baseline per coin is the sum
-  // of that coin's values across allTime points that fall strictly before the visible
-  // window's first timestamp.
+  // allTime: the ALL-timeframe dataset for the same metric. Baseline is the sum
+  // of enabled-coin values (with Other aggregating the unselected) across allTime
+  // points that fall strictly before the visible window's first timestamp.
   const withContinuousCumulative = useCallback((
     visible: ChartData[],
-    coins: string[],
+    enabled: string[],
     allTime: ChartData[],
   ) => {
-    if (visible.length === 0) return visible;
+    if (visible.length === 0) return visible as any[];
 
     // If the all-time dataset is empty or still loading, fall back to plain cumulative.
     if (allTime.length === 0) {
-      return withCumulativeForCoins(visible, coins);
+      return withCumulativeForCoins(visible, enabled);
     }
 
-    // Find the historical baseline: sum of selected-coin values across allTime points
-    // strictly before the visible window's first timestamp.
+    // Historical baseline = sum of (bucketed) enabled-coin values across allTime
+    // points strictly before the visible window's first timestamp.
     const firstVisibleTs = new Date(visible[0].timestamp).getTime();
+    const enabledSet = new Set(enabled);
+    const showOther = enabledSet.has(OTHER_KEY);
+
     let baseline = 0;
     for (const point of allTime) {
       const ts = new Date(point.timestamp).getTime();
       if (ts >= firstVisibleTs) break; // allTime is already sorted ascending
-      if (coins.includes('BTC')) baseline += point.BTC || 0;
-      if (coins.includes('ETH')) baseline += point.ETH || 0;
-      if (coins.includes('SOL')) baseline += point.SOL || 0;
+      const dict = coinsFromRow(point);
+      for (const [coin, v] of Object.entries(dict)) {
+        if (typeof v !== 'number' || !isFinite(v)) continue;
+        if (enabledSet.has(coin)) baseline += v;
+        else if (showOther) baseline += v;
+      }
     }
 
+    // Now bucket the visible window and attach cumulative seeded from baseline.
+    const normalized = visible.map(row => ({
+      ...row,
+      coins: coinsFromRow(row),
+    })) as (ChartData & { coins: Record<string, number> })[];
+    const bucketed = bucketWithOther(normalized as any, enabled);
+
     let cumulative = baseline;
-    return visible.map(item => {
-      const btc = coins.includes('BTC') ? item.BTC : 0;
-      const eth = coins.includes('ETH') ? item.ETH : 0;
-      const sol = coins.includes('SOL') ? item.SOL : 0;
-      cumulative += btc + eth + sol;
-      return { ...item, BTC: btc, ETH: eth, SOL: sol, Cumulative: cumulative };
+    return bucketed.map(row => {
+      let rowSum = 0;
+      for (const [k, v] of Object.entries(row)) {
+        if (k === 'timestamp' || k === 'total' || k === 'Cumulative') continue;
+        if (typeof v === 'number') rowSum += v;
+      }
+      cumulative += rowSum;
+      return { ...row, total: rowSum, Cumulative: cumulative };
     });
-  }, [withCumulativeForCoins]);
+  }, [withCumulativeForCoins, coinsFromRow]);
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -954,21 +1055,10 @@ export default function AnalyticsPage() {
     return Math.max(1, Math.floor(dataLength / targetLabels));
   };
 
-  // Per-chart coin toggle component
-  const CoinToggle = ({ coin, coins, setCoins }: { coin: string; coins: string[]; setCoins: (coins: string[]) => void }) => (
-    <button
-      onClick={() => setCoins(coins.includes(coin) ? coins.filter(c => c !== coin) : [...coins, coin])}
-      className={cn(
-        "flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium transition-all duration-200",
-        coins.includes(coin)
-          ? "bg-[var(--bg-muted)] border-[var(--border-color)] text-[var(--text-primary)]"
-          : "bg-transparent border-transparent text-[var(--text-tertiary)] hover:text-gray-300"
-      )}
-    >
-      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS[coin as keyof typeof COLORS] }} />
-      {coin}
-    </button>
-  );
+  // Note: the legacy `CoinToggle` was removed here. All per-chart coin
+  // toggling is handled by the shared `<CoinSelector>` component
+  // (src/components/CoinSelector.tsx), which supports BTC/ETH/SOL as default
+  // pills plus a dropdown of every other market BULK lists.
 
   const CumulativeToggle = ({ label }: { label: string }) => (
     <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
@@ -1002,13 +1092,24 @@ export default function AnalyticsPage() {
 
   // Get total cumulative volume for the stats card at the top of the page.
   // This MUST match the cumulative line's endpoint regardless of timeframe, so we
-  // compute it from the ALL-time dataset (summing all three coins) rather than the
-  // currently visible window. Returns null while the all-time fetch is in flight so
-  // the card can render a neutral placeholder instead of the wrong (window-only) number.
+  // compute it from the ALL-time dataset rather than the currently visible window.
+  //
+  // Now sums EVERY coin in each row's `coins` dict (with a legacy-shape fallback
+  // for rows that haven't been adapted yet) so BNB/DOGE/FARTCOIN/SUI/ZEC
+  // contribute to the total just like BTC/ETH/SOL do. Returns null while the
+  // all-time fetch is in flight so the card can render a neutral placeholder
+  // instead of the wrong (window-only) number.
   const totalCumulativeVolume = useMemo((): number | null => {
     if (volumeAllTime.length === 0) return null;
-    return volumeAllTime.reduce((sum, p) => sum + (p.BTC || 0) + (p.ETH || 0) + (p.SOL || 0), 0);
-  }, [volumeAllTime]);
+    return volumeAllTime.reduce((sum, p) => {
+      const dict = coinsFromRow(p);
+      let rowSum = 0;
+      for (const v of Object.values(dict)) {
+        if (typeof v === 'number' && isFinite(v)) rowSum += v;
+      }
+      return sum + rowSum;
+    }, 0);
+  }, [volumeAllTime, coinsFromRow]);
   
   const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
@@ -1076,12 +1177,17 @@ export default function AnalyticsPage() {
                 isDragging={volumeDragging}
                 leftAxisLabel="Daily Volume (USD)"
                 rightAxisLabel="Cumulative Volume (USD)"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={volumeCoins} setCoins={setVolumeCoins} />
-                  <CoinToggle coin="ETH" coins={volumeCoins} setCoins={setVolumeCoins} />
-                  <CoinToggle coin="SOL" coins={volumeCoins} setCoins={setVolumeCoins} />
-                  <CumulativeToggle label="Cumulative" />
-                </>}
+                toggles={<CoinSelector
+                  enabled={volumeCoins}
+                  onChange={setVolumeCoins}
+                  extraPills={[{
+                    key: 'cumulative',
+                    label: 'Cumulative Volume',
+                    color: COLORS.cumulative,
+                    active: true,
+                    onClick: () => { /* cumulative line is always on */ },
+                  }]}
+                />}
               >
                 {volumeDataFull.length > 0 ? (
                   <>
@@ -1104,9 +1210,20 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          {/* One stacked Bar per enabled coin — dynamic so new coins Just Work. */}
+                          {orderedSeriesFor(volumeCoins).map((coin, i, arr) => (
+                            <Bar
+                              key={coin}
+                              yAxisId="left"
+                              dataKey={coin}
+                              stackId="a"
+                              fill={getCoinColor(coin)}
+                              maxBarSize={80}
+                              animationDuration={600}
+                              animationEasing="ease-out"
+                              radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
+                            />
+                          ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1131,11 +1248,7 @@ export default function AnalyticsPage() {
                 loading={chartLoading.oi}
                 isDragging={oiDragging}
                 leftAxisLabel="Open Interest (USD)"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={oiCoins} setCoins={setOiCoins} />
-                  <CoinToggle coin="ETH" coins={oiCoins} setCoins={setOiCoins} />
-                  <CoinToggle coin="SOL" coins={oiCoins} setCoins={setOiCoins} />
-                </>}
+                toggles={<CoinSelector enabled={oiCoins} onChange={setOiCoins} />}
               >
                 {oiChartData.length > 0 ? (
                   <>
@@ -1143,27 +1256,23 @@ export default function AnalyticsPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
                           key={`oi-${oiAnimKey}`}
-                          data={sliceDataByRange(oiChartData.map(item => ({
-                            ...item,
-                            BTC: oiCoins.includes('BTC') ? item.BTC : 0,
-                            ETH: oiCoins.includes('ETH') ? item.ETH : 0,
-                            SOL: oiCoins.includes('SOL') ? item.SOL : 0,
-                          })), oiRange)} 
+                          data={sliceDataByRange(
+                            bucketWithOther(
+                              oiChartData.map(r => ({ ...r, coins: coinsFromRow(r) })) as any,
+                              oiCoins
+                            ),
+                            oiRange
+                          )}
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
                         >
                           <defs>
-                            <linearGradient id="oiBtcGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={COLORS.BTC} stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor={COLORS.BTC} stopOpacity={0}/>
-                            </linearGradient>
-                            <linearGradient id="oiEthGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={COLORS.ETH} stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor={COLORS.ETH} stopOpacity={0}/>
-                            </linearGradient>
-                            <linearGradient id="oiSolGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={COLORS.SOL} stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor={COLORS.SOL} stopOpacity={0}/>
-                            </linearGradient>
+                            {/* One gradient per enabled coin — generated from getCoinColor. */}
+                            {orderedSeriesFor(oiCoins).map(coin => (
+                              <linearGradient key={coin} id={`oiGrad_${coin}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={getCoinColor(coin)} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={getCoinColor(coin)} stopOpacity={0} />
+                              </linearGradient>
+                            ))}
                           </defs>
                           <XAxis 
                             dataKey="timestamp" 
@@ -1176,9 +1285,19 @@ export default function AnalyticsPage() {
                           />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="BTC" stroke={COLORS.BTC} fill="url(#oiBtcGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
-                          <Area type="monotone" dataKey="ETH" stroke={COLORS.ETH} fill="url(#oiEthGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
-                          <Area type="monotone" dataKey="SOL" stroke={COLORS.SOL} fill="url(#oiSolGradient)" strokeWidth={2} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          {orderedSeriesFor(oiCoins).map(coin => (
+                            <Area
+                              key={coin}
+                              type="monotone"
+                              dataKey={coin}
+                              stroke={getCoinColor(coin)}
+                              fill={`url(#oiGrad_${coin})`}
+                              strokeWidth={2}
+                              isAnimationActive={true}
+                              animationDuration={800}
+                              animationEasing="ease-in-out"
+                            />
+                          ))}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1190,8 +1309,8 @@ export default function AnalyticsPage() {
                       onRangeChange={(start, end) => setOiRange({ start, end })}
                       onDraggingChange={setOiDragging}
                       chartType="area"
-                      dataKeys={oiCoins}
-                      colors={COLORS}
+                      dataKeys={orderedSeriesFor(oiCoins)}
+                      colors={Object.fromEntries(orderedSeriesFor(oiCoins).map(c => [c, getCoinColor(c)]))}
                     />
                   </>
                 ) : <NoDataMessage title="open interest" />}
@@ -1207,11 +1326,7 @@ export default function AnalyticsPage() {
                 loading={chartLoading.funding}
                 isDragging={fundingDragging}
                 leftAxisLabel="Funding Rate (%)"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={fundingCoins} setCoins={setFundingCoins} />
-                  <CoinToggle coin="ETH" coins={fundingCoins} setCoins={setFundingCoins} />
-                  <CoinToggle coin="SOL" coins={fundingCoins} setCoins={setFundingCoins} />
-                </>}
+                toggles={<CoinSelector enabled={fundingCoins} onChange={setFundingCoins} />}
               >
                 {fundingChartData.length > 0 ? (
                   <>
@@ -1219,12 +1334,21 @@ export default function AnalyticsPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
                           key={`funding-${fundingAnimKey}`}
-                          data={sliceDataByRange(fundingChartData.map(item => ({
-                            ...item,
-                            BTC: fundingCoins.includes('BTC') ? item.BTC : null,
-                            ETH: fundingCoins.includes('ETH') ? item.ETH : null,
-                            SOL: fundingCoins.includes('SOL') ? item.SOL : null,
-                          })), fundingRange)} 
+                          data={sliceDataByRange(
+                            // Funding is a rate (not a quantity we can sum into Other),
+                            // so for the Line chart we keep each enabled coin as its
+                            // own series and simply omit the non-enabled ones.
+                            fundingChartData.map(item => {
+                              const dict = coinsFromRow(item);
+                              const row: Record<string, unknown> = { timestamp: item.timestamp };
+                              for (const coin of orderedSeriesFor(fundingCoins)) {
+                                if (coin === OTHER_KEY) continue; // "Other" meaningless for a rate
+                                row[coin] = typeof dict[coin] === 'number' ? dict[coin] : null;
+                              }
+                              return row;
+                            }),
+                            fundingRange
+                          )}
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
                         >
                           <XAxis 
@@ -1239,9 +1363,22 @@ export default function AnalyticsPage() {
                           <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
-                          <Line type="monotone" dataKey="BTC" stroke={COLORS.BTC} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
-                          <Line type="monotone" dataKey="ETH" stroke={COLORS.ETH} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
-                          <Line type="monotone" dataKey="SOL" stroke={COLORS.SOL} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={true} animationDuration={800} animationEasing="ease-in-out" />
+                          {orderedSeriesFor(fundingCoins)
+                            .filter(c => c !== OTHER_KEY)
+                            .map(coin => (
+                              <Line
+                                key={coin}
+                                type="monotone"
+                                dataKey={coin}
+                                stroke={getCoinColor(coin)}
+                                strokeWidth={2}
+                                dot={false}
+                                connectNulls={false}
+                                isAnimationActive={true}
+                                animationDuration={800}
+                                animationEasing="ease-in-out"
+                              />
+                            ))}
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -1253,8 +1390,8 @@ export default function AnalyticsPage() {
                       onRangeChange={(start, end) => setFundingRange({ start, end })}
                       onDraggingChange={setFundingDragging}
                       chartType="line"
-                      dataKeys={fundingCoins}
-                      colors={COLORS}
+                      dataKeys={orderedSeriesFor(fundingCoins).filter(c => c !== OTHER_KEY)}
+                      colors={Object.fromEntries(orderedSeriesFor(fundingCoins).filter(c => c !== OTHER_KEY).map(c => [c, getCoinColor(c)]))}
                     />
                   </>
                 ) : <NoDataMessage title="funding rate" />}
@@ -1268,12 +1405,17 @@ export default function AnalyticsPage() {
                 isDragging={liquidationsDragging}
                 leftAxisLabel="Daily Liquidations (USD)"
                 rightAxisLabel="Cumulative (USD)"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
-                  <CoinToggle coin="ETH" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
-                  <CoinToggle coin="SOL" coins={liquidationsCoins} setCoins={setLiquidationsCoins} />
-                  <CumulativeToggle label="Cumulative" />
-                </>}
+                toggles={<CoinSelector
+                  enabled={liquidationsCoins}
+                  onChange={setLiquidationsCoins}
+                  extraPills={[{
+                    key: 'cumulative',
+                    label: 'Cumulative',
+                    color: COLORS.cumulative,
+                    active: true,
+                    onClick: () => {},
+                  }]}
+                />}
               >
                 {liquidationsDataFull.length > 0 ? (
                   <>
@@ -1296,9 +1438,19 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          {orderedSeriesFor(liquidationsCoins).map((coin, i, arr) => (
+                            <Bar
+                              key={coin}
+                              yAxisId="left"
+                              dataKey={coin}
+                              stackId="a"
+                              fill={getCoinColor(coin)}
+                              maxBarSize={80}
+                              animationDuration={600}
+                              animationEasing="ease-out"
+                              radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
+                            />
+                          ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1330,12 +1482,17 @@ export default function AnalyticsPage() {
                 isDragging={tradesDragging}
                 leftAxisLabel="Daily Trades"
                 rightAxisLabel="Cumulative Trades"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={tradesCoins} setCoins={setTradesCoins} />
-                  <CoinToggle coin="ETH" coins={tradesCoins} setCoins={setTradesCoins} />
-                  <CoinToggle coin="SOL" coins={tradesCoins} setCoins={setTradesCoins} />
-                  <CumulativeToggle label="Cumulative" />
-                </>}
+                toggles={<CoinSelector
+                  enabled={tradesCoins}
+                  onChange={setTradesCoins}
+                  extraPills={[{
+                    key: 'cumulative',
+                    label: 'Cumulative',
+                    color: COLORS.cumulative,
+                    active: true,
+                    onClick: () => {},
+                  }]}
+                />}
               >
                 {tradesDataFull.length > 0 ? (
                   <>
@@ -1358,9 +1515,19 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          {orderedSeriesFor(tradesCoins).map((coin, i, arr) => (
+                            <Bar
+                              key={coin}
+                              yAxisId="left"
+                              dataKey={coin}
+                              stackId="a"
+                              fill={getCoinColor(coin)}
+                              maxBarSize={80}
+                              animationDuration={600}
+                              animationEasing="ease-out"
+                              radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
+                            />
+                          ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1385,12 +1552,17 @@ export default function AnalyticsPage() {
                 isDragging={adlDragging}
                 leftAxisLabel="Daily ADL (USD)"
                 rightAxisLabel="Cumulative ADL (USD)"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={adlCoins} setCoins={setAdlCoins} />
-                  <CoinToggle coin="ETH" coins={adlCoins} setCoins={setAdlCoins} />
-                  <CoinToggle coin="SOL" coins={adlCoins} setCoins={setAdlCoins} />
-                  <CumulativeToggle label="Cumulative" />
-                </>}
+                toggles={<CoinSelector
+                  enabled={adlCoins}
+                  onChange={setAdlCoins}
+                  extraPills={[{
+                    key: 'cumulative',
+                    label: 'Cumulative',
+                    color: COLORS.cumulative,
+                    active: true,
+                    onClick: () => {},
+                  }]}
+                />}
               >
                 {adlDataFull.length > 0 ? (
                   <>
@@ -1406,9 +1578,19 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} maxBarSize={80} animationDuration={600} animationEasing="ease-out" />
+                          {orderedSeriesFor(adlCoins).map((coin, i, arr) => (
+                            <Bar
+                              key={coin}
+                              yAxisId="left"
+                              dataKey={coin}
+                              stackId="a"
+                              fill={getCoinColor(coin)}
+                              maxBarSize={80}
+                              animationDuration={600}
+                              animationEasing="ease-out"
+                              radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
+                            />
+                          ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1437,12 +1619,17 @@ export default function AnalyticsPage() {
                 isDragging={uniqueTradersDragging}
                 leftAxisLabel="Traders per Coin"
                 rightAxisLabel="Total Unique"
-                toggles={<>
-                  <CoinToggle coin="BTC" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
-                  <CoinToggle coin="ETH" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
-                  <CoinToggle coin="SOL" coins={uniqueTradersCoins} setCoins={setUniqueTradersCoins} />
-                  <CumulativeToggle label="Total Unique" />
-                </>}
+                toggles={<CoinSelector
+                  enabled={uniqueTradersCoins}
+                  onChange={setUniqueTradersCoins}
+                  extraPills={[{
+                    key: 'total',
+                    label: 'Total Unique',
+                    color: COLORS.total,
+                    active: true,
+                    onClick: () => {},
+                  }]}
+                />}
               >
                 {uniqueTradersData.length > 0 ? (
                   <>
@@ -1450,12 +1637,15 @@ export default function AnalyticsPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`unique-traders-${uniqueTradersAnimKey}`}
-                          data={sliceDataByRange(uniqueTradersData.map(d => ({
-                            ...d,
-                            BTC: uniqueTradersCoins.includes('BTC') ? d.BTC : 0,
-                            ETH: uniqueTradersCoins.includes('ETH') ? d.ETH : 0,
-                            SOL: uniqueTradersCoins.includes('SOL') ? d.SOL : 0,
-                          })), uniqueTradersRange)} 
+                          data={sliceDataByRange(
+                            // Bucket into enabled + Other; preserve the `total` field
+                            // (pre-computed unique-wallet count) for the right-axis line.
+                            bucketWithOther(
+                              uniqueTradersData.map(r => ({ ...r, coins: coinsFromRow(r as any) })) as any,
+                              uniqueTradersCoins
+                            ),
+                            uniqueTradersRange
+                          )}
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }} 
                           barCategoryGap={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 5 ? "30%" : "20%"}
                         >
@@ -1463,9 +1653,19 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar yAxisId="left" dataKey="SOL" stackId="a" fill={COLORS.SOL} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
-                          <Bar yAxisId="left" dataKey="ETH" stackId="a" fill={COLORS.ETH} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
-                          <Bar yAxisId="left" dataKey="BTC" stackId="a" fill={COLORS.BTC} radius={[2, 2, 0, 0]} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80} />
+                          {orderedSeriesFor(uniqueTradersCoins).map((coin, i, arr) => (
+                            <Bar
+                              key={coin}
+                              yAxisId="left"
+                              dataKey={coin}
+                              stackId="a"
+                              fill={getCoinColor(coin)}
+                              animationDuration={400}
+                              animationEasing="ease-out"
+                              maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80}
+                              radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
+                            />
+                          ))}
                           <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
