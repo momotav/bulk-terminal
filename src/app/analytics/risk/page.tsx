@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
-import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { CoinPicker } from '@/components/CoinPicker';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -299,9 +299,9 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 export default function RiskPage() {
   const [loading, setLoading] = useState(true);
 
-  // Full market list from BULK /exchangeInfo — used to populate the Fair vs
-  // Mark Spread single-coin picker so new coins appear automatically.
-  const { coins: availableCoins } = useAvailableCoins();
+  // useAvailableCoins is still available here if any future section needs the
+  // full market list, but the Fair Spread picker now uses <CoinPicker> which
+  // fetches the list internally, so we don't destructure it at the page level.
 
   // Regime data
   const [regimeData, setRegimeData] = useState<{
@@ -592,18 +592,15 @@ export default function RiskPage() {
                     ))}
                   </div>
                 </div>
-                {/* Single-coin picker — iterates the live market list from
-                    useAvailableCoins so new coins appear automatically. */}
+                {/* Single-coin picker — shares visual design with every other
+                    coin picker on the site (<CoinPicker>). State is stored as
+                    "BTC-USD" but the picker works in bare coin names, so we
+                    adapt at the boundary. */}
                 <div className="mb-4">
-                  <select
-                    value={fairSpreadSymbol}
-                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
-                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-3 py-1.5 text-xs text-[var(--text-primary)]"
-                  >
-                    {availableCoins.map(coin => (
-                      <option key={coin} value={`${coin}-USD`}>{coin}</option>
-                    ))}
-                  </select>
+                  <CoinPicker
+                    value={fairSpreadSymbol.replace('-USD', '')}
+                    onChange={(coin) => setFairSpreadSymbol(`${coin}-USD`)}
+                  />
                 </div>
 
                 {fairSpreadData.length > 0 ? (
