@@ -215,150 +215,191 @@ const LiquidationRangeSlider = ({
   );
 };
 
-// Treemap component - proper squarified layout
-function LiquidationTreemap({ 
-  data, 
-  totalValue, 
-  assets 
-}: { 
+// ----------------------------------------------------------------------------
+// Liquidation Treemap
+//
+// Uses a **squarified** treemap layout (Bruls, Huijsen, van Wijk 2000), the
+// same algorithm Hyperliquid uses for this view. Squarification minimizes the
+// aspect ratio of each cell (rectangles stay close to 1:1), which is far more
+// readable than slice-and-dice — especially when the top item dominates and
+// the tail has a long list of tiny coins.
+//
+// Compared to the previous implementation this fixes three concrete issues:
+//   1. Long thin slivers for small coins (caused labels to truncate to "X...")
+//      — squarified layout produces small-but-square cells instead.
+//   2. Tooltip running off the edge of the card when hovering a corner cell
+//      — tooltip now clamps its position against the container bounds.
+//   3. Brittle font-size tiers based on arbitrary area thresholds
+//      — sizes are now computed from the cell's actual pixel dimensions.
+// ----------------------------------------------------------------------------
+function LiquidationTreemap({
+  data,
+  totalValue,
+  assets,
+}: {
   data: { symbol: string; side: string; value: number; count: number }[];
   totalValue: number;
   assets: number;
 }) {
-  const [hoveredItem, setHoveredItem] = useState<{ symbol: string; total: number; long: number; short: number; dominantSide: string; x: number; y: number } | null>(null);
+  // Hovered cell state for the tooltip. `rect` is carried so we can clamp the
+  // tooltip against the container edges (see tooltip rendering below).
+  const [hoveredItem, setHoveredItem] = useState<{
+    symbol: string;
+    total: number;
+    long: number;
+    short: number;
+    dominantSide: string;
+    rect: { x: number; y: number; width: number; height: number };
+  } | null>(null);
 
-  // Group by symbol - one rectangle per coin with dominant color.
-  // The old BTC/ETH/SOL filter was removed — the treemap now shows every coin
-  // that had liquidations in the window, with rectangle area proportional to
-  // total value. New BULK markets (BNB, DOGE, FARTCOIN, SUI, ZEC, ...) appear
-  // automatically once the backend reports liquidation data for them.
+  // Container size drives the squarification math (we need pixel dimensions).
+  // We read it from a ref + ResizeObserver so the layout reflows when the
+  // card resizes (responsive).
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setContainerSize({ w: r.width, h: r.height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Group raw liquidation events by symbol. Each cell's color is determined
+  // by which side (long vs short) has more cumulative liquidation value.
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
-
     for (const item of data) {
-      if (!groups[item.symbol]) {
-        groups[item.symbol] = { long: 0, short: 0, total: 0 };
-      }
-      if (item.side === 'long') {
-        groups[item.symbol].long += item.value;
-      } else {
-        groups[item.symbol].short += item.value;
-      }
+      if (!groups[item.symbol]) groups[item.symbol] = { long: 0, short: 0, total: 0 };
+      if (item.side === 'long') groups[item.symbol].long += item.value;
+      else groups[item.symbol].short += item.value;
       groups[item.symbol].total += item.value;
     }
-    
     return Object.entries(groups)
       .map(([symbol, values]) => ({
         symbol,
         value: values.total,
         long: values.long,
         short: values.short,
-        // Color based on dominant side
         color: values.short >= values.long ? COLORS.short : COLORS.long,
-        dominantSide: values.short >= values.long ? 'SHORT' : 'LONG'
+        dominantSide: values.short >= values.long ? 'SHORT' : 'LONG',
       }))
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [data]);
 
-  // Calculate total for percentage
-  const total = useMemo(() => {
-    return treemapItems.reduce((sum, item) => sum + item.value, 0);
-  }, [treemapItems]);
+  const total = useMemo(
+    () => treemapItems.reduce((sum, item) => sum + item.value, 0),
+    [treemapItems]
+  );
 
-  // Treemap algorithm - slice and dice with better layout
-  const calculateTreemap = useMemo(() => {
+  // Squarified treemap layout. Returns one rect per item in ABSOLUTE PIXELS
+  // (not percentages) so the label-sizing logic below can reason about space.
+  const rects = useMemo(() => {
     if (treemapItems.length === 0 || total === 0) return [];
+    if (containerSize.w === 0 || containerSize.h === 0) return [];
 
-    interface TreemapRect {
+    interface Rect {
       x: number;
       y: number;
       width: number;
       height: number;
       item: typeof treemapItems[0];
     }
-    
-    const rects: TreemapRect[] = [];
-    const items = [...treemapItems]; // Already sorted by value descending
-    
-    // Simple slice-and-dice algorithm
-    function subdivide(
-      itemsToLayout: typeof treemapItems,
+    const out: Rect[] = [];
+
+    // Scale item values → target area in pixels so the total area equals
+    // the container area. Each item's rect area will be proportional to its
+    // share of the total.
+    const totalArea = containerSize.w * containerSize.h;
+    const scaled = treemapItems.map(it => ({
+      item: it,
+      area: (it.value / total) * totalArea,
+    }));
+
+    // `squarify` — classic algorithm: process items in descending order,
+    // accumulate them into a "row" that runs along the SHORTER side of the
+    // remaining free rectangle. At each step check whether adding the next
+    // item would make the worst aspect ratio in the row better or worse.
+    // If worse, emit the current row and start a new one with the new item.
+    function squarify(
+      items: { item: typeof treemapItems[0]; area: number }[],
       x: number,
       y: number,
-      width: number,
-      height: number
+      w: number,
+      h: number
     ) {
-      if (itemsToLayout.length === 0 || width <= 0 || height <= 0) return;
-      
-      if (itemsToLayout.length === 1) {
-        rects.push({ x, y, width, height, item: itemsToLayout[0] });
-        return;
-      }
-      
-      const totalValue = itemsToLayout.reduce((sum, item) => sum + item.value, 0);
-      
-      if (itemsToLayout.length === 2) {
-        const ratio = itemsToLayout[0].value / totalValue;
-        // Always split along the longer axis
-        if (width >= height) {
-          const splitW = width * ratio;
-          rects.push({ x, y, width: splitW, height, item: itemsToLayout[0] });
-          rects.push({ x: x + splitW, y, width: width - splitW, height, item: itemsToLayout[1] });
-        } else {
-          const splitH = height * ratio;
-          rects.push({ x, y, width, height: splitH, item: itemsToLayout[0] });
-          rects.push({ x, y: y + splitH, width, height: height - splitH, item: itemsToLayout[1] });
-        }
-        return;
-      }
-      
-      // For 3+ items: split into two groups
-      // Find the best split point
-      let bestSplit = 1;
-      let bestRatio = 0;
-      let runningSum = 0;
-      
-      for (let i = 0; i < itemsToLayout.length - 1; i++) {
-        runningSum += itemsToLayout[i].value;
-        const ratio = runningSum / totalValue;
-        // We want the first group to be around 50-70% for a nice layout
-        if (ratio >= 0.4 && ratio <= 0.75) {
-          if (ratio > bestRatio) {
-            bestRatio = ratio;
-            bestSplit = i + 1;
+      if (items.length === 0 || w <= 0 || h <= 0) return;
+
+      // `worst` returns the maximum of longest/shortest aspect ratios for a
+      // row of given sizes laid along side `side`. Lower = more square-ish.
+      const worst = (sizes: number[], side: number): number => {
+        if (sizes.length === 0) return Infinity;
+        const s = sizes.reduce((a, b) => a + b, 0);
+        const sMax = Math.max(...sizes);
+        const sMin = Math.min(...sizes);
+        const sideSq = side * side;
+        const sSq = s * s;
+        return Math.max((sideSq * sMax) / sSq, sSq / (sideSq * sMin));
+      };
+
+      const remaining = [...items];
+      while (remaining.length > 0) {
+        const side = Math.min(w, h); // row runs along the shorter dimension
+        const row: typeof remaining = [];
+        let rowSizes: number[] = [];
+        let currentWorst = Infinity;
+
+        // Greedily add items to the row while aspect ratio improves.
+        while (remaining.length > 0) {
+          const trySizes = [...rowSizes, remaining[0].area];
+          const tryWorst = worst(trySizes, side);
+          if (row.length === 0 || tryWorst <= currentWorst) {
+            row.push(remaining.shift()!);
+            rowSizes = trySizes;
+            currentWorst = tryWorst;
+          } else {
+            break;
           }
         }
-      }
-      
-      // If no good split found, just take the first item
-      if (bestRatio === 0) {
-        bestSplit = 1;
-        bestRatio = itemsToLayout[0].value / totalValue;
-      }
-      
-      const firstGroup = itemsToLayout.slice(0, bestSplit);
-      const secondGroup = itemsToLayout.slice(bestSplit);
-      const firstValue = firstGroup.reduce((sum, item) => sum + item.value, 0);
-      const firstRatio = firstValue / totalValue;
-      
-      // Split along the longer axis
-      if (width >= height) {
-        // Horizontal split - first group on left
-        const splitW = width * firstRatio;
-        subdivide(firstGroup, x, y, splitW, height);
-        subdivide(secondGroup, x + splitW, y, width - splitW, height);
-      } else {
-        // Vertical split - first group on top
-        const splitH = height * firstRatio;
-        subdivide(firstGroup, x, y, width, splitH);
-        subdivide(secondGroup, x, y + splitH, width, height - splitH);
+
+        // Lay out the finalized row. Total area of the row determines its
+        // thickness along the LONG axis; items within split along the SHORT axis.
+        const rowArea = rowSizes.reduce((a, b) => a + b, 0);
+        if (w >= h) {
+          // Row is a vertical stripe on the left; items stack top-to-bottom.
+          const stripeW = rowArea / h;
+          let yy = y;
+          for (let i = 0; i < row.length; i++) {
+            const cellH = rowSizes[i] / stripeW;
+            out.push({ x, y: yy, width: stripeW, height: cellH, item: row[i].item });
+            yy += cellH;
+          }
+          x += stripeW;
+          w -= stripeW;
+        } else {
+          // Row is a horizontal stripe on top; items run left-to-right.
+          const stripeH = rowArea / w;
+          let xx = x;
+          for (let i = 0; i < row.length; i++) {
+            const cellW = rowSizes[i] / stripeH;
+            out.push({ x: xx, y, width: cellW, height: stripeH, item: row[i].item });
+            xx += cellW;
+          }
+          y += stripeH;
+          h -= stripeH;
+        }
       }
     }
-    
-    subdivide(items, 0, 0, 100, 100);
-    return rects;
-  }, [treemapItems, total]);
+
+    squarify(scaled, 0, 0, containerSize.w, containerSize.h);
+    return out;
+  }, [treemapItems, total, containerSize]);
 
   if (treemapItems.length === 0) {
     return (
@@ -368,100 +409,140 @@ function LiquidationTreemap({
     );
   }
 
+  // Edge-aware tooltip placement. We prefer above-and-centered, but if that
+  // would clip the top of the container we flip below; if the horizontal
+  // center would clip left/right, we clamp to the card edges. This is what
+  // fixes the "info goes kinda off" bug when you hover a corner cell.
+  const TOOLTIP_W = 180; // approximate — enough for clamping math
+  const TOOLTIP_H = 110;
+  const tooltipPos = (() => {
+    if (!hoveredItem || containerSize.w === 0) return null;
+    const r = hoveredItem.rect;
+    const cellCenterX = r.x + r.width / 2;
+    const preferredLeft = cellCenterX - TOOLTIP_W / 2;
+    const left = Math.max(8, Math.min(containerSize.w - TOOLTIP_W - 8, preferredLeft));
+    // Try to place just above the cell; flip below if there isn't room.
+    const above = r.y - TOOLTIP_H - 6;
+    const below = r.y + r.height + 6;
+    const top = above >= 8 ? above : below + TOOLTIP_H <= containerSize.h - 8 ? below : Math.max(8, r.y);
+    return { left, top };
+  })();
+
   return (
     <div className="space-y-3">
+      {/* Header row — matches the Hyperliquid layout: "Assets: N" on the left,
+          "Total Liquidations: $X" on the right. */}
       <div className="flex items-center justify-between text-sm">
-        <span className="text-[var(--text-secondary)]">Assets: <span className="text-[var(--text-primary)] font-medium">{treemapItems.length}</span></span>
-        <span className="text-[var(--text-secondary)]">Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(total)}</span></span>
+        <span className="text-[var(--text-secondary)]">
+          Assets: <span className="text-[var(--text-primary)] font-medium">{treemapItems.length}</span>
+        </span>
+        <span className="text-[var(--text-secondary)]">
+          Total Liquidations: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(total)}</span>
+        </span>
       </div>
-      
-      {/* Treemap container */}
-      <div 
+
+      {/* Treemap container. Height is fixed so the squarification math has
+          something stable to work with; width is 100% of the parent card. */}
+      <div
+        ref={containerRef}
         className="relative w-full h-80 md:h-[400px] rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
         onMouseLeave={() => setHoveredItem(null)}
       >
-        {calculateTreemap.map((rect, index) => {
-          // Calculate font size based on rectangle dimensions (not just area)
-          const area = rect.width * rect.height;
+        {rects.map((rect) => {
+          // Label sizing based on available pixels. We want:
+          //   - large cells (BTC when dominant): big symbol + value
+          //   - medium cells: moderate symbol + value
+          //   - small cells: small symbol only, no value (value shown on hover)
+          //   - tiny cells: no labels at all (color only)
+          //
+          // The thresholds are pixel-based so they stay correct at any
+          // container size, unlike the old percentage/area mixed heuristic.
           const minDim = Math.min(rect.width, rect.height);
-          
-          // Dynamic font sizing based on both area and smallest dimension
-          let symbolSize = 'text-sm';
-          let valueSize = 'text-xs';
-          let showValue = true;
-          let showSymbol = true;
-          
-          if (area > 3000 && minDim > 30) {
-            symbolSize = 'text-4xl';
-            valueSize = 'text-xl';
-          } else if (area > 1500 && minDim > 25) {
-            symbolSize = 'text-3xl';
-            valueSize = 'text-lg';
-          } else if (area > 800 && minDim > 20) {
-            symbolSize = 'text-2xl';
-            valueSize = 'text-base';
-          } else if (area > 400 && minDim > 15) {
-            symbolSize = 'text-xl';
-            valueSize = 'text-sm';
-          } else if (area > 150 && minDim > 10) {
-            symbolSize = 'text-lg';
-            valueSize = 'text-xs';
-          } else if (area > 50) {
-            symbolSize = 'text-base';
+          const maxDim = Math.max(rect.width, rect.height);
+
+          let symbolPx = 0;
+          let valuePx = 0;
+          let showValue = false;
+
+          if (minDim >= 80 && maxDim >= 120) {
+            symbolPx = 40;
+            valuePx = 24;
+            showValue = true;
+          } else if (minDim >= 60) {
+            symbolPx = 26;
+            valuePx = 16;
+            showValue = true;
+          } else if (minDim >= 40) {
+            symbolPx = 18;
+            valuePx = 12;
+            showValue = true;
+          } else if (minDim >= 24) {
+            symbolPx = 14;
+            showValue = false;
+          } else if (minDim >= 14) {
+            symbolPx = 11;
             showValue = false;
           } else {
-            symbolSize = 'text-xs';
+            // Too small for any text — show hover-only.
+            symbolPx = 0;
             showValue = false;
-            if (area < 20) showSymbol = false;
           }
-          
+
           return (
             <div
-              key={`${rect.item.symbol}-${index}`}
-              className="absolute flex flex-col items-center justify-center text-white transition-all hover:brightness-110 cursor-default overflow-hidden"
+              key={rect.item.symbol}
+              className="absolute flex flex-col items-center justify-center text-white transition-[filter,transform] duration-150 hover:brightness-110 cursor-default overflow-hidden select-none"
               style={{
-                left: `${rect.x}%`,
-                top: `${rect.y}%`,
-                width: `${rect.width}%`,
-                height: `${rect.height}%`,
+                left: `${rect.x}px`,
+                top: `${rect.y}px`,
+                width: `${rect.width}px`,
+                height: `${rect.height}px`,
                 backgroundColor: rect.item.color,
-                borderRight: '2px solid rgba(20,19,16,0.8)',
-                borderBottom: '2px solid rgba(20,19,16,0.8)',
+                // Thin dark rule between cells so borders are visible over
+                // same-color neighbors.
+                boxShadow: 'inset -1px -1px 0 rgba(20,19,16,0.9), inset 0 0 0 0.5px rgba(20,19,16,0.2)',
               }}
-              onMouseEnter={(e) => {
-                const containerRect = e.currentTarget.parentElement?.getBoundingClientRect();
-                const elemRect = e.currentTarget.getBoundingClientRect();
-                if (containerRect) {
-                  setHoveredItem({
-                    symbol: rect.item.symbol,
-                    total: rect.item.value,
-                    long: rect.item.long,
-                    short: rect.item.short,
-                    dominantSide: rect.item.dominantSide,
-                    x: elemRect.left - containerRect.left + elemRect.width / 2,
-                    y: elemRect.top - containerRect.top + elemRect.height / 2
-                  });
-                }
+              onMouseEnter={() => {
+                setHoveredItem({
+                  symbol: rect.item.symbol,
+                  total: rect.item.value,
+                  long: rect.item.long,
+                  short: rect.item.short,
+                  dominantSide: rect.item.dominantSide,
+                  rect,
+                });
               }}
             >
-              {showSymbol && (
-                <div className={`font-bold ${symbolSize} drop-shadow-md truncate max-w-full px-1`}>{rect.item.symbol}</div>
+              {symbolPx > 0 && (
+                <div
+                  className="font-bold drop-shadow-md truncate max-w-full px-2 leading-tight"
+                  style={{ fontSize: `${symbolPx}px` }}
+                >
+                  {rect.item.symbol}
+                </div>
               )}
               {showValue && (
-                <div className={`font-semibold ${valueSize} drop-shadow-md truncate max-w-full px-1`}>{formatCurrency(rect.item.value)}</div>
+                <div
+                  className="font-semibold drop-shadow-md truncate max-w-full px-2 leading-tight mt-0.5"
+                  style={{ fontSize: `${valuePx}px` }}
+                >
+                  {formatCurrency(rect.item.value)}
+                </div>
               )}
             </div>
           );
         })}
-        
-        {/* Hover Tooltip */}
-        {hoveredItem && (
-          <div 
+
+        {/* Hover Tooltip — positioned with edge clamping. The `tooltipPos`
+            math above keeps it fully inside the card even for corner cells,
+            which was the "info goes kinda off" bug from the old version. */}
+        {hoveredItem && tooltipPos && (
+          <div
             className="absolute z-20 pointer-events-none bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs"
             style={{
-              left: hoveredItem.x,
-              top: hoveredItem.y,
-              transform: 'translate(-50%, -50%)'
+              left: `${tooltipPos.left}px`,
+              top: `${tooltipPos.top}px`,
+              width: `${TOOLTIP_W}px`,
             }}
           >
             <div className="font-bold text-[var(--text-primary)] mb-1">{hoveredItem.symbol}</div>
@@ -480,7 +561,10 @@ function LiquidationTreemap({
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-[var(--text-secondary)]">Type:</span>
-                <span className="font-medium" style={{ color: hoveredItem.dominantSide === 'SHORT' ? COLORS.short : COLORS.long }}>
+                <span
+                  className="font-medium"
+                  style={{ color: hoveredItem.dominantSide === 'SHORT' ? COLORS.short : COLORS.long }}
+                >
                   {hoveredItem.dominantSide}
                 </span>
               </div>
@@ -488,7 +572,7 @@ function LiquidationTreemap({
           </div>
         )}
       </div>
-      
+
       {/* Legend */}
       <div className="flex items-center justify-center gap-6 text-sm">
         <div className="flex items-center gap-2">
