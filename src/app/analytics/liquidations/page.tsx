@@ -6,9 +6,8 @@ import {
   ComposedChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Cell, ReferenceLine, Legend
 } from 'recharts';
-import { Flame, TrendingUp, TrendingDown, ChevronDown, ExternalLink } from 'lucide-react';
-import { useAvailableCoins } from '@/hooks/useAvailableCoins';
-import { DEFAULT_COINS } from '@/lib/coins';
+import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
+import { CoinPicker } from '@/components/CoinPicker';
 
 // Time period options
 const PERIODS = [
@@ -526,53 +525,10 @@ function PeriodSelector({ value, onChange }: { value: string; onChange: (v: stri
   );
 }
 
-// Single-coin dropdown picker. Renamed from `CoinSelector` to avoid confusion
-// with the shared multi-select `<CoinSelector>` (src/components/CoinSelector.tsx)
-// used on the General page. This one just lets the user pick ONE coin to focus
-// the liquidations view on. Takes its coin list as a prop so the parent passes
-// in the live list from `useAvailableCoins()`.
-function SingleCoinDropdown({
-  value,
-  onChange,
-  coins,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  coins: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-muted)] rounded-lg border border-[var(--border-color)] hover:border-[var(--text-secondary)] transition-colors"
-      >
-        <span className="font-medium text-[var(--text-primary)]">{value}</span>
-        <ChevronDown size={16} className="text-[var(--text-secondary)]" />
-      </button>
-      
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[120px] max-h-64 overflow-y-auto">
-            {coins.map((coin) => (
-              <button
-                key={coin}
-                onClick={() => { onChange(coin); setOpen(false); }}
-                className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--bg-muted)] transition-colors ${
-                  value === coin ? 'text-[var(--accent)] font-medium' : 'text-[var(--text-primary)]'
-                }`}
-              >
-                {coin}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+// Note: the local `SingleCoinDropdown` was removed. Both uses on this page
+// (Liquidations Summary and Featured Liquidations filter) now use the shared
+// `<CoinPicker>` component so all three coin pickers across the site share
+// the same visual language — bold defaults, search box, colored swatches.
 
 // Custom tooltip for charts - compact version
 function ChartTooltip({ active, payload, label }: any) {
@@ -594,9 +550,10 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function LiquidationsPage() {
-  // Live market list for the single-coin pickers and featured-filter select.
-  // Pulled from BULK's /exchangeInfo via useAvailableCoins (module-level cached).
-  const { coins: availableCoins } = useAvailableCoins();
+  // `useAvailableCoins` is no longer called here — the two coin pickers
+  // (<CoinPicker> for Summary and for Featured filter) each call the hook
+  // themselves internally. Module-level caching in the hook means there's
+  // still only one network request per session.
 
   // State
   const [treemapPeriod, setTreemapPeriod] = useState('24h');
@@ -727,7 +684,7 @@ export default function LiquidationsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidations Summary</h2>
             <div className="flex items-center gap-2">
-              <SingleCoinDropdown coins={availableCoins} value={selectedCoin} onChange={setSelectedCoin} />
+              <CoinPicker value={selectedCoin} onChange={setSelectedCoin} />
               <PeriodSelector value={summaryPeriod} onChange={setSummaryPeriod} />
             </div>
           </div>
@@ -877,7 +834,7 @@ export default function LiquidationsPage() {
           <div className="flex flex-col gap-3 mb-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Market Summary</h2>
-              <SingleCoinDropdown coins={availableCoins} value={selectedCoin} onChange={setSelectedCoin} />
+              <CoinPicker value={selectedCoin} onChange={setSelectedCoin} />
             </div>
             <div className="overflow-x-auto -mx-1 px-1">
               <PeriodSelector value={marketPeriod} onChange={setMarketPeriod} />
@@ -974,18 +931,16 @@ export default function LiquidationsPage() {
       <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4 md:mb-6">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Featured Liquidations</h2>
-          <div className="flex items-center gap-2 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] px-3 py-1.5">
-            <select
-              value={featuredFilter}
-              onChange={(e) => setFeaturedFilter(e.target.value)}
-              className="bg-transparent text-sm text-[var(--text-primary)] outline-none cursor-pointer"
-            >
-              <option value="ALL">ALL</option>
-              {availableCoins.map(coin => (
-                <option key={coin} value={coin}>{coin}</option>
-              ))}
-            </select>
-          </div>
+          {/* Same <CoinPicker> used by the Summary section above, but with
+              includeAllOption so users can unfocus and see every coin's
+              liquidations in the feed. All three coin pickers across the
+              site now share one visual language. */}
+          <CoinPicker
+            value={featuredFilter}
+            onChange={setFeaturedFilter}
+            includeAllOption
+            ariaLabel="Filter featured liquidations by coin"
+          />
         </div>
         
         {loading.featured ? (
