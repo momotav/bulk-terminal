@@ -153,44 +153,50 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Single row: coin pills + Other + extras (Cumulative) + Deselect all +
-          the dropdown trigger. All in one row so the chart header stays
-          compact, matching Hyperliquid's layout. */}
-      {visiblePillCoins.map((coin) => (
+    <div className="flex flex-col gap-2 items-start">
+      {/* Row 1: pills (coins + Others + extras + Deselect all). flex-wrap so
+          long pill lists wrap cleanly instead of overflowing the card.
+          `items-start` on the parent keeps pills left-aligned and prevents
+          a single standalone pill from stretching full-width. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {visiblePillCoins.map((coin) => (
+          <CoinPill
+            key={coin}
+            label={coin}
+            color={getCoinColor(coin)}
+            active={enabledSet.has(coin)}
+            onClick={() => togglePill(coin)}
+          />
+        ))}
         <CoinPill
-          key={coin}
-          label={coin}
-          color={getCoinColor(coin)}
-          active={enabledSet.has(coin)}
-          onClick={() => togglePill(coin)}
+          key={OTHER_KEY}
+          label="Others"
+          color={getCoinColor(OTHER_KEY)}
+          active={enabledSet.has(OTHER_KEY)}
+          onClick={() => togglePill(OTHER_KEY)}
+          hidden={omitOther}
         />
-      ))}
-      <CoinPill
-        key={OTHER_KEY}
-        label="Others"
-        color={getCoinColor(OTHER_KEY)}
-        active={enabledSet.has(OTHER_KEY)}
-        onClick={() => togglePill(OTHER_KEY)}
-        hidden={omitOther}
-      />
-      {extraPills?.map((p) => (
-        <CoinPill
-          key={p.key}
-          label={p.label}
-          color={p.color}
-          active={p.active}
-          onClick={p.onClick}
-        />
-      ))}
-      <button
-        onClick={deselectAll}
-        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border-color)] bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-      >
-        Deselect all
-      </button>
+        {extraPills?.map((p) => (
+          <CoinPill
+            key={p.key}
+            label={p.label}
+            color={p.color}
+            active={p.active}
+            onClick={p.onClick}
+          />
+        ))}
+        <button
+          onClick={deselectAll}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border-color)] bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          Deselect all
+        </button>
+      </div>
 
-      {/* Dropdown trigger — shows total coin count + expands to a picker */}
+      {/* Row 2: the "N coins selected ▾" dropdown trigger. Its own row so it
+          reads as a separate control from the pills — this matches Hyperliquid's
+          layout exactly and makes it clearer what the dropdown does (add more
+          coins) vs what the pills do (toggle selected). */}
       <div className="relative inline-block" ref={dropdownRef}>
         <button
           onClick={() => setOpen((v) => !v)}
@@ -212,7 +218,7 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-1 w-[260px] z-20 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
+          <div className="absolute left-0 mt-1 w-[260px] z-20 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
             {/* Search box */}
             <div className="p-2 border-b border-[var(--border-color)]">
               <input
