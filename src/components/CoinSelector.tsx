@@ -39,11 +39,36 @@ export interface CoinSelectorProps {
     active: boolean;
     onClick: () => void;
   }>;
+  /**
+   * Maximum number of coins the user can enable at once (the Others pill and
+   * extra pills are excluded from this count). Used by the Market Regime
+   * panel on the Risk page — it visually can't handle more than 4 gauges in
+   * a row, so we cap selection at 4.
+   *
+   * When the user is at the cap, additional coins in the dropdown become
+   * disabled (grayed out) rather than hidden, so the user understands why
+   * they can't select them.
+   *
+   * When undefined, there's no limit.
+   */
+  maxCount?: number;
+  /**
+   * If true, the "Others" aggregate pill is hidden entirely. Use this for
+   * charts where aggregating unselected coins into an "Other" bucket doesn't
+   * make sense — e.g. the correlation matrix (you can't correlate with an
+   * average), the Market Regime gauges (regime is per-coin), or the
+   * volatility heatmap (heatmap cells are per-coin).
+   */
+  omitOther?: boolean;
 }
 
-export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProps) {
+export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOther }: CoinSelectorProps) {
   const { coins: allCoins, loading } = useAvailableCoins();
   const enabledSet = new Set(enabled);
+
+  // Count coins toward the `maxCount` cap — Others and extra pills don't count.
+  const coinCount = enabled.filter(c => c !== OTHER_KEY).length;
+  const atCap = typeof maxCount === 'number' && coinCount >= maxCount;
 
   // Dropdown open state + outside-click close + search filter.
   const [open, setOpen] = useState(false);
@@ -98,8 +123,14 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
 
   const togglePill = (coin: string) => {
     const next = new Set(enabledSet);
-    if (next.has(coin)) next.delete(coin);
-    else next.add(coin);
+    if (next.has(coin)) {
+      next.delete(coin);
+    } else {
+      // When at cap, block adding more coin pills (Others/extras always allowed
+      // because they don't count toward the cap — filtered out of coinCount).
+      if (atCap && coin !== OTHER_KEY) return;
+      next.add(coin);
+    }
     onChange(Array.from(next));
   };
 
@@ -107,6 +138,10 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
   // NOT close the dropdown — user can multi-select quickly without reopening.
   // (Hyperliquid behaves the same way in their coin picker.)
   const toggleFromDropdown = (coin: string) => {
+    // Enforce the cap: if we're already at the limit and this coin isn't
+    // currently selected, silently refuse. Disabling rows visually is done
+    // via DropdownRow's `disabled` prop below.
+    if (atCap && !enabledSet.has(coin)) return;
     togglePill(coin);
     // Explicitly do NOT call setOpen(false) — menu stays open.
   };
@@ -137,6 +172,7 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
         color={getCoinColor(OTHER_KEY)}
         active={enabledSet.has(OTHER_KEY)}
         onClick={() => togglePill(OTHER_KEY)}
+        hidden={omitOther}
       />
       {extraPills?.map((p) => (
         <CoinPill
@@ -197,6 +233,15 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
               Deselect All
             </button>
 
+            {/* Hint banner when the user has hit the max-select cap. Tells
+                them why other rows are grayed out. Only shows if maxCount
+                is configured AND they're at/above the cap. */}
+            {atCap && (
+              <div className="px-3 py-2 text-[11px] text-[var(--text-tertiary)] bg-[var(--bg-base)] border-b border-[var(--border-color)]">
+                Maximum {maxCount} coins selected. Deselect one to add another.
+              </div>
+            )}
+
             <div className="max-h-64 overflow-y-auto">
               {/* Default coins — rendered bold at the top of the list.
                   Matches Hyperliquid's styling where BTC / ETH / HYPE / SOL
@@ -209,6 +254,7 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
                       coin={coin}
                       active={enabledSet.has(coin)}
                       bold
+                      disabled={atCap && !enabledSet.has(coin)}
                       onClick={() => toggleFromDropdown(coin)}
                     />
                   ))}
@@ -228,6 +274,7 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
                       key={coin}
                       coin={coin}
                       active={enabledSet.has(coin)}
+                      disabled={atCap && !enabledSet.has(coin)}
                       onClick={() => toggleFromDropdown(coin)}
                     />
                   ))}
@@ -255,17 +302,26 @@ function DropdownRow({
   coin,
   active,
   bold,
+  disabled,
   onClick,
 }: {
   coin: string;
   active: boolean;
   bold?: boolean;
+  /** Grayed out and non-interactive — used when the user is at maxCount. */
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-[var(--bg-base)] transition-colors"
+      disabled={disabled}
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-1.5 text-xs transition-colors',
+        disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : 'hover:bg-[var(--bg-base)]'
+      )}
     >
       <span
         className="inline-block w-3 h-3 rounded-sm shrink-0"
@@ -295,12 +351,16 @@ function CoinPill({
   color,
   active,
   onClick,
+  hidden,
 }: {
   label: string;
   color: string;
   active: boolean;
   onClick: () => void;
+  /** When true the pill is not rendered at all (for omitOther on some charts). */
+  hidden?: boolean;
 }) {
+  if (hidden) return null;
   return (
     <button
       onClick={onClick}
