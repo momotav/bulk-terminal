@@ -474,18 +474,20 @@ const ChartCard = ({
     "bg-transparent rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300",
     loading && "opacity-60"
   )}>
-    {/* Header: title on the left; timeframe + toggles stack on the right */}
-    <div className="flex items-start justify-between gap-3 mb-4">
-      <h3 className="text-lg font-semibold text-[var(--text-primary)] pt-1">{title}</h3>
-      <div className="flex flex-col items-end gap-2 min-w-0">
-        <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
-        {toggles && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {toggles}
-          </div>
-        )}
-      </div>
+    {/* Header layout (matches Hyperliquid):
+        Row 1: title on the left, timeframe selector on the far right — full width each side
+                so the title never wraps into a second line.
+        Row 2: toggles (coin pills + dropdown trigger + any extra pills) span full width below.
+        This means even with many pills the title stays on a single line at a readable size. */}
+    <div className="flex items-center justify-between gap-3 mb-3">
+      <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">{title}</h3>
+      <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
     </div>
+    {toggles && (
+      <div className="mb-4">
+        {toggles}
+      </div>
+    )}
     <div className={cn(
       "relative",
       loading && "blur-sm opacity-60",
