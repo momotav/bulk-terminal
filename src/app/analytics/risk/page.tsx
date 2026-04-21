@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -114,6 +115,155 @@ const HeatmapCell = ({ value, label }: { value: number; label?: string }) => {
   );
 };
 
+/**
+ * CorrelationMatrix — N×N grid of correlation values across `assets`.
+ *
+ * When the number of coins is small (≤ DENSE_THRESHOLD) every cell shows its
+ * numeric value inline, matching the legacy look. When the matrix gets larger
+ * the text is hidden by default (cells keep their background color) and only
+ * revealed on hover — mirroring common heatmap tooling like Grafana and
+ * Hyperliquid's expanded correlation view. This prevents the matrix from
+ * overflowing its container when the user enables many coins.
+ */
+const DENSE_THRESHOLD = 6;
+
+function CorrelationMatrix({
+  assets,
+  matrix,
+}: {
+  assets: string[];
+  matrix: number[][];
+}) {
+  const dense = assets.length > DENSE_THRESHOLD;
+  // Hovered cell for the always-visible value readout under the matrix when
+  // we're in dense mode. Null means no cell hovered.
+  const [hover, setHover] = useState<{ row: string; col: string; value: number } | null>(null);
+
+  // Returns the tailwind bg class for a correlation value. Kept identical to
+  // HeatmapCell so the two panels stay visually consistent.
+  const bgFor = (v: number): string => {
+    if (v >= 0.95) return 'bg-[#00B482]';
+    if (v >= 0.85) return 'bg-[#00B482]/90';
+    if (v >= 0.75) return 'bg-[#00B482]/70';
+    if (v >= 0.65) return 'bg-[#4ADE80]/60';
+    if (v >= 0.55) return 'bg-[#FFB548]/50';
+    if (v >= 0.45) return 'bg-[#FB923C]/60';
+    if (v >= 0.35) return 'bg-[#EF4A3C]/60';
+    return 'bg-[#EF4A3C]/80';
+  };
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `auto repeat(${assets.length}, minmax(0, 1fr))` }}
+      >
+        {/* Header row */}
+        <div />
+        {assets.map(asset => (
+          <div
+            key={`h-${asset}`}
+            className="text-center text-[11px] text-[var(--text-tertiary)] py-1 truncate"
+            title={asset}
+          >
+            {asset}
+          </div>
+        ))}
+
+        {/* Data rows. Use a React fragment with a proper key instead of the
+            old `<>…</>` which couldn't carry a key attribute (that was
+            generating React warnings on the legacy implementation). */}
+        {assets.map((rowAsset, i) => (
+          <CorrelationRow
+            key={`row-${rowAsset}`}
+            rowAsset={rowAsset}
+            row={matrix[i]}
+            assets={assets}
+            dense={dense}
+            bgFor={bgFor}
+            onHover={setHover}
+          />
+        ))}
+      </div>
+
+      {/* In dense mode we dedicate a small footer row that shows the hovered
+          cell's exact value. Means the user doesn't need a floating tooltip
+          to learn the value, which is simpler on mobile and keyboards. */}
+      {dense && (
+        <div className="text-xs text-[var(--text-tertiary)] text-center min-h-[18px]">
+          {hover
+            ? <span>
+                <span className="text-[var(--text-primary)] font-medium">{hover.row}</span>
+                {' ↔ '}
+                <span className="text-[var(--text-primary)] font-medium">{hover.col}</span>
+                {' → '}
+                <span className="font-mono text-[var(--text-primary)]">
+                  {hover.value >= 0 ? '+' : ''}{hover.value.toFixed(2)}
+                </span>
+              </span>
+            : <span>Hover a cell to see its correlation value</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One row of the matrix — its own component so the `assets.map(... <>...</>)`
+// anti-pattern (fragments can't carry keys) is replaced with a proper
+// keyable element. Tiny but keeps React's reconciler happy.
+function CorrelationRow({
+  rowAsset,
+  row,
+  assets,
+  dense,
+  bgFor,
+  onHover,
+}: {
+  rowAsset: string;
+  row: number[];
+  assets: string[];
+  dense: boolean;
+  bgFor: (v: number) => string;
+  onHover: (h: { row: string; col: string; value: number } | null) => void;
+}) {
+  return (
+    <>
+      <div className="text-[11px] text-[var(--text-tertiary)] flex items-center pr-2 truncate" title={rowAsset}>
+        {rowAsset}
+      </div>
+      {row.map((val, j) => {
+        const colAsset = assets[j];
+        const classes = cn(
+          'flex items-center justify-center rounded font-mono font-medium transition-colors',
+          bgFor(val),
+          val >= 0.9 ? 'text-white' : 'text-[var(--text-primary)]',
+          // In dense mode cells are smaller and hide the text (revealed on hover).
+          dense ? 'aspect-square text-[10px]' : 'p-3 text-sm'
+        );
+        return (
+          <div
+            key={`${rowAsset}-${colAsset}`}
+            className={classes}
+            onMouseEnter={() => onHover({ row: rowAsset, col: colAsset, value: val })}
+            onMouseLeave={() => onHover(null)}
+            title={dense ? `${rowAsset} ↔ ${colAsset}: ${val >= 0 ? '+' : ''}${val.toFixed(2)}` : undefined}
+          >
+            {/* In dense mode the value is hidden unless the cell is hovered —
+                matches common heatmap behavior and keeps the grid compact. */}
+            {dense ? (
+              <span className="opacity-0 hover:opacity-100 transition-opacity">
+                {val >= 0 ? '+' : ''}{val.toFixed(2)}
+              </span>
+            ) : (
+              <>{val >= 0 ? '+' : ''}{val.toFixed(2)}</>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 // Custom tooltip
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -148,13 +298,27 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export default function RiskPage() {
   const [loading, setLoading] = useState(true);
-  
+
+  // Full market list from BULK /exchangeInfo — used to populate the Fair vs
+  // Mark Spread single-coin picker so new coins appear automatically.
+  const { coins: availableCoins } = useAvailableCoins();
+
   // Regime data
   const [regimeData, setRegimeData] = useState<{
     aggregateRegime: number;
     markets: { symbol: string; regime: number; regimeDt: number; regimeVol: number; fairBookPx: number; markPrice: number }[];
   } | null>(null);
-  
+  // Market Regime coin selection — capped at 4 via CoinSelector's maxCount so
+  // the gauge grid stays visually manageable. Aggregate card + up to 4 coins
+  // fits one row on desktop. The asset table below the gauges is filtered to
+  // the same set.
+  const [regimeCoins, setRegimeCoins] = useState<string[]>([...DEFAULT_COINS]);
+
+  // Volatility Heatmap / Correlation Matrix coin selection — no cap, but
+  // matrix switches to hover-to-reveal values when > ~6 coins so the UI
+  // doesn't overflow.
+  const [heatmapCoins, setHeatmapCoins] = useState<string[]>([...DEFAULT_COINS]);
+
   // Volatility chart
   const [volatilityHours, setVolatilityHours] = useState(24);
   const [volatilityData, setVolatilityData] = useState<{ timestamp: string; BTC: number; ETH: number; SOL: number }[]>([]);
@@ -232,19 +396,29 @@ export default function RiskPage() {
   // uses the shared `<CoinSelector>` which supports BTC/ETH/SOL defaults plus
   // a dropdown to add any other coin BULK has listed.
 
-  // Calculate heatmap data from regime data
+  // Calculate heatmap data from regime data — filtered to the coins the user
+  // currently has selected for the Volatility Heatmap / Correlation Matrix.
+  // The matrix dimensions are exactly `heatmapCoins` × `heatmapCoins`, so
+  // selecting 3 coins yields a 3x3 matrix, 8 coins yields 8x8, etc.
   const heatmapData = useMemo(() => {
     if (!regimeData?.markets) return null;
-    
-    const assets = regimeData.markets.map(m => m.symbol.replace('-USD', ''));
-    const volData = regimeData.markets.map(m => m.regimeVol);
-    
+
+    // Build a lookup from coin (e.g. "BTC") → market record.
+    const byCoin = new Map<string, typeof regimeData.markets[number]>();
+    for (const m of regimeData.markets) {
+      byCoin.set(m.symbol.replace('-USD', ''), m);
+    }
+
+    // Keep only coins the user has enabled AND for which we have data.
+    const assets = heatmapCoins.filter(c => byCoin.has(c));
+    const volData = assets.map(c => byCoin.get(c)!.regimeVol);
+
     // Normalize volatility to 0-1 scale for color intensity
     const maxVol = Math.max(...volData, 10);
     const normalizedVol = volData.map(v => v / maxVol);
-    
-    // Create correlation-like matrix (using spread similarity as proxy)
-    // In reality, you'd calculate actual correlation from price data
+
+    // Create correlation-like matrix (using spread similarity as proxy).
+    // In reality, you'd calculate actual correlation from price data.
     const matrix: number[][] = [];
     for (let i = 0; i < assets.length; i++) {
       matrix[i] = [];
@@ -259,9 +433,17 @@ export default function RiskPage() {
         }
       }
     }
-    
+
     return { assets, matrix, normalizedVol };
-  }, [regimeData]);
+  }, [regimeData, heatmapCoins]);
+
+  // Filtered list of markets for the Market Regime gauge grid and asset table.
+  // Only shows the coins the user picked via the regime coin selector.
+  const regimeMarkets = useMemo(() => {
+    if (!regimeData?.markets) return [];
+    const enabledSet = new Set(regimeCoins);
+    return regimeData.markets.filter(m => enabledSet.has(m.symbol.replace('-USD', '')));
+  }, [regimeData, regimeCoins]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
@@ -278,14 +460,26 @@ export default function RiskPage() {
           <div className="space-y-6">
             {/* Market Regime Section */}
             <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
+              <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
+                </div>
+                {/* Coin picker for the regime section — capped at 4 via
+                    maxCount so the gauge grid stays 1 row (Aggregate card + 4
+                    coins). omitOther because regime is per-coin — an "Others"
+                    aggregate regime wouldn't make sense. */}
+                <CoinSelector
+                  enabled={regimeCoins}
+                  onChange={setRegimeCoins}
+                  maxCount={4}
+                  omitOther
+                />
               </div>
-              
+
               {regimeData ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div className="col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
                       <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
                       <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
@@ -295,12 +489,13 @@ export default function RiskPage() {
                         {getRegimeLabel(Math.round(regimeData.aggregateRegime)).label}
                       </p>
                     </div>
-                    
-                    {regimeData.markets.map(market => (
-                      <RegimeGauge 
-                        key={market.symbol} 
-                        value={market.regime} 
-                        symbol={market.symbol.replace('-USD', '')} 
+
+                    {/* Up to 4 gauge cards from the user-selected coins. */}
+                    {regimeMarkets.map(market => (
+                      <RegimeGauge
+                        key={market.symbol}
+                        value={market.regime}
+                        symbol={market.symbol.replace('-USD', '')}
                       />
                     ))}
                   </div>
@@ -318,7 +513,7 @@ export default function RiskPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {regimeData.markets.map(market => {
+                        {regimeMarkets.map(market => {
                           const spread = market.fairBookPx > 0 
                             ? ((market.markPrice - market.fairBookPx) / market.fairBookPx) * 10000 
                             : 0;
@@ -371,115 +566,124 @@ export default function RiskPage() {
               )}
             </div>
 
-            {/* Row 2: Heatmap + Volatility */}
+            {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Volatility Heatmap */}
+              {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
               <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility Heatmap</h3>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Fair vs Mark Spread</h3>
+                  </div>
+                  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
+                    {timeRanges.map(r => (
+                      <button
+                        key={r.label}
+                        onClick={() => setFairSpreadHours(r.hours)}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded transition-colors",
+                          fairSpreadHours === r.hours
+                            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        )}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                
-                {heatmapData ? (
-                  <div className="space-y-4">
-                    {/* Volatility bars */}
-                    <div className="space-y-3">
-                      {heatmapData.assets.map((asset, i) => {
-                        const vol = regimeData?.markets[i]?.regimeVol || 0;
-                        const maxVol = 15; // Assume max 15% vol for scaling
-                        const width = Math.min(100, (vol / maxVol) * 100);
-                        
-                        return (
-                          <div key={asset} className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="w-3 h-3 rounded-sm" 
-                                  style={{ backgroundColor: getCoinColor(asset) }} 
-                                />
-                                <span className="text-[var(--text-primary)]">{asset}</span>
-                              </div>
-                              <span className="text-[var(--text-secondary)] font-mono">{vol.toFixed(2)}%</span>
-                            </div>
-                            <div className="h-3 bg-[var(--bg-muted)] rounded-full overflow-hidden">
-                              <div 
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{ 
-                                  width: `${width}%`,
-                                  backgroundColor: getCoinColor(asset)
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Correlation Matrix */}
-                    <div className="mt-6">
-                      <p className="text-sm text-[var(--text-tertiary)] mb-3">Correlation Matrix</p>
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${heatmapData.assets.length}, 1fr)` }}>
-                        {/* Header row */}
-                        <div></div>
-                        {heatmapData.assets.map(asset => (
-                          <div key={`h-${asset}`} className="text-center text-xs text-[var(--text-tertiary)] py-1">
-                            {asset}
-                          </div>
-                        ))}
-                        
-                        {/* Data rows */}
-                        {heatmapData.assets.map((rowAsset, i) => (
-                          <>
-                            <div key={`r-${rowAsset}`} className="text-xs text-[var(--text-tertiary)] flex items-center pr-2">
-                              {rowAsset}
-                            </div>
-                            {heatmapData.matrix[i].map((val, j) => (
-                              <HeatmapCell key={`${i}-${j}`} value={val} />
-                            ))}
-                          </>
-                        ))}
-                      </div>
-                    </div>
+                {/* Single-coin picker — iterates the live market list from
+                    useAvailableCoins so new coins appear automatically. */}
+                <div className="mb-4">
+                  <select
+                    value={fairSpreadSymbol}
+                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
+                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-3 py-1.5 text-xs text-[var(--text-primary)]"
+                  >
+                    {availableCoins.map(coin => (
+                      <option key={coin} value={`${coin}-USD`}>{coin}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {fairSpreadData.length > 0 ? (
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={fairSpreadData}>
+                        <defs>
+                          <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
+                            <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis
+                          dataKey="timestamp"
+                          tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
+                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                          axisLine={{ stroke: 'var(--border-color)' }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tickFormatter={(v) => `${v.toFixed(1)}`}
+                          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                          axisLine={{ stroke: 'var(--border-color)' }}
+                          tickLine={false}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip content={<ChartTooltip />} />
+                        <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
+                        <Area
+                          type="monotone"
+                          dataKey="spreadBps"
+                          name="Spread (bps)"
+                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
+                          fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
-                    Loading heatmap data...
+                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
+                    <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
               </div>
 
-              {/* Volatility Chart */}
+              {/* Volatility History. */}
               <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">Volatility History</h3>
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Volatility History</h3>
                   </div>
-                  <div className="flex flex-col items-end gap-2 min-w-0">
-                    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
-                      {timeRanges.map(r => (
-                        <button
-                          key={r.label}
-                          onClick={() => setVolatilityHours(r.hours)}
-                          className={cn(
-                            "px-3 py-1 text-xs font-medium rounded transition-colors",
-                            volatilityHours === r.hours 
-                              ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
-                              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                          )}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <CoinSelector enabled={volatilityCoins} onChange={setVolatilityCoins} />
-                    </div>
+                  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
+                    {timeRanges.map(r => (
+                      <button
+                        key={r.label}
+                        onClick={() => setVolatilityHours(r.hours)}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded transition-colors",
+                          volatilityHours === r.hours
+                            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        )}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                
+                <div className="mb-4">
+                  <CoinSelector enabled={volatilityCoins} onChange={setVolatilityCoins} omitOther />
+                </div>
+
                 {volatilityData.length > 0 ? (
-                  <div className="h-[300px]">
+                  <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData.map(row => {
                         // Normalize to {timestamp, coin1, coin2, ...} shape.
@@ -491,28 +695,25 @@ export default function RiskPage() {
                           : adaptLegacyRow(anyRow).coins;
                         const out: Record<string, unknown> = { timestamp: row.timestamp };
                         for (const coin of volatilityCoins) {
-                          if (coin === OTHER_KEY) continue; // volatility is a rate — no "Other" aggregate
+                          if (coin === OTHER_KEY) continue;
                           if (typeof dict[coin] === 'number') out[coin] = dict[coin];
                         }
                         return out;
                       })}>
-                        <XAxis 
-                          dataKey="timestamp" 
+                        <XAxis
+                          dataKey="timestamp"
                           tickFormatter={(ts) => formatDateForChart(ts, volatilityHours)}
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
                         />
-                        <YAxis 
+                        <YAxis
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
                           tickFormatter={(v) => `${v}%`}
                         />
                         <Tooltip content={<ChartTooltip />} />
-                        {/* One Line per enabled coin. "Other" is skipped because
-                            volatility is a rate and averaging across coins into
-                            an aggregate would be misleading. */}
                         {volatilityCoins
                           .filter(coin => coin !== OTHER_KEY)
                           .map(coin => (
@@ -529,95 +730,101 @@ export default function RiskPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
+                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
                     <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Row 3: Fair Spread Chart - Full Width */}
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2 pt-1">
-                  <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fair vs Mark Spread</h3>
-                </div>
-                <div className="flex flex-col items-end gap-2 min-w-0">
-                  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
-                    {timeRanges.map(r => (
-                      <button
-                        key={r.label}
-                        onClick={() => setFairSpreadHours(r.hours)}
-                        className={cn(
-                          "px-3 py-1 text-xs font-medium rounded transition-colors",
-                          fairSpreadHours === r.hours 
-                            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]" 
-                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                        )}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
+            {/* Row 3: Volatility Heatmap + Correlation Matrix (side-by-side).
+                Both are driven by the same `heatmapCoins` state so the two
+                panels are always in sync. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Volatility Heatmap. */}
+              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Volatility Heatmap</h3>
                   </div>
-                  <select
-                    value={fairSpreadSymbol}
-                    onChange={(e) => setFairSpreadSymbol(e.target.value)}
-                    className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
-                  >
-                    <option value="BTC-USD">BTC</option>
-                    <option value="ETH-USD">ETH</option>
-                    <option value="SOL-USD">SOL</option>
-                  </select>
                 </div>
+                {/* omitOther because the heatmap is per-coin; no max because
+                    the bars are vertically stacked and can handle many rows. */}
+                <div className="mb-4">
+                  <CoinSelector enabled={heatmapCoins} onChange={setHeatmapCoins} omitOther />
+                </div>
+
+                {heatmapData && heatmapData.assets.length > 0 ? (
+                  <div className="space-y-3">
+                    {heatmapData.assets.map((asset, i) => {
+                      // Look up the current volatility for THIS asset from
+                      // regimeData, not from positional indexing — the old
+                      // code assumed heatmapData.assets and regimeData.markets
+                      // were in lockstep, but now they're filtered independently.
+                      const market = regimeData?.markets.find(m => m.symbol.replace('-USD', '') === asset);
+                      const vol = market?.regimeVol || 0;
+                      const maxVol = 15; // Assume max 15% vol for scaling
+                      const width = Math.min(100, (vol / maxVol) * 100);
+                      return (
+                        <div key={asset} className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-sm"
+                                style={{ backgroundColor: getCoinColor(asset) }}
+                              />
+                              <span className="text-[var(--text-primary)]">{asset}</span>
+                            </div>
+                            <span className="text-[var(--text-secondary)] font-mono">{vol.toFixed(2)}%</span>
+                          </div>
+                          <div className="h-3 bg-[var(--bg-muted)] rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${width}%`,
+                                backgroundColor: getCoinColor(asset),
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
+                    {heatmapCoins.length === 0
+                      ? 'Select at least one coin above.'
+                      : 'Loading heatmap data...'}
+                  </div>
+                )}
               </div>
-              
-              {fairSpreadData.length > 0 ? (
-                <div className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={fairSpreadData}>
-                      <defs>
-                        <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#00B482" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#00B482" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
-                          <stop offset="5%" stopColor="#EF4A3C" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#EF4A3C" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis 
-                        dataKey="timestamp" 
-                        tickFormatter={(ts) => formatDateForChart(ts, fairSpreadHours)}
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                        tickLine={false}
-                      />
-                      <YAxis 
-                        tickFormatter={(v) => `${v.toFixed(1)}`}
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                        tickLine={false}
-                        domain={['auto', 'auto']}
-                      />
-                      <Tooltip content={<ChartTooltip />} />
-                      <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
-                      <Area 
-                        type="monotone"
-                        dataKey="spreadBps" 
-                        name="Spread (bps)"
-                        stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
-                        fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
-                        strokeWidth={2}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+
+              {/* Correlation Matrix. Shares heatmapCoins so picking in either
+                  panel updates both. When many coins are selected, cell values
+                  are hidden by default and only revealed on hover, so the
+                  matrix doesn't overflow the card. */}
+              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Correlation Matrix</h3>
+                  </div>
                 </div>
-              ) : (
-                <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
-                  <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
-                </div>
-              )}
+
+                {heatmapData && heatmapData.assets.length > 0 ? (
+                  <CorrelationMatrix
+                    assets={heatmapData.assets}
+                    matrix={heatmapData.matrix}
+                  />
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
+                    {heatmapCoins.length === 0
+                      ? 'Select at least one coin in the Volatility Heatmap panel.'
+                      : 'Loading correlation data...'}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
