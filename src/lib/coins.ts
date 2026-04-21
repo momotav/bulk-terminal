@@ -20,6 +20,24 @@
 export const DEFAULT_COINS = ['BTC', 'ETH', 'SOL'] as const;
 
 /**
+ * Coins to completely hide from the UI — they won't appear in any coin
+ * picker, dropdown, chart toggle, treemap, or map. Used for markets we
+ * don't want to surface (e.g. XAU, which BULK lists as a perpetual but
+ * which we've chosen not to expose on bulkstats for now).
+ *
+ * The list is filtered out inside `useAvailableCoins` so every downstream
+ * consumer (CoinSelector, CoinPicker, orderbook market picker, etc.)
+ * automatically sees a universe without these symbols — no per-caller
+ * changes needed.
+ *
+ * Note: this only affects what's DISPLAYED. The backend continues to
+ * collect data for these coins; hiding is purely a frontend concern, so
+ * if you later change your mind and want XAU visible, just remove it
+ * from this list — no data loss, no migration.
+ */
+export const HIDDEN_COINS: readonly string[] = ['XAU'];
+
+/**
  * Special aggregate bucket name. Used both as a series key in chart data and
  * as a toggle pill label. "Other" is shown alongside the default 3 coins and
  * holds the combined value of every coin the user hasn't explicitly enabled.
@@ -150,6 +168,10 @@ export function bucketWithOther(
 ): BucketedPoint[] {
   const enabledSet = new Set(enabledCoins);
   const showOther = enabledSet.has(OTHER_KEY);
+  // Hidden coins are silently dropped here — their values don't show as their
+  // own series, and they're NOT folded into Other either. This keeps
+  // totalCumulative / Other-bucket sums consistent with what the user sees.
+  const hiddenSet = new Set(HIDDEN_COINS);
 
   return data.map((row) => {
     const out: BucketedPoint = { timestamp: row.timestamp };
@@ -157,6 +179,7 @@ export function bucketWithOther(
 
     for (const [coin, value] of Object.entries(row.coins)) {
       if (typeof value !== 'number' || !isFinite(value)) continue;
+      if (hiddenSet.has(coin)) continue; // dropped entirely
       if (enabledSet.has(coin)) {
         // User wants this coin shown as its own series.
         out[coin] = value;
