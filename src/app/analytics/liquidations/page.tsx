@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
+import { HIDDEN_COINS } from '@/lib/coins';
 
 // Time period options
 const PERIODS = [
@@ -274,7 +275,10 @@ function LiquidationTreemap({
   // by which side (long vs short) has more cumulative liquidation value.
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
+    const hiddenSet = new Set(HIDDEN_COINS);
     for (const item of data) {
+      // Drop hidden symbols (e.g. XAU) so they don't appear as treemap cells.
+      if (hiddenSet.has(item.symbol)) continue;
       if (!groups[item.symbol]) groups[item.symbol] = { long: 0, short: 0, total: 0 };
       if (item.side === 'long') groups[item.symbol].long += item.value;
       else groups[item.symbol].short += item.value;
