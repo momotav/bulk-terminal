@@ -11,13 +11,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { ChevronDown } from 'lucide-react';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { DEFAULT_COINS } from '@/lib/coins';
 
 // ----------------------------------------------------------------------------
 // Constants & helpers
 // ----------------------------------------------------------------------------
 
-const MARKETS = ['BTC-USD', 'ETH-USD', 'SOL-USD'] as const;
-type Market = (typeof MARKETS)[number];
+// Market identifier is any string from BULK's /exchangeInfo (e.g. "BTC-USD",
+// "DOGE-USD", "FARTCOIN-USD"). The old `MARKETS = ['BTC-USD', 'ETH-USD', 'SOL-USD']`
+// const was removed — the full list is now fetched at runtime via the
+// useAvailableCoins hook, so newly-listed BULK markets show up here
+// automatically with no code changes.
+type Market = string;
 
 const COLORS = {
   bid: '#00B481',
@@ -56,7 +63,9 @@ function formatBps(bps: number | null): string {
 }
 
 // ----------------------------------------------------------------------------
-// Market selector pills
+// Market selector: quick pills for BTC/ETH/SOL + dropdown for every other
+// market BULK has listed. Mirrors the same UX pattern we use on the General
+// page — defaults are always one click away, long tail lives behind the menu.
 // ----------------------------------------------------------------------------
 
 function MarketSelector({
@@ -66,22 +75,104 @@ function MarketSelector({
   value: Market;
   onChange: (m: Market) => void;
 }) {
+  // Live list of every coin BULK has listed. Falls back to DEFAULT_COINS
+  // if /exchangeInfo is unreachable (see useAvailableCoins for details).
+  const { coins: allCoins } = useAvailableCoins();
+
+  // Dropdown state + outside-click close.
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  // Extract the "coin" part of the selected symbol (e.g. "BTC-USD" → "BTC").
+  const coinOf = (sym: string): string => sym.replace('-USD', '');
+  const selectedCoin = coinOf(value);
+
+  // The quick-pill row shows BTC/ETH/SOL *plus* the currently-selected coin if
+  // it's not one of the defaults. That way if the user picks FARTCOIN from the
+  // dropdown, FARTCOIN becomes a visible pill and stays there until they pick
+  // something else — same pattern as the General page's coin selector.
+  const pillCoins: string[] = [
+    ...DEFAULT_COINS,
+    ...(
+      (DEFAULT_COINS as readonly string[]).includes(selectedCoin) ? [] : [selectedCoin]
+    ),
+  ];
+
+  // Everything in the dropdown that isn't already a quick pill.
+  const dropdownCoins = allCoins.filter(
+    (c) => !(DEFAULT_COINS as readonly string[]).includes(c) && c !== selectedCoin
+  );
+
+  const pickCoin = (coin: string) => {
+    onChange(`${coin}-USD`);
+    setOpen(false);
+  };
+
   return (
-    <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
-      {MARKETS.map((m) => (
-        <button
-          key={m}
-          onClick={() => onChange(m)}
-          className={cn(
-            'px-3 py-1.5 text-sm font-medium rounded transition-colors',
-            value === m
-              ? 'bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]'
-              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Quick-click pills */}
+      <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
+        {pillCoins.map((coin) => {
+          const sym = `${coin}-USD`;
+          return (
+            <button
+              key={coin}
+              onClick={() => onChange(sym)}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium rounded transition-colors',
+                value === sym
+                  ? 'bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              )}
+            >
+              {coin}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Dropdown for the rest — only shown if there are additional markets
+          beyond the defaults. Always visually distinct from the pills so the
+          user understands the two affordances. */}
+      {dropdownCoins.length > 0 && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
+              'border border-[var(--border-color)] bg-[var(--bg-muted)]',
+              'text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors'
+            )}
+          >
+            More
+            <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
+          </button>
+
+          {open && (
+            <div className="absolute right-0 mt-1 min-w-[140px] max-h-64 overflow-y-auto z-20 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl py-1">
+              {dropdownCoins.map((coin) => (
+                <button
+                  key={coin}
+                  onClick={() => pickCoin(coin)}
+                  className="w-full text-left px-3 py-1.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-base)] transition-colors"
+                >
+                  {coin}
+                </button>
+              ))}
+            </div>
           )}
-        >
-          {m.replace('-USD', '')}
-        </button>
-      ))}
+        </div>
+      )}
     </div>
   );
 }
