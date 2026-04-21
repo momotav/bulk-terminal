@@ -484,7 +484,12 @@ const ChartCard = ({
       <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
     </div>
     {toggles && (
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-start gap-2">
+        {/* flex-wrap + items-start makes standalone pill elements (e.g. the
+            plain Daily New / Cumulative divs used by the New Users chart)
+            sit snug left-aligned at their natural width instead of stretching
+            to the full card width. CoinSelector itself uses the same pattern
+            internally, so the two look consistent. */}
         {toggles}
       </div>
     )}
