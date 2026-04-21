@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { request } from '@/lib/api';
-import { DEFAULT_COINS } from '@/lib/coins';
+import { DEFAULT_COINS, HIDDEN_COINS } from '@/lib/coins';
 
 /**
  * Minimal market metadata shape returned by the backend's `/exchange-info`
@@ -100,11 +100,17 @@ export function useAvailableCoins(): UseAvailableCoinsResult {
     };
   }, []);
 
+  // Filter out any coins listed in HIDDEN_COINS (e.g. XAU) so they never
+  // appear in pickers, dropdowns, chart toggles, or the treemap. One
+  // centralized filter means no consumer has to remember to exclude them.
+  const hiddenSet = new Set(HIDDEN_COINS);
+  const visibleMarkets = markets.filter(m => !hiddenSet.has(m.coin));
+
   // Extract just the coin keys, preserving BULK's ordering. If the fetch
   // failed and we have nothing, fall back to the defaults.
-  const coins = markets.length > 0
-    ? markets.map((m) => m.coin)
+  const coins = visibleMarkets.length > 0
+    ? visibleMarkets.map((m) => m.coin)
     : ([...DEFAULT_COINS] as string[]);
 
-  return { coins, markets, loading, error };
+  return { coins, markets: visibleMarkets, loading, error };
 }
