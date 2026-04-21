@@ -45,8 +45,9 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
   const { coins: allCoins, loading } = useAvailableCoins();
   const enabledSet = new Set(enabled);
 
-  // Dropdown open state + outside-click close.
+  // Dropdown open state + outside-click close + search filter.
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -57,6 +58,11 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+  // Clear the search box every time the dropdown is re-opened so stale
+  // filter state doesn't surprise the user.
+  useEffect(() => {
+    if (!open) setSearch('');
   }, [open]);
 
   // Figure out which coins should render as visible pills.
@@ -74,11 +80,17 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
     ),
   ];
 
-  // Coins available to ADD via the dropdown — every known coin that isn't
-  // already rendered as a visible pill.
-  const addableCoins = allCoins.filter(
-    (c) => !(DEFAULT_COINS as readonly string[]).includes(c) && !enabledSet.has(c)
-  );
+  // Split the full coin universe into "defaults" (rendered at the top of the
+  // dropdown, bolded) and "others" (everything else, below a separator).
+  // Matches Hyperliquid's dropdown layout in the reference screenshot.
+  const searchLower = search.trim().toLowerCase();
+  const matchesSearch = (coin: string) =>
+    searchLower === '' || coin.toLowerCase().includes(searchLower);
+
+  const defaultsInDropdown = (DEFAULT_COINS as readonly string[]).filter(matchesSearch);
+  const othersInDropdown = allCoins
+    .filter((c) => !(DEFAULT_COINS as readonly string[]).includes(c))
+    .filter(matchesSearch);
 
   // Count for the "N coins selected" trigger — everything the user has on
   // except Other (which is an aggregate, not a coin).
@@ -91,10 +103,12 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
     onChange(Array.from(next));
   };
 
-  const addCoinFromDropdown = (coin: string) => {
-    if (enabledSet.has(coin)) return; // already on
-    onChange([...enabled, coin]);
-    setOpen(false);
+  // Toggle a coin from INSIDE the dropdown. Unlike clicking a pill this does
+  // NOT close the dropdown — user can multi-select quickly without reopening.
+  // (Hyperliquid behaves the same way in their coin picker.)
+  const toggleFromDropdown = (coin: string) => {
+    togglePill(coin);
+    // Explicitly do NOT call setOpen(false) — menu stays open.
   };
 
   const deselectAll = () => {
@@ -104,49 +118,49 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Row of pills: coins + Other + extras (e.g. Cumulative) + Deselect all */}
-      <div className="flex flex-wrap items-center gap-2">
-        {visiblePillCoins.map((coin) => (
-          <CoinPill
-            key={coin}
-            label={coin}
-            color={getCoinColor(coin)}
-            active={enabledSet.has(coin)}
-            onClick={() => togglePill(coin)}
-          />
-        ))}
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Single row: coin pills + Other + extras (Cumulative) + Deselect all +
+          the dropdown trigger. All in one row so the chart header stays
+          compact, matching Hyperliquid's layout. */}
+      {visiblePillCoins.map((coin) => (
         <CoinPill
-          key={OTHER_KEY}
-          label="Others"
-          color={getCoinColor(OTHER_KEY)}
-          active={enabledSet.has(OTHER_KEY)}
-          onClick={() => togglePill(OTHER_KEY)}
+          key={coin}
+          label={coin}
+          color={getCoinColor(coin)}
+          active={enabledSet.has(coin)}
+          onClick={() => togglePill(coin)}
         />
-        {extraPills?.map((p) => (
-          <CoinPill
-            key={p.key}
-            label={p.label}
-            color={p.color}
-            active={p.active}
-            onClick={p.onClick}
-          />
-        ))}
-        <button
-          onClick={deselectAll}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border-color)] bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          Deselect all
-        </button>
-      </div>
+      ))}
+      <CoinPill
+        key={OTHER_KEY}
+        label="Others"
+        color={getCoinColor(OTHER_KEY)}
+        active={enabledSet.has(OTHER_KEY)}
+        onClick={() => togglePill(OTHER_KEY)}
+      />
+      {extraPills?.map((p) => (
+        <CoinPill
+          key={p.key}
+          label={p.label}
+          color={p.color}
+          active={p.active}
+          onClick={p.onClick}
+        />
+      ))}
+      <button
+        onClick={deselectAll}
+        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--border-color)] bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+      >
+        Deselect all
+      </button>
 
       {/* Dropdown trigger — shows total coin count + expands to a picker */}
       <div className="relative inline-block" ref={dropdownRef}>
         <button
           onClick={() => setOpen((v) => !v)}
-          disabled={loading || addableCoins.length === 0}
+          disabled={loading}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium',
             'border border-[var(--border-color)] bg-[var(--bg-muted)]',
             'text-[var(--text-primary)] hover:bg-[var(--bg-base)] transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -161,25 +175,114 @@ export function CoinSelector({ enabled, onChange, extraPills }: CoinSelectorProp
           />
         </button>
 
-        {open && addableCoins.length > 0 && (
-          <div className="absolute left-0 mt-1 min-w-[160px] max-h-64 overflow-y-auto z-20 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl py-1">
-            {addableCoins.map((coin) => (
-              <button
-                key={coin}
-                onClick={() => addCoinFromDropdown(coin)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-base)] transition-colors"
-              >
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-sm"
-                  style={{ background: getCoinColor(coin) }}
-                />
-                <span className="flex-1 text-left">{coin}</span>
-              </button>
-            ))}
+        {open && (
+          <div className="absolute right-0 mt-1 w-[260px] z-20 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
+            {/* Search box */}
+            <div className="p-2 border-b border-[var(--border-color)]">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search coins..."
+                autoFocus
+                className="w-full px-3 py-2 text-xs bg-[var(--bg-base)] border border-[var(--border-color)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--text-secondary)] transition-colors"
+              />
+            </div>
+
+            {/* Deselect all (inside the dropdown, like Hyperliquid) */}
+            <button
+              onClick={deselectAll}
+              className="w-full text-left px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-base)] transition-colors border-b border-[var(--border-color)]"
+            >
+              Deselect All
+            </button>
+
+            <div className="max-h-64 overflow-y-auto">
+              {/* Default coins — rendered bold at the top of the list.
+                  Matches Hyperliquid's styling where BTC / ETH / HYPE / SOL
+                  are visually distinguished from the long tail. */}
+              {defaultsInDropdown.length > 0 && (
+                <div className="py-1">
+                  {defaultsInDropdown.map((coin) => (
+                    <DropdownRow
+                      key={coin}
+                      coin={coin}
+                      active={enabledSet.has(coin)}
+                      bold
+                      onClick={() => toggleFromDropdown(coin)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Visual separator between defaults and the rest. */}
+              {defaultsInDropdown.length > 0 && othersInDropdown.length > 0 && (
+                <div className="border-t border-[var(--border-color)]" />
+              )}
+
+              {/* Everything else */}
+              {othersInDropdown.length > 0 && (
+                <div className="py-1">
+                  {othersInDropdown.map((coin) => (
+                    <DropdownRow
+                      key={coin}
+                      coin={coin}
+                      active={enabledSet.has(coin)}
+                      onClick={() => toggleFromDropdown(coin)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {defaultsInDropdown.length === 0 && othersInDropdown.length === 0 && (
+                <div className="px-3 py-4 text-xs text-[var(--text-tertiary)] text-center">
+                  No coins match &ldquo;{search}&rdquo;
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DropdownRow — one row inside the coin picker dropdown. Shows a colored
+// swatch, coin name, and a check mark when that coin is currently enabled.
+// ----------------------------------------------------------------------------
+function DropdownRow({
+  coin,
+  active,
+  bold,
+  onClick,
+}: {
+  coin: string;
+  active: boolean;
+  bold?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-[var(--bg-base)] transition-colors"
+    >
+      <span
+        className="inline-block w-3 h-3 rounded-sm shrink-0"
+        style={{ background: getCoinColor(coin) }}
+      />
+      <span className={cn(
+        'flex-1 text-left',
+        bold
+          ? 'font-semibold text-[var(--text-primary)]'
+          : 'font-normal text-[var(--text-secondary)]'
+      )}>
+        {coin}
+      </span>
+      {active && (
+        <Check size={12} className="text-[var(--text-primary)] shrink-0" strokeWidth={3} />
+      )}
+    </button>
   );
 }
 
