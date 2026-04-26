@@ -258,34 +258,39 @@ export function MarginSurface() {
         />
       )}
 
-      {/* Footer readout — shows hover details, or a baseline summary when no
-          cell is hovered. Always reserves the same vertical space so the
-          card doesn't reflow on hover. */}
-      <div className="mt-3 text-xs text-[var(--text-tertiary)] min-h-[20px]">
+      {/* Footer readout — single-line, professional. Original version used
+          abbreviated jargon ("MM open", "existing", "portfolio factor") which
+          made it hard to scan. Cleaned up to read naturally while keeping
+          everything a power user might want.
+          Format: "BTC long · $15M at 28x → 2.00% maintenance margin ($300K)"
+          We always reserve the same vertical space to avoid reflow on hover. */}
+      <div className="mt-3 text-xs text-[var(--text-secondary)] min-h-[20px]">
         {hover ? (
           <span>
             <span className="text-[var(--text-primary)] font-medium">{coin}</span>
             {' '}
             <span className="text-[var(--text-primary)]">{side === 'buy' ? 'long' : 'short'}</span>
-            {' • '}
+            {' · '}
             <span className="font-mono text-[var(--text-primary)]">{formatNotional(hover.notional)}</span>
-            {' @ '}
+            {' at '}
             <span className="font-mono text-[var(--text-primary)]">{hover.leverage}x</span>
             {' → '}
-            <span className="font-mono text-[var(--text-primary)]">MM open {(hover.mmrO * 100).toFixed(2)}%</span>
-            {' • '}
-            <span className="font-mono">existing {(hover.mmrE * 100).toFixed(2)}%</span>
-            {' • '}
-            <span className="font-mono">portfolio factor {hover.p.toFixed(3)}</span>
+            <span className="font-mono text-[var(--text-primary)]">
+              {(hover.mmrO * 100).toFixed(2)}%
+            </span>
+            {' maintenance margin '}
+            <span className="font-mono">
+              ({formatNotional(hover.notional * hover.mmrO)})
+            </span>
           </span>
         ) : surface ? (
           <span>
-            Baseline MM <span className="font-mono text-[var(--text-primary)]">{(baseline * 100).toFixed(2)}%</span>
+            Baseline <span className="font-mono text-[var(--text-primary)]">{(baseline * 100).toFixed(2)}%</span>
             {maxMmr > baseline && (
               <>
-                {' • peak '}
+                {' · peak '}
                 <span className="font-mono text-[var(--text-primary)]">{(maxMmr * 100).toFixed(2)}%</span>
-                <span className="text-[var(--text-tertiary)]"> at medium-leverage / large-size cells</span>
+                <span> at medium leverage on large positions</span>
               </>
             )}
           </span>
