@@ -175,6 +175,48 @@ export interface OrderbookSnapshot {
   stats: OrderbookStats;
 }
 
+// ============ Risk Surfaces ============
+//
+// BULK publishes per-market maintenance margin surfaces as a 2D grid indexed
+// by (notional_idx, leverage_idx), with one grid per regime and one each for
+// buy vs sell sides. Each cell tells you:
+//   mmrO = maintenance margin rate for OPENING a new position at that size/lev
+//   mmrE = maintenance margin rate for an EXISTING position (usually looser)
+//   p    = portfolio margining factor (credit when hedging across markets)
+//
+// regime is an integer in roughly [-12, +12]: negative = bearish stress,
+// 0 = neutral, positive = bullish stress. `liveRegime` tells you which one
+// is currently active.
+//
+// See: https://docs.bulk.trade (Risk Surfaces section)
+export interface RiskSurfaceCell {
+  mmrO: number;
+  mmrE: number;
+  p: number;
+}
+
+export interface RiskSurfaceEntry {
+  regime: number;
+  /** Leverage steps (x-axis). Typically [1, 2, ..., 50]. */
+  leverage: number[];
+  /** Notional size buckets in USD (y-axis). Log-ish spacing from ~$50K to $100M. */
+  notionals: number[];
+  /** buy[notional_idx][leverage_idx] → cell for LONG positions. */
+  buy: RiskSurfaceCell[][];
+  /** sell[notional_idx][leverage_idx] → cell for SHORT positions. */
+  sell: RiskSurfaceCell[][];
+}
+
+export interface RiskSurfaces {
+  symbol: string;
+  /** The regime that is currently active for this market. */
+  liveRegime: number;
+  /** One entry per regime the market publishes a surface for. */
+  surfaces: RiskSurfaceEntry[];
+  /** BULK's portfolio-margining correlation coefficients. Shape: [[[coinA, coinB], rho], ...]. */
+  corrs: Array<[[string, string], number]>;
+}
+
 // Helper to get auth token (for legacy auth only)
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -315,6 +357,15 @@ export const analytics = {
   async getOrderbook(coin: string, nlevels: number = 20): Promise<OrderbookSnapshot> {
     return request<OrderbookSnapshot>(
       `/api/analytics/orderbook/${encodeURIComponent(coin)}?nlevels=${nlevels}`
+    );
+  },
+
+  // BULK's margin model for a given market — a grid of (notional x leverage)
+  // maintenance margin rates per regime, per side (buy/sell). See RiskSurfaces
+  // type below for the shape. Backend is a 5-min caching proxy.
+  async getRiskSurfaces(coin: string): Promise<RiskSurfaces> {
+    return request<RiskSurfaces>(
+      `/api/analytics/risk-surfaces/${encodeURIComponent(coin)}`
     );
   },
 
