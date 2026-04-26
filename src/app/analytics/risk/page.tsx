@@ -9,6 +9,7 @@ import {
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
 import { CoinPicker } from '@/components/CoinPicker';
+import { MarginSurface } from '@/components/MarginSurface';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -565,6 +566,13 @@ export default function RiskPage() {
                 </div>
               )}
             </div>
+
+            {/* Row 1.5: Margin Surface — full width.
+                Sits between Market Regime ("what regime are we in?") and the
+                rest of the risk panels because it answers "what does that
+                regime mean for your margin?" — the natural follow-up
+                question after seeing the regime score. */}
+            <MarginSurface />
 
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
