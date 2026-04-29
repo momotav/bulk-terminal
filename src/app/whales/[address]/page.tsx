@@ -12,6 +12,7 @@ import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type
 import { useStore } from '@/store';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AccountHierarchy } from '@/components/AccountHierarchy';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -517,6 +518,11 @@ export default function WalletPage() {
                 </div>
               </div>
             )}
+
+            {/* Account hierarchy — sub-account tree (only renders when this
+                wallet has sub-accounts or IS a sub-account). Hidden for
+                vanilla single-account wallets so the layout stays compact. */}
+            <AccountHierarchy address={address} />
 
             {/* Main Content Grid */}
             <div className="grid lg:grid-cols-2 gap-6">
