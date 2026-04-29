@@ -195,16 +195,23 @@ export function MarginSurface() {
   // endpoint returns regimeDt for every market in one shot; we filter to
   // the selected coin. 10s matches the granularity at which BULK reports
   // regimeDt in the ticker stream — polling faster wouldn't change anything.
+  //
+  // Note: the backend returns markets keyed by bare coin (e.g. "BTC"), not
+  // the full symbol string ("BTC-USD"). We match against `coin` directly.
   useEffect(() => {
     let cancelled = false;
-    const symbol = `${coin}-USD`;
 
     const pull = () => {
       analytics
         .getRegimeData()
         .then((res) => {
           if (cancelled) return;
-          const market = res.markets.find((m) => m.symbol === symbol);
+          // Backend stores symbol as bare coin ("BTC") today, but be
+          // tolerant of either format in case that changes — match either
+          // exact-coin or "<coin>-USD".
+          const market = res.markets.find(
+            (m) => m.symbol === coin || m.symbol === `${coin}-USD`
+          );
           // regimeDt is documented as "regime duration in 10s intervals" in
           // some docs and as raw seconds in others. We treat it as seconds
           // here because the doc calculator uses it raw in `Math.pow(p, dt)`.
