@@ -73,6 +73,76 @@ export interface ExchangeHealth {
   liquidation_value_24h: number;
 }
 
+// ---------------------------------------------------------------------------
+// Account hierarchy (BULK v1.0.14: Master/Sub-account/Multisig)
+// ---------------------------------------------------------------------------
+
+export interface HierarchySubAccountRef {
+  pubkey: string;
+  name?: string;
+}
+
+export interface HierarchySummary {
+  totalBalance: number;
+  availableBalance: number;
+  marginUsed: number;
+  notional: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  positionsCount: number;
+}
+
+export interface HierarchyResponse {
+  address: string;
+  kind: 'MasterEOA' | 'SubAccount' | 'Unknown';
+  parent?: string;
+  subAccounts: HierarchySubAccountRef[];
+  multisigAccounts: string[];
+  resolvedAt: number;
+  // Per-pubkey financial summary keyed by pubkey. Includes the queried
+  // address itself plus each sub-account when the queried address is a master.
+  summaries: Record<string, HierarchySummary>;
+}
+
+// ---------------------------------------------------------------------------
+// Activity timeline (deposits, withdrawals, transfers, sub-account events)
+// ---------------------------------------------------------------------------
+
+export type ActivityEventType =
+  | 'deposit'
+  | 'withdrawal'
+  | 'transfer'
+  | 'createSubAccount'
+  | 'removeSubAccount'
+  | 'renameSubAccount'
+  | 'multisigCreated'
+  | 'proposalCreated'
+  | 'proposalExecuted'
+  | 'proposalFailed'
+  | 'proposalCancelled'
+  | string; // unknown future event types pass through as-is
+
+export interface ActivityEvent {
+  activityType: ActivityEventType;
+  status: string;                 // "completed" | "failed" | etc.
+  from?: string;                  // source pubkey (or null for some events)
+  to?: string;                    // destination pubkey
+  fromLabel?: string;             // resolver-friendly label, e.g. "farm (alice's sub-account)"
+  toLabel?: string;
+  symbol?: string;                // token symbol for transfers (e.g. "USDC")
+  amount?: number;
+  iso?: boolean;
+  slot?: number;
+  timestamp: number;              // nanoseconds (BULK convention) — divide by 1e6 for JS Date
+  sequence?: number;
+}
+
+export interface ActivityResponse {
+  address: string;
+  data: ActivityEvent[];
+  count: number;
+}
+
 export interface Notification {
   id: number;
   wallet_address: string;
@@ -752,6 +822,23 @@ export const wallet = {
 
   async trackWallet(address: string): Promise<{ success: boolean }> {
     return request(`/api/wallet/${address}/track`, { method: 'POST' });
+  },
+
+  // Account hierarchy from BULK v1.0.14: kind (Master/Sub), parent, sub-accounts,
+  // multisig membership, plus per-account financial summaries. Backend resolver
+  // service caches hierarchy 24h and per-account summaries 60s — this is the
+  // single source of truth used by /whales/[address] and (eventually) the
+  // leaderboard / liquidations feed.
+  async getHierarchy(address: string): Promise<HierarchyResponse> {
+    return request(`/api/wallet/${address}/hierarchy`);
+  },
+
+  // Activity timeline (deposits, withdrawals, transfers, sub-account events,
+  // multisig proposals). Proxies BULK's activityHistory query and labels
+  // addresses through the resolver so sub-accounts show as e.g. "alice's farm"
+  // instead of off-curve pubkeys.
+  async getActivity(address: string, limit: number = 50): Promise<ActivityResponse> {
+    return request(`/api/wallet/${address}/activity?limit=${limit}`);
   },
 
   async getWatchlist(): Promise<Array<{ wallet_address: string; nickname: string | null; total_pnl?: number; total_volume?: number }>> {
