@@ -13,6 +13,7 @@ import { useStore } from '@/store';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
+import { ActivityFeed } from '@/components/ActivityFeed';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -733,6 +734,15 @@ export default function WalletPage() {
                   );
                 })()}
               </div>
+            </div>
+
+            {/* Activity timeline — protocol-level events (deposits,
+                transfers, sub-account ops, multisig ops). Sits at the
+                bottom of the page because it's a chronological feed and
+                most of the time the user came here for the live position
+                / PnL info above; activity is supporting context. */}
+            <div className="mt-6">
+              <ActivityFeed address={address} />
             </div>
           </div>
         )}
