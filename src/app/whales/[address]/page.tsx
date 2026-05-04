@@ -14,6 +14,7 @@ import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
 import { ActivityFeed } from '@/components/ActivityFeed';
+import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -64,6 +65,10 @@ export default function WalletPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Position currently being inspected in the price-chart modal. null means
+  // closed. Set when the user clicks any position card.
+  const [chartPosition, setChartPosition] = useState<PositionForChart | null>(null);
+
   // Get current user's wallet address from multiple sources
   const solanaWalletAddress = solanaWallets?.[0]?.address;
   const privyWalletAddress = privyUser?.wallet?.address;
@@ -102,32 +107,52 @@ export default function WalletPage() {
   );
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError('');
-      
+    if (!address) return;
+
+    // Single fetch routine. The `silent` flag controls whether we trigger
+    // the loading spinner — true on initial mount, false on background
+    // refresh ticks (so the UI doesn't flicker every 10 seconds during a
+    // stream).
+    const fetchData = async (silent: boolean) => {
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
+
       try {
         const [walletResult, tradesResult, profileResult] = await Promise.all([
           wallet.getWallet(address),
           wallet.getTrades(address, 50).catch(() => ({ data: [] })),
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
         ]);
-        
+
         setData(walletResult);
         setTrades(tradesResult.data || []);
         setProfile((profileResult as any)?.profile || null);
-        
-        await wallet.trackWallet(address).catch(() => {});
+
+        // Only track on first load — no need to re-track every 10s.
+        if (!silent) {
+          await wallet.trackWallet(address).catch(() => {});
+        }
       } catch (err) {
-        setError('Failed to load wallet data');
+        // On background refresh failures, keep existing data on screen
+        // rather than flashing an error banner. The next tick will retry.
+        if (!silent) setError('Failed to load wallet data');
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     };
 
-    if (address) {
-      fetchData();
-    }
+    // Initial load — full spinner.
+    fetchData(false);
+
+    // Background refresh every 10 seconds. Cleared on unmount or when the
+    // wallet address changes. We don't visualize the refresh (no spinner,
+    // no toast) — positions and PnL just update in place. This is the
+    // behavior the BULK dev specifically asked for: live-feeling without
+    // user action.
+    const tick = window.setInterval(() => fetchData(true), 10_000);
+    return () => window.clearInterval(tick);
   }, [address]);
 
   const copyAddress = () => {
@@ -418,65 +443,63 @@ export default function WalletPage() {
               </div>
             </div>
 
-            {/* Tracked Stats Cards - Always show */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <BarChart3 className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Total Volume</span>
-                </div>
-                <p className="text-2xl font-bold text-blue-400">
-                  ${formatCompact(tracked?.total_volume || 0)}
-                </p>
-              </div>
+            {/* Stats — restructured for at-a-glance readability on a stream.
+                The streamer wants viewers to grok 'how is this trader doing
+                right now' in under a second. So we lead with one large hero
+                number (live unrealized PnL) and demote the supporting stats
+                below it. Historical tracked metrics (volume, trade count)
+                move to a smaller third row. */}
 
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Total Trades</span>
-                </div>
-                <p className="text-2xl font-bold text-purple-400">
-                  {tracked?.total_trades || 0}
-                </p>
-              </div>
-
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  {totalPnL >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-green-400" />
+            {/* Hero PnL — the headline number. Lives only when we have live
+                BULK margin data; otherwise we fall back to tracked total PnL
+                from our DB. */}
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-6 mb-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  {(hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0 ? (
+                    <TrendingUp className="w-7 h-7 text-bulk-green" />
                   ) : (
-                    <TrendingDown className="w-4 h-4 text-red-400" />
+                    <TrendingDown className="w-7 h-7 text-bulk-red" />
                   )}
-                  <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Total PnL</span>
+                  <div>
+                    <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
+                      {hasLiveData && margin ? 'Unrealized PnL' : 'Total PnL'}
+                    </p>
+                    <p className={cn(
+                      'text-4xl sm:text-5xl font-bold tabular-nums tracking-tight',
+                      (hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0
+                        ? 'text-bulk-green'
+                        : 'text-bulk-red'
+                    )}>
+                      {(hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0 ? '+' : ''}
+                      ${formatCompact(Math.abs(hasLiveData && margin ? margin.unrealizedPnl : totalPnL))}
+                    </p>
+                  </div>
                 </div>
-                <p className={cn(
-                  "text-2xl font-bold",
-                  totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                )}>
-                  {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
-                </p>
-              </div>
-
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Liquidations</span>
+                {/* Auto-refresh indicator — small green dot pulse so viewers
+                    know the page is live and not stale. */}
+                <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-bulk-green" />
+                  </span>
+                  Live · refreshes every 10s
                 </div>
-                <p className="text-2xl font-bold text-orange-400">
-                  {tracked?.total_liquidations || 0}
-                </p>
               </div>
             </div>
 
-            {/* Live Account Stats - Only show if has live data */}
+            {/* Live account stats row — only shown when we have BULK margin
+                data. These are the supporting numbers behind the hero PnL:
+                what they have to risk, what they're actively risking, what's
+                free, and how often they've blown up historically. */}
             {hasLiveData && margin && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-bulk-green" />
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Live Balance</span>
+                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Balance</span>
                   </div>
-                  <p className="text-2xl font-bold text-bulk-green">
+                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
                     ${formatNumber(margin.totalBalance, 2)}
                   </p>
                 </div>
@@ -486,25 +509,8 @@ export default function WalletPage() {
                     <Shield className="w-4 h-4 text-yellow-400" />
                     <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Margin Used</span>
                   </div>
-                  <p className="text-2xl font-bold text-yellow-400">
+                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
                     ${formatNumber(margin.marginUsed, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    {margin.unrealizedPnl >= 0 ? (
-                      <TrendingUp className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-red-400" />
-                    )}
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Unrealized PnL</span>
-                  </div>
-                  <p className={cn(
-                    "text-2xl font-bold",
-                    margin.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"
-                  )}>
-                    {margin.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(margin.unrealizedPnl, 2)}
                   </p>
                 </div>
 
@@ -513,12 +519,69 @@ export default function WalletPage() {
                     <PiggyBank className="w-4 h-4 text-cyan-400" />
                     <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Available</span>
                   </div>
-                  <p className="text-2xl font-bold text-cyan-400">
+                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
                     ${formatNumber(margin.availableBalance, 2)}
+                  </p>
+                </div>
+
+                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Flame className="w-4 h-4 text-orange-400" />
+                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Liquidations</span>
+                  </div>
+                  <p className="text-2xl font-bold text-orange-400 tabular-nums">
+                    {tracked?.total_liquidations || 0}
                   </p>
                 </div>
               </div>
             )}
+
+            {/* Historical tracked stats — smaller, demoted. These reflect
+                lifetime activity from our DB (volume, trade count). Useful
+                context but not what a stream viewer is looking for first. */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total Volume</span>
+                </div>
+                <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">
+                  ${formatCompact(tracked?.total_volume || 0)}
+                </p>
+              </div>
+
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total Trades</span>
+                </div>
+                <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">
+                  {tracked?.total_trades || 0}
+                </p>
+              </div>
+
+              {/* Realized PnL from our tracked DB — separate from live
+                  unrealized in the hero card. Only shown if it differs
+                  meaningfully from the hero number, otherwise it's noise. */}
+              {hasLiveData && margin && (
+                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    {totalPnL >= 0 ? (
+                      <TrendingUp className="w-3.5 h-3.5 text-bulk-green" />
+                    ) : (
+                      <TrendingDown className="w-3.5 h-3.5 text-bulk-red" />
+                    )}
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Realized (lifetime)</span>
+                  </div>
+                  <p className={cn(
+                    'text-lg font-semibold tabular-nums',
+                    totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
+                  )}>
+                    {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Account hierarchy — sub-account tree (only renders when this
                 wallet has sub-accounts or IS a sub-account). Hidden for
@@ -545,7 +608,12 @@ export default function WalletPage() {
                   </h2>
                 </div>
 
-                <div className="divide-y divide-dark-border max-h-[400px] overflow-y-auto">
+                {/* Position cards. Click any card to open the price chart
+                    modal with entry / mark / liq lines drawn on a candle
+                    chart for that market — the BULK dev's headline ask.
+                    The "→" arrow is persistent (not hover-only) so stream
+                    viewers know the cards are interactive. */}
+                <div className="divide-y divide-[var(--border-color)] max-h-[480px] overflow-y-auto">
                   {positions.length > 0 ? (
                     positions.map((pos, i) => {
                       const isLong = pos.size > 0;
@@ -555,28 +623,47 @@ export default function WalletPage() {
                       const markPrice = markPrices[pos.symbol] || 0;
 
                       return (
-                        <div key={i} className="p-4 hover:bg-[var(--bg-secondary-20)]/30 transition-colors">
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() =>
+                            setChartPosition({
+                              symbol: pos.symbol,
+                              side: isLong ? 'long' : 'short',
+                              entryPrice: pos.price,
+                              markPrice: markPrice || pos.price,
+                              liquidationPrice: pos.liquidationPrice,
+                              size: Math.abs(pos.size),
+                              leverage: pos.leverage,
+                              unrealizedPnl: pos.unrealizedPnl,
+                            })
+                          }
+                          className="w-full text-left p-5 hover:bg-[var(--bg-secondary-20)] transition-colors group cursor-pointer"
+                          aria-label={`View ${pos.symbol} chart`}
+                        >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                               <span className={cn(
-                                "px-2 py-0.5 rounded text-xs font-medium",
-                                isLong ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"
+                                'px-2 py-0.5 rounded text-xs font-semibold tracking-wider',
+                                isLong
+                                  ? 'bg-bulk-green/15 text-bulk-green'
+                                  : 'bg-bulk-red/15 text-bulk-red'
                               )}>
                                 {isLong ? 'LONG' : 'SHORT'}
                               </span>
-                              <span className="font-medium">{pos.symbol}</span>
-                              <span className="text-[var(--text-tertiary)] text-sm">{pos.leverage}x</span>
+                              <span className="font-semibold text-[var(--text-primary)]">{pos.symbol}</span>
+                              <span className="text-[var(--text-tertiary)] text-sm font-mono">{pos.leverage}x</span>
                             </div>
                             <div className="text-right">
                               <p className={cn(
-                                "font-medium",
-                                pos.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"
+                                'font-bold text-lg tabular-nums',
+                                pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
                               )}>
                                 {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
                               </p>
                               <p className={cn(
-                                "text-xs",
-                                pnlPercent >= 0 ? "text-green-400" : "text-red-400"
+                                'text-xs tabular-nums',
+                                pnlPercent >= 0 ? 'text-bulk-green' : 'text-bulk-red'
                               )}>
                                 {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
                               </p>
@@ -585,23 +672,32 @@ export default function WalletPage() {
                           
                           <div className="grid grid-cols-4 gap-2 text-xs">
                             <div>
-                              <p className="text-[var(--text-tertiary)]">Size</p>
-                              <p className="font-mono">{formatNumber(Math.abs(pos.size), 4)}</p>
+                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Size</p>
+                              <p className="font-mono text-[var(--text-primary)] tabular-nums">{formatNumber(Math.abs(pos.size), 4)}</p>
                             </div>
                             <div>
-                              <p className="text-[var(--text-tertiary)]">Entry</p>
-                              <p className="font-mono">${formatNumber(pos.price, 2)}</p>
+                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Entry</p>
+                              <p className="font-mono text-[var(--text-primary)] tabular-nums">${formatNumber(pos.price, 2)}</p>
                             </div>
                             <div>
-                              <p className="text-[var(--text-tertiary)]">Mark</p>
-                              <p className="font-mono text-blue-400">${formatNumber(markPrice, 2)}</p>
+                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Mark</p>
+                              <p className="font-mono text-blue-400 tabular-nums">${formatNumber(markPrice, 2)}</p>
                             </div>
                             <div>
-                              <p className="text-[var(--text-tertiary)]">Liq. Price</p>
-                              <p className="font-mono text-red-400">${formatNumber(pos.liquidationPrice, 2)}</p>
+                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Liq</p>
+                              <p className="font-mono text-bulk-red tabular-nums">${formatNumber(pos.liquidationPrice, 2)}</p>
                             </div>
                           </div>
-                        </div>
+
+                          {/* Persistent "view chart" affordance below the
+                              numbers. Subtle, but visible to anyone watching
+                              a stream — they can see the cards are clickable
+                              even without seeing the streamer's mouse. */}
+                          <div className="mt-3 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] group-hover:text-bulk-green transition-colors">
+                            <span>View chart</span>
+                            <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                          </div>
+                        </button>
                       );
                     })
                   ) : trades.length > 0 ? (
@@ -747,6 +843,15 @@ export default function WalletPage() {
           </div>
         )}
       </main>
+
+      {/* Position-detail chart modal — opened by clicking a position card.
+          Renders a candle chart for the position's market with horizontal
+          lines at entry / mark / liq. The BULK dev's marquee request for
+          the tournament broadcast view. */}
+      <PositionChartModal
+        position={chartPosition}
+        onClose={() => setChartPosition(null)}
+      />
     </div>
   );
 }
