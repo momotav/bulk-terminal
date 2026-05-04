@@ -74,6 +74,28 @@ export interface ExchangeHealth {
 }
 
 // ---------------------------------------------------------------------------
+// OHLCV candles (BULK kline format passes through unchanged)
+// ---------------------------------------------------------------------------
+
+export interface Candle {
+  t: number;   // open time, ms
+  T: number;   // close time, ms
+  o: number;   // open
+  h: number;   // high
+  l: number;   // low
+  c: number;   // close
+  v: number;   // volume in base asset
+  n: number;   // number of trades
+}
+
+export interface CandlesResponse {
+  symbol: string;
+  interval: string;
+  limit: number;
+  candles: Candle[];
+}
+
+// ---------------------------------------------------------------------------
 // Account hierarchy (BULK v1.0.14: Master/Sub-account/Multisig)
 // ---------------------------------------------------------------------------
 
@@ -436,6 +458,22 @@ export const analytics = {
   async getRiskSurfaces(coin: string): Promise<RiskSurfaces> {
     return request<RiskSurfaces>(
       `/api/analytics/risk-surfaces/${encodeURIComponent(coin)}`
+    );
+  },
+
+  // OHLCV candles for a market — used by the position-detail chart on the
+  // wallet page. Backend caches 30s. Allowed intervals match BULK's
+  // documented set: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M.
+  async getCandles(
+    symbol: string,
+    interval: string = '1h',
+    limit: number = 100,
+  ): Promise<CandlesResponse> {
+    const s = symbol.toUpperCase().endsWith('-USD')
+      ? symbol.toUpperCase()
+      : `${symbol.toUpperCase()}-USD`;
+    return request<CandlesResponse>(
+      `/api/analytics/candles/${encodeURIComponent(s)}?interval=${interval}&limit=${limit}`
     );
   },
 
