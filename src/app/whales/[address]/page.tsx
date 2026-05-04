@@ -587,12 +587,22 @@ export default function WalletPage() {
             <div className="grid lg:grid-cols-2 gap-6">
               {/* Positions / Recent Trades */}
               <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-                <div className="p-4 border-b border-[var(--border-color)]">
+                <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-2">
                   <h2 className="font-semibold flex items-center gap-2">
                     {positions.length > 0 ? (
                       <>
                         <Activity className="w-4 h-4 text-bulk-green" />
                         Open Positions ({positions.length})
+                      </>
+                    ) : !hasLiveData ? (
+                      // Distinct visual state for "BULK API didn't return
+                      // live data" — most likely a transient timeout. The
+                      // 10s background poll will retry and likely succeed.
+                      // Without this branch we silently fell through to
+                      // "Recent Trades" and users assumed positions = 0.
+                      <>
+                        <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                        Fetching positions…
                       </>
                     ) : (
                       <>
@@ -601,6 +611,14 @@ export default function WalletPage() {
                       </>
                     )}
                   </h2>
+                  {/* Tiny hint for the "Fetching" state so a streamer /
+                      viewer knows what's happening rather than thinking
+                      the page froze. */}
+                  {!hasLiveData && positions.length === 0 && (
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+                      auto-retries every 10s
+                    </span>
+                  )}
                 </div>
 
                 {/* Position cards. Click any card to open the price chart
