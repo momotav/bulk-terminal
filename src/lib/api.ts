@@ -439,7 +439,68 @@ export const leaderboard = {
     );
     return data;
   },
+
+  // Tournament-grade leaderboard sourced from BULK's official indexer.
+  // Numbers match what users see on bulk.trade exactly — use this for the
+  // primary "Top Traders" view, not the DB-backed getTopPnL above.
+  //
+  // Per the BULK dev: window=24h tracks the last 12h of trades (indexer
+  // limitation). Just expose it as "24h" so the UI matches their site.
+  async getBulkLeaderboard(opts: {
+    window?: BulkLeaderboardWindow;
+    metric?: BulkLeaderboardMetric;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<BulkLeaderboardResponse> {
+    const params = new URLSearchParams();
+    params.set('window', opts.window || '24h');
+    params.set('metric', opts.metric || 'cashflow_adjusted_roi');
+    if (opts.page) params.set('page', String(opts.page));
+    if (opts.pageSize) params.set('page_size', String(opts.pageSize));
+    return request<BulkLeaderboardResponse>(
+      `/api/leaderboard/bulk?${params.toString()}`
+    );
+  },
 };
+
+// Types for the BULK indexer leaderboard. Mirror the proxy endpoint's
+// validation: anything outside these unions is rejected at the backend.
+export type BulkLeaderboardWindow = '24h' | '7d' | '30d' | 'all';
+export type BulkLeaderboardMetric =
+  | 'cashflow_adjusted_roi'
+  | 'realized_pnl'
+  | 'net_realized_pnl'
+  | 'volume'
+  | 'roi'
+  | 'net_realized_roi'
+  | 'win_rate';
+
+export interface BulkLeaderboardRow {
+  rank: number;
+  wallet: string;
+  realized_pnl: number;
+  net_realized_pnl: number;
+  volume: number;
+  closed_count: number;
+  roi: number | null;
+  net_realized_roi: number | null;
+  cashflow_adjusted_roi: number | null;
+  win_rate: number;
+  updated_at: string;
+}
+
+export interface BulkLeaderboardResponse {
+  window: string;
+  metric: string;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+  rows: BulkLeaderboardRow[];
+  error?: string;
+}
 
 // Analytics API
 export const analytics = {
