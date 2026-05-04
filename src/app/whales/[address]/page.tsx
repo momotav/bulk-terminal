@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
-  TrendingUp, TrendingDown, Wallet, Activity, Flame,
-  AlertCircle, BarChart3, Clock, Loader2, DollarSign, Shield, PiggyBank, UserCheck
+  TrendingUp, TrendingDown, Wallet, Activity,
+  AlertCircle, Clock, Loader2, UserCheck
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
 import { useStore } from '@/store';
@@ -45,6 +45,33 @@ interface WalletProfile {
 
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
+}
+
+// Compact label/value pair for the integrated stats panel. Uppercase 10px
+// label on top, big tabular-nums value below. Optional accent color tints
+// the value (used for liquidations count when > 0).
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: 'orange';
+}) {
+  return (
+    <div>
+      <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">{label}</p>
+      <p
+        className={cn(
+          'text-lg sm:text-xl font-semibold tabular-nums truncate',
+          accent === 'orange' ? 'text-orange-400' : 'text-[var(--text-primary)]'
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
 }
 
 export default function WalletPage() {
@@ -443,145 +470,113 @@ export default function WalletPage() {
               </div>
             </div>
 
-            {/* Stats — restructured for at-a-glance readability on a stream.
-                The streamer wants viewers to grok 'how is this trader doing
-                right now' in under a second. So we lead with one large hero
-                number (live unrealized PnL) and demote the supporting stats
-                below it. Historical tracked metrics (volume, trade count)
-                move to a smaller third row. */}
-
-            {/* Hero PnL — the headline number. Lives only when we have live
-                BULK margin data; otherwise we fall back to tracked total PnL
-                from our DB. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-6 mb-4">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  {(hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0 ? (
-                    <TrendingUp className="w-7 h-7 text-bulk-green" />
-                  ) : (
-                    <TrendingDown className="w-7 h-7 text-bulk-red" />
-                  )}
-                  <div>
-                    <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
-                      {hasLiveData && margin ? 'Unrealized PnL' : 'Total PnL'}
-                    </p>
+            {/* Stats panel. One integrated card containing everything live
+                from BULK: PnL on the left as the visual anchor, supporting
+                numbers (balance, margin used, available, liqs) gridded next
+                to it. Single block keeps the visual weight grouped instead
+                of stacking two boxes on top of each other. */}
+            {hasLiveData && margin ? (
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-4 items-center">
+                  {/* PnL — spans 2 of 5 columns on desktop. Sized down from
+                      5xl to 3xl: still visually dominant on the page but
+                      doesn't feel like a billboard on a normal screen. */}
+                  <div className="lg:col-span-2 lg:border-r lg:border-[var(--border-color)] lg:pr-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      {margin.unrealizedPnl >= 0 ? (
+                        <TrendingUp className="w-4 h-4 text-bulk-green" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 text-bulk-red" />
+                      )}
+                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Unrealized PnL</span>
+                      {/* Live pulse dot inline with the label — quietly tells
+                          stream viewers data is fresh without taking space. */}
+                      <span className="relative flex h-1.5 w-1.5 ml-1">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-bulk-green" />
+                      </span>
+                    </div>
                     <p className={cn(
-                      'text-4xl sm:text-5xl font-bold tabular-nums tracking-tight',
-                      (hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0
-                        ? 'text-bulk-green'
-                        : 'text-bulk-red'
+                      'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
+                      margin.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
                     )}>
-                      {(hasLiveData && margin ? margin.unrealizedPnl : totalPnL) >= 0 ? '+' : ''}
-                      ${formatCompact(Math.abs(hasLiveData && margin ? margin.unrealizedPnl : totalPnL))}
+                      {margin.unrealizedPnl >= 0 ? '+' : ''}
+                      ${formatCompact(Math.abs(margin.unrealizedPnl))}
                     </p>
                   </div>
-                </div>
-                {/* Auto-refresh indicator — small green dot pulse so viewers
-                    know the page is live and not stale. */}
-                <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-bulk-green" />
-                  </span>
-                  Live · refreshes every 10s
+
+                  {/* Supporting stats — 4 columns of compact label/value
+                      pairs. No nested cards; just text. Avoids the
+                      "boxes inside box" feel from before. */}
+                  <Stat label="Balance" value={`$${formatNumber(margin.totalBalance, 0)}`} />
+                  <Stat label="Margin Used" value={`$${formatNumber(margin.marginUsed, 0)}`} />
+                  <Stat label="Available" value={`$${formatNumber(margin.availableBalance, 0)}`} />
+                  <Stat
+                    label="Liquidations"
+                    value={String(tracked?.total_liquidations || 0)}
+                    accent={(tracked?.total_liquidations || 0) > 0 ? 'orange' : undefined}
+                  />
                 </div>
               </div>
-            </div>
-
-            {/* Live account stats row — only shown when we have BULK margin
-                data. These are the supporting numbers behind the hero PnL:
-                what they have to risk, what they're actively risking, what's
-                free, and how often they've blown up historically. */}
-            {hasLiveData && margin && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <DollarSign className="w-4 h-4 text-bulk-green" />
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Balance</span>
+            ) : (
+              /* No live BULK data path — fall back to tracked PnL. Same
+                 single-card structure but with historical metrics. */
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-4 items-center">
+                  <div className="lg:col-span-2 lg:border-r lg:border-[var(--border-color)] lg:pr-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      {totalPnL >= 0 ? (
+                        <TrendingUp className="w-4 h-4 text-bulk-green" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 text-bulk-red" />
+                      )}
+                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total PnL (lifetime)</span>
+                    </div>
+                    <p className={cn(
+                      'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
+                      totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
+                    )}>
+                      {totalPnL >= 0 ? '+' : ''}${formatCompact(Math.abs(totalPnL))}
+                    </p>
                   </div>
-                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
-                    ${formatNumber(margin.totalBalance, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Shield className="w-4 h-4 text-yellow-400" />
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Margin Used</span>
-                  </div>
-                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
-                    ${formatNumber(margin.marginUsed, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <PiggyBank className="w-4 h-4 text-cyan-400" />
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Available</span>
-                  </div>
-                  <p className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
-                    ${formatNumber(margin.availableBalance, 2)}
-                  </p>
-                </div>
-
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Flame className="w-4 h-4 text-orange-400" />
-                    <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Liquidations</span>
-                  </div>
-                  <p className="text-2xl font-bold text-orange-400 tabular-nums">
-                    {tracked?.total_liquidations || 0}
-                  </p>
+                  <Stat label="Total Volume" value={`$${formatCompact(tracked?.total_volume || 0)}`} />
+                  <Stat label="Total Trades" value={String(tracked?.total_trades || 0)} />
+                  <Stat
+                    label="Liquidations"
+                    value={String(tracked?.total_liquidations || 0)}
+                    accent={(tracked?.total_liquidations || 0) > 0 ? 'orange' : undefined}
+                  />
+                  <div /> {/* spacer to balance the 5-col grid */}
                 </div>
               </div>
             )}
 
-            {/* Historical tracked stats — smaller, demoted. These reflect
-                lifetime activity from our DB (volume, trade count). Useful
-                context but not what a stream viewer is looking for first. */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total Volume</span>
-                </div>
-                <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">
-                  ${formatCompact(tracked?.total_volume || 0)}
-                </p>
-              </div>
-
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Activity className="w-3.5 h-3.5 text-purple-400" />
-                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total Trades</span>
-                </div>
-                <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">
-                  {tracked?.total_trades || 0}
-                </p>
-              </div>
-
-              {/* Realized PnL from our tracked DB — separate from live
-                  unrealized in the hero card. Only shown if it differs
-                  meaningfully from the hero number, otherwise it's noise. */}
-              {hasLiveData && margin && (
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    {totalPnL >= 0 ? (
-                      <TrendingUp className="w-3.5 h-3.5 text-bulk-green" />
-                    ) : (
-                      <TrendingDown className="w-3.5 h-3.5 text-bulk-red" />
-                    )}
-                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Realized (lifetime)</span>
-                  </div>
-                  <p className={cn(
-                    'text-lg font-semibold tabular-nums',
+            {/* Lifetime stats line. When live data is shown above, this row
+                gives the streamer historical context without adding more
+                cards. Inline text — small, secondary, easily scannable.
+                Skip it entirely when we already showed lifetime as the
+                hero (no live data path). */}
+            {hasLiveData && margin && (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-6 text-sm text-[var(--text-secondary)]">
+                <span>
+                  <span className="text-[var(--text-tertiary)]">Lifetime volume </span>
+                  <span className="font-mono text-[var(--text-primary)]">${formatCompact(tracked?.total_volume || 0)}</span>
+                </span>
+                <span>
+                  <span className="text-[var(--text-tertiary)]">Lifetime trades </span>
+                  <span className="font-mono text-[var(--text-primary)]">{tracked?.total_trades || 0}</span>
+                </span>
+                <span>
+                  <span className="text-[var(--text-tertiary)]">Realized </span>
+                  <span className={cn(
+                    'font-mono',
                     totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
                   )}>
                     {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
-                  </p>
-                </div>
-              )}
-            </div>
+                  </span>
+                </span>
+              </div>
+            )}
 
             {/* Account hierarchy — sub-account tree (only renders when this
                 wallet has sub-accounts or IS a sub-account). Hidden for
