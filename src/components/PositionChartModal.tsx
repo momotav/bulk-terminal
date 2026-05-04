@@ -115,6 +115,14 @@ export function PositionChartModal({ position, onClose }: Props) {
   // recreate on every change rather than mutating in place — the data
   // doesn't change often (open modal, switch interval) and re-creation is
   // simpler than reconciling between intervals.
+  //
+  // IMPORTANT: lightweight-charts needs a non-zero width and height at
+  // construction time, otherwise it renders blank. The modal opens via a
+  // flex layout, and there's a brief window where the container's
+  // `clientHeight` is still 0 because the browser hasn't laid out yet. To
+  // handle that we (1) seed the chart with a fallback size, (2) immediately
+  // re-apply the actual measured size after the next paint, and (3) wire a
+  // ResizeObserver to keep it in sync afterwards.
   useEffect(() => {
     if (!position || !candles || !containerRef.current) return;
 
@@ -125,27 +133,47 @@ export function PositionChartModal({ position, onClose }: Props) {
       seriesRef.current = null;
     }
 
-    const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight,
+    const container = containerRef.current;
+
+    // Detect light mode at chart creation. Cleaner than threading a theme
+    // prop through; lightweight-charts needs concrete colors anyway.
+    const isLight =
+      typeof document !== 'undefined' &&
+      !document.documentElement.classList.contains('dark') &&
+      document.documentElement.getAttribute('data-theme') !== 'dark';
+
+    const gridColor = isLight ? 'rgba(115, 106, 108, 0.15)' : 'rgba(84, 74, 76, 0.15)';
+    const borderColor = isLight ? 'rgba(115, 106, 108, 0.4)' : 'rgba(84, 74, 76, 0.4)';
+    const textColor = isLight ? '#736A6C' : '#807678';
+    const markLineColor = isLight ? '#1B1A14' : '#FFFEEF';
+
+    // Seed with non-zero dimensions even if the container hasn't been
+    // measured yet — chart will be resized to actual dimensions on the next
+    // paint via the ResizeObserver below.
+    const initialWidth = container.clientWidth || 800;
+    const initialHeight = container.clientHeight || 420;
+
+    const chart = createChart(container, {
+      width: initialWidth,
+      height: initialHeight,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#807678',
+        textColor,
         fontSize: 11,
         fontFamily: 'JetBrains Mono, monospace',
       },
       grid: {
-        vertLines: { color: 'rgba(84, 74, 76, 0.15)' },
-        horzLines: { color: 'rgba(84, 74, 76, 0.15)' },
+        vertLines: { color: gridColor },
+        horzLines: { color: gridColor },
       },
       crosshair: {
         mode: 1, // normal crosshair
       },
       rightPriceScale: {
-        borderColor: 'rgba(84, 74, 76, 0.4)',
+        borderColor,
       },
       timeScale: {
-        borderColor: 'rgba(84, 74, 76, 0.4)',
+        borderColor,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -185,7 +213,7 @@ export function PositionChartModal({ position, onClose }: Props) {
 
     series.createPriceLine({
       price: position.markPrice,
-      color: '#FFFEEF',
+      color: markLineColor,
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
@@ -203,23 +231,40 @@ export function PositionChartModal({ position, onClose }: Props) {
       });
     }
 
-    // Auto-fit the visible range so all three lines + candles are on screen.
+    // Fit time range immediately and again after the first paint, in case
+    // the container was 0px when we created the chart and it's now real.
     chart.timeScale().fitContent();
 
+    // Apply the *actual* measured size as soon as the browser has laid out.
+    // Using requestAnimationFrame ensures we read clientWidth/Height after
+    // the layout pass that follows this useEffect.
+    const raf = requestAnimationFrame(() => {
+      if (containerRef.current && chart) {
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (w > 0 && h > 0) {
+          chart.applyOptions({ width: w, height: h });
+          chart.timeScale().fitContent();
+        }
+      }
+    });
+
     // Resize observer — keeps the chart sized to its container when the
-    // modal resizes (e.g. window resize).
+    // modal resizes (e.g. window resize or theme switch shifting layout).
     const resize = () => {
       if (containerRef.current && chart) {
-        chart.applyOptions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (w > 0 && h > 0) {
+          chart.applyOptions({ width: w, height: h });
+        }
       }
     };
     const obs = new ResizeObserver(resize);
-    obs.observe(containerRef.current);
+    obs.observe(container);
 
     return () => {
+      cancelAnimationFrame(raf);
       obs.disconnect();
       chart.remove();
       chartRef.current = null;
@@ -254,7 +299,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
                 position.side === 'long'
                   ? 'bg-bulk-green/15 text-bulk-green'
-                  : 'bg-red-500/15 text-red-400'
+                  : 'bg-bulk-red/15 text-bulk-red'
               }`}
             >
               {position.side === 'long' ? (
@@ -294,7 +339,7 @@ export function PositionChartModal({ position, onClose }: Props) {
                 ? `$${formatNumber(position.liquidationPrice, 2)}`
                 : '—'
             }
-            valueClass="text-red-400"
+            valueClass="text-bulk-red"
             sublabel={
               distanceToLiqPct !== null
                 ? `${distanceToLiqPct.toFixed(2)}% away`
@@ -304,7 +349,7 @@ export function PositionChartModal({ position, onClose }: Props) {
           <Stat
             label="Unrealized PnL"
             value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
-            valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-red-400'}
+            valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
           />
         </div>
 
@@ -330,7 +375,7 @@ export function PositionChartModal({ position, onClose }: Props) {
                 <span>Loading…</span>
               </>
             )}
-            {error && <span className="text-red-400">{error}</span>}
+            {error && <span className="text-bulk-red">{error}</span>}
             {!loading && !error && candles && (
               <span>
                 <span className="font-mono">{candles.length}</span> candles
@@ -339,8 +384,11 @@ export function PositionChartModal({ position, onClose }: Props) {
           </div>
         </div>
 
-        {/* Chart container. min-h ensures it's visible even on small screens. */}
-        <div className="flex-1 min-h-[420px] p-2">
+        {/* Chart container. Explicit height (not flex-1) so the container
+            has a measurable size before lightweight-charts is constructed.
+            On large screens this is 60vh-ish; on small screens it falls
+            back to 360px so the chart is always usable. */}
+        <div className="h-[60vh] max-h-[560px] min-h-[360px] p-2">
           <div ref={containerRef} className="w-full h-full" />
         </div>
       </div>
