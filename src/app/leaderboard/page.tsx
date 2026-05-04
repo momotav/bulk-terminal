@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Trophy, Flame, Anchor, Activity } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { WalletRankSearch } from '@/components/leaderboard/WalletRankSearch';
 import { cn } from '@/lib/api';
 
@@ -54,13 +55,22 @@ export default function LeaderboardPage() {
           ))}
         </div>
 
-        {/* Leaderboard */}
+        {/* Leaderboard.
+            'pnl' is now sourced from BULK's official indexer so the ranks
+            match bulk.trade exactly — critical for tournament viewing where
+            streamers will flick between the two sites. The other three tabs
+            stay on our DB-backed views (liquidations, whales, activity)
+            since BULK's indexer doesn't expose those concepts. */}
         <div className="h-[600px]">
-          <LeaderboardTable 
-            type={activeTab} 
-            limit={50} 
-            showTimeframe={activeTab !== 'whales'} 
-          />
+          {activeTab === 'pnl' ? (
+            <BulkLeaderboardTable limit={50} />
+          ) : (
+            <LeaderboardTable
+              type={activeTab}
+              limit={50}
+              showTimeframe={activeTab !== 'whales'}
+            />
+          )}
         </div>
       </main>
     </div>
