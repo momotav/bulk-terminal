@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import { analytics, formatNumber, type Candle } from '@/lib/api';
+import { analytics, wallet, formatNumber, type Candle, type WalletFill } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // PositionChartModal
@@ -25,6 +25,10 @@ import { analytics, formatNumber, type Candle } from '@/lib/api';
 // ---------------------------------------------------------------------------
 
 export interface PositionForChart {
+  /** The wallet that holds this position. Required so the chart modal
+   *  can fetch the wallet's fill history for this market and render fill
+   *  markers on the candle chart. */
+  walletAddress: string;
   symbol: string;          // e.g. "BTC-USD"
   side: 'long' | 'short';  // derived from sign of size
   entryPrice: number;
@@ -60,6 +64,7 @@ export function PositionChartModal({ position, onClose }: Props) {
 
   const [interval, setInterval] = useState(DEFAULT_INTERVAL);
   const [candles, setCandles] = useState<Candle[] | null>(null);
+  const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +115,32 @@ export function PositionChartModal({ position, onClose }: Props) {
       cancelled = true;
     };
   }, [position, interval]);
+
+  // Fetch the wallet's fill history for this market. Doesn't depend on
+  // the interval — fills are point events, not aggregates. Fired once per
+  // (wallet, symbol) pair. Failing silently here is fine: if fills can't
+  // load, the chart still works, just without entry markers.
+  useEffect(() => {
+    if (!position) return;
+    let cancelled = false;
+    setFills(null);
+
+    wallet
+      .getFills(position.walletAddress, { symbol: position.symbol, limit: 500 })
+      .then((res) => {
+        if (cancelled) return;
+        setFills(res.fills || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[PositionChartModal] fills fetch failed:', err);
+        setFills([]); // don't block the chart on this
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [position]);
 
   // Build / rebuild the chart whenever candles arrive. We tear down and
   // recreate on every change rather than mutating in place — the data
@@ -231,6 +262,45 @@ export function PositionChartModal({ position, onClose }: Props) {
       });
     }
 
+    // Fill markers — every executed trade by this wallet on this market.
+    // Triangles point down for buys (entry/long-add) above the bar; up for
+    // sells below. lightweight-charts has built-in marker support so we
+    // don't have to draw anything manually.
+    //
+    // We tint by reasonCode so a stream viewer can spot forced exits at
+    // a glance. "trade" = normal user fill. "liq" = forced liquidation.
+    // "adl" = auto-deleveraged. Anything else falls back to side-color.
+    if (fills && fills.length > 0) {
+      const markers: SeriesMarker<Time>[] = fills
+        .map((f) => {
+          const reason = (f.reasonCode || 'trade').toLowerCase();
+          const isLiqOrAdl = reason === 'liq' || reason === 'adl';
+          // Liquidation/ADL get a distinctive orange flag regardless of
+          // side, so they pop visually. Normal fills stay green/red.
+          const color = isLiqOrAdl
+            ? '#FFB547'
+            : f.isBuy
+            ? '#00B481'
+            : '#EF4A3C';
+          const reasonLabel = isLiqOrAdl
+            ? reason === 'liq' ? ' (LIQ)' : ' (ADL)'
+            : '';
+          return {
+            time: Math.floor(f.timestamp / 1000) as UTCTimestamp,
+            position: f.isBuy ? 'belowBar' : 'aboveBar',
+            color,
+            shape: f.isBuy ? 'arrowUp' : 'arrowDown',
+            // Compact text. Showing size + price in the marker label keeps
+            // the chart self-explanatory without a separate hover tooltip.
+            text: `${f.isBuy ? 'Buy' : 'Sell'}${reasonLabel} ${formatNumber(f.size, 4)} @ ${formatNumber(f.price, 2)}`,
+          } as SeriesMarker<Time>;
+        })
+        // Sort ascending by time — lightweight-charts requires markers in
+        // chronological order, otherwise it silently drops some.
+        .sort((a, b) => (a.time as number) - (b.time as number));
+      series.setMarkers(markers);
+    }
+
     // Fit time range immediately and again after the first paint, in case
     // the container was 0px when we created the chart and it's now real.
     chart.timeScale().fitContent();
@@ -270,7 +340,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [candles, position]);
+  }, [candles, fills, position]);
 
   if (!position) return null;
 
@@ -379,6 +449,12 @@ export function PositionChartModal({ position, onClose }: Props) {
             {!loading && !error && candles && (
               <span>
                 <span className="font-mono">{candles.length}</span> candles
+                {fills && fills.length > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-mono">{fills.length}</span> fill{fills.length === 1 ? '' : 's'}
+                  </>
+                )}
               </span>
             )}
           </div>
