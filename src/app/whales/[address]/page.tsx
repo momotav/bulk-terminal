@@ -650,6 +650,7 @@ export default function WalletPage() {
                           type="button"
                           onClick={() =>
                             setChartPosition({
+                              walletAddress: address,
                               symbol: pos.symbol,
                               side: isLong ? 'long' : 'short',
                               entryPrice: pos.price,
