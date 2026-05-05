@@ -165,6 +165,30 @@ export interface ActivityResponse {
   count: number;
 }
 
+// One closed position from BULK's `positions` API. Represents a single
+// open→close lifecycle: trader opened a long/short, possibly added or
+// reduced, then fully closed. Realized PnL is net of fees and funding,
+// pre-computed by BULK.
+//
+// Used by the wallet page's "Closed Positions" list and the chart modal's
+// trade-history panel. Far more meaningful than raw fills because each
+// row is one decision the trader committed to.
+export interface ClosedPosition {
+  symbol: string;
+  side: 'long' | 'short';
+  size: number;
+  openPrice: number;
+  closePrice: number;
+  openedAt: number;     // ms since epoch
+  closedAt: number;     // ms since epoch
+  realizedPnl: number;
+  fees: number;
+  funding: number;
+  leverage: number;
+  notional?: number;
+  liquidated: boolean;
+}
+
 // One executed trade fill from BULK's `fills` API. We render these as
 // triangle markers on the position chart so users can see exactly when
 // and at what price the wallet entered/exited a market.
@@ -978,6 +1002,26 @@ export const wallet = {
     const qs = params.toString();
     return request(
       `/api/wallet/${address}/fills${qs ? `?${qs}` : ''}`
+    );
+  },
+
+  // Closed-position history for the wallet — each entry is one full
+  // open→close lifecycle with realized PnL pre-computed by BULK. This is
+  // what powers the wallet page's "Recent Trades" list (which is really a
+  // closed-positions list, not a fills list).
+  //
+  // Optional symbol filter is server-side, so we don't ship hundreds of
+  // unrelated positions to render one wallet's BTC-only history.
+  async getClosedPositions(
+    address: string,
+    opts: { symbol?: string; limit?: number } = {}
+  ): Promise<{ positions: ClosedPosition[] }> {
+    const params = new URLSearchParams();
+    if (opts.symbol) params.set('symbol', opts.symbol);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request(
+      `/api/wallet/${address}/closed-positions${qs ? `?${qs}` : ''}`
     );
   },
 
