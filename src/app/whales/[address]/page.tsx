@@ -9,6 +9,7 @@ import {
   AlertCircle, Clock, Loader2, UserCheck
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
+import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
 import { useStore } from '@/store';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -96,6 +97,16 @@ export default function WalletPage() {
   // closed. Set when the user clicks any position card.
   const [chartPosition, setChartPosition] = useState<PositionForChart | null>(null);
 
+  // Per-symbol "when did this position open" map. We compute this client-side
+  // by walking the wallet's fill history for each symbol — BULK doesn't
+  // expose a per-position timestamp on the position object. Null entries
+  // mean we tried but couldn't determine (e.g. no fills, or position is
+  // older than BULK's 5000-fill window). Undefined means we haven't fetched
+  // yet, so the UI shows "—" instead of a wrong value.
+  const [positionOpenTimes, setPositionOpenTimes] = useState<
+    Record<string, PositionOpenInfo | null>
+  >({});
+
   // Get current user's wallet address from multiple sources
   const solanaWalletAddress = solanaWallets?.[0]?.address;
   const privyWalletAddress = privyUser?.wallet?.address;
@@ -181,6 +192,57 @@ export default function WalletPage() {
     const tick = window.setInterval(() => fetchData(true), 10_000);
     return () => window.clearInterval(tick);
   }, [address]);
+
+  // Fetch fills for each open position and compute when it was opened.
+  // BULK doesn't expose a per-position open timestamp on the position
+  // object, so we derive it client-side from the wallet's fill history:
+  // walk fills chronologically and find the most recent moment net size
+  // went from 0 to non-zero. That timestamp is the position's open time.
+  //
+  // We fire one /fills request per open symbol. Backend caches 60s so
+  // re-renders are cheap. We don't refetch on the 10s tick because open
+  // times don't change for an existing position — only when a new one
+  // is added or an old one is closed, which the dependency on the
+  // joined symbol list handles.
+  const openSymbolKey = (data?.live?.positions || [])
+    .map((p) => p.symbol)
+    .sort()
+    .join(',');
+
+  useEffect(() => {
+    if (!address) return;
+    const positions = data?.live?.positions || [];
+    if (positions.length === 0) return;
+
+    let cancelled = false;
+    const next: Record<string, PositionOpenInfo | null> = {};
+
+    Promise.all(
+      positions.map(async (pos) => {
+        try {
+          const res = await wallet.getFills(address, {
+            symbol: pos.symbol,
+            limit: 500,
+          });
+          // computePositionOpenTime returns null when fills don't include
+          // a flat→nonflat transition for the current position (e.g. the
+          // wallet is a master-account whose sub-accounts did the trading,
+          // or the position is older than BULK's 5000-fill window).
+          const info = computePositionOpenTime(res.fills || []);
+          next[pos.symbol] = info;
+        } catch {
+          next[pos.symbol] = null;
+        }
+      })
+    ).then(() => {
+      if (!cancelled) setPositionOpenTimes(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, openSymbolKey]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
@@ -711,6 +773,37 @@ export default function WalletPage() {
                               <p className="font-mono text-bulk-red tabular-nums">${formatNumber(pos.liquidationPrice, 2)}</p>
                             </div>
                           </div>
+
+                          {/* Open time — derived client-side from the
+                              wallet's fill history (BULK doesn't expose
+                              per-position timestamps). Renders as
+                              "Opened 2h 14m ago" when we have data, falls
+                              back to a placeholder otherwise. */}
+                          {(() => {
+                            const openInfo = positionOpenTimes[pos.symbol];
+                            if (openInfo === undefined) {
+                              // Still fetching — render nothing rather than
+                              // a flashing placeholder.
+                              return null;
+                            }
+                            if (openInfo === null) {
+                              return null;
+                            }
+                            const ago = Date.now() - openInfo.openedAt;
+                            return (
+                              <p className="mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums">
+                                Opened {formatDuration(ago)} ago
+                                <span className="text-[var(--text-tertiary)]/70 ml-2">
+                                  · {new Date(openInfo.openedAt).toLocaleString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </p>
+                            );
+                          })()}
 
                           {/* Persistent "view chart" affordance below the
                               numbers. Subtle, but visible to anyone watching
