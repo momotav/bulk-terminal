@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
+import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { useStore } from '@/store';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -670,7 +671,7 @@ export default function WalletPage() {
                       // live data" — most likely a transient timeout. The
                       // 10s background poll will retry and likely succeed.
                       // Without this branch we silently fell through to
-                      // "Recent Trades" and users assumed positions = 0.
+                      // closed positions and users assumed positions = 0.
                       <>
                         <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
                         Fetching positions…
@@ -678,7 +679,7 @@ export default function WalletPage() {
                     ) : (
                       <>
                         <Clock className="w-4 h-4 text-blue-400" />
-                        Recent Trades ({trades.length})
+                        Recent Trades
                       </>
                     )}
                   </h2>
@@ -816,52 +817,34 @@ export default function WalletPage() {
                         </button>
                       );
                     })
-                  ) : trades.length > 0 ? (
-                    trades.map((trade) => {
-                      const isBuy = trade.side.toLowerCase() === 'buy' || trade.side.toLowerCase() === 'long';
-                      return (
-                        <div key={trade.id} className="p-4 hover:bg-[var(--bg-secondary-20)]/30 transition-colors">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="font-semibold">{trade.symbol}</span>
-                            <span className={cn(
-                              "px-1.5 py-0.5 rounded text-[10px] font-medium",
-                              isBuy ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"
-                            )}>
-                              {isBuy ? 'Buy' : 'Sell'}
-                            </span>
-                          </div>
-                          
-                          <div className="grid grid-cols-4 gap-4 text-xs">
-                            <div>
-                              <p className="text-[var(--text-tertiary)] mb-1">Value</p>
-                              <p className={isBuy ? "text-green-400" : "text-red-400"}>
-                                ${formatNumber(trade.value, 2)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] mb-1">Size</p>
-                              <p>{formatNumber(trade.size, 4)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] mb-1">Price</p>
-                              <p>${formatNumber(trade.price, 2)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] mb-1">Time</p>
-                              <p>{new Date(trade.timestamp).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
                   ) : (
-                    <div className="p-8 text-center text-[var(--text-tertiary)]">
-                      <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                      <p>No positions or trades found</p>
-                    </div>
+                    // No open positions: show recent closed-position history
+                    // instead of raw fills. Closed positions are far more
+                    // useful — each row is one open→close lifecycle with
+                    // realized PnL pre-computed by BULK.
+                    <ClosedPositionsList address={address} limit={50} />
                   )}
                 </div>
               </div>
+
+              {/* Closed Positions panel — always visible when there ARE
+                  open positions (so users see the recent trade history
+                  alongside the live state). Skipped when there are no
+                  open positions, since the panel above already shows
+                  closed positions in that case. */}
+              {positions.length > 0 && (
+                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
+                  <div className="p-4 border-b border-[var(--border-color)]">
+                    <h2 className="font-semibold flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-blue-400" />
+                      Recent Trades
+                    </h2>
+                  </div>
+                  <div className="max-h-[480px] overflow-y-auto">
+                    <ClosedPositionsList address={address} limit={50} />
+                  </div>
+                </div>
+              )}
 
               {/* PnL History Chart */}
               <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
