@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Crown, Medal, Trophy, ExternalLink } from 'lucide-react';
+import { ChevronDown, Crown, Medal, Trophy } from 'lucide-react';
 import {
   leaderboard,
   formatCompact,
@@ -26,7 +26,11 @@ import {
 // ----------------------------------------------------------------------------
 
 const WINDOWS: { id: BulkLeaderboardWindow; label: string }[] = [
-  { id: '24h', label: '24H' },
+  // Per the BULK dev: window=24h actually tracks the last 12h of trades.
+  // We label it 12H so users see what's really being measured. The API
+  // value still has to be 'window=24h' since that's what the indexer
+  // accepts — only the display label changes.
+  { id: '24h', label: '12H' },
   { id: '7d', label: '7D' },
   { id: '30d', label: '30D' },
   { id: 'all', label: 'All' },
@@ -123,7 +127,31 @@ export function BulkLeaderboardTable({
   const [rows, setRows] = useState<BulkLeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  // Custom metric dropdown — native <select> doesn't theme cleanly across
+  // browsers (Mac in particular shows a system-rendered popup that breaks
+  // our visual language). We render our own popover instead.
+  const [metricOpen, setMetricOpen] = useState(false);
+  const metricRef = useRef<HTMLDivElement>(null);
+
+  // Close the metric dropdown on outside click / Esc.
+  useEffect(() => {
+    if (!metricOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (metricRef.current && !metricRef.current.contains(e.target as Node)) {
+        setMetricOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMetricOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [metricOpen]);
 
   // Fetch on mount and whenever window/metric change. The backend caches
   // for 60s, so window-flicking on a page that's been open a while will
@@ -138,9 +166,6 @@ export function BulkLeaderboardTable({
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows || []);
-        // The indexer stamps each row with updated_at; they all share the
-        // same timestamp within a page, so we just take row 0's stamp.
-        setUpdatedAt(res.rows?.[0]?.updated_at || null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -160,39 +185,79 @@ export function BulkLeaderboardTable({
 
   return (
     <div className="glass-card h-full flex flex-col">
-      {/* Header — title, metric picker, window picker */}
-      <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-[var(--border-color)] flex-wrap">
+      {/* Header — title + controls. Kept tight: just the section name on
+          the left, controls on the right. The "Source: BULK indexer" and
+          per-row timestamp lines were dropped to reduce visual noise; the
+          rankings come from BULK by definition (this is the BULK widget). */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-color)] flex-wrap">
         <div className="flex items-center gap-2">
           <Trophy className="w-4 h-4 text-bulk-green" />
-          <div>
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Top Traders</h2>
-            <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-0.5">
-              Source: BULK indexer
-              {updatedAt && (
-                <span className="ml-1.5 normal-case tracking-normal text-[var(--text-tertiary)]">
-                  · {formatRelativeTime(updatedAt)}
-                </span>
-              )}
-            </p>
-          </div>
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Top Traders</h2>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Metric picker (when allowed) — small native select to keep the
-              JS bundle light. The order in METRICS controls dropdown order. */}
+          {/* Custom metric dropdown — themed to match the rest of bulkstats.
+              Native <select> renders a system popup that breaks visual
+              language (especially on macOS). We render our own popover. */}
           {allowMetricChange && (
-            <select
-              value={metric}
-              onChange={(e) => setMetric(e.target.value as BulkLeaderboardMetric)}
-              className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-2 py-1 text-xs text-[var(--text-primary)] cursor-pointer"
-              aria-label="Leaderboard metric"
-            >
-              {METRICS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={metricRef}>
+              <button
+                type="button"
+                onClick={() => setMetricOpen((o) => !o)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors',
+                  'bg-[var(--bg-muted)] border',
+                  metricOpen
+                    ? 'border-bulk-green/60 text-[var(--text-primary)]'
+                    : 'border-[var(--border-color)] text-[var(--text-primary)] hover:border-bulk-green/60'
+                )}
+                aria-haspopup="listbox"
+                aria-expanded={metricOpen}
+                aria-label="Leaderboard metric"
+              >
+                <span>
+                  {METRICS.find((m) => m.id === metric)?.label || metric}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'w-3 h-3 text-[var(--text-tertiary)] transition-transform',
+                    metricOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {metricOpen && (
+                <div
+                  role="listbox"
+                  className="absolute right-0 mt-2 w-48 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-2xl z-50 overflow-hidden"
+                >
+                  {METRICS.map((m) => {
+                    const isActive = m.id === metric;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setMetric(m.id);
+                          setMetricOpen(false);
+                        }}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2',
+                          isActive
+                            ? 'bg-[var(--bg-secondary-20)]/60 text-bulk-green'
+                            : 'text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)]'
+                        )}
+                      >
+                        <span>{m.label}</span>
+                        {isActive && <span className="text-bulk-green">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Window pill group — same visual language as our other toggles */}
@@ -294,39 +359,6 @@ export function BulkLeaderboardTable({
           </div>
         )}
       </div>
-
-      {/* Footer — link to bulk.trade for cross-checking */}
-      <div className="px-4 py-2.5 border-t border-[var(--border-color)] text-[10px] text-[var(--text-tertiary)] flex items-center justify-between">
-        <span>
-          {window === '24h' && '24h window tracks last 12h of trades · '}
-          Match official BULK rankings
-        </span>
-        <a
-          href="https://bulk.trade"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-[var(--text-primary)] flex items-center gap-1 transition-colors"
-        >
-          bulk.trade <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
     </div>
   );
-}
-
-// Relative-time helper. Used for the "updated 2m ago" label in the header.
-// Kept inline rather than reaching for a library — this is the only place
-// we need it.
-function formatRelativeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  const now = Date.now();
-  const sec = Math.max(0, Math.floor((now - t) / 1000));
-  if (sec < 30) return 'just now';
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  return `${day}d ago`;
 }
