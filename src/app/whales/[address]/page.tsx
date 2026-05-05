@@ -331,88 +331,99 @@ export default function WalletPage() {
           </div>
         ) : (
           <div>
-            {/* Wallet Header */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-6 mb-6">
+            {/* Wallet Header.
+                Compact identity card — small avatar + address + meta.
+                The AccountHierarchy dropdown lives in the right-hand action
+                row so users can switch between master and sub-accounts
+                without scrolling. */}
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  {/* Avatar */}
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Avatar — smaller than before. The full-bleed gradient
+                      square at 64px was visually overpowering for what is
+                      really just a placeholder. We render a round wallet
+                      icon at 40px instead unless we have a real Twitter
+                      avatar to show. */}
                   {twitterAvatar ? (
-                    <img 
-                      src={twitterAvatar} 
-                      alt="" 
-                      className="w-16 h-16 rounded-full border-2 border-[var(--border-color)]"
+                    <img
+                      src={twitterAvatar}
+                      alt=""
+                      className="w-10 h-10 rounded-full border border-[var(--border-color)] flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-xl font-bold">
-                      {address.slice(0, 2)}
+                    <div className="w-10 h-10 rounded-full bg-bulk-green/15 border border-bulk-green/30 flex items-center justify-center flex-shrink-0">
+                      <Wallet className="w-5 h-5 text-bulk-green" />
                     </div>
                   )}
-                  <div>
+                  <div className="min-w-0">
                     {/* Display name if available */}
                     {displayName && (
-                      <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-1">
+                      <h1 className="text-lg font-semibold text-[var(--text-primary)] truncate">
                         {displayName}
                       </h1>
                     )}
-                    
+
                     {/* Twitter/X handle */}
                     {twitterHandle && (
                       <a 
                         href={`https://twitter.com/${twitterHandle}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[var(--text-secondary)] hover:text-bulk-green transition-colors mb-2"
+                        className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors"
                       >
-                        <XIcon className="w-4 h-4" />
+                        <XIcon className="w-3 h-3" />
                         @{twitterHandle}
-                        <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
                     
                     {/* Wallet address */}
-                    <div className="flex items-center gap-2 mb-1">
-                      <Wallet className="w-4 h-4 text-[var(--text-tertiary)]" />
-                      <h2 className="font-mono text-lg sm:text-xl">{formatAddress(address)}</h2>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h2 className="font-mono text-base sm:text-lg text-[var(--text-primary)]">{formatAddress(address)}</h2>
                       {isOwnWallet && (
-                        <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
+                        <span className="px-1.5 py-0.5 bg-bulk-green/20 text-bulk-green text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-green/30">
                           You
                         </span>
                       )}
                       {address === '7DHvrCZMMLZ2ovNfKaGpvJZXAQyydbTz6dM7w7qXtzX5' && (
-                        <span className="px-2 py-0.5 bg-bulk-green/20 text-bulk-green text-xs font-semibold rounded-full border border-bulk-green/30">
+                        <span className="px-1.5 py-0.5 bg-bulk-green/20 text-bulk-green text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-green/30">
                           BULK MM
                         </span>
                       )}
                       <button
                         onClick={copyAddress}
-                        className="p-1.5 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                        className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                        aria-label="Copy address"
                       >
                         {copied ? (
-                          <Check className="w-4 h-4 text-bulk-green" />
+                          <Check className="w-3.5 h-3.5 text-bulk-green" />
                         ) : (
-                          <Copy className="w-4 h-4 text-[var(--text-tertiary)]" />
+                          <Copy className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                         )}
                       </button>
                       <a
                         href={`https://solscan.io/account/${address}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-1.5 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                        className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                        aria-label="View on Solscan"
                       >
-                        <ExternalLink className="w-4 h-4 text-[var(--text-tertiary)]" />
+                        <ExternalLink className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                       </a>
                     </div>
-                    <p className="text-xs text-[var(--text-tertiary)]">
-                      {tracked?.total_trades || 0} trades &bull; ${formatCompact(tracked?.total_volume || 0)} volume
+                    <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+                      {tracked?.total_trades || 0} trades · ${formatCompact(tracked?.total_volume || 0)} volume
                       {!hasLiveData && hasTrackedData && (
-                        <span className="text-yellow-400 ml-2">&bull; No active positions</span>
+                        <span className="text-yellow-400 ml-1.5">· No active positions</span>
                       )}
                     </p>
                   </div>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex items-center gap-2">
+                {/* Right side: account-family dropdown + action buttons.
+                    The hierarchy lives here so it's always one click away
+                    without taking a whole row of vertical space. */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <AccountHierarchy address={address} />
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
                   {canClaimWallet && (
                     <button
@@ -476,12 +487,11 @@ export default function WalletPage() {
                 to it. Single block keeps the visual weight grouped instead
                 of stacking two boxes on top of each other. */}
             {hasLiveData && margin ? (
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-4 items-center">
-                  {/* PnL — spans 2 of 5 columns on desktop. Sized down from
-                      5xl to 3xl: still visually dominant on the page but
-                      doesn't feel like a billboard on a normal screen. */}
-                  <div className="lg:col-span-2 lg:border-r lg:border-[var(--border-color)] lg:pr-4">
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4 space-y-5">
+                {/* Row 1: PnL hero. Full-width with the live pulse on the
+                    right. No more vertical-divider awkwardness. */}
+                <div className="flex items-end justify-between gap-4 flex-wrap">
+                  <div>
                     <div className="flex items-center gap-2 mb-1">
                       {margin.unrealizedPnl >= 0 ? (
                         <TrendingUp className="w-4 h-4 text-bulk-green" />
@@ -489,12 +499,6 @@ export default function WalletPage() {
                         <TrendingDown className="w-4 h-4 text-bulk-red" />
                       )}
                       <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Unrealized PnL</span>
-                      {/* Live pulse dot inline with the label — quietly tells
-                          stream viewers data is fresh without taking space. */}
-                      <span className="relative flex h-1.5 w-1.5 ml-1">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-bulk-green" />
-                      </span>
                     </div>
                     <p className={cn(
                       'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
@@ -504,10 +508,21 @@ export default function WalletPage() {
                       ${formatCompact(Math.abs(margin.unrealizedPnl))}
                     </p>
                   </div>
+                  {/* Live pulse — small dot + label, right-aligned. Tells
+                      stream viewers the page is auto-updating. */}
+                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-bulk-green" />
+                    </span>
+                    Live · 10s refresh
+                  </div>
+                </div>
 
-                  {/* Supporting stats — 4 columns of compact label/value
-                      pairs. No nested cards; just text. Avoids the
-                      "boxes inside box" feel from before. */}
+                {/* Row 2: 4 supporting stats in a clean grid. No nested
+                    cards, no vertical dividers, no orphan rows. Just a
+                    horizontal divider above to separate from the PnL hero. */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[var(--border-color)]">
                   <Stat label="Balance" value={`$${formatNumber(margin.totalBalance, 0)}`} />
                   <Stat label="Margin Used" value={`$${formatNumber(margin.marginUsed, 0)}`} />
                   <Stat label="Available" value={`$${formatNumber(margin.availableBalance, 0)}`} />
@@ -520,25 +535,25 @@ export default function WalletPage() {
               </div>
             ) : (
               /* No live BULK data path — fall back to tracked PnL. Same
-                 single-card structure but with historical metrics. */
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-4 items-center">
-                  <div className="lg:col-span-2 lg:border-r lg:border-[var(--border-color)] lg:pr-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      {totalPnL >= 0 ? (
-                        <TrendingUp className="w-4 h-4 text-bulk-green" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4 text-bulk-red" />
-                      )}
-                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total PnL (lifetime)</span>
-                    </div>
-                    <p className={cn(
-                      'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
-                      totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                    )}>
-                      {totalPnL >= 0 ? '+' : ''}${formatCompact(Math.abs(totalPnL))}
-                    </p>
+                 two-row structure but with historical metrics. */
+              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4 space-y-5">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    {totalPnL >= 0 ? (
+                      <TrendingUp className="w-4 h-4 text-bulk-green" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 text-bulk-red" />
+                    )}
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total PnL (lifetime)</span>
                   </div>
+                  <p className={cn(
+                    'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
+                    totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
+                  )}>
+                    {totalPnL >= 0 ? '+' : ''}${formatCompact(Math.abs(totalPnL))}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-[var(--border-color)]">
                   <Stat label="Total Volume" value={`$${formatCompact(tracked?.total_volume || 0)}`} />
                   <Stat label="Total Trades" value={String(tracked?.total_trades || 0)} />
                   <Stat
@@ -546,7 +561,6 @@ export default function WalletPage() {
                     value={String(tracked?.total_liquidations || 0)}
                     accent={(tracked?.total_liquidations || 0) > 0 ? 'orange' : undefined}
                   />
-                  <div /> {/* spacer to balance the 5-col grid */}
                 </div>
               </div>
             )}
@@ -577,11 +591,6 @@ export default function WalletPage() {
                 </span>
               </div>
             )}
-
-            {/* Account hierarchy — sub-account tree (only renders when this
-                wallet has sub-accounts or IS a sub-account). Hidden for
-                vanilla single-account wallets so the layout stays compact. */}
-            <AccountHierarchy address={address} />
 
             {/* Main Content Grid */}
             <div className="grid lg:grid-cols-2 gap-6">
