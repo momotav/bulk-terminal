@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time, MouseEventParams } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, type Candle, type WalletFill } from '@/lib/api';
+import { annotateFills, formatDuration } from '@/lib/positionWalk';
 
 // ---------------------------------------------------------------------------
 // PositionChartModal
@@ -57,16 +58,45 @@ const INTERVALS: { id: string; label: string }[] = [
 const DEFAULT_INTERVAL = '1h';
 const CANDLE_LIMIT = 200;
 
+// Metadata stashed alongside each marker at render time, keyed by the
+// marker's bucketed time (in seconds). Read by the crosshair-move handler
+// to populate the hover tooltip. Kept outside React state because it
+// doesn't drive rendering — only the ref's current value matters at
+// callback time.
+interface MarkerInfo {
+  isBuy: boolean;
+  isLiqOrAdl: boolean;
+  count: number;
+  totalSize: number;
+  avgPrice: number;
+  /** First fill's action label, e.g. "Open long", "Close short". */
+  actionLabel: string;
+  /** Original (unbucketed) timestamp of the first fill in the group. */
+  timestamp: number;
+}
+
 export function PositionChartModal({ position, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  // Marker metadata indexed by marker time (UTCTimestamp seconds). Populated
+  // when fills load; consumed by the crosshair-move handler to render the
+  // hover tooltip with action label, count, size, etc.
+  const markerInfoRef = useRef<Map<number, MarkerInfo>>(new Map());
 
   const [interval, setInterval] = useState(DEFAULT_INTERVAL);
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hover tooltip — shown when the crosshair lands on a marker's time bucket.
+  // Tracks viewport-relative pixel position so we can absolutely-position
+  // the tooltip div over the chart container.
+  const [tooltip, setTooltip] = useState<{
+    info: MarkerInfo;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Close on Esc — small UX nicety. Streamers using the keyboard expect this.
   useEffect(() => {
@@ -265,22 +295,23 @@ export function PositionChartModal({ position, onClose }: Props) {
     // Fill markers — wallet's executed trades on this market, painted on
     // the candle chart so users see the position's trade story at a glance.
     //
-    // Readability over completeness: 22 raw fills clustered in a single
-    // candle become a wall of overlapping text. We aggregate fills that
-    // share (timeBucket, side, reason) into a single marker, which is
-    // also how every real trading platform handles dense fill data.
-    //
     // Visual rules:
-    //   - Bucketed normal fills: arrow only, no text. The arrow direction
-    //     and color carry the side; users hover/zoom for details.
-    //   - Liquidations and ADLs: orange flag with a "LIQ" / "ADL" label
-    //     because forced exits are rare events worth calling out.
-    //   - Aggregated buckets show "×N" only when N > 1, suppressing the
-    //     count for solo fills.
+    //   - Buys → green circles labeled "B" below the bar
+    //   - Sells → red circles labeled "S" above the bar
+    //   - Liquidations / ADL → orange circles labeled "LIQ" / "ADL"
+    //   - Aggregated buckets (multiple fills in same candle, same side,
+    //     same reason) show "B ×N" / "S ×N" instead
+    //
+    // We aggregate fills by (timeBucket, side, reason) so a flurry of
+    // small fills against multiple makers in the same minute becomes
+    // one readable marker instead of a vertical wall of text.
+    //
+    // Detailed metadata (action label, exact size, exact price, time)
+    // is stored in chartMarkerInfoRef and shown in a custom hover
+    // tooltip via subscribeCrosshairMove below.
     if (fills && fills.length > 0) {
       // Bucket size in seconds — must match the chart interval so fills
-      // within the same candle group together. This is the "minimum
-      // resolvable time unit" on the chart.
+      // within the same candle group together.
       const bucketSeconds: Record<string, number> = {
         '5m': 300,
         '15m': 900,
@@ -290,93 +321,151 @@ export function PositionChartModal({ position, onClose }: Props) {
       };
       const bucket = bucketSeconds[interval] ?? 3600;
 
-      // Aggregate fills by (timeBucket, side, reason). Each group becomes
-      // one marker. We track total size for the count badge.
-      type FillGroup = {
-        time: number;            // seconds, bucketed
-        isBuy: boolean;
-        reason: string;          // 'trade' | 'liq' | 'adl'
-        count: number;
-        totalSize: number;
-        avgPrice: number;        // size-weighted average
-      };
-      const groups = new Map<string, FillGroup>();
+      // Annotate every fill with its position-state action so the hover
+      // tooltip can say "Open long: 0.5 @ 81200" rather than just
+      // "Buy 0.5 @ 81200". This walks the fills once chronologically.
+      const annotated = annotateFills(fills);
 
-      for (const f of fills) {
+      // Group annotated fills by (timeBucket, side, reason).
+      type Group = {
+        time: number;
+        isBuy: boolean;
+        reason: string;
+        fills: typeof annotated;
+      };
+      const groups = new Map<string, Group>();
+      for (const f of annotated) {
         const tSec = Math.floor(f.timestamp / 1000);
         const tBucket = Math.floor(tSec / bucket) * bucket;
         const reason = (f.reasonCode || 'trade').toLowerCase();
         const key = `${tBucket}|${f.isBuy ? 'B' : 'S'}|${reason}`;
         const g = groups.get(key);
         if (g) {
-          // Running size-weighted average — keeps avgPrice a meaningful
-          // VWAP even after many adds.
-          const newTotal = g.totalSize + f.size;
-          g.avgPrice =
-            newTotal > 0
-              ? (g.avgPrice * g.totalSize + f.price * f.size) / newTotal
-              : f.price;
-          g.totalSize = newTotal;
-          g.count += 1;
+          g.fills.push(f);
         } else {
           groups.set(key, {
             time: tBucket,
             isBuy: f.isBuy,
             reason,
-            count: 1,
-            totalSize: f.size,
-            avgPrice: f.price,
+            fills: [f],
           });
         }
       }
 
+      // Build markers + a parallel info map for hover. The map key is
+      // the marker time (seconds) — lightweight-charts gives us this
+      // back in the crosshair callback.
+      const infoMap = new Map<number, MarkerInfo>();
       const markers: SeriesMarker<Time>[] = Array.from(groups.values())
         .map((g) => {
           const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl';
-          // Color: liquidations are always orange; normal fills follow side.
           const color = isLiqOrAdl
             ? '#FFB547'
             : g.isBuy
             ? '#00B481'
             : '#EF4A3C';
 
-          // Text strategy:
-          //   - Liquidations always labeled (rare, important)
-          //   - Aggregated normal fills labeled with "×N" only
-          //   - Solo normal fills get no label (just the arrow)
-          let text: string | undefined;
-          if (isLiqOrAdl) {
-            const tag = g.reason === 'liq' ? 'LIQ' : 'ADL';
-            text = g.count > 1 ? `${tag} ×${g.count}` : tag;
-          } else if (g.count > 1) {
-            text = `×${g.count}`;
+          // Label: single letter for normal fills, action tag for forced
+          // exits. "×N" appended only when more than one fill bucketed.
+          const baseLabel = isLiqOrAdl
+            ? g.reason === 'liq' ? 'LIQ' : 'ADL'
+            : g.isBuy ? 'B' : 'S';
+          const text =
+            g.fills.length > 1
+              ? `${baseLabel} ×${g.fills.length}`
+              : baseLabel;
+
+          // Compute aggregated metadata for the tooltip. VWAP across the
+          // group's fills, total size, and the action of the *first*
+          // fill in the group (the one that opened/added to the position).
+          let totalSize = 0;
+          let weightedPriceSum = 0;
+          for (const f of g.fills) {
+            totalSize += f.size;
+            weightedPriceSum += f.size * f.price;
           }
+          const avgPrice = totalSize > 0 ? weightedPriceSum / totalSize : 0;
+          const primary = g.fills[0];
+
+          infoMap.set(g.time, {
+            isBuy: g.isBuy,
+            isLiqOrAdl,
+            count: g.fills.length,
+            totalSize,
+            avgPrice,
+            actionLabel: primary.actionLabel,
+            timestamp: primary.timestamp,
+          });
 
           return {
             time: g.time as UTCTimestamp,
             position: g.isBuy ? 'belowBar' : 'aboveBar',
             color,
-            // Use a flag shape for liq/adl so they stand out from normal
-            // arrow markers — different shape language for different
-            // event types.
-            shape: isLiqOrAdl
-              ? ('circle' as const)
-              : g.isBuy
-              ? ('arrowUp' as const)
-              : ('arrowDown' as const),
+            shape: 'circle' as const,
             text,
           } as SeriesMarker<Time>;
         })
-        // lightweight-charts requires markers in ascending time order.
-        // Without this, it silently drops some.
         .sort((a, b) => (a.time as number) - (b.time as number));
 
       series.setMarkers(markers);
+      markerInfoRef.current = infoMap;
+    } else {
+      // Clear out any stale info from a previous render
+      markerInfoRef.current = new Map();
     }
 
     // Fit time range immediately and again after the first paint, in case
     // the container was 0px when we created the chart and it's now real.
     chart.timeScale().fitContent();
+
+    // Hover tooltip wiring. Subscribe to crosshair movement and look up
+    // marker metadata by the time the cursor is over. We tolerate small
+    // bucket misalignment (the marker time is bucketed to the candle,
+    // but the cursor time is the candle's open time) by snapping to the
+    // nearest known marker bucket within +/- one candle interval.
+    const bucketSec = (() => {
+      switch (interval) {
+        case '5m': return 300;
+        case '15m': return 900;
+        case '1h': return 3600;
+        case '4h': return 14400;
+        case '1d': return 86400;
+        default: return 3600;
+      }
+    })();
+
+    const handleCrosshair = (param: MouseEventParams) => {
+      // Empty point or off-chart → hide tooltip
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        setTooltip(null);
+        return;
+      }
+      const cursorSec = Number(param.time);
+      // Find the closest marker bucket within one candle interval. We
+      // snap because lightweight-charts reports the candle's time, not
+      // the exact marker time, so equality won't work directly.
+      let best: { time: number; info: MarkerInfo } | null = null;
+      for (const [time, info] of markerInfoRef.current.entries()) {
+        const dt = Math.abs(time - cursorSec);
+        if (dt <= bucketSec / 2) {
+          if (!best || dt < Math.abs(best.time - cursorSec)) {
+            best = { time, info };
+          }
+        }
+      }
+      if (!best) {
+        setTooltip(null);
+        return;
+      }
+      // Position tooltip next to cursor. We offset slightly so the tip
+      // doesn't sit directly under the cursor (which would steal hover).
+      setTooltip({
+        info: best.info,
+        x: param.point.x + 16,
+        y: param.point.y + 16,
+      });
+    };
+    chart.subscribeCrosshairMove(handleCrosshair);
 
     // Apply the *actual* measured size as soon as the browser has laid out.
     // Using requestAnimationFrame ensures we read clientWidth/Height after
@@ -409,9 +498,15 @@ export function PositionChartModal({ position, onClose }: Props) {
     return () => {
       cancelAnimationFrame(raf);
       obs.disconnect();
+      try {
+        chart.unsubscribeCrosshairMove(handleCrosshair);
+      } catch {
+        /* chart may already be removed */
+      }
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      setTooltip(null);
     };
   }, [candles, fills, position, interval]);
 
@@ -548,8 +643,69 @@ export function PositionChartModal({ position, onClose }: Props) {
             has a measurable size before lightweight-charts is constructed.
             On large screens this is 60vh-ish; on small screens it falls
             back to 360px so the chart is always usable. */}
-        <div className="h-[60vh] max-h-[560px] min-h-[360px] p-2">
+        <div className="h-[60vh] max-h-[560px] min-h-[360px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
+
+          {/* Hover tooltip — appears when crosshair lands on a marker.
+              Absolutely positioned over the chart at the cursor offset
+              tracked by the crosshair-move handler. Pointer-events:none
+              so it never steals interaction from the chart underneath. */}
+          {tooltip && (
+            <div
+              className="absolute z-10 pointer-events-none bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg shadow-2xl px-3 py-2 text-xs"
+              style={{
+                left: tooltip.x + 8 /* chart container has p-2 padding */,
+                top: tooltip.y + 8,
+                maxWidth: 260,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
+                    tooltip.info.isLiqOrAdl
+                      ? 'bg-bulk-orange/20 text-bulk-orange'
+                      : tooltip.info.isBuy
+                      ? 'bg-bulk-green/20 text-bulk-green'
+                      : 'bg-bulk-red/20 text-bulk-red'
+                  }`}
+                >
+                  {tooltip.info.isLiqOrAdl
+                    ? '!'
+                    : tooltip.info.isBuy
+                    ? 'B'
+                    : 'S'}
+                </span>
+                <span className="font-semibold text-[var(--text-primary)]">
+                  {tooltip.info.actionLabel}
+                </span>
+                {tooltip.info.count > 1 && (
+                  <span className="text-[var(--text-tertiary)]">
+                    ×{tooltip.info.count}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[var(--text-secondary)] tabular-nums">
+                <div>
+                  <span className="text-[var(--text-tertiary)]">Size: </span>
+                  {formatNumber(tooltip.info.totalSize, 4)}
+                </div>
+                <div>
+                  <span className="text-[var(--text-tertiary)]">Price: </span>
+                  ${formatNumber(tooltip.info.avgPrice, 2)}
+                </div>
+              </div>
+              <div className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                {new Date(tooltip.info.timestamp).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+                {' · '}
+                {formatDuration(Date.now() - tooltip.info.timestamp)} ago
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
