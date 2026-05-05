@@ -262,42 +262,115 @@ export function PositionChartModal({ position, onClose }: Props) {
       });
     }
 
-    // Fill markers — every executed trade by this wallet on this market.
-    // Triangles point down for buys (entry/long-add) above the bar; up for
-    // sells below. lightweight-charts has built-in marker support so we
-    // don't have to draw anything manually.
+    // Fill markers — wallet's executed trades on this market, painted on
+    // the candle chart so users see the position's trade story at a glance.
     //
-    // We tint by reasonCode so a stream viewer can spot forced exits at
-    // a glance. "trade" = normal user fill. "liq" = forced liquidation.
-    // "adl" = auto-deleveraged. Anything else falls back to side-color.
+    // Readability over completeness: 22 raw fills clustered in a single
+    // candle become a wall of overlapping text. We aggregate fills that
+    // share (timeBucket, side, reason) into a single marker, which is
+    // also how every real trading platform handles dense fill data.
+    //
+    // Visual rules:
+    //   - Bucketed normal fills: arrow only, no text. The arrow direction
+    //     and color carry the side; users hover/zoom for details.
+    //   - Liquidations and ADLs: orange flag with a "LIQ" / "ADL" label
+    //     because forced exits are rare events worth calling out.
+    //   - Aggregated buckets show "×N" only when N > 1, suppressing the
+    //     count for solo fills.
     if (fills && fills.length > 0) {
-      const markers: SeriesMarker<Time>[] = fills
-        .map((f) => {
-          const reason = (f.reasonCode || 'trade').toLowerCase();
-          const isLiqOrAdl = reason === 'liq' || reason === 'adl';
-          // Liquidation/ADL get a distinctive orange flag regardless of
-          // side, so they pop visually. Normal fills stay green/red.
+      // Bucket size in seconds — must match the chart interval so fills
+      // within the same candle group together. This is the "minimum
+      // resolvable time unit" on the chart.
+      const bucketSeconds: Record<string, number> = {
+        '5m': 300,
+        '15m': 900,
+        '1h': 3600,
+        '4h': 14400,
+        '1d': 86400,
+      };
+      const bucket = bucketSeconds[interval] ?? 3600;
+
+      // Aggregate fills by (timeBucket, side, reason). Each group becomes
+      // one marker. We track total size for the count badge.
+      type FillGroup = {
+        time: number;            // seconds, bucketed
+        isBuy: boolean;
+        reason: string;          // 'trade' | 'liq' | 'adl'
+        count: number;
+        totalSize: number;
+        avgPrice: number;        // size-weighted average
+      };
+      const groups = new Map<string, FillGroup>();
+
+      for (const f of fills) {
+        const tSec = Math.floor(f.timestamp / 1000);
+        const tBucket = Math.floor(tSec / bucket) * bucket;
+        const reason = (f.reasonCode || 'trade').toLowerCase();
+        const key = `${tBucket}|${f.isBuy ? 'B' : 'S'}|${reason}`;
+        const g = groups.get(key);
+        if (g) {
+          // Running size-weighted average — keeps avgPrice a meaningful
+          // VWAP even after many adds.
+          const newTotal = g.totalSize + f.size;
+          g.avgPrice =
+            newTotal > 0
+              ? (g.avgPrice * g.totalSize + f.price * f.size) / newTotal
+              : f.price;
+          g.totalSize = newTotal;
+          g.count += 1;
+        } else {
+          groups.set(key, {
+            time: tBucket,
+            isBuy: f.isBuy,
+            reason,
+            count: 1,
+            totalSize: f.size,
+            avgPrice: f.price,
+          });
+        }
+      }
+
+      const markers: SeriesMarker<Time>[] = Array.from(groups.values())
+        .map((g) => {
+          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl';
+          // Color: liquidations are always orange; normal fills follow side.
           const color = isLiqOrAdl
             ? '#FFB547'
-            : f.isBuy
+            : g.isBuy
             ? '#00B481'
             : '#EF4A3C';
-          const reasonLabel = isLiqOrAdl
-            ? reason === 'liq' ? ' (LIQ)' : ' (ADL)'
-            : '';
+
+          // Text strategy:
+          //   - Liquidations always labeled (rare, important)
+          //   - Aggregated normal fills labeled with "×N" only
+          //   - Solo normal fills get no label (just the arrow)
+          let text: string | undefined;
+          if (isLiqOrAdl) {
+            const tag = g.reason === 'liq' ? 'LIQ' : 'ADL';
+            text = g.count > 1 ? `${tag} ×${g.count}` : tag;
+          } else if (g.count > 1) {
+            text = `×${g.count}`;
+          }
+
           return {
-            time: Math.floor(f.timestamp / 1000) as UTCTimestamp,
-            position: f.isBuy ? 'belowBar' : 'aboveBar',
+            time: g.time as UTCTimestamp,
+            position: g.isBuy ? 'belowBar' : 'aboveBar',
             color,
-            shape: f.isBuy ? 'arrowUp' : 'arrowDown',
-            // Compact text. Showing size + price in the marker label keeps
-            // the chart self-explanatory without a separate hover tooltip.
-            text: `${f.isBuy ? 'Buy' : 'Sell'}${reasonLabel} ${formatNumber(f.size, 4)} @ ${formatNumber(f.price, 2)}`,
+            // Use a flag shape for liq/adl so they stand out from normal
+            // arrow markers — different shape language for different
+            // event types.
+            shape: isLiqOrAdl
+              ? ('circle' as const)
+              : g.isBuy
+              ? ('arrowUp' as const)
+              : ('arrowDown' as const),
+            text,
           } as SeriesMarker<Time>;
         })
-        // Sort ascending by time — lightweight-charts requires markers in
-        // chronological order, otherwise it silently drops some.
+        // lightweight-charts requires markers in ascending time order.
+        // Without this, it silently drops some.
         .sort((a, b) => (a.time as number) - (b.time as number));
+
       series.setMarkers(markers);
     }
 
@@ -340,7 +413,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [candles, fills, position]);
+  }, [candles, fills, position, interval]);
 
   if (!position) return null;
 
