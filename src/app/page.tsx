@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, Loader2 } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { RecentActivity } from '@/components/RecentActivity';
 import { userApi, formatAddress, formatCompact, type UserSearchResult } from '@/lib/api';
 
@@ -176,10 +177,14 @@ export default function HomePage() {
       {/* Exchange Health Stats */}
       <ExchangeHealthStats />
 
-      {/* Leaderboards Grid */}
+      {/* Leaderboards Grid.
+          The Top Traders panel uses BULK's official indexer (matches
+          bulk.trade ranks exactly — critical during the tournament).
+          Liquidations, Whales, and Recent Activity stay on our DB since
+          BULK's indexer only covers the winners side. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="h-[450px]">
-          <LeaderboardTable type="pnl" limit={10} />
+          <BulkLeaderboardTable limit={10} />
         </div>
         <div className="h-[450px]">
           <LeaderboardTable type="liquidated" limit={10} />
