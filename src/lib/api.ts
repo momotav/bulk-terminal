@@ -165,6 +165,30 @@ export interface ActivityResponse {
   count: number;
 }
 
+// One executed trade fill from BULK's `fills` API. We render these as
+// triangle markers on the position chart so users can see exactly when
+// and at what price the wallet entered/exited a market.
+//
+// reasonCode tells us *why* the fill happened — most are "trade" but some
+// are forced (liq) or auto-deleveraging (adl). We tint markers by reason
+// so a stream viewer can spot a liquidation entry visually.
+export interface WalletFill {
+  timestamp: number;       // ms since epoch
+  symbol: string;          // e.g. "BTC-USD"
+  price: number;
+  size: number;            // always positive; direction is in isBuy
+  isBuy: boolean;
+  orderIdMaker?: string;
+  orderIdTaker?: string;
+  reasonCode?: string;     // "trade" | "liq" | "adl" | other
+  // BULK includes these for completeness; we don't use them in the chart
+  // overlay but expose them in the type for downstream consumers.
+  maker?: string;
+  taker?: string;
+  iso?: boolean;
+  counterpartyHint?: string;
+}
+
 export interface Notification {
   id: number;
   wallet_address: string;
@@ -938,6 +962,23 @@ export const wallet = {
   // instead of off-curve pubkeys.
   async getActivity(address: string, limit: number = 50): Promise<ActivityResponse> {
     return request(`/api/wallet/${address}/activity?limit=${limit}`);
+  },
+
+  // Live fill history for the wallet, optionally filtered to a symbol.
+  // Used by the position chart modal to draw markers showing every entry
+  // and exit on a given market. Sourced from BULK's `fills` API (not our
+  // DB) so the chart reflects fills that just happened a few seconds ago.
+  async getFills(
+    address: string,
+    opts: { symbol?: string; limit?: number } = {}
+  ): Promise<{ fills: WalletFill[] }> {
+    const params = new URLSearchParams();
+    if (opts.symbol) params.set('symbol', opts.symbol);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request(
+      `/api/wallet/${address}/fills${qs ? `?${qs}` : ''}`
+    );
   },
 
   async getWatchlist(): Promise<Array<{ wallet_address: string; nickname: string | null; total_pnl?: number; total_volume?: number }>> {
