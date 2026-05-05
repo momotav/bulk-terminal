@@ -449,7 +449,18 @@ export function PositionChartModal({ position, onClose }: Props) {
             {!loading && !error && candles && (
               <span>
                 <span className="font-mono">{candles.length}</span> candles
-                {fills && fills.length > 0 && (
+                {/* Three states for fills, distinct from candles loading:
+                    - null  → still fetching (no badge, avoid layout flicker)
+                    - []    → loaded but empty (show subtle "no fills" hint
+                              so the user knows nothing was hidden)
+                    - >0    → render the count
+                    Empty state uses tertiary text so it doesn't compete
+                    with the candle count visually. */}
+                {fills === null ? null : fills.length === 0 ? (
+                  <span className="text-[var(--text-tertiary)] ml-2">
+                    · no fills found for this market
+                  </span>
+                ) : (
                   <>
                     {' · '}
                     <span className="font-mono">{fills.length}</span> fill{fills.length === 1 ? '' : 's'}
