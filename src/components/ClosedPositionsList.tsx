@@ -29,9 +29,14 @@ interface Props {
   symbol?: string;
   /** Max rows to fetch from the backend. Default 50. */
   limit?: number;
+  /** Optional click handler — when provided, each row becomes clickable
+   *  and fires onSelect with the position. The wallet page wires this
+   *  up to open the chart modal in closed-position mode. When omitted
+   *  rows render as static (read-only). */
+  onSelect?: (p: ClosedPosition) => void;
 }
 
-export function ClosedPositionsList({ address, symbol, limit = 50 }: Props) {
+export function ClosedPositionsList({ address, symbol, limit = 50, onSelect }: Props) {
   const [positions, setPositions] = useState<ClosedPosition[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -95,7 +100,11 @@ export function ClosedPositionsList({ address, symbol, limit = 50 }: Props) {
   return (
     <div className="divide-y divide-[var(--border-color)]">
       {positions.map((p, i) => (
-        <ClosedPositionRow key={`${p.symbol}-${p.closedAt}-${i}`} p={p} />
+        <ClosedPositionRow
+          key={`${p.symbol}-${p.closedAt}-${i}`}
+          p={p}
+          onSelect={onSelect}
+        />
       ))}
     </div>
   );
@@ -103,7 +112,13 @@ export function ClosedPositionsList({ address, symbol, limit = 50 }: Props) {
 
 // One row per closed position. Layout: side+symbol on the left, PnL on
 // the right (color-coded). Below: entry → close prices + duration.
-function ClosedPositionRow({ p }: { p: ClosedPosition }) {
+function ClosedPositionRow({
+  p,
+  onSelect,
+}: {
+  p: ClosedPosition;
+  onSelect?: (p: ClosedPosition) => void;
+}) {
   const isWin = p.realizedPnl >= 0;
   const isLong = p.side === 'long';
   // PnL percent against notional at open. Falls back to 0 if size or
@@ -119,8 +134,23 @@ function ClosedPositionRow({ p }: { p: ClosedPosition }) {
     : 0;
   const duration = p.closedAt - p.openedAt;
 
+  // Render as a button when clickable, plain div otherwise. The button
+  // form preserves the same visual layout but adds keyboard focus and
+  // the cursor affordance.
+  const Wrapper = onSelect ? 'button' : 'div';
+  const wrapperProps = onSelect
+    ? {
+        type: 'button' as const,
+        onClick: () => onSelect(p),
+        className:
+          'w-full text-left p-4 hover:bg-[var(--bg-secondary-20)]/30 transition-colors cursor-pointer group',
+      }
+    : {
+        className: 'p-4 hover:bg-[var(--bg-secondary-20)]/30 transition-colors',
+      };
+
   return (
-    <div className="p-4 hover:bg-[var(--bg-secondary-20)]/30 transition-colors">
+    <Wrapper {...wrapperProps}>
       {/* Header row: side badge + symbol on left, realized PnL on right.
           Liquidated positions get an extra orange flame badge. */}
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -232,6 +262,6 @@ function ClosedPositionRow({ p }: { p: ClosedPosition }) {
           )}
         </span>
       </div>
-    </div>
+    </Wrapper>
   );
 }
