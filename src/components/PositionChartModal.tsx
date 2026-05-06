@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time, MouseEventParams } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, type Candle, type WalletFill } from '@/lib/api';
@@ -172,6 +172,30 @@ export function PositionChartModal({ position, onClose }: Props) {
     };
   }, [position]);
 
+  // Filter the wallet's full fill history down to just the fills that
+  // contributed to the *currently-open* position. Older fills come from
+  // positions that have since been closed and have no place on this chart.
+  //
+  // Logic: walk fills chronologically with annotateFills, find the most
+  // recent action='open' or 'flip', and slice from there. Falls back to
+  // the full list if no opener is found (position is older than BULK's
+  // fill window — better to show something than nothing).
+  //
+  // This is shared by the header fill count and the chart marker effect
+  // so they stay in sync — same source of truth.
+  const currentPositionFills = useMemo(() => {
+    if (!fills || fills.length === 0) return [];
+    const annotated = annotateFills(fills);
+    for (let i = annotated.length - 1; i >= 0; i--) {
+      const a = annotated[i].action;
+      if (a === 'open' || a === 'flip') {
+        return annotated.slice(i);
+      }
+    }
+    // No opener in the visible window — return all fills as a fallback.
+    return annotated;
+  }, [fills]);
+
   // Build / rebuild the chart whenever candles arrive. We tear down and
   // recreate on every change rather than mutating in place — the data
   // doesn't change often (open modal, switch interval) and re-creation is
@@ -326,7 +350,16 @@ export function PositionChartModal({ position, onClose }: Props) {
       // "Buy 0.5 @ 81200". This walks the fills once chronologically.
       const annotated = annotateFills(fills);
 
-      // Group annotated fills by (timeBucket, side, reason).
+      // currentPositionFills (computed in the useMemo above) is already
+      // sliced to only the fills from the currently-open position.
+      // Reuse it directly so the marker logic stays in sync with the
+      // header's fill count.
+      const currentPosFills = currentPositionFills;
+
+      // Group annotated fills by (timeBucket, side, reason). We iterate
+      // over `currentPosFills` (already filtered to the currently
+      // open position) so previously-closed positions don't show up
+      // on the chart.
       type Group = {
         time: number;
         isBuy: boolean;
@@ -334,7 +367,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         fills: typeof annotated;
       };
       const groups = new Map<string, Group>();
-      for (const f of annotated) {
+      for (const f of currentPosFills) {
         const tSec = Math.floor(f.timestamp / 1000);
         const tBucket = Math.floor(tSec / bucket) * bucket;
         const reason = (f.reasonCode || 'trade').toLowerCase();
@@ -516,7 +549,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       seriesRef.current = null;
       setTooltip(null);
     };
-  }, [candles, fills, position, interval]);
+  }, [candles, fills, currentPositionFills, position, interval]);
 
   if (!position) return null;
 
@@ -629,17 +662,19 @@ export function PositionChartModal({ position, onClose }: Props) {
                     - null  → still fetching (no badge, avoid layout flicker)
                     - []    → loaded but empty (show subtle "no fills" hint
                               so the user knows nothing was hidden)
-                    - >0    → render the count
-                    Empty state uses tertiary text so it doesn't compete
-                    with the candle count visually. */}
-                {fills === null ? null : fills.length === 0 ? (
+                    - >0    → render the count of fills *for this position*
+                    The count uses currentPositionFills (filtered to just
+                    the currently-open trade), not the raw fill history,
+                    so it matches what the user sees on the chart. */}
+                {fills === null ? null : currentPositionFills.length === 0 ? (
                   <span className="text-[var(--text-tertiary)] ml-2">
-                    · no fills found for this market
+                    · no fills for this position
                   </span>
                 ) : (
                   <>
                     {' · '}
-                    <span className="font-mono">{fills.length}</span> fill{fills.length === 1 ? '' : 's'}
+                    <span className="font-mono">{currentPositionFills.length}</span> fill
+                    {currentPositionFills.length === 1 ? '' : 's'}
                   </>
                 )}
               </span>
