@@ -577,16 +577,29 @@ export const analytics = {
   // OHLCV candles for a market — used by the position-detail chart on the
   // wallet page. Backend caches 30s. Allowed intervals match BULK's
   // documented set: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M.
+  //
+  // Optional `startTime` / `endTime` (ms epoch) restrict the response to
+  // a specific time window — used by the closed-position chart to load
+  // candles around a historical trade rather than the most recent N
+  // candles. When omitted, behavior is unchanged.
   async getCandles(
     symbol: string,
     interval: string = '1h',
     limit: number = 100,
+    opts: { startTime?: number; endTime?: number } = {},
   ): Promise<CandlesResponse> {
     const s = symbol.toUpperCase().endsWith('-USD')
       ? symbol.toUpperCase()
       : `${symbol.toUpperCase()}-USD`;
+    const params = new URLSearchParams({ interval, limit: String(limit) });
+    if (typeof opts.startTime === 'number') {
+      params.set('startTime', String(Math.floor(opts.startTime)));
+    }
+    if (typeof opts.endTime === 'number') {
+      params.set('endTime', String(Math.floor(opts.endTime)));
+    }
     return request<CandlesResponse>(
-      `/api/analytics/candles/${encodeURIComponent(s)}?interval=${interval}&limit=${limit}`
+      `/api/analytics/candles/${encodeURIComponent(s)}?${params.toString()}`
     );
   },
 
