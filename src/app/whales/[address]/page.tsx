@@ -98,6 +98,13 @@ export default function WalletPage() {
   // closed. Set when the user clicks any position card.
   const [chartPosition, setChartPosition] = useState<PositionForChart | null>(null);
 
+  // Which sub-panel is showing — open positions or recent closed positions.
+  // Defaults to whichever has data (we set this in an effect below). User
+  // can flick between the two with the segmented control in the panel
+  // header. Replaces the older two-panel stacked layout that wasted
+  // vertical space.
+  const [positionsTab, setPositionsTab] = useState<'open' | 'recent'>('open');
+
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
   // expose a per-position timestamp on the position object. Null entries
@@ -244,6 +251,19 @@ export default function WalletPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, openSymbolKey]);
+
+  // Track whether the user has manually clicked a tab. Once they have, we
+  // never auto-switch on data changes — that would be jarring (e.g. their
+  // last position closes and the panel suddenly jumps tabs). On first load
+  // with no open positions we land on "recent" automatically; afterward,
+  // the user is in charge.
+  const [tabIsUserPicked, setTabIsUserPicked] = useState(false);
+
+  useEffect(() => {
+    if (tabIsUserPicked) return;
+    const hasOpen = (data?.live?.positions || []).length > 0;
+    setPositionsTab(hasOpen ? 'open' : 'recent');
+  }, [data, tabIsUserPicked]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
@@ -657,39 +677,66 @@ export default function WalletPage() {
 
             {/* Main Content Grid */}
             <div className="grid lg:grid-cols-2 gap-6">
-              {/* Positions / Recent Trades */}
+              {/* Positions panel with Open / Recent tab toggle.
+                  Replaces the older two-stacked-panels layout. The default
+                  tab is auto-picked: "Open" if the wallet has any active
+                  position, otherwise "Recent". Once the user clicks a tab,
+                  the auto-switch is disabled (tabIsUserPicked) so the panel
+                  doesn't jump around as positions open/close in the
+                  background poll. */}
               <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-                <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-2">
-                  <h2 className="font-semibold flex items-center gap-2">
-                    {positions.length > 0 ? (
-                      <>
-                        <Activity className="w-4 h-4 text-bulk-green" />
-                        Open Positions ({positions.length})
-                      </>
-                    ) : !hasLiveData ? (
-                      // Distinct visual state for "BULK API didn't return
-                      // live data" — most likely a transient timeout. The
-                      // 10s background poll will retry and likely succeed.
-                      // Without this branch we silently fell through to
-                      // closed positions and users assumed positions = 0.
-                      <>
-                        <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
-                        Fetching positions…
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-4 h-4 text-blue-400" />
+                <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
+                  {/* Loading state takes precedence over tabs — if BULK
+                      hasn't returned yet, show the spinner instead of
+                      tabs (which would be empty anyway). */}
+                  {!hasLiveData && positions.length === 0 ? (
+                    <h2 className="font-semibold flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                      Fetching positions…
+                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider ml-2">
+                        auto-retries every 10s
+                      </span>
+                    </h2>
+                  ) : (
+                    <div className="flex items-center gap-0.5 bg-[var(--bg-base)] rounded-lg p-0.5 border border-[var(--border-color)]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPositionsTab('open');
+                          setTabIsUserPicked(true);
+                        }}
+                        className={cn(
+                          'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                          positionsTab === 'open'
+                            ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        )}
+                      >
+                        <Activity className="w-3.5 h-3.5 text-bulk-green" />
+                        Open
+                        {positions.length > 0 && (
+                          <span className="text-[var(--text-tertiary)] tabular-nums">
+                            {positions.length}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPositionsTab('recent');
+                          setTabIsUserPicked(true);
+                        }}
+                        className={cn(
+                          'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                          positionsTab === 'recent'
+                            ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        )}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-blue-400" />
                         Recent Trades
-                      </>
-                    )}
-                  </h2>
-                  {/* Tiny hint for the "Fetching" state so a streamer /
-                      viewer knows what's happening rather than thinking
-                      the page froze. */}
-                  {!hasLiveData && positions.length === 0 && (
-                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
-                      auto-retries every 10s
-                    </span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -699,8 +746,9 @@ export default function WalletPage() {
                     The "→" arrow is persistent (not hover-only) so stream
                     viewers know the cards are interactive. */}
                 <div className="divide-y divide-[var(--border-color)] max-h-[480px] overflow-y-auto">
-                  {positions.length > 0 ? (
-                    positions.map((pos, i) => {
+                  {positionsTab === 'open' ? (
+                    positions.length > 0 ? (
+                      positions.map((pos, i) => {
                       const isLong = pos.size > 0;
                       const pnlPercent = pos.notional 
                         ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100 
@@ -817,34 +865,25 @@ export default function WalletPage() {
                         </button>
                       );
                     })
+                    ) : (
+                      // "Open" tab selected but no open positions exist.
+                      // Empty state with a hint that recent trades are one
+                      // tab over.
+                      <div className="p-8 text-center text-[var(--text-tertiary)]">
+                        <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No open positions</p>
+                        <p className="text-xs mt-1">
+                          Switch to Recent Trades to see closed positions
+                        </p>
+                      </div>
+                    )
                   ) : (
-                    // No open positions: show recent closed-position history
-                    // instead of raw fills. Closed positions are far more
-                    // useful — each row is one open→close lifecycle with
-                    // realized PnL pre-computed by BULK.
+                    // "Recent" tab — always show closed-positions list,
+                    // regardless of whether there are open positions.
                     <ClosedPositionsList address={address} limit={50} />
                   )}
                 </div>
               </div>
-
-              {/* Closed Positions panel — always visible when there ARE
-                  open positions (so users see the recent trade history
-                  alongside the live state). Skipped when there are no
-                  open positions, since the panel above already shows
-                  closed positions in that case. */}
-              {positions.length > 0 && (
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-                  <div className="p-4 border-b border-[var(--border-color)]">
-                    <h2 className="font-semibold flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-blue-400" />
-                      Recent Trades
-                    </h2>
-                  </div>
-                  <div className="max-h-[480px] overflow-y-auto">
-                    <ClosedPositionsList address={address} limit={50} />
-                  </div>
-                </div>
-              )}
 
               {/* PnL History Chart */}
               <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
