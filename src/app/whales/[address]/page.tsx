@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
   TrendingUp, TrendingDown, Wallet, Activity,
-  AlertCircle, Clock, Loader2, UserCheck
+  AlertCircle, Clock, Loader2, UserCheck,
+  BarChart3, Flame, Shield, PiggyBank, DollarSign
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
@@ -70,6 +71,97 @@ function Stat({
           accent === 'orange' ? 'text-orange-400' : 'text-[var(--text-primary)]'
         )}
       >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// Compact inline variant of Stat. Used in the dense single-row stats
+// strip on the wallet page header. Smaller value text and tighter spacing
+// than the full Stat — suitable for sitting alongside several siblings
+// in one horizontal row without needing a grid layout.
+function InlineStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: 'orange';
+}) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider leading-tight">
+        {label}
+      </span>
+      <span
+        className={cn(
+          'text-base font-semibold tabular-nums leading-tight mt-0.5',
+          accent === 'orange' ? 'text-orange-400' : 'text-[var(--text-primary)]'
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// Color-coded stat card. One card per metric; each metric has its own
+// accent color so users can scan the panel by color (volume is always
+// blue, balance is always green, etc.) instead of reading every label.
+//
+// The `tone` controls icon + label + value color collectively. For PnL
+// metrics where the value's sign should flip color (positive=green,
+// negative=red), pass `valueTone` as well — that lets us keep the
+// label/icon at their semantic color while the number itself responds
+// to its sign.
+//
+// Each card is self-contained (own border, own padding) so the panel
+// reads as a grid of independent tiles rather than a continuous strip.
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  tone,
+  valueTone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  tone: 'blue' | 'purple' | 'green' | 'orange' | 'yellow' | 'cyan' | 'red';
+  /** Override color of the value alone. Used by PnL cards where the
+   *  number's sign drives its color but the label stays semantic. */
+  valueTone?: 'green' | 'red';
+}) {
+  // Tone → Tailwind color classes. Kept as a static map (not template
+  // strings) because Tailwind's JIT only includes classes it can see at
+  // build time; dynamically-built class names get purged.
+  const toneClasses: Record<typeof tone, { icon: string; label: string; value: string }> = {
+    blue:   { icon: 'text-blue-400',   label: 'text-blue-400/80',   value: 'text-blue-400' },
+    purple: { icon: 'text-purple-400', label: 'text-purple-400/80', value: 'text-purple-400' },
+    green:  { icon: 'text-bulk-green', label: 'text-bulk-green/80', value: 'text-bulk-green' },
+    orange: { icon: 'text-bulk-orange',label: 'text-bulk-orange/80',value: 'text-bulk-orange' },
+    yellow: { icon: 'text-yellow-400', label: 'text-yellow-400/80', value: 'text-yellow-400' },
+    cyan:   { icon: 'text-cyan-400',   label: 'text-cyan-400/80',   value: 'text-cyan-400' },
+    red:    { icon: 'text-bulk-red',   label: 'text-bulk-red/80',   value: 'text-bulk-red' },
+  };
+  const c = toneClasses[tone];
+  // valueTone overrides the value color when given (PnL sign flip).
+  const valueColor =
+    valueTone === 'green' ? 'text-bulk-green' :
+    valueTone === 'red' ? 'text-bulk-red' :
+    c.value;
+
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className={cn('w-4 h-4', c.icon)} />
+        <span className={cn('text-[10px] uppercase tracking-wider font-medium', c.label)}>
+          {label}
+        </span>
+      </div>
+      <p className={cn('text-2xl font-bold tabular-nums tracking-tight truncate', valueColor)}>
         {value}
       </p>
     </div>
@@ -570,108 +662,98 @@ export default function WalletPage() {
                 to it. Single block keeps the visual weight grouped instead
                 of stacking two boxes on top of each other. */}
             {hasLiveData && margin ? (
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4 space-y-5">
-                {/* Row 1: PnL hero. Full-width with the live pulse on the
-                    right. No more vertical-divider awkwardness. */}
-                <div className="flex items-end justify-between gap-4 flex-wrap">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      {margin.unrealizedPnl >= 0 ? (
-                        <TrendingUp className="w-4 h-4 text-bulk-green" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4 text-bulk-red" />
-                      )}
-                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Unrealized PnL</span>
-                    </div>
-                    <p className={cn(
-                      'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
-                      margin.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                    )}>
-                      {margin.unrealizedPnl >= 0 ? '+' : ''}
-                      ${formatCompact(Math.abs(margin.unrealizedPnl))}
-                    </p>
-                  </div>
-                  {/* Live pulse — small dot + label, right-aligned. Tells
-                      stream viewers the page is auto-updating. */}
-                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bulk-green opacity-75" />
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-bulk-green" />
-                    </span>
-                    Live · 10s refresh
-                  </div>
-                </div>
+              // 8-card stat grid. Each metric gets its own accent color
+              // applied to icon/label/value, plus its own bordered tile.
+              // Top row = lifetime/historical context, bottom row = live
+              // state. PnL cards (Total PnL, Unrealized) use the per-tone
+              // color for icon/label but flip the value color based on sign
+              // — green when positive, red when negative.
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                {/* Row 1 — lifetime context */}
+                <StatCard
+                  icon={BarChart3}
+                  label="Total Volume"
+                  value={`$${formatCompact(tracked?.total_volume || 0)}`}
+                  tone="blue"
+                />
+                <StatCard
+                  icon={Activity}
+                  label="Total Trades"
+                  value={String(tracked?.total_trades || 0)}
+                  tone="purple"
+                />
+                <StatCard
+                  icon={TrendingUp}
+                  label="Total PnL"
+                  value={`${totalPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(totalPnL))}`}
+                  tone="green"
+                  valueTone={totalPnL >= 0 ? 'green' : 'red'}
+                />
+                <StatCard
+                  icon={Flame}
+                  label="Liquidations"
+                  value={String(tracked?.total_liquidations || 0)}
+                  tone="orange"
+                />
 
-                {/* Row 2: 4 supporting stats in a clean grid. No nested
-                    cards, no vertical dividers, no orphan rows. Just a
-                    horizontal divider above to separate from the PnL hero. */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[var(--border-color)]">
-                  <Stat label="Balance" value={`$${formatNumber(margin.totalBalance, 0)}`} />
-                  <Stat label="Margin Used" value={`$${formatNumber(margin.marginUsed, 0)}`} />
-                  <Stat label="Available" value={`$${formatNumber(margin.availableBalance, 0)}`} />
-                  <Stat
-                    label="Liquidations"
-                    value={String(tracked?.total_liquidations || 0)}
-                    accent={(tracked?.total_liquidations || 0) > 0 ? 'orange' : undefined}
-                  />
-                </div>
+                {/* Row 2 — live state */}
+                <StatCard
+                  icon={DollarSign}
+                  label="Live Balance"
+                  value={`$${formatNumber(margin.totalBalance, 2)}`}
+                  tone="green"
+                />
+                <StatCard
+                  icon={Shield}
+                  label="Margin Used"
+                  value={`$${formatNumber(margin.marginUsed, 2)}`}
+                  tone="yellow"
+                />
+                <StatCard
+                  icon={margin.unrealizedPnl >= 0 ? TrendingUp : TrendingDown}
+                  label="Unrealized PnL"
+                  value={`${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}`}
+                  tone="red"
+                  valueTone={margin.unrealizedPnl >= 0 ? 'green' : 'red'}
+                />
+                <StatCard
+                  icon={PiggyBank}
+                  label="Available"
+                  value={`$${formatNumber(margin.availableBalance, 2)}`}
+                  tone="cyan"
+                />
               </div>
             ) : (
-              /* No live BULK data path — fall back to tracked PnL. Same
-                 two-row structure but with historical metrics. */
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4 space-y-5">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    {totalPnL >= 0 ? (
-                      <TrendingUp className="w-4 h-4 text-bulk-green" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-bulk-red" />
-                    )}
-                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Total PnL (lifetime)</span>
-                  </div>
-                  <p className={cn(
-                    'text-3xl sm:text-4xl font-bold tabular-nums tracking-tight',
-                    totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                  )}>
-                    {totalPnL >= 0 ? '+' : ''}${formatCompact(Math.abs(totalPnL))}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-[var(--border-color)]">
-                  <Stat label="Total Volume" value={`$${formatCompact(tracked?.total_volume || 0)}`} />
-                  <Stat label="Total Trades" value={String(tracked?.total_trades || 0)} />
-                  <Stat
-                    label="Liquidations"
-                    value={String(tracked?.total_liquidations || 0)}
-                    accent={(tracked?.total_liquidations || 0) > 0 ? 'orange' : undefined}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Lifetime stats line. When live data is shown above, this row
-                gives the streamer historical context without adding more
-                cards. Inline text — small, secondary, easily scannable.
-                Skip it entirely when we already showed lifetime as the
-                hero (no live data path). */}
-            {hasLiveData && margin && (
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-6 text-sm text-[var(--text-secondary)]">
-                <span>
-                  <span className="text-[var(--text-tertiary)]">Lifetime volume </span>
-                  <span className="font-mono text-[var(--text-primary)]">${formatCompact(tracked?.total_volume || 0)}</span>
-                </span>
-                <span>
-                  <span className="text-[var(--text-tertiary)]">Lifetime trades </span>
-                  <span className="font-mono text-[var(--text-primary)]">{tracked?.total_trades || 0}</span>
-                </span>
-                <span>
-                  <span className="text-[var(--text-tertiary)]">Realized </span>
-                  <span className={cn(
-                    'font-mono',
-                    totalPnL >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                  )}>
-                    {totalPnL >= 0 ? '+' : ''}${formatCompact(totalPnL)}
-                  </span>
-                </span>
+              // No live BULK data — show only the lifetime row of cards
+              // (top row of 4) since live metrics aren't available. Same
+              // visual language, just one row instead of two so the
+              // layout doesn't look broken with placeholder zeros.
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                <StatCard
+                  icon={BarChart3}
+                  label="Total Volume"
+                  value={`$${formatCompact(tracked?.total_volume || 0)}`}
+                  tone="blue"
+                />
+                <StatCard
+                  icon={Activity}
+                  label="Total Trades"
+                  value={String(tracked?.total_trades || 0)}
+                  tone="purple"
+                />
+                <StatCard
+                  icon={TrendingUp}
+                  label="Total PnL"
+                  value={`${totalPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(totalPnL))}`}
+                  tone="green"
+                  valueTone={totalPnL >= 0 ? 'green' : 'red'}
+                />
+                <StatCard
+                  icon={Flame}
+                  label="Liquidations"
+                  value={String(tracked?.total_liquidations || 0)}
+                  tone="orange"
+                />
               </div>
             )}
 
