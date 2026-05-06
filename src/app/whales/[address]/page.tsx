@@ -129,7 +129,11 @@ function StatCard({
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  tone: 'blue' | 'purple' | 'green' | 'orange' | 'yellow' | 'cyan' | 'red';
+  /** Color tone for icon + label + value. Use 'neutral' for reference
+   *  numbers (volume, balance, etc.) where color carries no semantic
+   *  meaning. Use the colored tones only for metrics whose sign or
+   *  identity matters at a glance — PnL is the obvious case. */
+  tone: 'neutral' | 'green' | 'red' | 'orange';
   /** Override color of the value alone. Used by PnL cards where the
    *  number's sign drives its color but the label stays semantic. */
   valueTone?: 'green' | 'red';
@@ -137,14 +141,20 @@ function StatCard({
   // Tone → Tailwind color classes. Kept as a static map (not template
   // strings) because Tailwind's JIT only includes classes it can see at
   // build time; dynamically-built class names get purged.
+  //
+  // The 'neutral' tone uses the standard text colors so non-semantic
+  // metrics (volume, trades, balance, margin, available) read as
+  // reference numbers rather than competing for attention. PnL keeps
+  // tinted icon/label so it stands out from neutrals at a glance.
   const toneClasses: Record<typeof tone, { icon: string; label: string; value: string }> = {
-    blue:   { icon: 'text-blue-400',   label: 'text-blue-400/80',   value: 'text-blue-400' },
-    purple: { icon: 'text-purple-400', label: 'text-purple-400/80', value: 'text-purple-400' },
+    neutral: {
+      icon: 'text-[var(--text-tertiary)]',
+      label: 'text-[var(--text-tertiary)]',
+      value: 'text-[var(--text-primary)]',
+    },
     green:  { icon: 'text-bulk-green', label: 'text-bulk-green/80', value: 'text-bulk-green' },
-    orange: { icon: 'text-bulk-orange',label: 'text-bulk-orange/80',value: 'text-bulk-orange' },
-    yellow: { icon: 'text-yellow-400', label: 'text-yellow-400/80', value: 'text-yellow-400' },
-    cyan:   { icon: 'text-cyan-400',   label: 'text-cyan-400/80',   value: 'text-cyan-400' },
     red:    { icon: 'text-bulk-red',   label: 'text-bulk-red/80',   value: 'text-bulk-red' },
+    orange: { icon: 'text-bulk-orange',label: 'text-bulk-orange/80',value: 'text-bulk-orange' },
   };
   const c = toneClasses[tone];
   // valueTone overrides the value color when given (PnL sign flip).
@@ -674,13 +684,13 @@ export default function WalletPage() {
                   icon={BarChart3}
                   label="Total Volume"
                   value={`$${formatCompact(tracked?.total_volume || 0)}`}
-                  tone="blue"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={Activity}
                   label="Total Trades"
                   value={String(tracked?.total_trades || 0)}
-                  tone="purple"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={TrendingUp}
@@ -693,7 +703,7 @@ export default function WalletPage() {
                   icon={Flame}
                   label="Liquidations"
                   value={String(tracked?.total_liquidations || 0)}
-                  tone="orange"
+                  tone="neutral"
                 />
 
                 {/* Row 2 — live state */}
@@ -701,13 +711,13 @@ export default function WalletPage() {
                   icon={DollarSign}
                   label="Live Balance"
                   value={`$${formatNumber(margin.totalBalance, 2)}`}
-                  tone="green"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={Shield}
                   label="Margin Used"
                   value={`$${formatNumber(margin.marginUsed, 2)}`}
-                  tone="yellow"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={margin.unrealizedPnl >= 0 ? TrendingUp : TrendingDown}
@@ -720,7 +730,7 @@ export default function WalletPage() {
                   icon={PiggyBank}
                   label="Available"
                   value={`$${formatNumber(margin.availableBalance, 2)}`}
-                  tone="cyan"
+                  tone="neutral"
                 />
               </div>
             ) : (
@@ -733,13 +743,13 @@ export default function WalletPage() {
                   icon={BarChart3}
                   label="Total Volume"
                   value={`$${formatCompact(tracked?.total_volume || 0)}`}
-                  tone="blue"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={Activity}
                   label="Total Trades"
                   value={String(tracked?.total_trades || 0)}
-                  tone="purple"
+                  tone="neutral"
                 />
                 <StatCard
                   icon={TrendingUp}
@@ -752,7 +762,7 @@ export default function WalletPage() {
                   icon={Flame}
                   label="Liquidations"
                   value={String(tracked?.total_liquidations || 0)}
-                  tone="orange"
+                  tone="neutral"
                 />
               </div>
             )}
