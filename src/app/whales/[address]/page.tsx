@@ -843,6 +843,7 @@ export default function WalletPage() {
                           type="button"
                           onClick={() =>
                             setChartPosition({
+                              kind: 'live',
                               walletAddress: address,
                               symbol: pos.symbol,
                               side: isLong ? 'long' : 'short',
@@ -962,7 +963,28 @@ export default function WalletPage() {
                   ) : (
                     // "Recent" tab — always show closed-positions list,
                     // regardless of whether there are open positions.
-                    <ClosedPositionsList address={address} limit={50} />
+                    <ClosedPositionsList
+                      address={address}
+                      limit={50}
+                      onSelect={(p) =>
+                        setChartPosition({
+                          kind: 'closed',
+                          walletAddress: address,
+                          symbol: p.symbol,
+                          side: p.side,
+                          entryPrice: p.openPrice,
+                          closePrice: p.closePrice,
+                          size: p.size,
+                          leverage: p.leverage,
+                          realizedPnl: p.realizedPnl,
+                          fees: p.fees,
+                          funding: p.funding,
+                          openedAt: p.openedAt,
+                          closedAt: p.closedAt,
+                          liquidated: p.liquidated,
+                        })
+                      }
+                    />
                   )}
                 </div>
               </div>
