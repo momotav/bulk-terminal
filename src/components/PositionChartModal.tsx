@@ -25,20 +25,46 @@ import { annotateFills, formatDuration } from '@/lib/positionWalk';
 // and renders OHLC + price lines natively, so the integration is small.
 // ---------------------------------------------------------------------------
 
-export interface PositionForChart {
-  /** The wallet that holds this position. Required so the chart modal
-   *  can fetch the wallet's fill history for this market and render fill
-   *  markers on the candle chart. */
+// Live position — open in the wallet right now. Includes mark price and
+// liquidation price (only meaningful for currently-open positions).
+export interface LivePositionForChart {
+  kind: 'live';
   walletAddress: string;
-  symbol: string;          // e.g. "BTC-USD"
-  side: 'long' | 'short';  // derived from sign of size
+  symbol: string;
+  side: 'long' | 'short';
   entryPrice: number;
   markPrice: number;
   liquidationPrice: number;
-  size: number;            // absolute size (display)
+  size: number;
   leverage: number;
   unrealizedPnl: number;
 }
+
+// Closed position — finished trade pulled from the wallet's
+// closed-position history. No mark or liq (those are live concepts);
+// instead we have a closePrice and timestamps bounding the trade.
+export interface ClosedPositionForChart {
+  kind: 'closed';
+  walletAddress: string;
+  symbol: string;
+  side: 'long' | 'short';
+  entryPrice: number;     // avgOpenPrice
+  closePrice: number;     // avgClosePrice
+  size: number;
+  leverage: number;       // 0 if BULK didn't include it for closed positions
+  realizedPnl: number;
+  fees: number;
+  funding: number;
+  openedAt: number;       // ms epoch — start of trade
+  closedAt: number;       // ms epoch — end of trade
+  liquidated: boolean;
+}
+
+// What the modal renders. Discriminated by `kind` so the chart effect
+// branches on live-vs-closed behavior cleanly. Older code using
+// `PositionForChart` directly continues to work since the type is the
+// union — pages just have to set `kind` when constructing the value.
+export type PositionForChart = LivePositionForChart | ClosedPositionForChart;
 
 interface Props {
   position: PositionForChart | null; // null = closed
@@ -84,7 +110,29 @@ export function PositionChartModal({ position, onClose }: Props) {
   // hover tooltip with action label, count, size, etc.
   const markerInfoRef = useRef<Map<number, MarkerInfo>>(new Map());
 
-  const [interval, setInterval] = useState(DEFAULT_INTERVAL);
+  // Auto-pick a sensible default interval. For live we always start at
+  // 1H. For closed positions we pick based on trade duration so a
+  // 30-minute scalp doesn't render as one candle on a 1D chart, and a
+  // multi-day swing doesn't render as 5000 5m candles.
+  const initialInterval = (() => {
+    if (!position || position.kind === 'live') return DEFAULT_INTERVAL;
+    const durMs = position.closedAt - position.openedAt;
+    const hours = durMs / (60 * 60_000);
+    if (hours < 1) return '5m';
+    if (hours < 6) return '15m';
+    if (hours < 48) return '1h';
+    if (hours < 240) return '4h';   // ~10 days
+    return '1d';
+  })();
+
+  const [interval, setInterval] = useState(initialInterval);
+
+  // Reset interval when the active position changes — otherwise switching
+  // from a 5-minute scalp to a 5-day swing would keep the wrong interval.
+  useEffect(() => {
+    setInterval(initialInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,14 +168,32 @@ export function PositionChartModal({ position, onClose }: Props) {
   }, [position]);
 
   // Fetch candles whenever the active position or interval changes.
+  // For live positions we fetch the most recent N candles. For closed
+  // positions we fetch a window centered on the trade's lifespan so the
+  // chart always shows the relevant period (otherwise a trade that
+  // closed days ago would render off-screen).
   useEffect(() => {
     if (!position) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
 
+    // Time window for closed-position candles. We pad the trade's
+    // lifespan by 25% on each side so users see context (price action
+    // before entry, price action after exit). For very short trades we
+    // floor the padding at 30 min so the chart isn't pixel-narrow.
+    let timeWindow: { startTime?: number; endTime?: number } = {};
+    if (position.kind === 'closed') {
+      const dur = Math.max(position.closedAt - position.openedAt, 30 * 60_000);
+      const pad = Math.max(dur * 0.25, 15 * 60_000);
+      timeWindow = {
+        startTime: position.openedAt - pad,
+        endTime: position.closedAt + pad,
+      };
+    }
+
     analytics
-      .getCandles(position.symbol, interval, CANDLE_LIMIT)
+      .getCandles(position.symbol, interval, CANDLE_LIMIT, timeWindow)
       .then((res) => {
         if (cancelled) return;
         setCandles(res.candles);
@@ -173,28 +239,40 @@ export function PositionChartModal({ position, onClose }: Props) {
   }, [position]);
 
   // Filter the wallet's full fill history down to just the fills that
-  // contributed to the *currently-open* position. Older fills come from
-  // positions that have since been closed and have no place on this chart.
+  // belong to the position the user is looking at.
   //
-  // Logic: walk fills chronologically with annotateFills, find the most
-  // recent action='open' or 'flip', and slice from there. Falls back to
-  // the full list if no opener is found (position is older than BULK's
-  // fill window — better to show something than nothing).
+  // - Live position: walk fills chronologically; find the most recent
+  //   open / flip transition and slice from there. (Older fills come
+  //   from positions that have since been closed.)
+  // - Closed position: take fills within the trade's lifespan window
+  //   [openedAt, closedAt] inclusive, with a 1s slop on each end to
+  //   catch fills that landed exactly at the boundary.
   //
-  // This is shared by the header fill count and the chart marker effect
-  // so they stay in sync — same source of truth.
+  // Both paths share the same shape — fills are annotated with action
+  // labels so the hover tooltip can say "Open long" rather than just
+  // "Buy". Memoized because it feeds both the header fill count and
+  // the chart marker effect — same source of truth.
   const currentPositionFills = useMemo(() => {
-    if (!fills || fills.length === 0) return [];
+    if (!fills || fills.length === 0 || !position) return [];
     const annotated = annotateFills(fills);
+
+    if (position.kind === 'closed') {
+      const SLOP = 1000;
+      return annotated.filter(
+        (f) =>
+          f.timestamp >= position.openedAt - SLOP &&
+          f.timestamp <= position.closedAt + SLOP
+      );
+    }
+
     for (let i = annotated.length - 1; i >= 0; i--) {
       const a = annotated[i].action;
       if (a === 'open' || a === 'flip') {
         return annotated.slice(i);
       }
     }
-    // No opener in the visible window — return all fills as a fallback.
     return annotated;
-  }, [fills]);
+  }, [fills, position]);
 
   // Build / rebuild the chart whenever candles arrive. We tear down and
   // recreate on every change rather than mutating in place — the data
@@ -286,7 +364,9 @@ export function PositionChartModal({ position, onClose }: Props) {
     }));
     series.setData(data);
 
-    // Three horizontal price lines: entry, mark, liquidation.
+    // Horizontal price lines. Different sets per kind:
+    //   - live  → Entry (solid, side-colored), Mark (dashed grey), Liq (dashed red)
+    //   - closed → Entry (solid, side-colored), Close (solid grey), no Liq
     series.createPriceLine({
       price: position.entryPrice,
       color: position.side === 'long' ? '#00B481' : '#EF4A3C',
@@ -296,23 +376,42 @@ export function PositionChartModal({ position, onClose }: Props) {
       title: 'Entry',
     });
 
-    series.createPriceLine({
-      price: position.markPrice,
-      color: markLineColor,
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: 'Mark',
-    });
-
-    if (position.liquidationPrice > 0) {
+    if (position.kind === 'live') {
       series.createPriceLine({
-        price: position.liquidationPrice,
-        color: '#EF4A3C',
-        lineWidth: 2,
+        price: position.markPrice,
+        color: markLineColor,
+        lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: 'Liq',
+        title: 'Mark',
+      });
+
+      if (position.liquidationPrice > 0) {
+        series.createPriceLine({
+          price: position.liquidationPrice,
+          color: '#EF4A3C',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'Liq',
+        });
+      }
+    } else {
+      // Closed position: draw the close price as the second reference
+      // line. Color it by win/loss so users see "did this trade work"
+      // at a glance (green=profit, red=loss) without reading numbers.
+      // Solid line because, unlike Mark, this is a fixed historical
+      // value — not a moving target.
+      const wasProfitable =
+        (position.side === 'long' && position.closePrice > position.entryPrice) ||
+        (position.side === 'short' && position.closePrice < position.entryPrice);
+      series.createPriceLine({
+        price: position.closePrice,
+        color: wasProfitable ? '#00B481' : '#EF4A3C',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: 'Close',
       });
     }
 
@@ -553,11 +652,15 @@ export function PositionChartModal({ position, onClose }: Props) {
 
   if (!position) return null;
 
-  // Pre-compute distance-to-liq as a percentage so the streamer / viewer
-  // can see "this position is 4% from getting wrecked."
-  const distanceToLiqPct = position.liquidationPrice > 0 && position.markPrice > 0
-    ? Math.abs((position.markPrice - position.liquidationPrice) / position.markPrice) * 100
-    : null;
+  // Pre-compute distance-to-liq for live positions (only meaningful while
+  // the position is open). Closed positions use their realized PnL story
+  // for the same horizontal screen real estate.
+  const distanceToLiqPct =
+    position.kind === 'live' &&
+    position.liquidationPrice > 0 &&
+    position.markPrice > 0
+      ? Math.abs((position.markPrice - position.liquidationPrice) / position.markPrice) * 100
+      : null;
 
   return (
     <div
@@ -595,7 +698,23 @@ export function PositionChartModal({ position, onClose }: Props) {
             </span>
             <h2 className="text-lg font-semibold">{position.symbol}</h2>
             <span className="text-sm text-[var(--text-tertiary)]">
-              {position.leverage}× · {formatNumber(position.size, 4)} units
+              {position.leverage > 0 && `${position.leverage}× · `}
+              {formatNumber(position.size, 4)} units
+              {position.kind === 'closed' && (
+                <>
+                  {' · '}
+                  <span className={position.liquidated ? 'text-bulk-orange' : ''}>
+                    {position.liquidated ? 'LIQUIDATED' : 'CLOSED'}
+                  </span>
+                  {' '}
+                  {new Date(position.closedAt).toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </>
+              )}
             </span>
           </div>
           <button
@@ -607,30 +726,67 @@ export function PositionChartModal({ position, onClose }: Props) {
           </button>
         </div>
 
-        {/* Stat strip — the four numbers a streamer cares about most */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
-          <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
-          <Stat label="Mark" value={`$${formatNumber(position.markPrice, 2)}`} />
-          <Stat
-            label="Liquidation"
-            value={
-              position.liquidationPrice > 0
-                ? `$${formatNumber(position.liquidationPrice, 2)}`
-                : '—'
-            }
-            valueClass="text-bulk-red"
-            sublabel={
-              distanceToLiqPct !== null
-                ? `${distanceToLiqPct.toFixed(2)}% away`
-                : undefined
-            }
-          />
-          <Stat
-            label="Unrealized PnL"
-            value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
-            valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
-          />
-        </div>
+        {/* Stat strip — different stats per kind:
+            - live: Entry, Mark, Liquidation, Unrealized PnL
+            - closed: Entry, Close, Held duration, Realized PnL */}
+        {position.kind === 'live' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+            <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
+            <Stat label="Mark" value={`$${formatNumber(position.markPrice, 2)}`} />
+            <Stat
+              label="Liquidation"
+              value={
+                position.liquidationPrice > 0
+                  ? `$${formatNumber(position.liquidationPrice, 2)}`
+                  : '—'
+              }
+              valueClass="text-bulk-red"
+              sublabel={
+                distanceToLiqPct !== null
+                  ? `${distanceToLiqPct.toFixed(2)}% away`
+                  : undefined
+              }
+            />
+            <Stat
+              label="Unrealized PnL"
+              value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
+              valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+            <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
+            <Stat
+              label="Close"
+              value={`$${formatNumber(position.closePrice, 2)}`}
+              valueClass={
+                (position.side === 'long'
+                  ? position.closePrice > position.entryPrice
+                  : position.closePrice < position.entryPrice)
+                  ? 'text-bulk-green'
+                  : 'text-bulk-red'
+              }
+            />
+            <Stat
+              label="Held"
+              value={formatDuration(position.closedAt - position.openedAt)}
+              sublabel={
+                position.fees > 0 || position.funding !== 0
+                  ? `Fees $${formatNumber(position.fees, 2)}${
+                      position.funding !== 0
+                        ? ` · Funding ${position.funding >= 0 ? '+' : ''}$${formatNumber(position.funding, 2)}`
+                        : ''
+                    }`
+                  : undefined
+              }
+            />
+            <Stat
+              label="Realized PnL"
+              value={`${position.realizedPnl >= 0 ? '+' : ''}$${formatNumber(position.realizedPnl, 2)}`}
+              valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
+          </div>
+        )}
 
         {/* Interval selector */}
         <div className="flex items-center gap-1 p-3 border-b border-[var(--border-color)]/40">
