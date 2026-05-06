@@ -187,6 +187,10 @@ export interface ClosedPosition {
   leverage: number;
   notional?: number;
   liquidated: boolean;
+  /** BULK's close reason string, e.g. "trade", "liquidation", "adl".
+   *  Empty when not provided. Useful for distinguishing forced exits
+   *  with finer granularity than the boolean `liquidated`. */
+  closeReason?: string;
 }
 
 // One executed trade fill from BULK's `fills` API. We render these as
