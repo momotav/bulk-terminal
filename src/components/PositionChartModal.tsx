@@ -365,15 +365,19 @@ export function PositionChartModal({ position, onClose }: Props) {
             ? '#00B481'
             : '#EF4A3C';
 
-          // Label: single letter for normal fills, action tag for forced
-          // exits. "×N" appended only when more than one fill bucketed.
-          const baseLabel = isLiqOrAdl
-            ? g.reason === 'liq' ? 'LIQ' : 'ADL'
-            : g.isBuy ? 'B' : 'S';
-          const text =
-            g.fills.length > 1
-              ? `${baseLabel} ×${g.fills.length}`
-              : baseLabel;
+          // Label strategy: text on the chart is expensive — every label
+          // crowds out chart real estate, and with 500 fills compressed
+          // into 30 minutes the labels become unreadable noise.
+          //
+          // Solution: pure circles for normal buy/sell fills. The tooltip
+          // (subscribeCrosshairMove below) provides full context on hover.
+          // Only liquidations and ADLs get an on-chart label because
+          // those are rare, important events worth flagging visually.
+          const text = isLiqOrAdl
+            ? g.reason === 'liq'
+              ? g.fills.length > 1 ? `LIQ ×${g.fills.length}` : 'LIQ'
+              : g.fills.length > 1 ? `ADL ×${g.fills.length}` : 'ADL'
+            : undefined;
 
           // Compute aggregated metadata for the tooltip. VWAP across the
           // group's fills, total size, and the action of the *first*
@@ -402,6 +406,10 @@ export function PositionChartModal({ position, onClose }: Props) {
             position: g.isBuy ? 'belowBar' : 'aboveBar',
             color,
             shape: 'circle' as const,
+            // Bigger circles for liq/adl so they pop visually even
+            // without scanning labels. lightweight-charts default size
+            // is 1; 2 is noticeably larger but still in scale.
+            size: isLiqOrAdl ? 2 : 1,
             text,
           } as SeriesMarker<Time>;
         })
