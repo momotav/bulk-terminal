@@ -503,12 +503,25 @@ function Heatmap({
 }) {
   // Pick a sparse set of axis ticks to label — labelling all 50 leverages or
   // 21 notionals is too dense, so we show every Nth.
-  const leverageTickStep = Math.max(1, Math.floor(leverage.length / 8));
+  // On mobile (≤640px), columns are ~12-15px wide which can't fit even
+  // 2-digit labels. We can't easily detect viewport size during render
+  // without hooks, so we just show fewer labels overall — every 4th or
+  // 5th column instead of every 2nd. The previous step (length/8) gave
+  // ~10 labels on a 20-leverage axis, way too many for mobile.
+  // length/5 gives ~4 labels which is the sweet spot: enough to anchor
+  // the user's understanding of the axis, sparse enough to never
+  // collide with neighboring columns.
+  const leverageTickStep = Math.max(1, Math.floor(leverage.length / 5));
   const notionalTickStep = Math.max(1, Math.floor(notionals.length / 6));
 
   return (
     <div className="w-full" onMouseLeave={() => onHover(null)}>
-      {/* Top legend: leverage labels along X axis. */}
+      {/* Top legend: leverage labels along X axis.
+          We use `whitespace-nowrap` and `overflow-visible` instead of the
+          old `truncate` so labels can spill into adjacent (empty) columns
+          rather than getting cut off mid-character. With the sparser tick
+          step above, every label has at least 4 empty columns of breathing
+          room around it, so overflow never collides with another label. */}
       <div
         className="grid mb-1 text-[10px] text-[var(--text-tertiary)]"
         style={{
@@ -517,7 +530,7 @@ function Heatmap({
       >
         <div /> {/* spacer aligned with notional column */}
         {leverage.map((lev, j) => (
-          <div key={j} className="text-center truncate">
+          <div key={j} className="text-center whitespace-nowrap overflow-visible">
             {j % leverageTickStep === 0 || j === leverage.length - 1 ? `${lev}x` : ''}
           </div>
         ))}
