@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { Trophy } from 'lucide-react';
 import {
   leaderboard,
+  cn,
   type BulkLeaderboardRankResponse,
   type BulkLeaderboardWindow,
   type BulkLeaderboardMetric,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
 
 interface Props {
   address: string;
