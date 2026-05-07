@@ -378,6 +378,17 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);
   }
+
+  /* Hides the scrollbar entirely while keeping the element scrollable.
+     Used for horizontally-scrollable mobile tab bars where a visible
+     scrollbar would look cluttered. */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE/Edge legacy */
+    scrollbar-width: none;     /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;             /* Chrome / Safari / Webkit */
+  }
   
   /* Global scrollbar styling */
   ::-webkit-scrollbar {
