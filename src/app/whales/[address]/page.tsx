@@ -605,12 +605,18 @@ export default function WalletPage() {
                   </div>
                 </div>
 
-                {/* Right side: account-family dropdown + action buttons.
-                    The hierarchy lives here so it's always one click away
-                    without taking a whole row of vertical space. */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <BulkRankBadge address={address} />
-                  <AccountHierarchy address={address} />
+                {/* Right side: vertically stacked rank + account-family,
+                    then action buttons next to them. Stack puts the rank
+                    visually on top of the hierarchy pill so they read as a
+                    pair (this wallet's standing + its account family),
+                    distinct from the actions (Follow, Claim) further right.
+                    `items-end` keeps the column flush against the right
+                    edge so both pills line up. */}
+                <div className="flex items-start gap-3 flex-wrap">
+                  <div className="flex flex-col items-end gap-2">
+                    <BulkRankBadge address={address} />
+                    <AccountHierarchy address={address} />
+                  </div>
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
                   {canClaimWallet && (
                     <button
