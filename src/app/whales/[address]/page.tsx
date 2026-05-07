@@ -16,6 +16,7 @@ import { useStore } from '@/store';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
+import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 
@@ -608,6 +609,7 @@ export default function WalletPage() {
                     The hierarchy lives here so it's always one click away
                     without taking a whole row of vertical space. */}
                 <div className="flex items-center gap-2 flex-wrap">
+                  <BulkRankBadge address={address} />
                   <AccountHierarchy address={address} />
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
                   {canClaimWallet && (
