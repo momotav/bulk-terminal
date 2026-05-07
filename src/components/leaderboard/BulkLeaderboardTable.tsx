@@ -229,7 +229,14 @@ export function BulkLeaderboardTable({
               {metricOpen && (
                 <div
                   role="listbox"
-                  className="absolute right-0 mt-2 w-48 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-2xl z-50 overflow-hidden"
+                  // Align menu to the LEFT edge of the trigger so it opens
+                  // rightward into available space. Previously used `right-0`
+                  // which on mobile pushed the menu off-screen because the
+                  // trigger sits at the left side of its (wrapped) row.
+                  // sm:right-0 sm:left-auto restores the rightward-anchor on
+                  // wider viewports where the trigger is on the right edge
+                  // and there's room for the menu to extend leftward.
+                  className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-2xl z-50 overflow-hidden"
                 >
                   {METRICS.map((m) => {
                     const isActive = m.id === metric;
