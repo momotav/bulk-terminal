@@ -71,12 +71,19 @@ export default function AnalyticsLayout({
         </div>
       </aside>
 
-      {/* Mobile Tab Bar */}
+      {/* Mobile Tab Bar.
+          Horizontally scrollable so all tab items remain reachable on
+          narrow viewports without wrapping or clipping (previously "Risk"
+          got cut off the right edge). `whitespace-nowrap` + `flex-shrink-0`
+          on items prevents compression; `overflow-x-auto` adds the scroll.
+          The scrollbar is hidden via Tailwind's `scrollbar-hide` utility
+          where available — falls back to a slim default scrollbar on
+          browsers that don't have it. */}
       <div className="md:hidden border-b border-[var(--border-color)] bg-[var(--bg-base)]">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <span className="text-sm font-medium text-[var(--text-primary)]">Analytics</span>
-          <span className="text-[var(--text-tertiary)]">/</span>
-          <nav className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
+          <span className="text-sm font-medium text-[var(--text-primary)] flex-shrink-0">Analytics</span>
+          <span className="text-[var(--text-tertiary)] flex-shrink-0">/</span>
+          <nav className="flex items-center gap-2 flex-shrink-0">
             {menuItems.map((item) => {
               const isActive = pathname === item.href || 
                 (item.href === '/analytics/general' && pathname === '/analytics');
@@ -87,7 +94,7 @@ export default function AnalyticsLayout({
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0
                     ${isActive 
                       ? 'bg-[var(--accent)]/10 text-[var(--accent)]' 
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-muted)]'
