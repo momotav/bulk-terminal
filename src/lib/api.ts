@@ -513,6 +513,25 @@ export const leaderboard = {
       `/api/leaderboard/bulk?${params.toString()}`
     );
   },
+
+  // Look up a wallet's rank on the BULK indexer leaderboard for a given
+  // window+metric. Backend paginates server-side and returns the rank +
+  // the row's metric values, or `found: false` if not in top ~2000.
+  // Cached 60s, so it's safe to call on every wallet page render.
+  async getBulkRank(
+    address: string,
+    opts: {
+      window?: BulkLeaderboardWindow;
+      metric?: BulkLeaderboardMetric;
+    } = {},
+  ): Promise<BulkLeaderboardRankResponse> {
+    const params = new URLSearchParams();
+    params.set('window', opts.window || '24h');
+    params.set('metric', opts.metric || 'cashflow_adjusted_roi');
+    return request<BulkLeaderboardRankResponse>(
+      `/api/leaderboard/bulk/rank/${encodeURIComponent(address)}?${params.toString()}`
+    );
+  },
 };
 
 // Types for the BULK indexer leaderboard. Mirror the proxy endpoint's
@@ -553,6 +572,29 @@ export interface BulkLeaderboardResponse {
   rows: BulkLeaderboardRow[];
   error?: string;
 }
+
+// Discriminated union for the rank-lookup endpoint. `found: true` means
+// the wallet is in the top ~2000 traders for this window+metric and we
+// have its rank; `found: false` means it's not — could be too low to
+// matter, could be a fresh wallet with no closed positions yet, etc.
+export type BulkLeaderboardRankResponse =
+  | {
+      found: true;
+      rank: number;
+      total: number;
+      metric: string;
+      window: string;
+      wallet: string;
+      row: BulkLeaderboardRow;
+    }
+  | {
+      found: false;
+      total: number;
+      metric: string;
+      window: string;
+      wallet: string;
+      scannedPages: number;
+    };
 
 // Analytics API
 export const analytics = {
