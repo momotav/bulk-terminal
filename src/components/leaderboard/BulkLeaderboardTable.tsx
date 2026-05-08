@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import { ChevronDown, Crown, Medal, Trophy } from 'lucide-react';
 import {
@@ -116,14 +116,29 @@ interface BulkLeaderboardTableProps {
   /** Whether to show the metric dropdown. Sometimes we want to lock to a
    *  specific metric (e.g. always-cashflow-ROI on a tournament page). */
   allowMetricChange?: boolean;
+  /** Initial metric. Defaults to cashflow_adjusted_roi. Useful when
+   *  embedding the table for a specific lens (e.g. 'volume' on the whale
+   *  tracker page). When `allowMetricChange` is false, this also acts as
+   *  the locked metric. */
+  defaultMetric?: BulkLeaderboardMetric;
+  /** Initial window. Defaults to '24h'. */
+  defaultWindow?: BulkLeaderboardWindow;
+  /** Override the panel title. Defaults to "Top Traders". */
+  title?: string;
+  /** Override the title icon. Defaults to Trophy. */
+  icon?: ComponentType<{ className?: string }>;
 }
 
 export function BulkLeaderboardTable({
   limit = 50,
   allowMetricChange = true,
+  defaultMetric = 'cashflow_adjusted_roi',
+  defaultWindow = '24h',
+  title = 'Top Traders',
+  icon: Icon = Trophy,
 }: BulkLeaderboardTableProps) {
-  const [window, setWindow] = useState<BulkLeaderboardWindow>('24h');
-  const [metric, setMetric] = useState<BulkLeaderboardMetric>('cashflow_adjusted_roi');
+  const [window, setWindow] = useState<BulkLeaderboardWindow>(defaultWindow);
+  const [metric, setMetric] = useState<BulkLeaderboardMetric>(defaultMetric);
   const [rows, setRows] = useState<BulkLeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -191,8 +206,8 @@ export function BulkLeaderboardTable({
           rankings come from BULK by definition (this is the BULK widget). */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-color)] flex-wrap">
         <div className="flex items-center gap-2">
-          <Trophy className="w-4 h-4 text-bulk-green" />
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Top Traders</h2>
+          <Icon className="w-4 h-4 text-bulk-green" />
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
