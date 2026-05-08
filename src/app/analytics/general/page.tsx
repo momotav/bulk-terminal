@@ -554,6 +554,16 @@ export default function AnalyticsPage() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [topUsersPage, setTopUsersPage] = useState(1);
   const [topUsersSortAsc, setTopUsersSortAsc] = useState(false); // false = high to low (default)
+
+  // Tracks whether the initial fetch (`fetchInitialData` further below) has
+  // completed. Per-chart effects consult this so they only fire on
+  // *user-driven* timeframe changes, not on the initial mount where the
+  // initial fetch already covers everything. Previously per-chart effects
+  // depended on `loading` instead, which caused them to fire a second
+  // time the moment `loading` flipped to false — duplicating every chart
+  // fetch on first page load. Using a ref (vs state) avoids extra
+  // re-renders and the dep-array re-fire problem.
+  const hasInitiallyLoadedRef = useRef(false);
   
   // Per-chart coin selections (independent for each chart).
   // Default is the 3 original coins + "Other" aggregate on. Users can toggle
@@ -731,8 +741,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, volume: false }));
       }
     };
-    if (!loading) fetchVolumeData();
-  }, [volumeHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchVolumeData();
+  }, [volumeHours]);
 
   // Fetch OI data - REAL HISTORICAL from ticker_snapshots (WebSocket collected)
   useEffect(() => {
@@ -748,8 +760,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, oi: false }));
       }
     };
-    if (!loading) fetchOiData();
-  }, [oiHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchOiData();
+  }, [oiHours]);
 
   // Fetch funding data - REAL HISTORICAL from ticker_snapshots (WebSocket collected)
   useEffect(() => {
@@ -765,8 +779,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, funding: false }));
       }
     };
-    if (!loading) fetchFundingData();
-  }, [fundingHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchFundingData();
+  }, [fundingHours]);
 
   // Fetch liquidations data when timeframe changes
   useEffect(() => {
@@ -782,8 +798,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, liquidations: false }));
       }
     };
-    if (!loading) fetchLiquidationsData();
-  }, [liquidationsHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchLiquidationsData();
+  }, [liquidationsHours]);
 
   // Fetch trades data when timeframe changes - from PostgreSQL database
   useEffect(() => {
@@ -799,8 +817,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, trades: false }));
       }
     };
-    if (!loading) fetchTradesData();
-  }, [tradesHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchTradesData();
+  }, [tradesHours]);
 
   // Fetch ADL data when timeframe changes
   useEffect(() => {
@@ -816,8 +836,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, adl: false }));
       }
     };
-    if (!loading) fetchAdlData();
-  }, [adlHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchAdlData();
+  }, [adlHours]);
 
   // Fetch Unique Traders by Coin
   useEffect(() => {
@@ -833,8 +855,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, uniqueTraders: false }));
       }
     };
-    if (!loading) fetchData();
-  }, [uniqueTradersHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchData();
+  }, [uniqueTradersHours]);
 
   // Fetch Daily Active Users
   useEffect(() => {
@@ -850,8 +874,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, dau: false }));
       }
     };
-    if (!loading) fetchData();
-  }, [dauHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchData();
+  }, [dauHours]);
 
   // Fetch Cumulative New Users
   useEffect(() => {
@@ -867,8 +893,10 @@ export default function AnalyticsPage() {
         setChartLoading(prev => ({ ...prev, newUsers: false }));
       }
     };
-    if (!loading) fetchData();
-  }, [newUsersHours, loading]);
+    // Skip on initial mount — fetchInitialData already did this fetch.
+    // Fire only when the user changes the timeframe, marked by the ref.
+    if (hasInitiallyLoadedRef.current) fetchData();
+  }, [newUsersHours]);
 
   // Initial data fetch - REAL DATA ONLY
   useEffect(() => {
@@ -907,6 +935,12 @@ export default function AnalyticsPage() {
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
       } finally {
+        // Mark the initial fetch as complete BEFORE flipping `loading`.
+        // Per-chart effects below check this ref and skip on mount; if
+        // we set the ref after `loading=false` they'd race and one of
+        // them might still see `false` on the same tick the ref reads
+        // its old value. Order: ref first, then state.
+        hasInitiallyLoadedRef.current = true;
         setLoading(false);
       }
     };
