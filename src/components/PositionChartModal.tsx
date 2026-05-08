@@ -110,6 +110,13 @@ export function PositionChartModal({ position, onClose }: Props) {
   // hover tooltip with action label, count, size, etc.
   const markerInfoRef = useRef<Map<number, MarkerInfo>>(new Map());
 
+  // Tracks whether the most recent mousedown on the modal originated on
+  // the backdrop itself (vs. on a child like the chart canvas). Used to
+  // suppress modal-close on clicks that ended up on the backdrop only
+  // because the user dragged a chart axis past the panel boundary. See
+  // the backdrop element below for the full rationale.
+  const mouseDownOnBackdropRef = useRef(false);
+
   // Auto-pick a sensible default interval. For live we always start at
   // 1H. For closed positions we pick based on trade duration so a
   // 30-minute scalp doesn't render as one candle on a 1D chart, and a
@@ -664,14 +671,40 @@ export function PositionChartModal({ position, onClose }: Props) {
 
   return (
     <div
-      // Backdrop. Clicking outside the panel closes the modal.
-      onClick={onClose}
+      // Backdrop close handling.
+      //
+      // Previous version used onClick={onClose} which had a subtle bug:
+      // when a user drags on the chart axis (to zoom) and releases their
+      // mouse outside the chart but still inside the modal, the synthetic
+      // `click` event sometimes bubbles to the backdrop and closes the
+      // modal — destroying their zoom gesture.
+      //
+      // Fix: track where the mousedown started. If it started inside the
+      // panel, suppress the next click on the backdrop. Only fresh
+      // backdrop-originated clicks close the modal. This is the standard
+      // "drag-resistant click" pattern used by Material UI, Radix, etc.
+      onMouseDown={(e) => {
+        // The backdrop is the click target only if the user genuinely
+        // pressed on it (not on a child). e.target === e.currentTarget
+        // means the event originated on the backdrop element itself.
+        mouseDownOnBackdropRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        // Only close when both the mousedown AND the click happened on
+        // the backdrop. Clicks bubbled up from inside the panel are
+        // suppressed (their mousedown was inside the panel).
+        if (mouseDownOnBackdropRef.current && e.target === e.currentTarget) {
+          onClose();
+        }
+        mouseDownOnBackdropRef.current = false;
+      }}
       className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
     >
       <div
-        // Stop propagation so clicks inside the panel don't bubble to the
-        // backdrop close handler.
-        onClick={(e) => e.stopPropagation()}
+        // No more stopPropagation needed — the backdrop's mousedown-tracking
+        // handles drag-out clicks correctly. Keeping it would also work
+        // but isn't necessary; we leave it off so React can properly track
+        // the click target chain.
         className="relative w-full max-w-5xl max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
       >
         {/* Header */}
