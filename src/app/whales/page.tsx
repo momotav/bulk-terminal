@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Anchor, Eye, Star, AlertCircle, Loader2 } from 'lucide-react';
-import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { formatAddress, userApi, formatCompact, type UserSearchResult } from '@/lib/api';
 import { useStore } from '@/store';
@@ -264,7 +263,19 @@ export default function WhalesPage() {
             />
           </div>
           <div className="h-[500px]">
-            <LeaderboardTable type="pnl" limit={15} />
+            {/* Top Traders by PnL — also sourced from BULK indexer for
+                consistency with the Top Whales panel on the left. The
+                old DB-tracked version only saw wallets we'd collected,
+                missing many real top performers. Locked to realized_pnl
+                metric since this panel is purpose-built for "who's making
+                money on the exchange". Window is user-selectable. */}
+            <BulkLeaderboardTable
+              limit={15}
+              defaultMetric="realized_pnl"
+              defaultWindow="24h"
+              allowMetricChange={false}
+              title="Top Traders"
+            />
           </div>
         </div>
       </main>
