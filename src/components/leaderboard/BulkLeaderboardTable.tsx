@@ -324,13 +324,24 @@ export function BulkLeaderboardTable({
                 metric === 'realized_pnl' || metric === 'net_realized_pnl'
                   ? (metricValue ?? 0) >= 0
                   : true;
+              // When the active metric IS volume, we hide the volume
+              // context column to avoid showing the same number twice.
+              // Adjust the grid template so the remaining cells expand
+              // cleanly (3 columns instead of 4).
+              const showVolumeContext = metric !== 'volume';
+              const gridCols = showVolumeContext
+                ? 'grid-cols-[40px_1fr_auto_auto]'
+                : 'grid-cols-[40px_1fr_auto]';
 
               return (
                 <Link
                   key={row.wallet}
                   href={`/whales/${row.wallet}`}
                   prefetch={false}
-                  className="grid grid-cols-[40px_1fr_auto_auto] gap-3 items-center px-4 py-2.5 hover:bg-[var(--bg-secondary-20)] transition-colors group"
+                  className={cn(
+                    'grid gap-3 items-center px-4 py-2.5 hover:bg-[var(--bg-secondary-20)] transition-colors group',
+                    gridCols
+                  )}
                 >
                   {/* Rank */}
                   <div className="flex items-center justify-center">
@@ -347,15 +358,20 @@ export function BulkLeaderboardTable({
                     </p>
                   </div>
 
-                  {/* Volume — context number, smaller */}
-                  <div className="text-right hidden sm:block">
-                    <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
-                      Volume
-                    </p>
-                    <p className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
-                      ${formatCompact(row.volume)}
-                    </p>
-                  </div>
+                  {/* Volume — context number, smaller. Hidden when the
+                      active metric IS volume because it would render the
+                      exact same number+label twice (e.g. "VOLUME $30B ·
+                      VOLUME $30B"), which is just visual noise. */}
+                  {showVolumeContext && (
+                    <div className="text-right hidden sm:block">
+                      <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+                        Volume
+                      </p>
+                      <p className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
+                        ${formatCompact(row.volume)}
+                      </p>
+                    </div>
+                  )}
 
                   {/* The big metric — colored by profit sign for PnL metrics */}
                   <div className="text-right">
