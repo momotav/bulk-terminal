@@ -56,19 +56,28 @@ export default function LeaderboardPage() {
         </div>
 
         {/* Leaderboard.
-            'pnl' is now sourced from BULK's official indexer so the ranks
-            match bulk.trade exactly — critical for tournament viewing where
-            streamers will flick between the two sites. The other three tabs
-            stay on our DB-backed views (liquidations, whales, activity)
-            since BULK's indexer doesn't expose those concepts. */}
+            'pnl' and 'whales' are now sourced from BULK's official indexer
+            so the ranks match bulk.trade exactly — critical for tournament
+            viewing where streamers will flick between the two sites. The
+            other two tabs (liquidations, activity) stay on our DB-backed
+            views since BULK's indexer doesn't expose those concepts. */}
         <div className="h-[600px]">
           {activeTab === 'pnl' ? (
             <BulkLeaderboardTable limit={50} />
+          ) : activeTab === 'whales' ? (
+            <BulkLeaderboardTable
+              limit={50}
+              defaultMetric="volume"
+              defaultWindow="all"
+              allowMetricChange={false}
+              title="Whale Watch"
+              icon={Anchor}
+            />
           ) : (
             <LeaderboardTable
               type={activeTab}
               limit={50}
-              showTimeframe={activeTab !== 'whales'}
+              showTimeframe={true}
             />
           )}
         </div>
