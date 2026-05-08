@@ -1124,25 +1124,25 @@ export default function AnalyticsPage() {
   const volumeDataFiltered = useMemo(() => sliceDataByRange(volumeDataFull, volumeRange), [volumeDataFull, volumeRange, sliceDataByRange]);
 
   // Get total cumulative volume for the stats card at the top of the page.
-  // This MUST match the cumulative line's endpoint regardless of timeframe, so we
-  // compute it from the ALL-time dataset rather than the currently visible window.
+  // We read this from the SAME source the chart's cumulative line uses
+  // (`volumeDataFull`'s last point's `Cumulative` field) so the headline
+  // number and the chart tooltip always agree.
   //
-  // Now sums EVERY coin in each row's `coins` dict (with a legacy-shape fallback
-  // for rows that haven't been adapted yet) so BNB/DOGE/FARTCOIN/SUI/ZEC
-  // contribute to the total just like BTC/ETH/SOL do. Returns null while the
-  // all-time fetch is in flight so the card can render a neutral placeholder
-  // instead of the wrong (window-only) number.
+  // Previously this summed `volumeAllTime` bars directly, which produced a
+  // slightly different number than the chart line — the chart's cumulative
+  // is recomputed by `withContinuousCumulative` (which can stitch in fresh
+  // recent hourly klines on top of the all-time daily baseline), while a
+  // plain bar-sum doesn't. The two agreed within ~$4B but never exactly,
+  // and to a user looking at both they read as "wrong stat."
+  //
+  // Returns null while the dataset is in flight so the card renders a
+  // neutral placeholder instead of a transient zero.
   const totalCumulativeVolume = useMemo((): number | null => {
-    if (volumeAllTime.length === 0) return null;
-    return volumeAllTime.reduce((sum, p) => {
-      const dict = coinsFromRow(p);
-      let rowSum = 0;
-      for (const v of Object.values(dict)) {
-        if (typeof v === 'number' && isFinite(v)) rowSum += v;
-      }
-      return sum + rowSum;
-    }, 0);
-  }, [volumeAllTime, coinsFromRow]);
+    if (volumeDataFull.length === 0) return null;
+    const last = volumeDataFull[volumeDataFull.length - 1] as Record<string, unknown>;
+    const cum = last?.Cumulative;
+    return typeof cum === 'number' && isFinite(cum) ? cum : null;
+  }, [volumeDataFull]);
   
   const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
