@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, Anchor } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
@@ -193,7 +193,18 @@ export default function HomePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="h-[450px]">
-          <LeaderboardTable type="whales" limit={10} showTimeframe={false} />
+          {/* Whale Watch — BULK indexer's volume ranking, all-time. The
+              old DB-backed version only saw wallets we'd collected stats
+              for (often missed real top-volume traders); BULK's indexer
+              is authoritative across every wallet on the exchange. */}
+          <BulkLeaderboardTable
+            limit={10}
+            defaultMetric="volume"
+            defaultWindow="all"
+            allowMetricChange={false}
+            title="Whale Watch"
+            icon={Anchor}
+          />
         </div>
         <div className="h-[450px]">
           <RecentActivity />
