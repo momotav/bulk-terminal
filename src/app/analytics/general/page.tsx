@@ -666,29 +666,37 @@ export default function AnalyticsPage() {
     }
   }, [dauDragging]);
 
-  // Fetch LIVE OI directly from BULK API for stats card
+  // Fetch LIVE OI directly from BULK API for stats card.
+  //
+  // Sums OI across ALL active markets (not just BTC/ETH/SOL like before).
+  // The chart includes BNB/DOGE/FARTCOIN/SUI/ZEC etc as "Other," so the
+  // stat needs to match — otherwise the headline reads ~$1.2B while the
+  // chart tooltip sums to ~$1.5B and looks broken.
+  //
+  // /tickers-bulk returns one ticker per active market in a single call,
+  // which is both more accurate (sees every symbol) and cheaper than
+  // fanning out per-symbol fetches like the old code did.
   useEffect(() => {
     const fetchLiveOI = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
-        const [btcRes, ethRes, solRes] = await Promise.all([
-          fetch(`${API_URL}/api/analytics/ticker/BTC-USD`),
-          fetch(`${API_URL}/api/analytics/ticker/ETH-USD`),
-          fetch(`${API_URL}/api/analytics/ticker/SOL-USD`),
-        ]);
-        
-        const [btc, eth, sol] = await Promise.all([
-          btcRes.ok ? btcRes.json() : null,
-          ethRes.ok ? ethRes.json() : null,
-          solRes.ok ? solRes.json() : null,
-        ]);
-        
-        // OI is in coins, multiply by mark price to get USD
-        const btcOI = (parseFloat(btc?.openInterest || 0)) * (parseFloat(btc?.markPrice || 0));
-        const ethOI = (parseFloat(eth?.openInterest || 0)) * (parseFloat(eth?.markPrice || 0));
-        const solOI = (parseFloat(sol?.openInterest || 0)) * (parseFloat(sol?.markPrice || 0));
-        
-        setLiveOI(btcOI + ethOI + solOI);
+        const res = await fetch(`${API_URL}/api/analytics/tickers-bulk`);
+        if (!res.ok) return;
+        const body = await res.json();
+        const tickers: any[] = Array.isArray(body?.tickers) ? body.tickers : [];
+
+        // OI is denominated in coins; multiply by mark price for USD.
+        // Some tickers may lack one or both fields during market init —
+        // those contribute 0 instead of NaN poisoning the sum.
+        let totalOI = 0;
+        for (const t of tickers) {
+          const oi = parseFloat(t?.openInterest ?? 0);
+          const mark = parseFloat(t?.markPrice ?? 0);
+          if (Number.isFinite(oi) && Number.isFinite(mark)) {
+            totalOI += oi * mark;
+          }
+        }
+        setLiveOI(totalOI);
       } catch (error) {
         console.error('Failed to fetch live OI:', error);
       }
