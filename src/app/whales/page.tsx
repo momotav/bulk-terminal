@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Anchor, Eye, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { formatAddress, userApi, formatCompact, type UserSearchResult } from '@/lib/api';
 import { useStore } from '@/store';
 import { usePrivy } from '@privy-io/react-auth';
@@ -245,10 +246,22 @@ export default function WhalesPage() {
           </div>
         )}
 
-        {/* Top Whales */}
+        {/* Top Whales — sourced from BULK indexer's volume ranking
+            (was previously the DB-tracked leaderboard, which only saw
+            wallets we'd already collected stats for and missed many real
+            top-volume traders). The BULK indexer is authoritative across
+            all addresses on the exchange. Locked to `volume` metric since
+            this panel's whole point is "biggest whales by trade volume". */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="h-[500px]">
-            <LeaderboardTable type="whales" limit={15} showTimeframe={false} />
+            <BulkLeaderboardTable
+              limit={15}
+              defaultMetric="volume"
+              defaultWindow="all"
+              allowMetricChange={false}
+              title="Top Whales"
+              icon={Anchor}
+            />
           </div>
           <div className="h-[500px]">
             <LeaderboardTable type="pnl" limit={15} />
