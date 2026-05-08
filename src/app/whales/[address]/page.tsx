@@ -9,7 +9,7 @@ import {
   AlertCircle, Clock, Loader2, UserCheck,
   BarChart3, Flame, Shield, PiggyBank, DollarSign
 } from 'lucide-react';
-import { wallet, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, userApi } from '@/lib/api';
+import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, userApi } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { useStore } from '@/store';
@@ -197,6 +197,20 @@ export default function WalletPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Per-wallet stats sourced from BULK's official indexer. This replaces the
+  // DB-tracked aggregates (tracked.total_volume / total_trades / total_pnl)
+  // which only counted activity since BulkStats started collecting and were
+  // expensive to maintain (the trades table grew to >4 GB on disk just to
+  // compute these aggregates). BULK's indexer publishes the real numbers
+  // for every wallet on the exchange — much more accurate, and lets us
+  // stop persisting raw trades for aggregate purposes entirely.
+  //
+  // null while loading. `found: false` means the wallet isn't in BULK's
+  // top ranks (typically because it's never closed a position) — we fall
+  // back to the DB tracked numbers in that case so brand-new wallets
+  // still see something.
+  const [bulkStats, setBulkStats] = useState<BulkLeaderboardRankResponse | null>(null);
+
   // Position currently being inspected in the price-chart modal. null means
   // closed. Set when the user clicks any position card.
   const [chartPosition, setChartPosition] = useState<PositionForChart | null>(null);
@@ -302,6 +316,38 @@ export default function WalletPage() {
     // user action.
     const tick = window.setInterval(() => fetchData(true), 10_000);
     return () => window.clearInterval(tick);
+  }, [address]);
+
+  // Fetch this wallet's stats from BULK's official indexer. We use the
+  // 'all' window with `volume` metric because we want lifetime numbers
+  // (the rank-by-volume window has the highest population so the wallet
+  // is most likely to be present). The response includes volume,
+  // closed_count, realized_pnl, win_rate — everything we need for the
+  // header stat cards.
+  //
+  // Cached server-side for 60s, so this is essentially free to call. The
+  // 30s polling matches the wallet's data-refresh cadence so stats stay
+  // fresh without hammering the indexer.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchBulkStats = async () => {
+      try {
+        const res = await leaderboard.getBulkRank(address, {
+          window: 'all',
+          metric: 'volume',
+        });
+        if (!cancelled) setBulkStats(res);
+      } catch (err) {
+        // Indexer down or wallet not ranked — fall back to DB stats below
+        if (!cancelled) setBulkStats(null);
+      }
+    };
+    fetchBulkStats();
+    const tick = window.setInterval(fetchBulkStats, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(tick);
+    };
   }, [address]);
 
   // Fetch fills for each open position and compute when it was opened.
@@ -477,6 +523,19 @@ export default function WalletPage() {
   const hasLiveData = margin !== null && margin !== undefined;
   const hasTrackedData = tracked !== null && tracked !== undefined;
 
+  // Stats sourced from BULK indexer with DB fallback. BULK's lifetime
+  // numbers are authoritative — they cover every trade on the exchange,
+  // not just trades we happened to capture. DB fallback exists for
+  // wallets the indexer doesn't know about (brand-new traders) and the
+  // brief moment before BULK stats load on page mount.
+  const bulkRow = bulkStats?.found ? bulkStats.row : null;
+  const bulkVolume = bulkRow?.volume ?? tracked?.total_volume ?? 0;
+  const bulkClosedCount = bulkRow?.closed_count ?? tracked?.total_trades ?? 0;
+  // BULK's realized_pnl is closed-position PnL only (matches what bulk.trade
+  // shows). The card label stays "Total PnL" since "realized" is jargon —
+  // most users read PnL as "what the trader has made."
+  const bulkRealizedPnL = bulkRow?.realized_pnl ?? tracked?.total_pnl ?? 0;
+
   // Display name priority: Twitter name > display name > null
   const displayName = profile?.twitter_name || profile?.display_name || null;
   const twitterHandle = profile?.twitter_handle;
@@ -597,7 +656,7 @@ export default function WalletPage() {
                       </a>
                     </div>
                     <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-                      {tracked?.total_trades || 0} trades · ${formatCompact(tracked?.total_volume || 0)} volume
+                      {bulkClosedCount} closed · ${formatCompact(bulkVolume)} volume
                       {!hasLiveData && hasTrackedData && (
                         <span className="text-yellow-400 ml-1.5">· No active positions</span>
                       )}
@@ -687,25 +746,32 @@ export default function WalletPage() {
               // color for icon/label but flip the value color based on sign
               // — green when positive, red when negative.
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                {/* Row 1 — lifetime context */}
+                {/* Row 1 — lifetime context, sourced from BULK indexer.
+                    "Closed Positions" replaces the older "Total Trades"
+                    label since BULK exposes closed-position count rather
+                    than raw fill count — closed_count is also a more
+                    meaningful metric (a position that opened and closed
+                    is a meaningful unit of trader activity; fills are
+                    an implementation detail of how the position was
+                    sliced into orders). */}
                 <StatCard
                   icon={BarChart3}
                   label="Total Volume"
-                  value={`$${formatCompact(tracked?.total_volume || 0)}`}
+                  value={`$${formatCompact(bulkVolume)}`}
                   tone="neutral"
                 />
                 <StatCard
                   icon={Activity}
-                  label="Total Trades"
-                  value={String(tracked?.total_trades || 0)}
+                  label="Closed Positions"
+                  value={String(bulkClosedCount)}
                   tone="neutral"
                 />
                 <StatCard
                   icon={TrendingUp}
                   label="Total PnL"
-                  value={`${totalPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(totalPnL))}`}
+                  value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
                   tone="green"
-                  valueTone={totalPnL >= 0 ? 'green' : 'red'}
+                  valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
                 />
                 <StatCard
                   icon={Flame}
@@ -750,21 +816,21 @@ export default function WalletPage() {
                 <StatCard
                   icon={BarChart3}
                   label="Total Volume"
-                  value={`$${formatCompact(tracked?.total_volume || 0)}`}
+                  value={`$${formatCompact(bulkVolume)}`}
                   tone="neutral"
                 />
                 <StatCard
                   icon={Activity}
-                  label="Total Trades"
-                  value={String(tracked?.total_trades || 0)}
+                  label="Closed Positions"
+                  value={String(bulkClosedCount)}
                   tone="neutral"
                 />
                 <StatCard
                   icon={TrendingUp}
                   label="Total PnL"
-                  value={`${totalPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(totalPnL))}`}
+                  value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
                   tone="green"
-                  valueTone={totalPnL >= 0 ? 'green' : 'red'}
+                  valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
                 />
                 <StatCard
                   icon={Flame}
