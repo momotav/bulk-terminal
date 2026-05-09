@@ -27,16 +27,6 @@ const XIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-interface Trade {
-  id: number;
-  symbol: string;
-  side: string;
-  size: number;
-  price: number;
-  value: number;
-  timestamp: string;
-}
-
 interface WalletProfile {
   wallet_address: string;
   twitter_handle?: string;
@@ -189,7 +179,6 @@ export default function WalletPage() {
   const { wallets: solanaWallets } = useSolanaWallets();
   
   const [data, setData] = useState<WalletData | null>(null);
-  const [trades, setTrades] = useState<Trade[]>([]);
   const [profile, setProfile] = useState<WalletProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
@@ -283,14 +272,21 @@ export default function WalletPage() {
       }
 
       try {
-        const [walletResult, tradesResult, profileResult] = await Promise.all([
+        // Two parallel fetches:
+        //  - wallet.getWallet:        live BULK account + tracked DB row
+        //  - userApi.getWalletProfile: claimed username if any
+        //
+        // We used to also call wallet.getTrades(50) here for a "recent
+        // trades" panel that was never rendered (the wallet page now
+        // shows BULK fills via ClosedPositionsList instead). Removed —
+        // it was a pure wasted round-trip on every page load and every
+        // 10s background refresh, slowing the page perceptibly.
+        const [walletResult, profileResult] = await Promise.all([
           wallet.getWallet(address),
-          wallet.getTrades(address, 50).catch(() => ({ data: [] })),
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
         ]);
 
         setData(walletResult);
-        setTrades(tradesResult.data || []);
         setProfile((profileResult as any)?.profile || null);
 
         // Only track on first load — no need to re-track every 10s.
