@@ -1026,16 +1026,40 @@ export default function AnalyticsPage() {
       return withCumulativeForCoins(visible, enabled);
     }
 
-    // Historical baseline = sum of (bucketed) enabled-coin values across allTime
-    // points strictly before the visible window's first timestamp.
-    const firstVisibleTs = new Date(visible[0].timestamp).getTime();
+    // Historical baseline = sum of allTime points whose UTC day is STRICTLY
+    // BEFORE the UTC day of the visible window's first timestamp.
+    //
+    // This prevents double-counting on the 1D view: 1D's visible window
+    // starts mid-day (24h ago, e.g. May 8 10:00). The allTime dataset is
+    // daily, so May 8's row covers ALL of May 8 (00:00-23:59). If we
+    // included May 8's daily total in baseline AND showed the May 8
+    // 10:00-23:59 hours as visible bars, the May 8 afternoon volume
+    // would be counted twice. The 1D cumulative would then exceed the
+    // W/M/Q/Y/ALL cumulative for the same instant-in-time, making the
+    // two views disagree.
+    //
+    // By comparing UTC days (not raw timestamps), we exclude any allTime
+    // row whose day overlaps with any visible bar.
+    const firstVisibleDate = new Date(visible[0].timestamp);
+    const firstVisibleDayUTC = Date.UTC(
+      firstVisibleDate.getUTCFullYear(),
+      firstVisibleDate.getUTCMonth(),
+      firstVisibleDate.getUTCDate()
+    );
     const enabledSet = new Set(enabled);
     const showOther = enabledSet.has(OTHER_KEY);
 
     let baseline = 0;
     for (const point of allTime) {
-      const ts = new Date(point.timestamp).getTime();
-      if (ts >= firstVisibleTs) break; // allTime is already sorted ascending
+      const pointDate = new Date(point.timestamp);
+      const pointDayUTC = Date.UTC(
+        pointDate.getUTCFullYear(),
+        pointDate.getUTCMonth(),
+        pointDate.getUTCDate()
+      );
+      // Strictly-before-day comparison. allTime is sorted ascending, so
+      // we can break early once we hit the first overlapping day.
+      if (pointDayUTC >= firstVisibleDayUTC) break;
       const dict = coinsFromRow(point);
       for (const [coin, v] of Object.entries(dict)) {
         if (typeof v !== 'number' || !isFinite(v)) continue;
