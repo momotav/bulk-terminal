@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry, type ChartData } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  Bar, ComposedChart, Line, LineChart, ReferenceLine, Area, AreaChart
+  Bar, ComposedChart, Line, LineChart, ReferenceLine, Area, AreaChart, Cell
 } from 'recharts';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
@@ -1096,6 +1096,29 @@ export default function AnalyticsPage() {
     return Math.max(1, Math.floor(dataLength / targetLabels));
   };
 
+  // Detect whether a given chart row represents "today, still in progress"
+  // — i.e. a daily bucket that hasn't accumulated a full 24h of data yet.
+  //
+  // On multi-day timeframes (W/M/Q/Y/ALL) the bars are daily aggregates.
+  // Today's bucket has only had ~N hours of trading instead of a full 24,
+  // so its bar is naturally shorter than every other bar. Without any
+  // visual treatment this looks like a data anomaly ("why is today's bar
+  // so small?"). We fade today's bar to half opacity so users immediately
+  // understand "this one is partial."
+  //
+  // On 1D view (hours <= 24) the bars are hourly and every bar represents
+  // a complete hour by definition, so we skip the fade entirely.
+  const isIncompleteDay = useCallback((timestamp: string | undefined, hours: number): boolean => {
+    if (!timestamp || hours <= 24) return false;
+    const d = new Date(timestamp);
+    const now = new Date();
+    return (
+      d.getUTCFullYear() === now.getUTCFullYear() &&
+      d.getUTCMonth() === now.getUTCMonth() &&
+      d.getUTCDate() === now.getUTCDate()
+    );
+  }, []);
+
   // Note: the legacy `CoinToggle` was removed here. All per-chart coin
   // toggling is handled by the shared `<CoinSelector>` component
   // (src/components/CoinSelector.tsx), which supports BTC/ETH/SOL as default
@@ -1251,7 +1274,10 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<ChartTooltip />} />
-                          {/* One stacked Bar per enabled coin — dynamic so new coins Just Work. */}
+                          {/* One stacked Bar per enabled coin — dynamic so new coins Just Work.
+                              Each Bar renders a Cell per data point so we can fade today's
+                              bar (incomplete day) on multi-day timeframes. See isIncompleteDay
+                              comment above for the full rationale. */}
                           {orderedSeriesFor(volumeCoins).map((coin, i, arr) => (
                             <Bar
                               key={coin}
@@ -1263,7 +1289,15 @@ export default function AnalyticsPage() {
                               animationDuration={600}
                               animationEasing="ease-out"
                               radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
-                            />
+                            >
+                              {volumeDataFiltered.map((entry, idx) => (
+                                <Cell
+                                  key={`cell-${idx}`}
+                                  fill={getCoinColor(coin)}
+                                  fillOpacity={isIncompleteDay(entry.timestamp, volumeHours) ? 0.45 : 1}
+                                />
+                              ))}
+                            </Bar>
                           ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
@@ -1490,7 +1524,15 @@ export default function AnalyticsPage() {
                               animationDuration={600}
                               animationEasing="ease-out"
                               radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
-                            />
+                            >
+                              {liquidationsDataFiltered.map((entry, idx) => (
+                                <Cell
+                                  key={`cell-${idx}`}
+                                  fill={getCoinColor(coin)}
+                                  fillOpacity={isIncompleteDay(entry.timestamp, liquidationsHours) ? 0.45 : 1}
+                                />
+                              ))}
+                            </Bar>
                           ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
@@ -1567,7 +1609,15 @@ export default function AnalyticsPage() {
                               animationDuration={600}
                               animationEasing="ease-out"
                               radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
-                            />
+                            >
+                              {tradesDataFiltered.map((entry, idx) => (
+                                <Cell
+                                  key={`cell-${idx}`}
+                                  fill={getCoinColor(coin)}
+                                  fillOpacity={isIncompleteDay(entry.timestamp, tradesHours) ? 0.45 : 1}
+                                />
+                              ))}
+                            </Bar>
                           ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
@@ -1630,7 +1680,15 @@ export default function AnalyticsPage() {
                               animationDuration={600}
                               animationEasing="ease-out"
                               radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
-                            />
+                            >
+                              {adlDataFiltered.map((entry, idx) => (
+                                <Cell
+                                  key={`cell-${idx}`}
+                                  fill={getCoinColor(coin)}
+                                  fillOpacity={isIncompleteDay(entry.timestamp, adlHours) ? 0.45 : 1}
+                                />
+                              ))}
+                            </Bar>
                           ))}
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
@@ -1705,7 +1763,15 @@ export default function AnalyticsPage() {
                               animationEasing="ease-out"
                               maxBarSize={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 3 ? 150 : 80}
                               radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined}
-                            />
+                            >
+                              {sliceDataByRange(uniqueTradersData, uniqueTradersRange).map((entry, idx) => (
+                                <Cell
+                                  key={`cell-${idx}`}
+                                  fill={getCoinColor(coin)}
+                                  fillOpacity={isIncompleteDay(entry.timestamp, uniqueTradersHours) ? 0.45 : 1}
+                                />
+                              ))}
+                            </Bar>
                           ))}
                           <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
@@ -1754,7 +1820,15 @@ export default function AnalyticsPage() {
                           <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]} />
+                          <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]}>
+                            {sliceDataByRange(newUsersData, newUsersRange).map((entry: any, idx: number) => (
+                              <Cell
+                                key={`cell-${idx}`}
+                                fill={COLORS.BTC}
+                                fillOpacity={isIncompleteDay(entry.timestamp, newUsersHours) ? 0.45 : 1}
+                              />
+                            ))}
+                          </Bar>
                           <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1801,7 +1875,15 @@ export default function AnalyticsPage() {
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, dauHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
                           <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
                           <Tooltip content={<UserStatsTooltip />} />
-                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]}>
+                            {sliceDataByRange(dauData, dauRange).map((entry: any, idx: number) => (
+                              <Cell
+                                key={`cell-${idx}`}
+                                fill={COLORS.BTC}
+                                fillOpacity={isIncompleteDay(entry.timestamp, dauHours) ? 0.45 : 1}
+                              />
+                            ))}
+                          </Bar>
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
