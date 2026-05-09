@@ -86,18 +86,23 @@ export function BulkRankBadge({
   const rank = data.rank;
   const total = data.total;
 
-  // Format total as compact for readability ("1.2K" not "1247").
-  const totalFmt =
-    total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total);
-
-  // Color tier by rank — top 10 gold, top 100 silver, top 1000 neutral.
-  // Subtle differentiation that rewards top performers visually.
+  // Color tier by rank — top 10 gold, top 100 green, top 1000 muted-green,
+  // everything else neutral. Subtle differentiation that rewards top
+  // performers visually without making rank #25000 feel like a failure.
   const tier =
     rank <= 10
       ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'
       : rank <= 100
       ? 'text-bulk-green bg-bulk-green/10 border-bulk-green/30'
+      : rank <= 1000
+      ? 'text-bulk-green/70 bg-bulk-green/5 border-bulk-green/20'
       : 'text-[var(--text-secondary)] bg-[var(--bg-secondary-20)] border-[var(--border-color)]';
+
+  // "of N traders" text only shown when we have a real total (the
+  // legacy paginated endpoint provided this; the new direct-lookup
+  // endpoint doesn't, so we show just the rank number in that case).
+  const totalFmt =
+    total > 0 ? (total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total)) : null;
 
   return (
     <Link
@@ -106,12 +111,16 @@ export function BulkRankBadge({
         'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:opacity-80',
         tier
       )}
-      title={`Rank #${rank} of ${total} traders by ${METRIC_LABELS[metric]} (${WINDOW_LABELS[window]}). Click to view leaderboard.`}
+      title={
+        totalFmt
+          ? `Rank #${rank} of ${total} traders by ${METRIC_LABELS[metric]} (${WINDOW_LABELS[window]}). Click to view leaderboard.`
+          : `Rank #${rank} by ${METRIC_LABELS[metric]} (${WINDOW_LABELS[window]}). Click to view leaderboard.`
+      }
     >
       <Trophy className="w-3.5 h-3.5" />
       <span className="tabular-nums font-semibold">#{rank}</span>
       <span className="text-[var(--text-tertiary)] font-normal">
-        of {totalFmt} · {METRIC_LABELS[metric]}
+        {totalFmt ? `of ${totalFmt} · ` : ''}{METRIC_LABELS[metric]}
       </span>
     </Link>
   );
