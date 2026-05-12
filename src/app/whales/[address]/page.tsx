@@ -10,6 +10,7 @@ import {
   BarChart3, Flame, Shield, PiggyBank, DollarSign
 } from 'lucide-react';
 import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, userApi } from '@/lib/api';
+import { isSystemWallet } from '@/lib/systemWallets';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { useStore } from '@/store';
@@ -669,7 +670,23 @@ export default function WalletPage() {
                     edge so both pills line up. */}
                 <div className="flex items-start gap-3 flex-wrap">
                   <div className="flex flex-col items-end gap-2">
-                    <BulkRankBadge address={address} />
+                    {/* System wallets get a distinct badge in place of
+                        the rank badge. They're BULK's operational
+                        accounts (liquidation engine, insurance fund,
+                        market-maker bots) — showing a rank for them
+                        would be misleading since they're not real
+                        traders competing on the leaderboard. */}
+                    {isSystemWallet(address) ? (
+                      <div
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-purple-500/10 border-purple-500/30 text-purple-400"
+                        title="This wallet is operated by the BULK exchange protocol (liquidation engine, insurance fund, or market-maker). It is not a regular trader and is hidden from leaderboards."
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                        <span className="font-semibold">Bulk System Account</span>
+                      </div>
+                    ) : (
+                      <BulkRankBadge address={address} />
+                    )}
                     <AccountHierarchy address={address} />
                   </div>
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
