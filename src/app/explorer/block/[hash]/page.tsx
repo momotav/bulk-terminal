@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Header } from '@/components/Header';
 import {
   ArrowLeft, Hash, Clock, Activity, Zap, Loader2, AlertCircle,
-  Copy, Check, ExternalLink, Shield,
+  Copy, Check, Shield,
 } from 'lucide-react';
 import { explorer, type ExplorerBlockDetail, formatAddress } from '@/lib/api';
 import { getActionLabel, isKnownAction } from '@/lib/explorerActions';
@@ -99,45 +98,37 @@ export default function BlockDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)]">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-[var(--text-tertiary)] mb-3" />
-          <p className="text-sm text-[var(--text-tertiary)]">Loading block…</p>
-        </main>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-[var(--text-tertiary)] mb-3" />
+        <p className="text-sm text-[var(--text-tertiary)]">Loading block…</p>
+      </main>
     );
   }
 
   if (error || !block) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)]">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link
-            href="/explorer"
-            className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Explorer
-          </Link>
-          <div className="border border-red-500/30 bg-red-500/10 text-red-400 rounded-lg p-6 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Block not found</p>
-              <p className="text-sm mt-1 opacity-75">{error || `No block with hash ${shortHash(hash)}`}</p>
-            </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Link
+          href="/explorer"
+          className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Explorer
+        </Link>
+        <div className="border border-red-500/30 bg-red-500/10 text-red-400 rounded-lg p-6 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Block not found</p>
+            <p className="text-sm mt-1 opacity-75">{error || `No block with hash ${shortHash(hash)}`}</p>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     );
   }
 
   const ts = formatTimestamp(block.timestampNs);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
-      <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <Link
           href="/explorer"
           className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -275,6 +266,5 @@ export default function BlockDetailPage() {
           )}
         </div>
       </main>
-    </div>
   );
 }
