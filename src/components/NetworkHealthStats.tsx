@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Zap, Hash, Wifi, WifiOff } from 'lucide-react';
+import { Activity, Zap, Hash } from 'lucide-react';
 
 // Mirror of the backend's `getThroughput()` response shape. Kept inline
 // rather than imported from a shared types module since this is the
@@ -81,8 +81,8 @@ export function NetworkHealthStats() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[...Array(3)].map((_, i) => (
           <div
             key={i}
             className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 animate-pulse"
@@ -95,35 +95,8 @@ export function NetworkHealthStats() {
     );
   }
 
-  // Status badge: live (green pulse), stale (yellow), disconnected (red).
-  // Shown inline on the rightmost tile so we don't burn a whole tile on
-  // just connection state, but users can see at a glance whether the
-  // stream is healthy.
-  const status = data?.status ?? 'disconnected';
-  const statusConfig = {
-    live: {
-      label: 'Live',
-      icon: Wifi,
-      color: 'text-bulk-green',
-      pulse: 'animate-pulse',
-    },
-    stale: {
-      label: 'Stale',
-      icon: Wifi,
-      color: 'text-yellow-400',
-      pulse: '',
-    },
-    disconnected: {
-      label: 'Offline',
-      icon: WifiOff,
-      color: 'text-red-400',
-      pulse: '',
-    },
-  }[status];
-  const StatusIcon = statusConfig.icon;
-
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {/* TPS — transactions per second from the explorer block stream */}
       <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
@@ -171,26 +144,6 @@ export function NetworkHealthStats() {
         </p>
         <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
           {formatBlockTime(data?.blockTimeMs ?? null)} block time
-        </p>
-      </div>
-
-      {/* Network status indicator. Doubles as the "explorer stream is
-          alive" signal — if it shows disconnected, the other three
-          tiles' numbers should be treated as stale. */}
-      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <StatusIcon
-            className={`w-4 h-4 ${statusConfig.color} ${statusConfig.pulse}`}
-          />
-          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">
-            Network
-          </span>
-        </div>
-        <p className={`text-2xl font-bold ${statusConfig.color}`}>
-          {statusConfig.label}
-        </p>
-        <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-          {data?.sampleCount ?? 0} blocks tracked
         </p>
       </div>
     </div>
