@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Header } from '@/components/Header';
 import { Hash, Activity, Zap, ChevronRight, Loader2 } from 'lucide-react';
 import { explorer, type ExplorerBlock } from '@/lib/api';
 
@@ -69,9 +68,7 @@ export default function ExplorerPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
-      <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
@@ -175,6 +172,5 @@ export default function ExplorerPage() {
           </div>
         </div>
       </main>
-    </div>
   );
 }
