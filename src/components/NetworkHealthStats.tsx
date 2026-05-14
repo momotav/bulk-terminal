@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Activity, Zap, Hash } from 'lucide-react';
+import { AnimatedNumber } from './AnimatedNumber';
 
 // Mirror of the backend's `getThroughput()` response shape. Kept inline
 // rather than imported from a shared types module since this is the
@@ -106,7 +107,7 @@ export function NetworkHealthStats() {
           </span>
         </div>
         <p className="text-2xl font-bold text-bulk-green tabular-nums">
-          {formatRate(data?.tps ?? 0)}
+          <AnimatedNumber value={data?.tps ?? 0} format={formatRate} />
         </p>
         <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
           {data?.windowSeconds ?? 60}s avg
@@ -124,7 +125,7 @@ export function NetworkHealthStats() {
           </span>
         </div>
         <p className="text-2xl font-bold text-yellow-400 tabular-nums">
-          {formatRate(data?.aps ?? 0)}
+          <AnimatedNumber value={data?.aps ?? 0} format={formatRate} />
         </p>
         <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
           actions / sec
@@ -140,7 +141,10 @@ export function NetworkHealthStats() {
           </span>
         </div>
         <p className="text-2xl font-bold text-blue-400 tabular-nums">
-          {formatRound(data?.latestRound ?? null)}
+          <AnimatedNumber
+            value={data?.latestRound ?? null}
+            format={(n) => Math.round(n).toLocaleString()}
+          />
         </p>
         <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
           {formatBlockTime(data?.blockTimeMs ?? null)} block time
