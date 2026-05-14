@@ -15,6 +15,7 @@ const navItems = [
   { href: '/leaderboard', label: 'Leaderboard' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/whales', label: 'Whale Tracker' },
+  { href: '/explorer', label: 'Explorer' },
 ];
 
 export function Header() {
