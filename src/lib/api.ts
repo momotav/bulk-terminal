@@ -1012,6 +1012,64 @@ export const analytics = {
   },
 };
 
+// Explorer API — read-only views into BULK's chain via the explorer
+// node. See backend/src/routes/explorer.ts for shape details.
+
+export interface ExplorerBlock {
+  round: number;
+  txCount: number;
+  actionCount: number;
+  timestampNs: number;
+  blockhash: string;
+  previousRoundHash?: string | null;
+  txHashes?: string[];
+  txHashXor?: string;
+  nextRound?: number;
+  receivedAt?: number;
+}
+
+export interface ExplorerBlockDetail extends ExplorerBlock {
+  type: 'block';
+  missingBodies: number;
+  transactions: Array<{
+    hash: string;
+    nonce: number;
+    account: string;
+    signer: string;
+    actionCount: number;
+    actions: string[];
+  }>;
+}
+
+export interface ExplorerTxDetail {
+  type: 'tx';
+  hash: string;
+  round: number;
+  indexInBlock: number;
+  timestampNs: number;
+  blockhash: string;
+  previousRoundHash?: string | null;
+  nextRound?: number;
+  missingBody: boolean;
+  nonce: number;
+  account: string;
+  signer: string;
+  actionCount: number;
+  actions: string[];
+}
+
+export const explorer = {
+  async getRecentBlocks(limit: number = 50): Promise<{ blocks: ExplorerBlock[]; limit: number }> {
+    return request(`/api/explorer/blocks?limit=${limit}`);
+  },
+  async getBlock(blockhash: string): Promise<ExplorerBlockDetail> {
+    return request(`/api/explorer/block/${blockhash}`);
+  },
+  async getTransaction(txhash: string): Promise<ExplorerTxDetail> {
+    return request(`/api/explorer/tx/${txhash}`);
+  },
+};
+
 // Wallet API
 export const wallet = {
   async getWallet(address: string): Promise<WalletData> {
