@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2, Anchor } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
+import { NetworkHealthStats } from '@/components/NetworkHealthStats';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { RecentActivity } from '@/components/RecentActivity';
@@ -174,8 +175,15 @@ export default function HomePage() {
         </div>
       </form>
 
-      {/* Exchange Health Stats */}
+      {/* Exchange Health Stats — trading economics: 24h volume, OI,
+          active traders, liquidations. Sourced from BULK trading API. */}
       <ExchangeHealthStats />
+
+      {/* Network Health Stats — chain throughput: TPS, APS, latest
+          round, connection status. Sourced from BULK's explorer node
+          via a persistent WS connection on our backend. Updates every
+          ~3s; numbers feel alive because BULK is fast. */}
+      <NetworkHealthStats />
 
       {/* Leaderboards Grid.
           The Top Traders panel uses BULK's official indexer (matches
