@@ -18,6 +18,7 @@ import {
   bucketWithOther,
   adaptLegacyRow,
 } from '@/lib/coins';
+import { withNetwork } from '@/lib/network';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -680,7 +681,7 @@ export default function AnalyticsPage() {
     const fetchLiveOI = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
-        const res = await fetch(`${API_URL}/api/analytics/tickers-bulk`);
+        const res = await fetch(`${API_URL}${withNetwork("/api/analytics/tickers-bulk")}`);
         if (!res.ok) return;
         const body = await res.json();
         const tickers: any[] = Array.isArray(body?.tickers) ? body.tickers : [];
