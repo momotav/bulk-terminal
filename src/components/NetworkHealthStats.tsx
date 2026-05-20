@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, Zap, Hash } from 'lucide-react';
 import { AnimatedNumber } from './AnimatedNumber';
+import { withNetwork } from '@/lib/network';
 
 // Mirror of the backend's `getThroughput()` response shape. Kept inline
 // rather than imported from a shared types module since this is the
@@ -58,7 +59,7 @@ export function NetworkHealthStats() {
 
     const fetchThroughput = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/explorer/throughput`);
+        const res = await fetch(`${API_URL}${withNetwork("/api/explorer/throughput")}`);
         if (!res.ok) return;
         const json = (await res.json()) as ThroughputData;
         if (!cancelled) {
