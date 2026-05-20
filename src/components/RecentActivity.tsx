@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Flame, TrendingUp, TrendingDown, Zap } from 'lucide-react';
 import { formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
+import { withNetwork } from '@/lib/network';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
@@ -25,7 +26,7 @@ export function RecentActivity() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/analytics/recent-activity?limit=40`);
+        const response = await fetch(`${API_BASE}${withNetwork("/api/analytics/recent-activity?limit=40")}`);
         if (!response.ok) throw new Error('Failed to fetch');
         const data = await response.json();
         
