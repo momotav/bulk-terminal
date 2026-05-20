@@ -3,9 +3,9 @@
 // Network switcher dropdown for the page header.
 //
 // Renders as a compact pill showing the current network with a chevron;
-// clicking opens a small menu with Mainnet / Staging. Selecting a
-// network updates localStorage + URL and triggers a page-wide
-// re-render via the `bulkstats:network-changed` event.
+// clicking opens a small menu with Paper Trading Testnet / Devnet.
+// Selecting a network updates localStorage + URL and triggers a
+// page-wide re-render via the `bulkstats:network-changed` event.
 //
 // Visual style: matches the dark/light toggle and user menu nearby,
 // so this fits the header rhythm rather than dominating it.
@@ -15,12 +15,13 @@ import { ChevronDown, Globe } from 'lucide-react';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { NETWORK_LABELS, type NetworkId } from '@/lib/network';
 
-// Visual treatment per network. Mainnet stays neutral so it doesn't
-// scream; staging gets an amber accent because users SHOULD notice
+// Visual treatment per network. Testnet (the default everyone uses)
+// stays neutral so it doesn't scream; devnet gets an amber accent
+// because users SHOULD notice they're not on the public testnet.
 // they're not on the production network.
 const TONE: Record<NetworkId, { dot: string; text: string }> = {
-  mainnet: { dot: 'bg-bulk-green', text: 'text-[var(--text-primary)]' },
-  staging: { dot: 'bg-amber-400', text: 'text-amber-400' },
+  testnet: { dot: 'bg-bulk-green', text: 'text-[var(--text-primary)]' },
+  devnet: { dot: 'bg-amber-400', text: 'text-amber-400' },
 };
 
 export function NetworkSwitcher() {
@@ -90,7 +91,7 @@ export function NetworkSwitcher() {
             );
           })}
           <div className="px-3 py-2 border-t border-[var(--border-color)] text-[10px] text-[var(--text-tertiary)] leading-relaxed">
-            Staging shows live data from BULK's staging network.
+            Devnet shows live data from BULK's internal dev network.
             Historical data on charts/leaderboards may not be available.
           </div>
         </div>
