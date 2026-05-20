@@ -1,5 +1,7 @@
 // API client for BULK Terminal Backend
 
+import { withNetwork } from './network';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
 // Types
@@ -390,7 +392,12 @@ export async function request<T>(
     }
   }
   
-  const res = await fetch(`${API_URL}${endpoint}`, {
+  // Append `?net=staging` (or current network) so the backend can
+  // route this request's BULK upstream calls to the right network.
+  // Mainnet (default) gets no query param to keep URLs clean.
+  const url = `${API_URL}${withNetwork(endpoint)}`;
+
+  const res = await fetch(url, {
     ...options,
     headers,
   });
