@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, Users, Flame, RefreshCw } from 'lucide-react';
+import { withNetwork } from '@/lib/network';
 
 interface ExchangeStats {
   volume24h: number;
@@ -21,7 +22,7 @@ export function ExchangeHealthStats() {
   const fetchStats = async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/api/analytics/exchange-stats`);
+      const response = await fetch(`${API_URL}${withNetwork("/api/analytics/exchange-stats")}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch stats');
