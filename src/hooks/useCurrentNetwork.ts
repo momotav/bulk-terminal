@@ -4,7 +4,7 @@
 // active BULK network. Returns the current value and a setter.
 //
 // Use in components that should re-render when the user switches
-// networks — e.g. the dropdown badge, the staging banner, anything
+// networks — e.g. the dropdown badge, the devnet banner, anything
 // that displays network-dependent state.
 //
 // For pure API calls (lib/api.ts), use `getCurrentNetwork()` from
@@ -25,8 +25,8 @@ export function useCurrentNetwork(): {
 } {
   // SSR-safe initial value. The real value is hydrated on mount via
   // the effect below — we can't read localStorage during SSR. This
-  // means the very first paint shows mainnet even if the user's
-  // saved choice is staging; the switch happens within ~1 frame.
+  // means the very first paint shows testnet even if the user's
+  // saved choice is devnet; the switch happens within ~1 frame.
   const [network, setNetworkState] = useState<NetworkId>(DEFAULT_NETWORK);
 
   useEffect(() => {
