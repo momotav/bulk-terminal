@@ -392,7 +392,7 @@ export async function request<T>(
     }
   }
   
-  // Append `?net=staging` (or current network) so the backend can
+  // Append `?net=devnet` (or current network) so the backend can
   // route this request's BULK upstream calls to the right network.
   // Mainnet (default) gets no query param to keep URLs clean.
   const url = `${API_URL}${withNetwork(endpoint)}`;
