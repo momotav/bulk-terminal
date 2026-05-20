@@ -1,8 +1,11 @@
 // Frontend network state.
 //
-// Tracks which BULK network the user is currently viewing (mainnet
-// or staging). The choice is persisted in localStorage and overridable
-// via URL query param `?net=staging` for shareable deep links.
+// Tracks which BULK network the user is currently viewing — the
+// Paper Trading Testnet (the public testnet where the trading comp
+// runs, the default) or Devnet (the dev's internal environment for
+// testing new features). The choice is persisted in localStorage and
+// overridable via URL query param `?net=devnet` for shareable deep
+// links.
 //
 // Every API call from the frontend appends `?net=<current>` so the
 // backend can route to the right BULK upstream. This keeps the
@@ -15,7 +18,7 @@
 //      and tabs
 //   2. URL `?net=` query — takes precedence over localStorage on a
 //      given page load (lets you share a link to "see this page on
-//      staging" without changing the recipient's default)
+//      devnet" without changing the recipient's default)
 //   3. window event 'bulkstats:network-changed' — fired when the user
 //      picks a new network from the switcher. Components subscribe
 //      to re-render or refetch when network changes.
@@ -25,24 +28,24 @@
 // (which doesn't have access to hooks). React components use the
 // `useCurrentNetwork()` hook in `hooks/useCurrentNetwork.ts`.
 
-export type NetworkId = 'mainnet' | 'staging';
+export type NetworkId = 'testnet' | 'devnet';
 
-export const DEFAULT_NETWORK: NetworkId = 'mainnet';
+export const DEFAULT_NETWORK: NetworkId = 'testnet';
 
 const LS_KEY = 'bulkstats:network';
 const CHANGE_EVENT = 'bulkstats:network-changed';
 
 export const NETWORK_LABELS: Record<NetworkId, string> = {
-  mainnet: 'Mainnet',
-  staging: 'Staging',
+  testnet: 'Paper Trading Testnet',
+  devnet: 'Devnet',
 };
 
 function isValidNetwork(s: unknown): s is NetworkId {
-  return s === 'mainnet' || s === 'staging';
+  return s === 'testnet' || s === 'devnet';
 }
 
 // Returns the active network. Checks URL param first, then
-// localStorage, then defaults to mainnet. Safe to call during SSR
+// localStorage, then defaults to testnet. Safe to call during SSR
 // (returns default when window is unavailable).
 export function getCurrentNetwork(): NetworkId {
   if (typeof window === 'undefined') return DEFAULT_NETWORK;
@@ -116,13 +119,13 @@ export function onNetworkChange(handler: (net: NetworkId) => void): () => void {
 }
 
 // Returns the query-string fragment for the active network, ready to
-// append to a URL. Returns empty string when on mainnet to keep URLs
+// append to a URL. Returns empty string when on testnet to keep URLs
 // clean (default doesn't need to be explicit in the URL).
 //
 // Example:
 //   fetch(`/api/analytics/foo${netQueryString()}`)
-//   → "/api/analytics/foo?net=staging" on staging
-//   → "/api/analytics/foo" on mainnet
+//   → "/api/analytics/foo?net=devnet" on devnet
+//   → "/api/analytics/foo" on testnet
 export function netQueryString(separator: '?' | '&' = '?'): string {
   const net = getCurrentNetwork();
   if (net === DEFAULT_NETWORK) return '';
