@@ -4,7 +4,7 @@ import localFont from 'next/font/local';
 import './globals.css';
 import { PrivyProvider } from '@/components/PrivyProvider';
 import { Header } from '@/components/Header';
-import { StagingBanner } from '@/components/StagingBanner';
+import { DevnetBanner } from '@/components/DevnetBanner';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -63,7 +63,7 @@ export default function RootLayout({
         <PrivyProvider>
           <div className="min-h-screen flex flex-col">
             <Header />
-            <StagingBanner />
+            <DevnetBanner />
             <main className="flex-1">
               {children}
             </main>
