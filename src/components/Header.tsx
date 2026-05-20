@@ -9,6 +9,7 @@ import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
 import { ThemeToggle } from './ThemeToggle';
+import { NetworkSwitcher } from './NetworkSwitcher';
 
 const navItems = [
   { href: '/', label: 'Dashboard' },
@@ -243,6 +244,11 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Network Switcher - hidden on mobile to save space */}
+            <div className="hidden sm:block">
+              <NetworkSwitcher />
+            </div>
+
             {/* Theme Toggle - hidden on mobile */}
             <div className="hidden sm:block">
               <ThemeToggle />
