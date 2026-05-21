@@ -5,33 +5,133 @@ import { Activity, TrendingUp, TrendingDown, Flame } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, cn, type ClosedPosition } from '@/lib/api';
 import { formatDuration } from '@/lib/positionWalk';
 
-// Build the hover-tooltip text for a closed position's PnL number.
-// Shows the gross → net breakdown so users see how fees and funding
-// contributed to the headline result. Plain text (native title attr),
-// using a vertical-bar separator that renders consistently across
-// browsers and screen readers.
+// Styled hover popover for the closed-position PnL breakdown. Anchored
+// to the headline number, shown on mouse enter / hidden on leave with
+// no delay. Uses absolute positioning so it doesn't push other content
+// around. `pointer-events-none` lets clicks pass through to the parent
+// row, so clicking the number still opens the position chart modal.
 //
-// Example output:
-//   Gross +$1,234.56
-//   Fees -$192.19
-//   Funding +$0.00
-//   ─────────
-//   Net +$1,042.37
-//
-// Numbers formatted with 2 decimals (not compacted) since users hovering
-// for a breakdown want precision, not abbreviation.
-function buildPnlBreakdownTooltip(p: ClosedPosition): string {
+// Desktop only — hover doesn't exist on touch and the row tap already
+// navigates to the chart. Users on mobile see the net headline number
+// directly; the breakdown is a power-user affordance.
+function PnlBreakdownPopover({
+  position,
+  isWin,
+}: {
+  position: ClosedPosition;
+  isWin: boolean;
+}) {
   const fmt = (n: number): string => {
     const sign = n >= 0 ? '+' : '-';
     return `${sign}$${formatNumber(Math.abs(n), 2)}`;
   };
-  return [
-    `Gross ${fmt(p.grossPnl)}`,
-    `Fees ${fmt(p.fees)}`,
-    `Funding ${fmt(p.funding)}`,
-    '─────────',
-    `Net ${fmt(p.realizedPnl)}`,
-  ].join('\n');
+  // Each row: (label, value, optional value-tone). Tone null means
+  // tertiary text color. Color the Net line to match the win/loss
+  // headline so the eye links the two numbers visually.
+  const rows: { label: string; value: string; tone: 'win' | 'loss' | null }[] = [
+    { label: 'Gross', value: fmt(position.grossPnl), tone: position.grossPnl >= 0 ? 'win' : 'loss' },
+    { label: 'Fees', value: fmt(position.fees), tone: position.fees >= 0 ? 'win' : 'loss' },
+    { label: 'Funding', value: fmt(position.funding), tone: position.funding >= 0 ? 'win' : 'loss' },
+  ];
+  return (
+    <div
+      role="tooltip"
+      className={cn(
+        // Position: just below the PnL number, right-aligned so it never
+        // overflows the panel right edge.
+        'absolute right-0 top-full mt-1.5 z-20',
+        // Card: matches the wallet page panel design vocabulary —
+        // muted bg, border token, soft shadow for elevation.
+        'rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)]',
+        'shadow-lg shadow-black/30',
+        // Sizing — tight, content-driven width.
+        'min-w-[180px] px-3 py-2.5',
+        // No interaction: hover capture stays on parent; clicks pass through.
+        'pointer-events-none',
+      )}
+    >
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-center justify-between gap-4 text-xs leading-relaxed"
+        >
+          <span className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+            {row.label}
+          </span>
+          <span
+            className={cn(
+              'font-mono tabular-nums',
+              row.tone === 'win' && 'text-bulk-green',
+              row.tone === 'loss' && 'text-bulk-red',
+              !row.tone && 'text-[var(--text-secondary)]',
+            )}
+          >
+            {row.value}
+          </span>
+        </div>
+      ))}
+      {/* Separator + Net total. Border-top draws the divider; the Net
+          row reuses the same flex layout for alignment. */}
+      <div className="mt-2 pt-2 border-t border-[var(--border-color)]">
+        <div className="flex items-center justify-between gap-4 text-xs">
+          <span className="text-[var(--text-secondary)] uppercase tracking-wider text-[10px] font-semibold">
+            Net
+          </span>
+          <span
+            className={cn(
+              'font-mono tabular-nums font-bold',
+              isWin ? 'text-bulk-green' : 'text-bulk-red',
+            )}
+          >
+            {fmt(position.realizedPnl)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Wrapper around the PnL number + % that shows the breakdown popover on
+// hover. Split out from the row component so the hover state can live in
+// its own subtree without re-rendering the whole row on every mouse
+// move. `relative` anchors the popover; the popover itself is
+// pointer-events-none so clicks still hit the row's button wrapper
+// underneath.
+function PnlNumberWithBreakdown({
+  p,
+  isWin,
+  pnlPercent,
+}: {
+  p: ClosedPosition;
+  isWin: boolean;
+  pnlPercent: number;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <p
+        className={cn(
+          'font-bold text-base tabular-nums leading-tight cursor-help',
+          isWin ? 'text-bulk-green' : 'text-bulk-red',
+        )}
+      >
+        {isWin ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
+      </p>
+      <p
+        className={cn(
+          'text-[10px] tabular-nums',
+          isWin ? 'text-bulk-green/80' : 'text-bulk-red/80',
+        )}
+      >
+        {isWin ? '+' : ''}{pnlPercent.toFixed(2)}%
+      </p>
+      {hovered && <PnlBreakdownPopover position={p} isWin={isWin} />}
+    </div>
+  );
 }
 
 // ----------------------------------------------------------------------------
@@ -210,29 +310,14 @@ function ClosedPositionRow({
           )}
         </div>
         <div className="text-right flex-shrink-0">
-          {/* Build the breakdown tooltip. The headline number is net
-              (gross + fees + funding); the tooltip shows the components
-              so users can see how fees / funding contributed without
-              having to do the math themselves. Title attr is plain HTML
-              and works across browsers without a popover library — we
-              can swap to a styled popover later if the team wants. */}
-          <p
-            className={cn(
-              'font-bold text-base tabular-nums leading-tight cursor-help',
-              isWin ? 'text-bulk-green' : 'text-bulk-red'
-            )}
-            title={buildPnlBreakdownTooltip(p)}
-          >
-            {isWin ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
-          </p>
-          <p
-            className={cn(
-              'text-[10px] tabular-nums',
-              isWin ? 'text-bulk-green/80' : 'text-bulk-red/80'
-            )}
-          >
-            {isWin ? '+' : ''}{pnlPercent.toFixed(2)}%
-          </p>
+          {/* PnL number with hover popover showing the gross → net
+              breakdown. The wrapping div is `relative` so the popover
+              anchors here; clicks still propagate to the parent button
+              that opens the chart modal (popover is pointer-events-none).
+              We treat the wrapper as an inline group via onMouseEnter /
+              onMouseLeave so the popover stays visible while the cursor
+              is anywhere within the right-side number block. */}
+          <PnlNumberWithBreakdown p={p} isWin={isWin} pnlPercent={pnlPercent} />
         </div>
       </div>
 
