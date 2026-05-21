@@ -1077,6 +1077,35 @@ export const explorer = {
   },
 };
 
+// Risk event from BULK's POST /account type:"riskHistory" (v1.0.15).
+// Backend normalizes the raw BULK payload — timestamp arrives as ms,
+// side is the position side (derived from isBuy on the BULK fill).
+export interface RiskEvent {
+  eventType: 'liquidation' | 'adl';
+  symbol: string;
+  side: 'long' | 'short';
+  size: number;
+  price: number;
+  value: number;                          // size * price (USD notional at the fill)
+  marginPrior: number;
+  marginAfter: number;
+  marginDelta: number;                    // marginAfter - marginPrior (negative on loss)
+  /** Human-readable reason, e.g. "liquidation due to equity X < maintenance margin: Y". */
+  reason: string;
+  /** True for isolated-margin per-instrument events; false for cross-margin (base). */
+  iso: boolean;
+  timestamp: number;                      // ms
+  slot: number;                           // Solana slot
+  sequence: number;                       // per-block sequence number
+}
+
+export interface RiskEventsResponse {
+  events: RiskEvent[];
+  source: 'bulk';                         // explicit so callers can adapt UI later
+  /** True when BULK's 5000-event ring is full and history likely extends further back. */
+  truncated: boolean;
+}
+
 // Wallet API
 export const wallet = {
   async getWallet(address: string): Promise<WalletData> {
@@ -1087,8 +1116,15 @@ export const wallet = {
     return request(`/api/wallet/${address}/trades?limit=${limit}`);
   },
 
-  async getLiquidations(address: string, limit: number = 50): Promise<{ data: Array<{ id: number; symbol: string; side: string; size: number; price: number; value: number; timestamp: string }> }> {
-    return request(`/api/wallet/${address}/liquidations?limit=${limit}`);
+  // BULK riskHistory — liquidations + ADL events. Source is BULK exclusively
+  // as of v1.0.15 migration; the older DB-backed return shape ({data: [...]})
+  // is gone. Optional type filter narrows to one event kind.
+  async getLiquidations(
+    address: string,
+    opts: { limit?: number; type?: 'liquidation' | 'adl' | 'all' } = {}
+  ): Promise<RiskEventsResponse> {
+    const { limit = 50, type = 'all' } = opts;
+    return request(`/api/wallet/${address}/liquidations?limit=${limit}&type=${type}`);
   },
 
   async trackWallet(address: string): Promise<{ success: boolean }> {
