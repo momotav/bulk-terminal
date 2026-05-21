@@ -7,7 +7,8 @@ import {
   ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
   TrendingUp, TrendingDown, Wallet, Activity,
   AlertCircle, Clock, Loader2, UserCheck,
-  BarChart3, Flame, Shield, PiggyBank, DollarSign
+  BarChart3, Flame, Shield, PiggyBank, DollarSign,
+  Receipt, Repeat
 } from 'lucide-react';
 import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
@@ -637,6 +638,21 @@ export default function WalletPage() {
   const bulkGrossPnL = bulkRow?.realized_pnl;
   const bulkFeesPaid = bulkRow?.fees_paid;
 
+  // Lifetime fees + funding for the dedicated KPI cards. Pulled from
+  // BULK's fullAccount.margin which carries wallet-wide aggregates.
+  // We prefer this over the indexer's fees_paid (which is also lifetime
+  // but updates on a slower cadence) because margin.fees and
+  // margin.funding both come from the same source — using one for fees
+  // and the other for funding would risk a small visible drift between
+  // the two cards. Sign convention: both fields are negative when the
+  // trader paid net, positive when they received net.
+  //
+  // Fallback: when no live margin is loaded, use the indexer's
+  // fees_paid for the Fees card (it's the same metric) and omit the
+  // Funding card (no equivalent indexer field).
+  const lifetimeFees = margin?.fees ?? bulkFeesPaid ?? null;
+  const lifetimeFunding = margin?.funding ?? null;
+
   // Display name priority: Twitter name > display name > null
   const displayName = profile?.twitter_name || profile?.display_name || null;
   const twitterHandle = profile?.twitter_handle;
@@ -876,15 +892,14 @@ export default function WalletPage() {
               // state. PnL cards (Total PnL, Unrealized) use the per-tone
               // color for icon/label but flip the value color based on sign
               // — green when positive, red when negative.
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                {/* Row 1 — lifetime context, sourced from BULK indexer.
-                    "Closed Positions" replaces the older "Total Trades"
-                    label since BULK exposes closed-position count rather
-                    than raw fill count — closed_count is also a more
-                    meaningful metric (a position that opened and closed
-                    is a meaningful unit of trader activity; fills are
-                    an implementation detail of how the position was
-                    sliced into orders). */}
+              //
+              // 5-column grid because Fees + Funding cards bring the
+              // lifetime row to 5 cards. Matches HyperTracker / Dexly's
+              // wallet profile layout where fees + funding are first-class
+              // KPIs alongside Total PnL and Volume.
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+                {/* Row 1 — lifetime context, sourced from BULK indexer +
+                    fullAccount.margin. */}
                 <StatCard
                   icon={BarChart3}
                   label="Total Volume"
@@ -905,11 +920,30 @@ export default function WalletPage() {
                   valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
                   tooltip={totalPnlTooltip}
                 />
+                {/* Fees Paid — lifetime fees this wallet has paid (always
+                    negative-signed in source data; we render as the
+                    absolute "paid" amount with a clear sign treatment).
+                    Card tone is neutral (red would feel punitive for a
+                    factual reference number — fees aren't a loss, they're
+                    cost of business). */}
                 <StatCard
-                  icon={Flame}
-                  label="Liquidations"
-                  value={String(tracked?.total_liquidations || 0)}
+                  icon={Receipt}
+                  label="Fees Paid"
+                  value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
                   tone="neutral"
+                />
+                {/* Funding — signed. Positive means the trader RECEIVED
+                    funding net over lifetime (held the right side of
+                    funding-rate sign for long enough); negative means
+                    they paid more than they received. Sign-driven
+                    coloring (green/red) makes the direction readable
+                    at a glance. */}
+                <StatCard
+                  icon={Repeat}
+                  label={lifetimeFunding !== null && lifetimeFunding < 0 ? 'Funding Paid' : 'Funding Received'}
+                  value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '-'}$${formatCompact(Math.abs(lifetimeFunding))}` : '—'}
+                  tone="neutral"
+                  valueTone={lifetimeFunding !== null ? (lifetimeFunding >= 0 ? 'green' : 'red') : undefined}
                 />
 
                 {/* Row 2 — live state */}
@@ -938,13 +972,25 @@ export default function WalletPage() {
                   value={`$${formatNumber(margin.availableBalance, 2)}`}
                   tone="neutral"
                 />
+                {/* Liquidations moved from row 1 to row 2 to keep the
+                    grid symmetric (5×2 instead of 5+4). Reads naturally
+                    in row 2 as "how often did this wallet's risk go
+                    sideways" — fits with the live-state context. */}
+                <StatCard
+                  icon={Flame}
+                  label="Liquidations"
+                  value={String(tracked?.total_liquidations || 0)}
+                  tone="neutral"
+                />
               </div>
             ) : (
               // No live BULK data — show only the lifetime row of cards
-              // (top row of 4) since live metrics aren't available. Same
-              // visual language, just one row instead of two so the
-              // layout doesn't look broken with placeholder zeros.
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              // since live metrics aren't available. We still surface
+              // Fees Paid from the indexer (fees_paid is on the per-wallet
+              // indexer endpoint independently of live data), but skip
+              // Funding (no equivalent indexer field — funding only
+              // appears on the live margin object).
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
                 <StatCard
                   icon={BarChart3}
                   label="Total Volume"
@@ -964,6 +1010,12 @@ export default function WalletPage() {
                   tone="green"
                   valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
                   tooltip={totalPnlTooltip}
+                />
+                <StatCard
+                  icon={Receipt}
+                  label="Fees Paid"
+                  value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
+                  tone="neutral"
                 />
                 <StatCard
                   icon={Flame}
