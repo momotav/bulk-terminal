@@ -79,13 +79,6 @@ export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
             </span>
           )}
         </div>
-        {/* Source hint — explicit since this panel is BULK-only and its
-            history depth differs from the rest of the page (which mixes
-            BULK live + DB aggregates). */}
-        <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-mono">
-          source: BULK riskHistory
-          {truncated && ' · ring full'}
-        </span>
       </div>
 
       <RiskEventsBody events={events} error={error} />
