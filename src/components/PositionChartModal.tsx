@@ -428,13 +428,19 @@ export function PositionChartModal({ position, onClose }: Props) {
     // Visual rules:
     //   - Buys → green circles labeled "B" below the bar
     //   - Sells → red circles labeled "S" above the bar
-    //   - Liquidations / ADL → orange circles labeled "LIQ" / "ADL"
+    //   - Liquidations / ADL / Sweeps → orange circles labeled "LIQ" / "ADL" / "LSWP"
     //   - Aggregated buckets (multiple fills in same candle, same side,
     //     same reason) show "B ×N" / "S ×N" instead
     //
     // We aggregate fills by (timeBucket, side, reason) so a flurry of
     // small fills against multiple makers in the same minute becomes
     // one readable marker instead of a vertical wall of text.
+    //
+    // BULK v1.0.15 added `liq_sweep` (reasonCode 3) — a partial-liquidation
+    // cascade. We treat it as liquidation-flavored (same orange palette)
+    // but with a distinct "LSWP" label so users can tell at a glance
+    // whether a position was force-closed in one shot (LIQ) or via
+    // multiple partial sweeps (LSWP).
     //
     // Detailed metadata (action label, exact size, exact price, time)
     // is stored in chartMarkerInfoRef and shown in a custom hover
@@ -497,7 +503,10 @@ export function PositionChartModal({ position, onClose }: Props) {
       const infoMap = new Map<number, MarkerInfo>();
       const markers: SeriesMarker<Time>[] = Array.from(groups.values())
         .map((g) => {
-          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl';
+          // `liq_sweep` is liquidation-flavored — share the orange palette
+          // with LIQ and ADL so users can spot all force-close events at
+          // a glance. The label text below distinguishes the three.
+          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl' || g.reason === 'liq_sweep';
           const color = isLiqOrAdl
             ? '#FFB547'
             : g.isBuy
@@ -510,11 +519,13 @@ export function PositionChartModal({ position, onClose }: Props) {
           //
           // Solution: pure circles for normal buy/sell fills. The tooltip
           // (subscribeCrosshairMove below) provides full context on hover.
-          // Only liquidations and ADLs get an on-chart label because
-          // those are rare, important events worth flagging visually.
+          // Only liquidations, ADLs, and sweeps get an on-chart label
+          // because those are rare, important events worth flagging visually.
           const text = isLiqOrAdl
             ? g.reason === 'liq'
               ? g.fills.length > 1 ? `LIQ ×${g.fills.length}` : 'LIQ'
+              : g.reason === 'liq_sweep'
+              ? g.fills.length > 1 ? `LSWP ×${g.fills.length}` : 'LSWP'
               : g.fills.length > 1 ? `ADL ×${g.fills.length}` : 'ADL'
             : undefined;
 
