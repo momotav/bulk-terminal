@@ -183,9 +183,16 @@ export interface ClosedPosition {
   closePrice: number;
   openedAt: number;     // ms since epoch
   closedAt: number;     // ms since epoch
+  /** Net realized PnL — already includes fees and funding. Use this as
+   *  the headline number in any UI. The components (grossPnl, fees,
+   *  funding) are exposed below for breakdown tooltips. */
   realizedPnl: number;
-  fees: number;
-  funding: number;
+  /** Gross price-only PnL: (closePrice - openPrice) × size. Useful for
+   *  showing the breakdown ("Gross $X · Fees -$Y → Net $Z") in tooltips
+   *  so users see where the number came from. */
+  grossPnl: number;
+  fees: number;        // negative when paid by trader; zero when not yet booked
+  funding: number;     // signed (negative when paid, positive when received)
   leverage: number;
   notional?: number;
   liquidated: boolean;
@@ -235,11 +242,18 @@ export interface Notification {
 
 export interface WalletData {
   address: string;
+  /**
+   * Live account snapshot. PnL fields here are NET — the backend has
+   * already added fees and funding into the realizedPnl values for both
+   * margin and per-position. Unrealized PnL stays gross (mark-to-market
+   * doesn't book fees until close).
+   */
   live: {
     margin: {
       totalBalance: number;
       availableBalance: number;
       marginUsed: number;
+      /** Net realized PnL (gross realized + fees + funding). */
       realizedPnl: number;
       unrealizedPnl: number;
     };
@@ -248,6 +262,8 @@ export interface WalletData {
       size: number;
       price: number;
       notional: number;
+      /** Net realized on this position (gross + fees + funding). */
+      realizedPnl?: number;
       unrealizedPnl: number;
       leverage: number;
       liquidationPrice: number;
