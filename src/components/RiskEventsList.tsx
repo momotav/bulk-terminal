@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Flame, Zap, AlertTriangle, ArrowDown, ArrowUp } from 'lucide-react';
+import { Flame, Zap, AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   wallet,
   formatNumber,
@@ -40,15 +40,24 @@ interface Props {
   type?: 'liquidation' | 'adl' | 'all';
 }
 
+// Initial visible row count. Anything beyond this is hidden behind an
+// expand button so the panel doesn't dominate the wallet page by default —
+// most users care about the most recent few; the rest is on-demand.
+const COLLAPSED_COUNT = 10;
+
 export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
   const [events, setEvents] = useState<RiskEvent[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setEvents(null);
     setError(false);
+    // Reset expanded state when the wallet changes — navigating between
+    // wallets should always land on the collapsed default view.
+    setIsExpanded(false);
     wallet
       .getLiquidations(address, { limit, type })
       .then((res) => {
@@ -81,7 +90,12 @@ export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
         </div>
       </div>
 
-      <RiskEventsBody events={events} error={error} />
+      <RiskEventsBody
+        events={events}
+        error={error}
+        isExpanded={isExpanded}
+        onToggleExpand={() => setIsExpanded((v) => !v)}
+      />
     </div>
   );
 }
@@ -93,9 +107,13 @@ export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
 function RiskEventsBody({
   events,
   error,
+  isExpanded,
+  onToggleExpand,
 }: {
   events: RiskEvent[] | null;
   error: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }) {
   // Loading: skeleton rows. Matches ClosedPositionsList style so the
   // wallet page doesn't feel inconsistent between panels.
@@ -133,30 +151,63 @@ function RiskEventsBody({
     );
   }
 
+  // Collapse logic: only show the first N rows unless expanded. The toggle
+  // button below the table flips state and is only rendered when the
+  // overflow actually exists (no point showing "Show 0 more").
+  const hasOverflow = events.length > COLLAPSED_COUNT;
+  const visible = isExpanded ? events : events.slice(0, COLLAPSED_COUNT);
+  const hiddenCount = events.length - COLLAPSED_COUNT;
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
-            <th className="text-left font-medium px-4 py-2">Event</th>
-            <th className="text-left font-medium px-4 py-2">Market</th>
-            <th className="text-right font-medium px-4 py-2">Size</th>
-            <th className="text-right font-medium px-4 py-2">Price</th>
-            <th className="text-right font-medium px-4 py-2">Value</th>
-            <th className="text-right font-medium px-4 py-2">Margin Δ</th>
-            <th className="text-left font-medium px-4 py-2 hidden md:table-cell">
-              Reason
-            </th>
-            <th className="text-right font-medium px-4 py-2">When</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--border-color)]">
-          {events.map((e) => (
-            <RiskEventRow key={`${e.timestamp}-${e.sequence}-${e.symbol}`} e={e} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
+              <th className="text-left font-medium px-4 py-2">Event</th>
+              <th className="text-left font-medium px-4 py-2">Market</th>
+              <th className="text-right font-medium px-4 py-2">Size</th>
+              <th className="text-right font-medium px-4 py-2">Price</th>
+              <th className="text-right font-medium px-4 py-2">Value</th>
+              <th className="text-right font-medium px-4 py-2">Margin Δ</th>
+              <th className="text-left font-medium px-4 py-2 hidden md:table-cell">
+                Reason
+              </th>
+              <th className="text-right font-medium px-4 py-2">When</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-color)]">
+            {visible.map((e) => (
+              <RiskEventRow key={`${e.timestamp}-${e.sequence}-${e.symbol}`} e={e} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Expand / collapse toggle. Only mounted when the list actually has
+          rows beyond the collapsed threshold — otherwise it'd be misleading
+          ("Show 0 more"). Lives outside the table so it gets full width
+          regardless of horizontal scroll on narrow viewports. */}
+      {hasOverflow && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="w-full px-4 py-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)]/30 transition-colors flex items-center justify-center gap-1.5 font-medium"
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="w-3.5 h-3.5" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3.5 h-3.5" />
+              Show {hiddenCount} more
+            </>
+          )}
+        </button>
+      )}
+    </>
   );
 }
 
