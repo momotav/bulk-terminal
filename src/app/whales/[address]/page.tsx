@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -118,6 +118,7 @@ function StatCard({
   value,
   tone,
   valueTone,
+  tooltip,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
@@ -130,6 +131,10 @@ function StatCard({
   /** Override color of the value alone. Used by PnL cards where the
    *  number's sign drives its color but the label stays semantic. */
   valueTone?: 'green' | 'red';
+  /** Optional rich breakdown content shown in a popover on hover. When
+   *  provided, the card gets a `cursor-help` affordance and the popover
+   *  anchors to the card. Used by Total PnL to show gross/fees/net. */
+  tooltip?: ReactNode;
 }) {
   // Tone → Tailwind color classes. Kept as a static map (not template
   // strings) because Tailwind's JIT only includes classes it can see at
@@ -156,8 +161,18 @@ function StatCard({
     valueTone === 'red' ? 'text-bulk-red' :
     c.value;
 
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+    <div
+      className={cn(
+        'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4',
+        // Anchor for the optional popover; cursor-help signals interactivity.
+        Boolean(tooltip) && 'relative cursor-help',
+      )}
+      onMouseEnter={tooltip ? () => setHovered(true) : undefined}
+      onMouseLeave={tooltip ? () => setHovered(false) : undefined}
+    >
       <div className="flex items-center gap-2 mb-2">
         <Icon className={cn('w-4 h-4', c.icon)} />
         <span className={cn('text-[10px] uppercase tracking-wider font-medium', c.label)}>
@@ -167,7 +182,90 @@ function StatCard({
       <p className={cn('text-2xl font-bold tabular-nums tracking-tight truncate', valueColor)}>
         {value}
       </p>
+      {tooltip && hovered && (
+        // Popover anchored below the card, left-aligned (cards live in a
+        // grid; left-align avoids clipping at the right edge of the row).
+        // pointer-events-none so the hover stays attached to the card,
+        // not the popover, preventing flicker as the cursor moves.
+        <div
+          role="tooltip"
+          className={cn(
+            'absolute left-0 top-full mt-1.5 z-30',
+            'rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)]',
+            'shadow-lg shadow-black/30',
+            'min-w-[200px] px-3 py-2.5',
+            'pointer-events-none',
+          )}
+        >
+          {tooltip}
+        </div>
+      )}
     </div>
+  );
+}
+
+// Breakdown content for the "Total PnL" StatCard hover popover. Renders
+// a Gross / Fees / Net summary so users can see how fees discounted the
+// headline number. Reused at both StatCard call sites (with-live and
+// no-live layouts). Numbers formatted with 2 decimals — the popover is
+// the "show me the precision" surface, distinct from the compacted
+// headline.
+function TotalPnlBreakdown({
+  gross,
+  fees,
+  net,
+}: {
+  gross: number;
+  fees: number;
+  net: number;
+}) {
+  const fmt = (n: number): string => {
+    const sign = n >= 0 ? '+' : '-';
+    return `${sign}$${formatNumber(Math.abs(n), 2)}`;
+  };
+  const isWin = net >= 0;
+  const rows: { label: string; value: string; tone: 'win' | 'loss' | null }[] = [
+    { label: 'Gross', value: fmt(gross), tone: gross >= 0 ? 'win' : 'loss' },
+    { label: 'Fees', value: fmt(fees), tone: fees >= 0 ? 'win' : 'loss' },
+  ];
+  return (
+    <>
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-center justify-between gap-4 text-xs leading-relaxed"
+        >
+          <span className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+            {row.label}
+          </span>
+          <span
+            className={cn(
+              'font-mono tabular-nums',
+              row.tone === 'win' && 'text-bulk-green',
+              row.tone === 'loss' && 'text-bulk-red',
+              !row.tone && 'text-[var(--text-secondary)]',
+            )}
+          >
+            {row.value}
+          </span>
+        </div>
+      ))}
+      <div className="mt-2 pt-2 border-t border-[var(--border-color)]">
+        <div className="flex items-center justify-between gap-4 text-xs">
+          <span className="text-[var(--text-secondary)] uppercase tracking-wider text-[10px] font-semibold">
+            Net
+          </span>
+          <span
+            className={cn(
+              'font-mono tabular-nums font-bold',
+              isWin ? 'text-bulk-green' : 'text-bulk-red',
+            )}
+          >
+            {fmt(net)}
+          </span>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -529,10 +627,15 @@ export default function WalletPage() {
   const bulkRow = bulkStats?.found ? bulkStats.row : null;
   const bulkVolume = bulkRow?.volume ?? tracked?.total_volume ?? 0;
   const bulkClosedCount = bulkRow?.closed_count ?? tracked?.total_trades ?? 0;
-  // BULK's realized_pnl is closed-position PnL only (matches what bulk.trade
-  // shows). The card label stays "Total PnL" since "realized" is jargon —
-  // most users read PnL as "what the trader has made."
-  const bulkRealizedPnL = bulkRow?.realized_pnl ?? tracked?.total_pnl ?? 0;
+  // Total PnL: use the NET realized PnL from the indexer (already net
+  // of fees) so the headline number matches what the trader actually
+  // pocketed. BULK's indexer exposes both `realized_pnl` (gross) and
+  // `net_realized_pnl` (fee-discounted) side-by-side; we want net.
+  // DB fallback also stores net values (updated 2026-05-21 to match).
+  // Hover popover below the card exposes the gross/fees breakdown.
+  const bulkRealizedPnL = bulkRow?.net_realized_pnl ?? tracked?.total_pnl ?? 0;
+  const bulkGrossPnL = bulkRow?.realized_pnl;
+  const bulkFeesPaid = bulkRow?.fees_paid;
 
   // Display name priority: Twitter name > display name > null
   const displayName = profile?.twitter_name || profile?.display_name || null;
@@ -542,6 +645,20 @@ export default function WalletPage() {
   // Calculate totals for positions
   const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
   const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.notional || 0), 0);
+
+  // Breakdown popover for the Total PnL card. Built once here so both
+  // StatCard call sites (live + no-live layouts) get the same content.
+  // Only rendered when the indexer gave us a gross/fees breakdown —
+  // when we're falling back to tracked.total_pnl from our DB we don't
+  // have the components, so the popover is omitted.
+  const totalPnlTooltip =
+    bulkGrossPnL !== undefined && bulkFeesPaid !== undefined ? (
+      <TotalPnlBreakdown
+        gross={bulkGrossPnL}
+        fees={bulkFeesPaid}
+        net={bulkRealizedPnL}
+      />
+    ) : undefined;
 
   if (loading) {
     return (
@@ -786,6 +903,7 @@ export default function WalletPage() {
                   value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
                   tone="green"
                   valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
+                  tooltip={totalPnlTooltip}
                 />
                 <StatCard
                   icon={Flame}
@@ -845,6 +963,7 @@ export default function WalletPage() {
                   value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
                   tone="green"
                   valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
+                  tooltip={totalPnlTooltip}
                 />
                 <StatCard
                   icon={Flame}
