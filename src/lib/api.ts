@@ -572,14 +572,31 @@ export type BulkLeaderboardMetric =
 export interface BulkLeaderboardRow {
   rank: number;
   wallet: string;
+  /** Gross realized PnL — closed-position price math only, no fees/funding.
+   *  Confirmed 2026-05-21: indexer exposes both gross and net side-by-side. */
   realized_pnl: number;
+  /** Net realized PnL — gross minus fees. This is the user-facing PnL
+   *  number; UIs should use this for headlines. (Funding isn't broken
+   *  out on the indexer response so it's not separately netted here,
+   *  but if BULK adds it, the net value would already include it.) */
   net_realized_pnl: number;
+  /** Total fees paid on this wallet's lifetime trades. Already negative-signed
+   *  (the trader paid them). realized_pnl + fees_paid = net_realized_pnl. */
+  fees_paid?: number;
   volume: number;
   closed_count: number;
   roi: number | null;
   net_realized_roi: number | null;
   cashflow_adjusted_roi: number | null;
   win_rate: number;
+  /** Largest gross notional this wallet has ever held open. */
+  peak_notional?: number;
+  /** Largest account balance ever observed. */
+  peak_balance?: number;
+  /** Effective capital deployed — typically equals peak_balance. */
+  effective_capital?: number;
+  /** Indexer's composite skill metric. */
+  skill_score?: number;
   updated_at: string;
 }
 
