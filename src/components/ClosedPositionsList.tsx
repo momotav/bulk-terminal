@@ -5,6 +5,35 @@ import { Activity, TrendingUp, TrendingDown, Flame } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, cn, type ClosedPosition } from '@/lib/api';
 import { formatDuration } from '@/lib/positionWalk';
 
+// Build the hover-tooltip text for a closed position's PnL number.
+// Shows the gross → net breakdown so users see how fees and funding
+// contributed to the headline result. Plain text (native title attr),
+// using a vertical-bar separator that renders consistently across
+// browsers and screen readers.
+//
+// Example output:
+//   Gross +$1,234.56
+//   Fees -$192.19
+//   Funding +$0.00
+//   ─────────
+//   Net +$1,042.37
+//
+// Numbers formatted with 2 decimals (not compacted) since users hovering
+// for a breakdown want precision, not abbreviation.
+function buildPnlBreakdownTooltip(p: ClosedPosition): string {
+  const fmt = (n: number): string => {
+    const sign = n >= 0 ? '+' : '-';
+    return `${sign}$${formatNumber(Math.abs(n), 2)}`;
+  };
+  return [
+    `Gross ${fmt(p.grossPnl)}`,
+    `Fees ${fmt(p.fees)}`,
+    `Funding ${fmt(p.funding)}`,
+    '─────────',
+    `Net ${fmt(p.realizedPnl)}`,
+  ].join('\n');
+}
+
 // ----------------------------------------------------------------------------
 // ClosedPositionsList
 //
@@ -181,11 +210,18 @@ function ClosedPositionRow({
           )}
         </div>
         <div className="text-right flex-shrink-0">
+          {/* Build the breakdown tooltip. The headline number is net
+              (gross + fees + funding); the tooltip shows the components
+              so users can see how fees / funding contributed without
+              having to do the math themselves. Title attr is plain HTML
+              and works across browsers without a popover library — we
+              can swap to a styled popover later if the team wants. */}
           <p
             className={cn(
-              'font-bold text-base tabular-nums leading-tight',
+              'font-bold text-base tabular-nums leading-tight cursor-help',
               isWin ? 'text-bulk-green' : 'text-bulk-red'
             )}
+            title={buildPnlBreakdownTooltip(p)}
           >
             {isWin ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
           </p>
@@ -257,9 +293,6 @@ function ClosedPositionRow({
           )}
           Price moved {priceMovePercent >= 0 ? '+' : ''}
           {priceMovePercent.toFixed(2)}%
-          {p.fees > 0 && (
-            <span className="ml-2">· Fees ${formatNumber(p.fees, 2)}</span>
-          )}
         </span>
       </div>
     </Wrapper>
