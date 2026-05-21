@@ -256,6 +256,10 @@ export interface WalletData {
       /** Net realized PnL (gross realized + fees + funding). */
       realizedPnl: number;
       unrealizedPnl: number;
+      /** Lifetime fees paid by this wallet (negative when paid). */
+      fees: number;
+      /** Lifetime funding paid/received (negative when paid, positive when received). */
+      funding: number;
     };
     positions: Array<{
       symbol: string;
