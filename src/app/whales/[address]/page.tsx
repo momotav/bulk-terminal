@@ -19,6 +19,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { AccountHierarchy } from '@/components/AccountHierarchy';
 import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
+import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 
 // X (Twitter) icon component
@@ -1169,6 +1170,15 @@ export default function WalletPage() {
                   );
                 })()}
               </div>
+            </div>
+
+            {/* Risk Events — liquidations + ADL history sourced from BULK's
+                riskHistory endpoint. Full-width because the `reason` field
+                is text-heavy and would truncate awkwardly in a side column.
+                Sits above ActivityFeed since force-close events are
+                higher-signal than generic protocol activity. */}
+            <div className="mt-6">
+              <RiskEventsList address={address} />
             </div>
 
             {/* Activity timeline — protocol-level events (deposits,
