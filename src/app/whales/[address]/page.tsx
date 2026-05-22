@@ -271,19 +271,53 @@ function TotalPnlBreakdown({
 }
 
 // ----------------------------------------------------------------------------
-// PerformanceBar
+// PlaceholderCard
 //
-// Compact 6-bar visualization of recent trade outcomes. Each bar is one
-// closed position colored by sign of realizedPnl (green = win, red = loss).
-// Newest on the right, oldest on the left so the eye reads it like a
-// timeline (left → right = then → now). Matches Hyperdash's wallet header
-// performance strip.
+// Lightweight placeholder that matches BarMetricCard's geometry — used
+// in the top strip to fill slots that can't compute (e.g. Direction Bias
+// when the wallet has no open positions). Keeps the 4-card strip shape
+// stable instead of letting it collapse to 1/2/3 cards depending on
+// wallet state, which would look broken.
 //
-// Below the bars: a secondary line with win-rate % and total trade count
-// for context. When `winRate` is null (no closed positions yet, or the
-// indexer hasn't published a rate), shows "N/A".
+// Visual: same border + padding + label as a real card, but the primary
+// value is "—" and the bar is muted.
 // ----------------------------------------------------------------------------
-function PerformanceBar({
+function PlaceholderCard({
+  label,
+  subtitle = 'No data',
+}: {
+  label: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 opacity-60">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+        {label}
+      </div>
+      <div className="text-2xl font-bold tabular-nums tracking-tight text-[var(--text-tertiary)] mb-2">
+        —
+      </div>
+      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2" />
+      <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+        {subtitle}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// PerformanceCard
+//
+// Top-strip variant of the performance visualization. Renders as a
+// full-size card matching BarMetricCard's dimensions so the 4-card top
+// strip (Performance / Direction Bias / Distance to Liq / Leverage)
+// reads as one unified row.
+//
+// Compared to a small inline strip: bigger bars (so they're legible at
+// glance), bigger value text (the win rate number leads), explicit
+// "Performance" label header to match the strip neighbors.
+// ----------------------------------------------------------------------------
+function PerformanceCard({
   recentWinLoss,
   winRate,
   totalTrades,
@@ -292,28 +326,37 @@ function PerformanceBar({
   winRate: number | null;
   totalTrades: number;
 }) {
-  if (totalTrades === 0) {
-    // Brand-new wallets without any closed trades — show nothing rather
-    // than a misleading empty bar.
-    return null;
-  }
-  // Pad to 6 slots so the layout doesn't jump when a wallet has fewer
-  // than 6 trades. Empty slots render as muted placeholders.
+  // Pad to 6 slots so the bar shape is stable regardless of trade count.
+  // Slot value: true = win, false = loss, null = no trade yet (placeholder).
   const slots: (boolean | null)[] = [...recentWinLoss];
   while (slots.length < 6) slots.push(null);
+  // We computed slots newest-first; rendering reverses to show
+  // newest-rightmost (timeline convention).
+
+  const winRateColor =
+    winRate === null ? 'text-[var(--text-tertiary)]' :
+    winRate >= 0.6 ? 'text-bulk-green' :
+    winRate >= 0.4 ? 'text-[var(--text-primary)]' :
+    'text-bulk-red';
+
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
         Performance
-      </span>
-      {/* 6 thin bars, newest-rightmost. We reverse `slots` for render
-          since we computed it newest-first but want newest on the right. */}
-      <div className="flex items-center gap-1">
+      </div>
+      <div className={cn('text-2xl font-bold tabular-nums tracking-tight mb-2', winRateColor)}>
+        {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'}
+      </div>
+      {/* 6 bars rendered as a horizontal strip. We use h-1.5 to match
+          the bar height on neighbor cards (BarMetricCard) so they line
+          up visually across the strip. Width auto-flexes to fill the
+          card's content width via flex-1 on each slot. */}
+      <div className="flex items-center gap-1 mb-2">
         {[...slots].reverse().map((slot, i) => (
           <div
             key={i}
             className={cn(
-              'w-3 h-5 rounded-sm',
+              'flex-1 h-1.5 rounded-full',
               slot === true && 'bg-bulk-green',
               slot === false && 'bg-bulk-red',
               slot === null && 'bg-[var(--bg-secondary-20)]/40',
@@ -321,9 +364,9 @@ function PerformanceBar({
           />
         ))}
       </div>
-      <span className="text-[10px] text-[var(--text-tertiary)] font-mono tabular-nums">
-        {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'} Win Rate · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
-      </span>
+      <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+        {winRate !== null ? `${(winRate * 100).toFixed(0)}% Win Rate` : 'N/A Win Rate'} · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
+      </div>
     </div>
   );
 }
@@ -1062,7 +1105,13 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 py-6">
+        {/* Width: full viewport, not the previous max-w-7xl. The wallet
+            detail page benefits from horizontal real estate — wider
+            stat strips read better, the position cards line up cleaner,
+            and the chart gets more room. The narrow centered layout was
+            making this page feel cramped on 1440px+ displays compared
+            to peer dashboards. */}
         <Link 
           href="/whales"
           className="inline-flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
@@ -1198,18 +1247,6 @@ export default function WalletPage() {
                       <BulkRankBadge address={address} />
                     )}
                     <AccountHierarchy address={address} />
-                    {/* Performance bar — last 6 trades W/L visualization
-                        + lifetime win rate. Mimics Hyperdash's wallet
-                        header performance strip. Hidden for system
-                        wallets (BULK protocol accounts) since they don't
-                        have meaningful trade history. */}
-                    {!isSystemWallet(address) && (
-                      <PerformanceBar
-                        recentWinLoss={recentWinLoss}
-                        winRate={winRate}
-                        totalTrades={bulkRow?.closed_count ?? closedPositions.length}
-                      />
-                    )}
                   </div>
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
                   {canClaimWallet && (
@@ -1266,6 +1303,90 @@ export default function WalletPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Top strip — 4 bar-style cards that read as the Hyperdash
+                signature: Performance, Direction Bias, Distance to
+                Liquidation, Effective Leverage. Each card carries a
+                primary value + bar viz + footer subtitle in the same
+                visual treatment, so the row reads as one coordinated
+                strip rather than 4 unrelated stats.
+                
+                Cards with no data (e.g. closed wallet with no open
+                positions → Distance to Liq has nothing to compute)
+                render as a placeholder "—" rather than collapsing.
+                Keeps the 4-card strip shape stable across wallets. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              {!isSystemWallet(address) ? (
+                <PerformanceCard
+                  recentWinLoss={recentWinLoss}
+                  winRate={winRate}
+                  totalTrades={bulkRow?.closed_count ?? closedPositions.length}
+                />
+              ) : (
+                <PlaceholderCard label="Performance" />
+              )}
+              {directionBias ? (
+                <BarMetricCard
+                  label="Direction Bias"
+                  value={directionBias.label}
+                  valueTone={
+                    directionBias.label === 'Very Bullish' || directionBias.label === 'Bullish' ? 'green' :
+                    directionBias.label === 'Very Bearish' || directionBias.label === 'Bearish' ? 'red' :
+                    'neutral'
+                  }
+                  barColor="bg-bulk-green"
+                  fillPct={directionBias.longPct}
+                  secondaryBarColor="bg-bulk-red"
+                  secondaryFillPct={1 - directionBias.longPct}
+                  subtitle={
+                    `${(directionBias.longPct * 100).toFixed(0)}% Long $${formatCompact(directionBias.longNotional)} · ` +
+                    `${((1 - directionBias.longPct) * 100).toFixed(0)}% Short $${formatCompact(directionBias.shortNotional)}`
+                  }
+                />
+              ) : (
+                <PlaceholderCard label="Direction Bias" subtitle="No open positions" />
+              )}
+              {distanceToLiq ? (
+                <BarMetricCard
+                  label="Distance to Liquidation"
+                  value={`${(distanceToLiq.pct * 100).toFixed(2)}%`}
+                  valueTone={
+                    distanceToLiq.pct < 0.05 ? 'red' :
+                    distanceToLiq.pct < 0.15 ? 'orange' :
+                    'green'
+                  }
+                  barColor={
+                    distanceToLiq.pct < 0.05 ? 'bg-bulk-red' :
+                    distanceToLiq.pct < 0.15 ? 'bg-bulk-orange' :
+                    'bg-bulk-green'
+                  }
+                  fillPct={distanceToLiq.pct}
+                  subtitle={`Closest: ${distanceToLiq.symbol}`}
+                />
+              ) : (
+                <PlaceholderCard label="Distance to Liquidation" subtitle="No open positions" />
+              )}
+              {effectiveLeverage !== null && margin ? (
+                <BarMetricCard
+                  label="Effective Leverage"
+                  value={`${effectiveLeverage.toFixed(1)}x`}
+                  valueTone={
+                    effectiveLeverage > 10 ? 'red' :
+                    effectiveLeverage > 5 ? 'orange' :
+                    'green'
+                  }
+                  barColor={
+                    effectiveLeverage > 10 ? 'bg-bulk-red' :
+                    effectiveLeverage > 5 ? 'bg-bulk-orange' :
+                    'bg-bulk-green'
+                  }
+                  fillPct={Math.min(effectiveLeverage / 10, 1)}
+                  subtitle={`$${formatCompact(totalNotional)} Notional · $${formatCompact(margin.totalBalance)} Equity`}
+                />
+              ) : (
+                <PlaceholderCard label="Effective Leverage" subtitle="No open positions" />
+              )}
             </div>
 
             {/* Stats panel. One integrated card containing everything live
@@ -1411,91 +1532,6 @@ export default function WalletPage() {
                   value={String(tracked?.total_liquidations || 0)}
                   tone="neutral"
                 />
-              </div>
-            )}
-
-            {/* Bar-style metric row — Direction Bias / Distance to
-                Liquidation / Effective Leverage. Visually distinct from
-                the regular stat cards above because each one is a 0-100%
-                progress metric where the bar fill carries equal
-                information to the headline number. Mirrors the
-                Performance/Leverage/Margin Usage/Direction Bias cards
-                in Hyperdash's wallet view.
-
-                Only rendered when there are open positions — these are
-                live-state metrics, not lifetime aggregates. */}
-            {positions.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                {/* Direction Bias — long/short ratio of open positions
-                    weighted by notional. Bar fills from BOTH sides:
-                    green from the left for long, red from the right for
-                    short. The label flips between bullish/bearish tones
-                    based on which side dominates. */}
-                {directionBias && (
-                  <BarMetricCard
-                    label="Direction Bias"
-                    value={directionBias.label}
-                    valueTone={
-                      directionBias.label === 'Very Bullish' || directionBias.label === 'Bullish' ? 'green' :
-                      directionBias.label === 'Very Bearish' || directionBias.label === 'Bearish' ? 'red' :
-                      'neutral'
-                    }
-                    barColor="bg-bulk-green"
-                    fillPct={directionBias.longPct}
-                    secondaryBarColor="bg-bulk-red"
-                    secondaryFillPct={1 - directionBias.longPct}
-                    subtitle={
-                      `${(directionBias.longPct * 100).toFixed(0)}% Long $${formatCompact(directionBias.longNotional)} · ` +
-                      `${((1 - directionBias.longPct) * 100).toFixed(0)}% Short $${formatCompact(directionBias.shortNotional)}`
-                    }
-                  />
-                )}
-
-                {/* Distance to Liquidation — worst-case position. Fill
-                    color flips to red/yellow/green as the headroom
-                    shrinks. Bar fill itself represents the SAFETY margin
-                    (close to liq = thin bar). */}
-                {distanceToLiq && (
-                  <BarMetricCard
-                    label="Distance to Liquidation"
-                    value={`${(distanceToLiq.pct * 100).toFixed(2)}%`}
-                    valueTone={
-                      distanceToLiq.pct < 0.05 ? 'red' :
-                      distanceToLiq.pct < 0.15 ? 'orange' :
-                      'green'
-                    }
-                    barColor={
-                      distanceToLiq.pct < 0.05 ? 'bg-bulk-red' :
-                      distanceToLiq.pct < 0.15 ? 'bg-bulk-orange' :
-                      'bg-bulk-green'
-                    }
-                    fillPct={distanceToLiq.pct}
-                    subtitle={`Closest: ${distanceToLiq.symbol}`}
-                  />
-                )}
-
-                {/* Effective Leverage — total notional / equity. Bar
-                    fills proportionally to a "safe" reference (10x
-                    equals full bar — anything 10x or above is high-risk
-                    territory regardless of the perp). */}
-                {effectiveLeverage !== null && margin && (
-                  <BarMetricCard
-                    label="Effective Leverage"
-                    value={`${effectiveLeverage.toFixed(1)}x`}
-                    valueTone={
-                      effectiveLeverage > 10 ? 'red' :
-                      effectiveLeverage > 5 ? 'orange' :
-                      'green'
-                    }
-                    barColor={
-                      effectiveLeverage > 10 ? 'bg-bulk-red' :
-                      effectiveLeverage > 5 ? 'bg-bulk-orange' :
-                      'bg-bulk-green'
-                    }
-                    fillPct={Math.min(effectiveLeverage / 10, 1)}
-                    subtitle={`$${formatCompact(totalNotional)} Notional · $${formatCompact(margin.totalBalance)} Equity`}
-                  />
-                )}
               </div>
             )}
 
