@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Activity, TrendingUp, TrendingDown, Flame } from 'lucide-react';
-import { wallet, formatNumber, formatCompact, cn, type ClosedPosition } from '@/lib/api';
+import { wallet, formatNumber, formatCompact, cn, timeAgo, type ClosedPosition } from '@/lib/api';
 import { formatDuration } from '@/lib/positionWalk';
 
 // Styled hover popover for the closed-position PnL breakdown. Anchored
@@ -163,9 +163,19 @@ interface Props {
    *  up to open the chart modal in closed-position mode. When omitted
    *  rows render as static (read-only). */
   onSelect?: (p: ClosedPosition) => void;
+  /** Visual density mode.
+   *  - 'cards' (default): each position renders as a multi-line card
+   *    with entry/close/size/held on a metadata row. Used by the chart
+   *    modal where vertical space is generous and rows are sparse.
+   *  - 'table': dense single-row-per-position table format with sortable
+   *    headers. Used by the wallet detail page where the panel sits
+   *    full-width below the chart and benefits from compact rows that
+   *    let users scan many trades at once. Mirrors Hyperdash's positions
+   *    table convention. */
+  density?: 'cards' | 'table';
 }
 
-export function ClosedPositionsList({ address, symbol, limit = 50, onSelect }: Props) {
+export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, density = 'cards' }: Props) {
   const [positions, setPositions] = useState<ClosedPosition[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -222,6 +232,36 @@ export function ClosedPositionsList({ address, symbol, limit = 50, onSelect }: P
         <p className="text-xs mt-1">
           Recent open→close trades will appear here
         </p>
+      </div>
+    );
+  }
+
+  if (density === 'table') {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
+              <th className="text-left font-medium px-4 py-2.5">Market</th>
+              <th className="text-right font-medium px-4 py-2.5">Size</th>
+              <th className="text-right font-medium px-4 py-2.5">Entry</th>
+              <th className="text-right font-medium px-4 py-2.5">Close</th>
+              <th className="text-right font-medium px-4 py-2.5">PnL</th>
+              <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
+              <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Held</th>
+              <th className="text-right font-medium px-4 py-2.5">When</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-color)]">
+            {positions.map((p, i) => (
+              <ClosedPositionTableRow
+                key={`${p.symbol}-${p.closedAt}-${i}`}
+                p={p}
+                onSelect={onSelect}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -381,5 +421,122 @@ function ClosedPositionRow({
         </span>
       </div>
     </Wrapper>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// ClosedPositionTableRow
+//
+// Single-line dense table row variant. Mirrors Hyperdash's positions
+// table layout: market, size, entry, close, PnL, %, held, time-ago.
+// Clickable to open the chart modal when `onSelect` is wired.
+//
+// The PnL cell carries the same hover popover as the card variant
+// (gross/fees/net breakdown) so the table doesn't lose the rich
+// breakdown affordance. All other cells are plain text — the row's
+// information density is the point.
+// ----------------------------------------------------------------------------
+function ClosedPositionTableRow({
+  p,
+  onSelect,
+}: {
+  p: ClosedPosition;
+  onSelect?: (p: ClosedPosition) => void;
+}) {
+  const isWin = p.realizedPnl >= 0;
+  const isLong = p.side === 'long';
+  const notionalAtOpen = p.size * p.openPrice;
+  const pnlPercent = notionalAtOpen > 0 ? (p.realizedPnl / notionalAtOpen) * 100 : 0;
+  const duration = p.closedAt - p.openedAt;
+  const handleClick = onSelect ? () => onSelect(p) : undefined;
+  return (
+    <tr
+      className={cn(
+        'transition-colors',
+        onSelect && 'cursor-pointer hover:bg-[var(--bg-secondary-20)]/30',
+      )}
+      onClick={handleClick}
+    >
+      {/* Market cell — side badge + symbol + LIQ flag if force-closed. */}
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider',
+              isLong
+                ? 'bg-bulk-green/15 text-bulk-green'
+                : 'bg-bulk-red/15 text-bulk-red',
+            )}
+          >
+            {isLong ? 'LONG' : 'SHORT'}
+          </span>
+          <span className="font-medium text-[var(--text-primary)]">{p.symbol}</span>
+          {p.liquidated && (
+            <span
+              className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-bulk-orange/15 text-bulk-orange text-[9px] font-semibold tracking-wider"
+              title="Force-closed via liquidation"
+            >
+              <Flame className="w-2.5 h-2.5" />
+              LIQ
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
+        {formatNumber(p.size, 4)}
+      </td>
+      <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
+        ${formatNumber(p.openPrice, 4)}
+      </td>
+      <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
+        ${formatNumber(p.closePrice, 4)}
+      </td>
+      {/* PnL with hover breakdown — reuses the existing popover component. */}
+      <td className="px-4 py-2.5 text-right">
+        <PnlNumberWithBreakdownInline p={p} isWin={isWin} />
+      </td>
+      <td
+        className={cn(
+          'px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell',
+          isWin ? 'text-bulk-green/80' : 'text-bulk-red/80',
+        )}
+      >
+        {isWin ? '+' : ''}{pnlPercent.toFixed(2)}%
+      </td>
+      <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums hidden lg:table-cell">
+        {formatDuration(duration)}
+      </td>
+      <td
+        className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap"
+        title={new Date(p.closedAt).toISOString()}
+      >
+        {timeAgo(p.closedAt)}
+      </td>
+    </tr>
+  );
+}
+
+// Inline-only variant of the PnL number with hover breakdown. Different
+// from PnlNumberWithBreakdown above because the table row doesn't need
+// the percent line below (that's its own column) — just the number
+// with the hover popover.
+function PnlNumberWithBreakdownInline({ p, isWin }: { p: ClosedPosition; isWin: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span
+        className={cn(
+          'font-bold tabular-nums cursor-help',
+          isWin ? 'text-bulk-green' : 'text-bulk-red',
+        )}
+      >
+        {isWin ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
+      </span>
+      {hovered && <PnlBreakdownPopover position={p} isWin={isWin} />}
+    </div>
   );
 }
