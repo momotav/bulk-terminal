@@ -653,7 +653,7 @@ export default function WalletPage() {
   // can flick between the two with the segmented control in the panel
   // header. Replaces the older two-panel stacked layout that wasted
   // vertical space.
-  const [positionsTab, setPositionsTab] = useState<'open' | 'recent'>('open');
+  const [positionsTab, setPositionsTab] = useState<'open' | 'recent' | 'liquidations'>('open');
 
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
@@ -1443,7 +1443,7 @@ export default function WalletPage() {
                 vertical stack so each block gets the full main-column
                 width.
                 ────────────────────────────────────────────────────── */}
-            <div className="flex flex-col gap-6 min-w-0">
+            <div className="flex flex-col gap-4 min-w-0">
 
             {/* Top strip — 4 bar-style cards that read as the Hyperdash
                 signature: Performance, Direction Bias, Distance to
@@ -1456,7 +1456,7 @@ export default function WalletPage() {
                 positions → Distance to Liq has nothing to compute)
                 render as a placeholder "—" rather than collapsing.
                 Keeps the 4-card strip shape stable across wallets. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {!isSystemWallet(address) ? (
                 <PerformanceCard
                   recentWinLoss={recentWinLoss}
@@ -1676,140 +1676,142 @@ export default function WalletPage() {
                       <Clock className="w-3.5 h-3.5 text-blue-400" />
                       Recent Trades
                     </button>
+                    {/* Liquidations tab — surfaces the riskHistory feed
+                        (force-close events, ADL events) that used to sit
+                        as a standalone panel below the chart. Tabbing
+                        it tightens the page: the user pivots between
+                        live positions / lifetime closes / forced exits
+                        in one place. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPositionsTab('liquidations');
+                        setTabIsUserPicked(true);
+                      }}
+                      className={cn(
+                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                        positionsTab === 'liquidations'
+                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      )}
+                    >
+                      <Flame className="w-3.5 h-3.5 text-bulk-orange" />
+                      Liquidations
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* Position cards. Click any card to open the price chart
-                  modal with entry / mark / liq lines drawn on a candle
-                  chart for that market — the BULK dev's headline ask.
-                  The "→" arrow is persistent (not hover-only) so stream
-                  viewers know the cards are interactive. */}
-              <div className="divide-y divide-[var(--border-color)] max-h-[480px] overflow-y-auto">
+              {/* Panel body — unified table treatment across all three
+                  tabs. Open positions, closed positions, and risk
+                  events all render as dense single-row-per-item tables
+                  so the panel reads as a consistent surface no matter
+                  which tab is active. Clicking any row in Open or
+                  Recent opens the chart modal. */}
+              <div className="max-h-[480px] overflow-y-auto">
                 {positionsTab === 'open' ? (
                   positions.length > 0 ? (
-                    positions.map((pos, i) => {
-                    const isLong = pos.size > 0;
-                    const pnlPercent = pos.notional 
-                      ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100 
-                      : 0;
-                    const markPrice = markPrices[pos.symbol] || 0;
-
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() =>
-                          setChartPosition({
-                            kind: 'live',
-                            walletAddress: address,
-                            symbol: pos.symbol,
-                            side: isLong ? 'long' : 'short',
-                            entryPrice: pos.price,
-                            markPrice: markPrice || pos.price,
-                            liquidationPrice: pos.liquidationPrice,
-                            size: Math.abs(pos.size),
-                            leverage: pos.leverage,
-                            unrealizedPnl: pos.unrealizedPnl,
-                          })
-                        }
-                        className="w-full text-left p-5 hover:bg-[var(--bg-secondary-20)] transition-colors group cursor-pointer"
-                        aria-label={`View ${pos.symbol} chart`}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className={cn(
-                              'px-2 py-0.5 rounded text-xs font-semibold tracking-wider',
-                              isLong
-                                ? 'bg-bulk-green/15 text-bulk-green'
-                                : 'bg-bulk-red/15 text-bulk-red'
-                            )}>
-                              {isLong ? 'LONG' : 'SHORT'}
-                            </span>
-                            <span className="font-semibold text-[var(--text-primary)]">{pos.symbol}</span>
-                            <span className="text-[var(--text-tertiary)] text-sm font-mono">{pos.leverage}x</span>
-                          </div>
-                          <div className="text-right">
-                            <p className={cn(
-                              'font-bold text-lg tabular-nums',
-                              pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                            )}>
-                              {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
-                            </p>
-                            <p className={cn(
-                              'text-xs tabular-nums',
-                              pnlPercent >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                            )}>
-                              {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-4 gap-2 text-xs">
-                          <div>
-                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Size</p>
-                            <p className="font-mono text-[var(--text-primary)] tabular-nums">{formatNumber(Math.abs(pos.size), 4)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Entry</p>
-                            <p className="font-mono text-[var(--text-primary)] tabular-nums">${formatNumber(pos.price, 2)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Mark</p>
-                            <p className="font-mono text-blue-400 tabular-nums">${formatNumber(markPrice, 2)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Liq</p>
-                            <p className="font-mono text-bulk-red tabular-nums">${formatNumber(pos.liquidationPrice, 2)}</p>
-                          </div>
-                        </div>
-
-                        {/* Open time — derived client-side from the
-                            wallet's fill history (BULK doesn't expose
-                            per-position timestamps). Renders as
-                            "Opened 2h 14m ago" when we have data, falls
-                            back to a placeholder otherwise. */}
-                        {(() => {
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
+                          <th className="text-left font-medium px-4 py-2.5">Market</th>
+                          <th className="text-right font-medium px-4 py-2.5">Size</th>
+                          <th className="text-right font-medium px-4 py-2.5">Entry</th>
+                          <th className="text-right font-medium px-4 py-2.5">Mark</th>
+                          <th className="text-right font-medium px-4 py-2.5">PnL</th>
+                          <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
+                          <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Liq</th>
+                          <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Opened</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--border-color)]">
+                        {positions.map((pos, i) => {
+                          const isLong = pos.size > 0;
+                          const pnlPercent = pos.notional
+                            ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100
+                            : 0;
+                          const markPrice = markPrices[pos.symbol] || 0;
                           const openInfo = positionOpenTimes[pos.symbol];
-                          if (openInfo === undefined) {
-                            // Still fetching — render nothing rather than
-                            // a flashing placeholder.
-                            return null;
-                          }
-                          if (openInfo === null) {
-                            return null;
-                          }
-                          const ago = Date.now() - openInfo.openedAt;
+                          const ago = openInfo ? Date.now() - openInfo.openedAt : null;
                           return (
-                            <p className="mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums">
-                              Opened {formatDuration(ago)} ago
-                              <span className="text-[var(--text-tertiary)]/70 ml-2">
-                                · {new Date(openInfo.openedAt).toLocaleString(undefined, {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </span>
-                            </p>
+                            <tr
+                              key={i}
+                              className="cursor-pointer hover:bg-[var(--bg-secondary-20)]/30 transition-colors"
+                              onClick={() =>
+                                setChartPosition({
+                                  kind: 'live',
+                                  walletAddress: address,
+                                  symbol: pos.symbol,
+                                  side: isLong ? 'long' : 'short',
+                                  entryPrice: pos.price,
+                                  markPrice: markPrice || pos.price,
+                                  liquidationPrice: pos.liquidationPrice,
+                                  size: Math.abs(pos.size),
+                                  leverage: pos.leverage,
+                                  unrealizedPnl: pos.unrealizedPnl,
+                                })
+                              }
+                            >
+                              {/* Market cell — side badge + symbol + leverage chip. */}
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider',
+                                      isLong
+                                        ? 'bg-bulk-green/15 text-bulk-green'
+                                        : 'bg-bulk-red/15 text-bulk-red',
+                                    )}
+                                  >
+                                    {isLong ? 'LONG' : 'SHORT'}
+                                  </span>
+                                  <span className="font-medium text-[var(--text-primary)]">{pos.symbol}</span>
+                                  <span className="text-[var(--text-tertiary)] text-xs font-mono">{pos.leverage}x</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
+                                {formatNumber(Math.abs(pos.size), 4)}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
+                                ${formatNumber(pos.price, 4)}
+                              </td>
+                              {/* Mark — colored to indicate live-data
+                                  status. Blue accent stays consistent
+                                  with the original card rendering. */}
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-blue-400">
+                                ${formatNumber(markPrice, 4)}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                <span
+                                  className={cn(
+                                    'font-bold font-mono tabular-nums',
+                                    pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red',
+                                  )}
+                                >
+                                  {pos.unrealizedPnl >= 0 ? '+' : '-'}${formatNumber(Math.abs(pos.unrealizedPnl), 2)}
+                                </span>
+                              </td>
+                              <td
+                                className={cn(
+                                  'px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell',
+                                  pnlPercent >= 0 ? 'text-bulk-green/80' : 'text-bulk-red/80',
+                                )}
+                              >
+                                {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-bulk-red hidden lg:table-cell">
+                                ${formatNumber(pos.liquidationPrice, 4)}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap hidden lg:table-cell">
+                                {ago !== null ? `${formatDuration(ago)} ago` : '—'}
+                              </td>
+                            </tr>
                           );
-                        })()}
-
-                        {/* Persistent "view chart" affordance below the
-                            numbers. Subtle, but visible to anyone watching
-                            a stream — they can see the cards are clickable
-                            even without seeing the streamer's mouse. */}
-                        <div className="mt-3 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] group-hover:text-bulk-green transition-colors">
-                          <span>View chart</span>
-                          <span className="transition-transform group-hover:translate-x-0.5">→</span>
-                        </div>
-                      </button>
-                    );
-                  })
+                        })}
+                      </tbody>
+                    </table>
                   ) : (
                     // "Open" tab selected but no open positions exist.
-                    // Empty state with a hint that recent trades are one
-                    // tab over.
                     <div className="p-8 text-center text-[var(--text-tertiary)]">
                       <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
                       <p>No open positions</p>
@@ -1818,9 +1820,8 @@ export default function WalletPage() {
                       </p>
                     </div>
                   )
-                ) : (
-                  // "Recent" tab — always show closed-positions list,
-                  // regardless of whether there are open positions.
+                ) : positionsTab === 'recent' ? (
+                  // "Recent" tab — closed-position table.
                   <ClosedPositionsList
                     address={address}
                     limit={50}
@@ -1844,17 +1845,15 @@ export default function WalletPage() {
                       })
                     }
                   />
+                ) : (
+                  // "Liquidations" tab — riskHistory feed. RiskEventsList
+                  // brings its own internal "Show N more" toggle so we
+                  // don't need pagination wrappers here. `bare` mode
+                  // skips the component's own card chrome since we're
+                  // already inside the positions panel card.
+                  <RiskEventsList address={address} bare />
                 )}
               </div>
-            </div>
-
-            {/* Risk Events — liquidations + ADL history sourced from BULK's
-                riskHistory endpoint. Full-width because the `reason` field
-                is text-heavy and would truncate awkwardly in a side column.
-                Sits above ActivityFeed since force-close events are
-                higher-signal than generic protocol activity. */}
-            <div className="mt-6">
-              <RiskEventsList address={address} />
             </div>
 
             {/* Activity timeline — protocol-level events (deposits,
@@ -1862,9 +1861,7 @@ export default function WalletPage() {
                 bottom of the page because it's a chronological feed and
                 most of the time the user came here for the live position
                 / PnL info above; activity is supporting context. */}
-            <div className="mt-6">
-              <ActivityFeed address={address} />
-            </div>
+            <ActivityFeed address={address} />
             </div>{/* end main-column wrapper */}
           </div>
         )}
