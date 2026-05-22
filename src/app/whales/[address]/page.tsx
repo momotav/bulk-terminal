@@ -306,6 +306,80 @@ function PlaceholderCard({
 }
 
 // ----------------------------------------------------------------------------
+// OverviewRow
+//
+// Compact label/value pair used inside the left-rail Overview and
+// Analysis sections. Renders as a single flex line so the rail stays
+// scan-able vertically. Optional tone tints just the value, leaving
+// the label muted.
+//
+// When `tooltip` is provided, the value gets a help-cursor and shows
+// the popover content on hover — used for Total PnL's gross/fees/net
+// breakdown. Tooltip anchors below the row so it doesn't overflow
+// the rail's narrow width.
+// ----------------------------------------------------------------------------
+function OverviewRow({
+  label,
+  value,
+  tone = 'neutral',
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  tone?: 'green' | 'red' | 'neutral';
+  tooltip?: ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const valueColor =
+    tone === 'green' ? 'text-bulk-green' :
+    tone === 'red' ? 'text-bulk-red' :
+    'text-[var(--text-primary)]';
+  return (
+    <div
+      className={cn('relative flex items-center justify-between gap-3 text-xs', Boolean(tooltip) && 'cursor-help')}
+      onMouseEnter={tooltip ? () => setHovered(true) : undefined}
+      onMouseLeave={tooltip ? () => setHovered(false) : undefined}
+    >
+      <span className="text-[var(--text-tertiary)]">{label}</span>
+      <span className={cn('font-mono tabular-nums', valueColor)}>{value}</span>
+      {tooltip && hovered && (
+        <div
+          role="tooltip"
+          className={cn(
+            'absolute left-0 top-full mt-1 z-30',
+            'rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)]',
+            'shadow-lg shadow-black/30',
+            'min-w-[200px] px-3 py-2.5',
+            'pointer-events-none',
+          )}
+        >
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Format ms duration as "Xd Yh" / "Xh Ym" / "Xm" / "—". Shared helper
+// between the left-rail Analysis section and any other place that needs
+// the same short-form duration format.
+function formatDurationShort(ms: number | null): string {
+  if (ms === null || ms <= 0) return '—';
+  const minutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(ms / 86_400_000);
+  if (days > 0) {
+    const remainingHours = Math.floor((ms - days * 86_400_000) / 3_600_000);
+    return `${days}d ${remainingHours}h`;
+  }
+  if (hours > 0) {
+    const remainingMinutes = Math.floor((ms - hours * 3_600_000) / 60_000);
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+// ----------------------------------------------------------------------------
 // PerformanceCard
 //
 // Top-strip variant of the performance visualization. Renders as a
@@ -1131,179 +1205,228 @@ export default function WalletPage() {
             </Link>
           </div>
         ) : (
-          <div>
-            {/* Wallet Header.
-                Compact identity card — small avatar + address + meta.
-                The AccountHierarchy dropdown lives in the right-hand action
-                row so users can switch between master and sub-accounts
-                without scrolling. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 mb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Avatar — smaller than before. The full-bleed gradient
-                      square at 64px was visually overpowering for what is
-                      really just a placeholder. We render a round wallet
-                      icon at 40px instead unless we have a real Twitter
-                      avatar to show. */}
-                  {twitterAvatar ? (
-                    <img
-                      src={twitterAvatar}
-                      alt=""
-                      className="w-10 h-10 rounded-full border border-[var(--border-color)] flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-bulk-green/15 border border-bulk-green/30 flex items-center justify-center flex-shrink-0">
-                      <Wallet className="w-5 h-5 text-bulk-green" />
-                    </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+            {/* ──────────────────────────────────────────────────────
+                LEFT RAIL — identity + headline value + Overview list +
+                Analysis list. Mirrors Hyperdash's wallet view sidebar:
+                thin vertical strip of identity and stats that frames
+                the main content area without competing with it for
+                visual weight.
+
+                Stacks above the main column on lg: breakpoint and below
+                (mobile/tablet), so phones see a normal vertical scroll
+                with all the rail content at the top.
+                ────────────────────────────────────────────────────── */}
+            <aside className="flex flex-col gap-6">
+              {/* Identity block — avatar + names + address. Compact
+                  vertical stack since the rail is narrow (~300px). */}
+              <div className="flex flex-col items-start gap-3">
+                {twitterAvatar ? (
+                  <img
+                    src={twitterAvatar}
+                    alt=""
+                    className="w-14 h-14 rounded-full border border-[var(--border-color)]"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-bulk-green/15 border border-bulk-green/30 flex items-center justify-center">
+                    <Wallet className="w-7 h-7 text-bulk-green" />
+                  </div>
+                )}
+                <div className="w-full min-w-0">
+                  {displayName && (
+                    <h1 className="text-lg font-semibold text-[var(--text-primary)] truncate">
+                      {displayName}
+                    </h1>
                   )}
-                  <div className="min-w-0">
-                    {/* Display name if available */}
-                    {displayName && (
-                      <h1 className="text-lg font-semibold text-[var(--text-primary)] truncate">
-                        {displayName}
-                      </h1>
-                    )}
-
-                    {/* Twitter/X handle */}
-                    {twitterHandle && (
-                      <a 
-                        href={`https://twitter.com/${twitterHandle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors"
-                      >
-                        <XIcon className="w-3 h-3" />
-                        @{twitterHandle}
-                      </a>
-                    )}
-                    
-                    {/* Wallet address */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h2 className="font-mono text-base sm:text-lg text-[var(--text-primary)]">{formatAddress(address)}</h2>
-                      {isOwnWallet && (
-                        <span className="px-1.5 py-0.5 bg-bulk-green/20 text-bulk-green text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-green/30">
-                          You
-                        </span>
-                      )}
-                      {address === '7DHvrCZMMLZ2ovNfKaGpvJZXAQyydbTz6dM7w7qXtzX5' && (
-                        <span className="px-1.5 py-0.5 bg-bulk-green/20 text-bulk-green text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-green/30">
-                          BULK MM
-                        </span>
-                      )}
-                      <button
-                        onClick={copyAddress}
-                        className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
-                        aria-label="Copy address"
-                      >
-                        {copied ? (
-                          <Check className="w-3.5 h-3.5 text-bulk-green" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                        )}
-                      </button>
-                      <a
-                        href={`https://solscan.io/account/${address}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
-                        aria-label="View on Solscan"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                      </a>
-                    </div>
-                    <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-                      {bulkClosedCount} closed · ${formatCompact(bulkVolume)} volume
-                      {!hasLiveData && hasTrackedData && (
-                        <span className="text-yellow-400 ml-1.5">· No active positions</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right side: vertically stacked rank + account-family,
-                    then action buttons next to them. Stack puts the rank
-                    visually on top of the hierarchy pill so they read as a
-                    pair (this wallet's standing + its account family),
-                    distinct from the actions (Follow, Claim) further right.
-                    `items-end` keeps the column flush against the right
-                    edge so both pills line up. */}
-                <div className="flex items-start gap-3 flex-wrap">
-                  <div className="flex flex-col items-end gap-2">
-                    {/* System wallets get a distinct badge in place of
-                        the rank badge. They're BULK's operational
-                        accounts (liquidation engine, insurance fund,
-                        market-maker bots) — showing a rank for them
-                        would be misleading since they're not real
-                        traders competing on the leaderboard. */}
-                    {isSystemWallet(address) ? (
-                      <div
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-purple-500/10 border-purple-500/30 text-purple-400"
-                        title="This wallet is operated by the BULK exchange protocol (liquidation engine, insurance fund, or market-maker). It is not a regular trader and is hidden from leaderboards."
-                      >
-                        <Shield className="w-3.5 h-3.5" />
-                        <span className="font-semibold">Bulk System Account</span>
-                      </div>
-                    ) : (
-                      <BulkRankBadge address={address} />
-                    )}
-                    <AccountHierarchy address={address} />
-                  </div>
-                  {/* Claim Wallet button - only for email users who haven't claimed yet */}
-                  {canClaimWallet && (
-                    <button
-                      onClick={handleClaimWallet}
-                      disabled={claimLoading}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 disabled:opacity-50"
+                  {twitterHandle && (
+                    <a
+                      href={`https://twitter.com/${twitterHandle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors mb-1"
                     >
-                      {claimLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <UserCheck className="w-4 h-4" />
-                          This is my wallet
-                        </>
-                      )}
-                    </button>
+                      <XIcon className="w-3 h-3" />
+                      @{twitterHandle}
+                    </a>
                   )}
-                  
-                  {/* Show "Your Wallet" badge if this is claimed wallet */}
-                  {isClaimedWallet && (
-                    <span className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-sm font-medium">
-                      <UserCheck className="w-4 h-4" />
-                      Your Claimed Wallet
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h2 className="font-mono text-sm text-[var(--text-primary)]">{formatAddress(address)}</h2>
+                    <button
+                      onClick={copyAddress}
+                      className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                      title="Copy address"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-bulk-green" /> : <Copy className="w-3 h-3 text-[var(--text-tertiary)]" />}
+                    </button>
+                    <a
+                      href={`https://explorer.bulk.trade/address/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
+                      title="View on BULK explorer"
+                    >
+                      <ExternalLink className="w-3 h-3 text-[var(--text-tertiary)]" />
+                    </a>
+                  </div>
+                  {isOwnWallet && (
+                    <span className="inline-block mt-1 px-1.5 py-0.5 bg-bulk-green/20 text-bulk-green text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-green/30">
+                      You
                     </span>
                   )}
-
-                  {/* Follow button - ONLY show if NOT own wallet */}
-                  {!isOwnWallet && (
-                    <button
-                      onClick={toggleFollow}
-                      disabled={followLoading}
-                      className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
-                        isFollowing
-                          ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
-                          : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
-                      )}
+                </div>
+                {/* Hierarchy + rank stacked beneath identity. They're
+                    contextual to the wallet itself, not actions. */}
+                <div className="flex flex-col gap-2 w-full">
+                  {isSystemWallet(address) ? (
+                    <div
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-purple-500/10 border-purple-500/30 text-purple-400 self-start"
+                      title="This wallet is operated by the BULK exchange protocol"
                     >
-                      {followLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : isFollowing ? (
-                        <>
-                          <StarOff className="w-4 h-4" />
-                          Unfollow
-                        </>
-                      ) : (
-                        <>
-                          <Star className="w-4 h-4" />
-                          Follow
-                        </>
-                      )}
-                    </button>
+                      <Shield className="w-3.5 h-3.5" />
+                      <span className="font-semibold">BULK System</span>
+                    </div>
+                  ) : (
+                    <BulkRankBadge address={address} />
                   )}
+                  <AccountHierarchy address={address} />
+                </div>
+                {/* Follow / Claim buttons stacked below. Full width so
+                    they fill the rail. */}
+                {canClaimWallet && (
+                  <button
+                    onClick={handleClaimWallet}
+                    disabled={claimLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 disabled:opacity-50"
+                  >
+                    {claimLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><UserCheck className="w-4 h-4" />This is my wallet</>)}
+                  </button>
+                )}
+                {isClaimedWallet && (
+                  <span className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-sm font-medium">
+                    <UserCheck className="w-4 h-4" />
+                    Your Claimed Wallet
+                  </span>
+                )}
+                {!isOwnWallet && (
+                  <button
+                    onClick={toggleFollow}
+                    disabled={followLoading}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50",
+                      isFollowing
+                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20"
+                        : "bg-bulk-green text-dark-primary hover:bg-bulk-green/90"
+                    )}
+                  >
+                    {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? (<><StarOff className="w-4 h-4" />Unfollow</>) : (<><Star className="w-4 h-4" />Follow</>)}
+                  </button>
+                )}
+              </div>
+
+              {/* Account Value — the huge headline number. Mimics
+                  Hyperdash's left-rail anchor. Falls back to "—" when
+                  live balance hasn't loaded; the small skeleton-y
+                  treatment is intentional rather than a spinner so the
+                  rail layout stays stable. */}
+              <div className="border-t border-[var(--border-color)] pt-5">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+                  Account Value
+                </div>
+                <div className="text-3xl font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
+                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
                 </div>
               </div>
-            </div>
+
+              {/* Overview — compact key:value list. Each row uses the
+                  same flex layout (label left, value right) so the
+                  column reads cleanly. Tone applied to the value side
+                  only when it carries semantic meaning (PnL sign). */}
+              <div className="border-t border-[var(--border-color)] pt-5">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
+                  Overview
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  <OverviewRow
+                    label="Unrealized PnL"
+                    value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'}
+                    tone={margin ? (margin.unrealizedPnl >= 0 ? 'green' : 'red') : 'neutral'}
+                  />
+                  <OverviewRow
+                    label="Account Leverage"
+                    value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}x` : '—'}
+                  />
+                  <OverviewRow
+                    label="Margin Usage"
+                    value={
+                      margin && margin.totalBalance > 0
+                        ? `${((margin.marginUsed / margin.totalBalance) * 100).toFixed(2)}%`
+                        : '—'
+                    }
+                  />
+                  <OverviewRow
+                    label="All Time PnL"
+                    value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
+                    tone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
+                    tooltip={totalPnlTooltip}
+                  />
+                  <OverviewRow
+                    label="Volume"
+                    value={`$${formatCompact(bulkVolume)}`}
+                  />
+                  <OverviewRow
+                    label="Fees Paid"
+                    value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
+                  />
+                  <OverviewRow
+                    label="Liquidations"
+                    value={String(tracked?.total_liquidations || 0)}
+                  />
+                </div>
+              </div>
+
+              {/* Analysis — derived stats from closed positions. Same
+                  layout vocabulary as Overview so the rail reads as
+                  one cohesive sidebar with topical sub-sections. */}
+              {closedPositions.length > 0 && (
+                <div className="border-t border-[var(--border-color)] pt-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
+                    Analysis
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    <OverviewRow
+                      label="Longest Win Streak"
+                      value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '—'}
+                    />
+                    <OverviewRow
+                      label="Avg Trade Duration"
+                      value={formatDurationShort(analysisStats.avgDuration)}
+                    />
+                    <OverviewRow
+                      label="Median Trade Duration"
+                      value={formatDurationShort(analysisStats.medianDuration)}
+                    />
+                    <OverviewRow
+                      label="PnL Cohort"
+                      value={analysisStats.pnlCohort.label}
+                      tone={analysisStats.pnlCohort.tone}
+                    />
+                    <OverviewRow
+                      label="Size Cohort"
+                      value={analysisStats.sizeCohort}
+                      tone="green"
+                    />
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {/* ──────────────────────────────────────────────────────
+                MAIN COLUMN — top strip, chart, positions, risk events,
+                activity. The bulk of the page content lives here in a
+                vertical stack so each block gets the full main-column
+                width.
+                ────────────────────────────────────────────────────── */}
+            <div className="flex flex-col gap-6 min-w-0">
 
             {/* Top strip — 4 bar-style cards that read as the Hyperdash
                 signature: Performance, Direction Bias, Distance to
@@ -1389,483 +1512,322 @@ export default function WalletPage() {
               )}
             </div>
 
-            {/* Stats panel. One integrated card containing everything live
-                from BULK: PnL on the left as the visual anchor, supporting
-                numbers (balance, margin used, available, liqs) gridded next
-                to it. Single block keeps the visual weight grouped instead
-                of stacking two boxes on top of each other. */}
-            {hasLiveData && margin ? (
-              // 8-card stat grid. Each metric gets its own accent color
-              // applied to icon/label/value, plus its own bordered tile.
-              // Top row = lifetime/historical context, bottom row = live
-              // state. PnL cards (Total PnL, Unrealized) use the per-tone
-              // color for icon/label but flip the value color based on sign
-              // — green when positive, red when negative.
-              //
-              // 5-column grid because Fees + Funding cards bring the
-              // lifetime row to 5 cards. Matches HyperTracker / Dexly's
-              // wallet profile layout where fees + funding are first-class
-              // KPIs alongside Total PnL and Volume.
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-                {/* Row 1 — lifetime context, sourced from BULK indexer +
-                    fullAccount.margin. */}
-                <StatCard
-                  icon={BarChart3}
-                  label="Total Volume"
-                  value={`$${formatCompact(bulkVolume)}`}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={Activity}
-                  label="Closed Positions"
-                  value={String(bulkClosedCount)}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={TrendingUp}
-                  label="Total PnL"
-                  value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
-                  tone="green"
-                  valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
-                  tooltip={totalPnlTooltip}
-                />
-                {/* Fees Paid — lifetime fees this wallet has paid (always
-                    negative-signed in source data; we render as the
-                    absolute "paid" amount with a clear sign treatment).
-                    Card tone is neutral (red would feel punitive for a
-                    factual reference number — fees aren't a loss, they're
-                    cost of business). */}
-                <StatCard
-                  icon={Receipt}
-                  label="Fees Paid"
-                  value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
-                  tone="neutral"
-                />
-                {/* Funding — signed. Positive means the trader RECEIVED
-                    funding net over lifetime (held the right side of
-                    funding-rate sign for long enough); negative means
-                    they paid more than they received. Sign-driven
-                    coloring (green/red) makes the direction readable
-                    at a glance. */}
-                <StatCard
-                  icon={Repeat}
-                  label={lifetimeFunding !== null && lifetimeFunding < 0 ? 'Funding Paid' : 'Funding Received'}
-                  value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '-'}$${formatCompact(Math.abs(lifetimeFunding))}` : '—'}
-                  tone="neutral"
-                  valueTone={lifetimeFunding !== null ? (lifetimeFunding >= 0 ? 'green' : 'red') : undefined}
-                />
 
-                {/* Row 2 — live state */}
-                <StatCard
-                  icon={DollarSign}
-                  label="Live Balance"
-                  value={`$${formatNumber(margin.totalBalance, 2)}`}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={Shield}
-                  label="Margin Used"
-                  value={`$${formatNumber(margin.marginUsed, 2)}`}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={margin.unrealizedPnl >= 0 ? TrendingUp : TrendingDown}
-                  label="Unrealized PnL"
-                  value={`${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}`}
-                  tone="red"
-                  valueTone={margin.unrealizedPnl >= 0 ? 'green' : 'red'}
-                />
-                <StatCard
-                  icon={PiggyBank}
-                  label="Available"
-                  value={`$${formatNumber(margin.availableBalance, 2)}`}
-                  tone="neutral"
-                />
-                {/* Liquidations moved from row 1 to row 2 to keep the
-                    grid symmetric (5×2 instead of 5+4). Reads naturally
-                    in row 2 as "how often did this wallet's risk go
-                    sideways" — fits with the live-state context. */}
-                <StatCard
-                  icon={Flame}
-                  label="Liquidations"
-                  value={String(tracked?.total_liquidations || 0)}
-                  tone="neutral"
-                />
-              </div>
-            ) : (
-              // No live BULK data — show only the lifetime row of cards
-              // since live metrics aren't available. We still surface
-              // Fees Paid from the indexer (fees_paid is on the per-wallet
-              // indexer endpoint independently of live data), but skip
-              // Funding (no equivalent indexer field — funding only
-              // appears on the live margin object).
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-                <StatCard
-                  icon={BarChart3}
-                  label="Total Volume"
-                  value={`$${formatCompact(bulkVolume)}`}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={Activity}
-                  label="Closed Positions"
-                  value={String(bulkClosedCount)}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={TrendingUp}
-                  label="Total PnL"
-                  value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
-                  tone="green"
-                  valueTone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
-                  tooltip={totalPnlTooltip}
-                />
-                <StatCard
-                  icon={Receipt}
-                  label="Fees Paid"
-                  value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
-                  tone="neutral"
-                />
-                <StatCard
-                  icon={Flame}
-                  label="Liquidations"
-                  value={String(tracked?.total_liquidations || 0)}
-                  tone="neutral"
-                />
-              </div>
-            )}
 
-            {/* Main Content Grid */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Left column: compact analysis stats stacked above the
-                  positions panel. AnalysisCard is small (~140px) so it
-                  doesn't crowd the positions list visible below — it
-                  reads as a "trader profile summary" above a "trader
-                  activity feed". Hidden when there's no closed-position
-                  history to analyze (brand-new wallets). */}
-              <div className="flex flex-col gap-4">
-                {closedPositions.length > 0 && (
-                  <AnalysisCard
-                    longestStreak={analysisStats.longestStreak}
-                    avgDuration={analysisStats.avgDuration}
-                    medianDuration={analysisStats.medianDuration}
-                    pnlCohort={analysisStats.pnlCohort}
-                    sizeCohort={analysisStats.sizeCohort}
+            {/* PnL chart — full width of the main column, prominent
+                visual anchor. Moved above positions in the Hyperdash-
+                style layout because the chart tells the wallet's story
+                first; positions detail comes after. */}
+            {/* PnL History Chart */}
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
+              <div className="p-4 border-b border-[var(--border-color)]">
+                <h2 className="font-semibold flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-green-400" />
+                  PnL History
+                </h2>
+              </div>
+
+              {history.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+                  <div>
+                    <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>No history data yet</p>
+                    <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
+                  </div>
+                </div>
+              ) : (() => {
+                const chartData = history.map(h => ({ 
+                  ...h, 
+                  displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
+                }));
+                
+                // Find min/max for gradient stop calculation
+                const pnlValues = chartData.map(d => d.displayPnl);
+                const minPnl = Math.min(...pnlValues);
+                const maxPnl = Math.max(...pnlValues);
+                
+                // Calculate where zero line falls in the gradient (0 = top, 1 = bottom)
+                const zeroPosition = maxPnl <= 0 ? 0 : minPnl >= 0 ? 1 : maxPnl / (maxPnl - minPnl);
+                
+                return (
+                  <div className="flex-1 p-4 min-h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="pnlLineGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#22c55e" />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" />
+                            <stop offset="100%" stopColor="#ef4444" />
+                          </linearGradient>
+                          <linearGradient id="pnlFillGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" stopOpacity={0.1} />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" stopOpacity={0.1} />
+                            <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis 
+                          dataKey="timestamp" 
+                          tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                          tick={{ fill: '#666', fontSize: 10 }}
+                          axisLine={{ stroke: 'var(--border-color)' }}
+                        />
+                        <YAxis 
+                          tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
+                          tick={{ fill: '#666', fontSize: 10 }}
+                          axisLine={{ stroke: 'var(--border-color)' }}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip 
+                          contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                          labelStyle={{ color: 'var(--text-secondary)' }}
+                          labelFormatter={(ts) => new Date(ts).toLocaleString()}
+                          formatter={(value: number) => {
+                            const color = value >= 0 ? '#22c55e' : '#ef4444';
+                            return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="displayPnl" 
+                          stroke="url(#pnlLineGradient)"
+                          strokeWidth={2}
+                          fill="url(#pnlFillGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Positions panel — full width below the chart with
+                Open / Recent tab toggle. Hyperdash convention: a
+                wide table sits under the chart so the eye reads
+                chart-then-positions naturally as a top-to-bottom
+                story. The Recent tab uses a dense table format. */}
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
+              <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
+                {/* Loading state takes precedence over tabs — if BULK
+                    hasn't returned yet, show the spinner instead of
+                    tabs (which would be empty anyway). */}
+                {!hasLiveData && positions.length === 0 ? (
+                  <h2 className="font-semibold flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                    Fetching positions…
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider ml-2">
+                      auto-retries every 10s
+                    </span>
+                  </h2>
+                ) : (
+                  <div className="flex items-center gap-0.5 bg-[var(--bg-base)] rounded-lg p-0.5 border border-[var(--border-color)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPositionsTab('open');
+                        setTabIsUserPicked(true);
+                      }}
+                      className={cn(
+                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                        positionsTab === 'open'
+                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      )}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-bulk-green" />
+                      Open
+                      {positions.length > 0 && (
+                        <span className="text-[var(--text-tertiary)] tabular-nums">
+                          {positions.length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPositionsTab('recent');
+                        setTabIsUserPicked(true);
+                      }}
+                      className={cn(
+                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                        positionsTab === 'recent'
+                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      )}
+                    >
+                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      Recent Trades
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Position cards. Click any card to open the price chart
+                  modal with entry / mark / liq lines drawn on a candle
+                  chart for that market — the BULK dev's headline ask.
+                  The "→" arrow is persistent (not hover-only) so stream
+                  viewers know the cards are interactive. */}
+              <div className="divide-y divide-[var(--border-color)] max-h-[480px] overflow-y-auto">
+                {positionsTab === 'open' ? (
+                  positions.length > 0 ? (
+                    positions.map((pos, i) => {
+                    const isLong = pos.size > 0;
+                    const pnlPercent = pos.notional 
+                      ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100 
+                      : 0;
+                    const markPrice = markPrices[pos.symbol] || 0;
+
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() =>
+                          setChartPosition({
+                            kind: 'live',
+                            walletAddress: address,
+                            symbol: pos.symbol,
+                            side: isLong ? 'long' : 'short',
+                            entryPrice: pos.price,
+                            markPrice: markPrice || pos.price,
+                            liquidationPrice: pos.liquidationPrice,
+                            size: Math.abs(pos.size),
+                            leverage: pos.leverage,
+                            unrealizedPnl: pos.unrealizedPnl,
+                          })
+                        }
+                        className="w-full text-left p-5 hover:bg-[var(--bg-secondary-20)] transition-colors group cursor-pointer"
+                        aria-label={`View ${pos.symbol} chart`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              'px-2 py-0.5 rounded text-xs font-semibold tracking-wider',
+                              isLong
+                                ? 'bg-bulk-green/15 text-bulk-green'
+                                : 'bg-bulk-red/15 text-bulk-red'
+                            )}>
+                              {isLong ? 'LONG' : 'SHORT'}
+                            </span>
+                            <span className="font-semibold text-[var(--text-primary)]">{pos.symbol}</span>
+                            <span className="text-[var(--text-tertiary)] text-sm font-mono">{pos.leverage}x</span>
+                          </div>
+                          <div className="text-right">
+                            <p className={cn(
+                              'font-bold text-lg tabular-nums',
+                              pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
+                            )}>
+                              {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
+                            </p>
+                            <p className={cn(
+                              'text-xs tabular-nums',
+                              pnlPercent >= 0 ? 'text-bulk-green' : 'text-bulk-red'
+                            )}>
+                              {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Size</p>
+                            <p className="font-mono text-[var(--text-primary)] tabular-nums">{formatNumber(Math.abs(pos.size), 4)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Entry</p>
+                            <p className="font-mono text-[var(--text-primary)] tabular-nums">${formatNumber(pos.price, 2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Mark</p>
+                            <p className="font-mono text-blue-400 tabular-nums">${formatNumber(markPrice, 2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Liq</p>
+                            <p className="font-mono text-bulk-red tabular-nums">${formatNumber(pos.liquidationPrice, 2)}</p>
+                          </div>
+                        </div>
+
+                        {/* Open time — derived client-side from the
+                            wallet's fill history (BULK doesn't expose
+                            per-position timestamps). Renders as
+                            "Opened 2h 14m ago" when we have data, falls
+                            back to a placeholder otherwise. */}
+                        {(() => {
+                          const openInfo = positionOpenTimes[pos.symbol];
+                          if (openInfo === undefined) {
+                            // Still fetching — render nothing rather than
+                            // a flashing placeholder.
+                            return null;
+                          }
+                          if (openInfo === null) {
+                            return null;
+                          }
+                          const ago = Date.now() - openInfo.openedAt;
+                          return (
+                            <p className="mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums">
+                              Opened {formatDuration(ago)} ago
+                              <span className="text-[var(--text-tertiary)]/70 ml-2">
+                                · {new Date(openInfo.openedAt).toLocaleString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </p>
+                          );
+                        })()}
+
+                        {/* Persistent "view chart" affordance below the
+                            numbers. Subtle, but visible to anyone watching
+                            a stream — they can see the cards are clickable
+                            even without seeing the streamer's mouse. */}
+                        <div className="mt-3 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] group-hover:text-bulk-green transition-colors">
+                          <span>View chart</span>
+                          <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                  ) : (
+                    // "Open" tab selected but no open positions exist.
+                    // Empty state with a hint that recent trades are one
+                    // tab over.
+                    <div className="p-8 text-center text-[var(--text-tertiary)]">
+                      <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>No open positions</p>
+                      <p className="text-xs mt-1">
+                        Switch to Recent Trades to see closed positions
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  // "Recent" tab — always show closed-positions list,
+                  // regardless of whether there are open positions.
+                  <ClosedPositionsList
+                    address={address}
+                    limit={50}
+                    density="table"
+                    onSelect={(p) =>
+                      setChartPosition({
+                        kind: 'closed',
+                        walletAddress: address,
+                        symbol: p.symbol,
+                        side: p.side,
+                        entryPrice: p.openPrice,
+                        closePrice: p.closePrice,
+                        size: p.size,
+                        leverage: p.leverage,
+                        realizedPnl: p.realizedPnl,
+                        fees: p.fees,
+                        funding: p.funding,
+                        openedAt: p.openedAt,
+                        closedAt: p.closedAt,
+                        liquidated: p.liquidated,
+                      })
+                    }
                   />
                 )}
-              {/* Positions panel with Open / Recent tab toggle.
-                  Replaces the older two-stacked-panels layout. The default
-                  tab is auto-picked: "Open" if the wallet has any active
-                  position, otherwise "Recent". Once the user clicks a tab,
-                  the auto-switch is disabled (tabIsUserPicked) so the panel
-                  doesn't jump around as positions open/close in the
-                  background poll. */}
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-                <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
-                  {/* Loading state takes precedence over tabs — if BULK
-                      hasn't returned yet, show the spinner instead of
-                      tabs (which would be empty anyway). */}
-                  {!hasLiveData && positions.length === 0 ? (
-                    <h2 className="font-semibold flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
-                      Fetching positions…
-                      <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider ml-2">
-                        auto-retries every 10s
-                      </span>
-                    </h2>
-                  ) : (
-                    <div className="flex items-center gap-0.5 bg-[var(--bg-base)] rounded-lg p-0.5 border border-[var(--border-color)]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPositionsTab('open');
-                          setTabIsUserPicked(true);
-                        }}
-                        className={cn(
-                          'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                          positionsTab === 'open'
-                            ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
-                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        )}
-                      >
-                        <Activity className="w-3.5 h-3.5 text-bulk-green" />
-                        Open
-                        {positions.length > 0 && (
-                          <span className="text-[var(--text-tertiary)] tabular-nums">
-                            {positions.length}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPositionsTab('recent');
-                          setTabIsUserPicked(true);
-                        }}
-                        className={cn(
-                          'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                          positionsTab === 'recent'
-                            ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
-                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        )}
-                      >
-                        <Clock className="w-3.5 h-3.5 text-blue-400" />
-                        Recent Trades
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Position cards. Click any card to open the price chart
-                    modal with entry / mark / liq lines drawn on a candle
-                    chart for that market — the BULK dev's headline ask.
-                    The "→" arrow is persistent (not hover-only) so stream
-                    viewers know the cards are interactive. */}
-                <div className="divide-y divide-[var(--border-color)] max-h-[480px] overflow-y-auto">
-                  {positionsTab === 'open' ? (
-                    positions.length > 0 ? (
-                      positions.map((pos, i) => {
-                      const isLong = pos.size > 0;
-                      const pnlPercent = pos.notional 
-                        ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100 
-                        : 0;
-                      const markPrice = markPrices[pos.symbol] || 0;
-
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() =>
-                            setChartPosition({
-                              kind: 'live',
-                              walletAddress: address,
-                              symbol: pos.symbol,
-                              side: isLong ? 'long' : 'short',
-                              entryPrice: pos.price,
-                              markPrice: markPrice || pos.price,
-                              liquidationPrice: pos.liquidationPrice,
-                              size: Math.abs(pos.size),
-                              leverage: pos.leverage,
-                              unrealizedPnl: pos.unrealizedPnl,
-                            })
-                          }
-                          className="w-full text-left p-5 hover:bg-[var(--bg-secondary-20)] transition-colors group cursor-pointer"
-                          aria-label={`View ${pos.symbol} chart`}
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className={cn(
-                                'px-2 py-0.5 rounded text-xs font-semibold tracking-wider',
-                                isLong
-                                  ? 'bg-bulk-green/15 text-bulk-green'
-                                  : 'bg-bulk-red/15 text-bulk-red'
-                              )}>
-                                {isLong ? 'LONG' : 'SHORT'}
-                              </span>
-                              <span className="font-semibold text-[var(--text-primary)]">{pos.symbol}</span>
-                              <span className="text-[var(--text-tertiary)] text-sm font-mono">{pos.leverage}x</span>
-                            </div>
-                            <div className="text-right">
-                              <p className={cn(
-                                'font-bold text-lg tabular-nums',
-                                pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                              )}>
-                                {pos.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(pos.unrealizedPnl, 2)}
-                              </p>
-                              <p className={cn(
-                                'text-xs tabular-nums',
-                                pnlPercent >= 0 ? 'text-bulk-green' : 'text-bulk-red'
-                              )}>
-                                {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-4 gap-2 text-xs">
-                            <div>
-                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Size</p>
-                              <p className="font-mono text-[var(--text-primary)] tabular-nums">{formatNumber(Math.abs(pos.size), 4)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Entry</p>
-                              <p className="font-mono text-[var(--text-primary)] tabular-nums">${formatNumber(pos.price, 2)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Mark</p>
-                              <p className="font-mono text-blue-400 tabular-nums">${formatNumber(markPrice, 2)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">Liq</p>
-                              <p className="font-mono text-bulk-red tabular-nums">${formatNumber(pos.liquidationPrice, 2)}</p>
-                            </div>
-                          </div>
-
-                          {/* Open time — derived client-side from the
-                              wallet's fill history (BULK doesn't expose
-                              per-position timestamps). Renders as
-                              "Opened 2h 14m ago" when we have data, falls
-                              back to a placeholder otherwise. */}
-                          {(() => {
-                            const openInfo = positionOpenTimes[pos.symbol];
-                            if (openInfo === undefined) {
-                              // Still fetching — render nothing rather than
-                              // a flashing placeholder.
-                              return null;
-                            }
-                            if (openInfo === null) {
-                              return null;
-                            }
-                            const ago = Date.now() - openInfo.openedAt;
-                            return (
-                              <p className="mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums">
-                                Opened {formatDuration(ago)} ago
-                                <span className="text-[var(--text-tertiary)]/70 ml-2">
-                                  · {new Date(openInfo.openedAt).toLocaleString(undefined, {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </span>
-                              </p>
-                            );
-                          })()}
-
-                          {/* Persistent "view chart" affordance below the
-                              numbers. Subtle, but visible to anyone watching
-                              a stream — they can see the cards are clickable
-                              even without seeing the streamer's mouse. */}
-                          <div className="mt-3 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] group-hover:text-bulk-green transition-colors">
-                            <span>View chart</span>
-                            <span className="transition-transform group-hover:translate-x-0.5">→</span>
-                          </div>
-                        </button>
-                      );
-                    })
-                    ) : (
-                      // "Open" tab selected but no open positions exist.
-                      // Empty state with a hint that recent trades are one
-                      // tab over.
-                      <div className="p-8 text-center text-[var(--text-tertiary)]">
-                        <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <p>No open positions</p>
-                        <p className="text-xs mt-1">
-                          Switch to Recent Trades to see closed positions
-                        </p>
-                      </div>
-                    )
-                  ) : (
-                    // "Recent" tab — always show closed-positions list,
-                    // regardless of whether there are open positions.
-                    <ClosedPositionsList
-                      address={address}
-                      limit={50}
-                      onSelect={(p) =>
-                        setChartPosition({
-                          kind: 'closed',
-                          walletAddress: address,
-                          symbol: p.symbol,
-                          side: p.side,
-                          entryPrice: p.openPrice,
-                          closePrice: p.closePrice,
-                          size: p.size,
-                          leverage: p.leverage,
-                          realizedPnl: p.realizedPnl,
-                          fees: p.fees,
-                          funding: p.funding,
-                          openedAt: p.openedAt,
-                          closedAt: p.closedAt,
-                          liquidated: p.liquidated,
-                        })
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-              </div>{/* end left column flex-col wrapper */}
-
-              {/* PnL History Chart */}
-              <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-                <div className="p-4 border-b border-[var(--border-color)]">
-                  <h2 className="font-semibold flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                    PnL History
-                  </h2>
-                </div>
-
-                {history.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
-                    <div>
-                      <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                      <p>No history data yet</p>
-                      <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
-                    </div>
-                  </div>
-                ) : (() => {
-                  const chartData = history.map(h => ({ 
-                    ...h, 
-                    displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
-                  }));
-                  
-                  // Find min/max for gradient stop calculation
-                  const pnlValues = chartData.map(d => d.displayPnl);
-                  const minPnl = Math.min(...pnlValues);
-                  const maxPnl = Math.max(...pnlValues);
-                  
-                  // Calculate where zero line falls in the gradient (0 = top, 1 = bottom)
-                  const zeroPosition = maxPnl <= 0 ? 0 : minPnl >= 0 ? 1 : maxPnl / (maxPnl - minPnl);
-                  
-                  return (
-                    <div className="flex-1 p-4 min-h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData}>
-                          <defs>
-                            <linearGradient id="pnlLineGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#22c55e" />
-                              <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" />
-                              <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" />
-                              <stop offset="100%" stopColor="#ef4444" />
-                            </linearGradient>
-                            <linearGradient id="pnlFillGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
-                              <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" stopOpacity={0.1} />
-                              <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" stopOpacity={0.1} />
-                              <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
-                            </linearGradient>
-                          </defs>
-                          <XAxis 
-                            dataKey="timestamp" 
-                            tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                            tick={{ fill: '#666', fontSize: 10 }}
-                            axisLine={{ stroke: 'var(--border-color)' }}
-                          />
-                          <YAxis 
-                            tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
-                            tick={{ fill: '#666', fontSize: 10 }}
-                            axisLine={{ stroke: 'var(--border-color)' }}
-                            domain={['auto', 'auto']}
-                          />
-                          <Tooltip 
-                            contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                            labelStyle={{ color: 'var(--text-secondary)' }}
-                            labelFormatter={(ts) => new Date(ts).toLocaleString()}
-                            formatter={(value: number) => {
-                              const color = value >= 0 ? '#22c55e' : '#ef4444';
-                              return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
-                            }}
-                          />
-                          <Area 
-                            type="monotone" 
-                            dataKey="displayPnl" 
-                            stroke="url(#pnlLineGradient)"
-                            strokeWidth={2}
-                            fill="url(#pnlFillGradient)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  );
-                })()}
               </div>
             </div>
 
@@ -1886,6 +1848,7 @@ export default function WalletPage() {
             <div className="mt-6">
               <ActivityFeed address={address} />
             </div>
+            </div>{/* end main-column wrapper */}
           </div>
         )}
       </main>
