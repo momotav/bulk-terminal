@@ -38,6 +38,12 @@ interface Props {
   limit?: number;
   /** Filter by event type. Default 'all'. */
   type?: 'liquidation' | 'adl' | 'all';
+  /** When true, skip the outer card chrome (background, border, header).
+   *  Used when embedding the list inside another panel (e.g. the wallet
+   *  page's tabbed positions panel) so we don't nest a card inside a
+   *  card. Header label, count, and "Risk Events" title are also hidden
+   *  in bare mode because the parent tab already provides that context. */
+  bare?: boolean;
 }
 
 // Initial visible row count. Anything beyond this is hidden behind an
@@ -45,7 +51,7 @@ interface Props {
 // most users care about the most recent few; the rest is on-demand.
 const COLLAPSED_COUNT = 10;
 
-export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
+export function RiskEventsList({ address, limit = 50, type = 'all', bare = false }: Props) {
   const [events, setEvents] = useState<RiskEvent[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState(false);
@@ -74,6 +80,19 @@ export function RiskEventsList({ address, limit = 50, type = 'all' }: Props) {
       cancelled = true;
     };
   }, [address, limit, type]);
+
+  // Bare mode: render only the body, no outer card or header. Caller
+  // owns the surrounding layout.
+  if (bare) {
+    return (
+      <RiskEventsBody
+        events={events}
+        error={error}
+        isExpanded={isExpanded}
+        onToggleExpand={() => setIsExpanded((v) => !v)}
+      />
+    );
+  }
 
   return (
     <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
