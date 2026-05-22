@@ -10,7 +10,7 @@ import {
   BarChart3, Flame, Shield, PiggyBank, DollarSign,
   Receipt, Repeat
 } from 'lucide-react';
-import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, userApi } from '@/lib/api';
+import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, type ClosedPosition, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
@@ -270,6 +270,221 @@ function TotalPnlBreakdown({
   );
 }
 
+// ----------------------------------------------------------------------------
+// PerformanceBar
+//
+// Compact 6-bar visualization of recent trade outcomes. Each bar is one
+// closed position colored by sign of realizedPnl (green = win, red = loss).
+// Newest on the right, oldest on the left so the eye reads it like a
+// timeline (left → right = then → now). Matches Hyperdash's wallet header
+// performance strip.
+//
+// Below the bars: a secondary line with win-rate % and total trade count
+// for context. When `winRate` is null (no closed positions yet, or the
+// indexer hasn't published a rate), shows "N/A".
+// ----------------------------------------------------------------------------
+function PerformanceBar({
+  recentWinLoss,
+  winRate,
+  totalTrades,
+}: {
+  recentWinLoss: boolean[];
+  winRate: number | null;
+  totalTrades: number;
+}) {
+  if (totalTrades === 0) {
+    // Brand-new wallets without any closed trades — show nothing rather
+    // than a misleading empty bar.
+    return null;
+  }
+  // Pad to 6 slots so the layout doesn't jump when a wallet has fewer
+  // than 6 trades. Empty slots render as muted placeholders.
+  const slots: (boolean | null)[] = [...recentWinLoss];
+  while (slots.length < 6) slots.push(null);
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+        Performance
+      </span>
+      {/* 6 thin bars, newest-rightmost. We reverse `slots` for render
+          since we computed it newest-first but want newest on the right. */}
+      <div className="flex items-center gap-1">
+        {[...slots].reverse().map((slot, i) => (
+          <div
+            key={i}
+            className={cn(
+              'w-3 h-5 rounded-sm',
+              slot === true && 'bg-bulk-green',
+              slot === false && 'bg-bulk-red',
+              slot === null && 'bg-[var(--bg-secondary-20)]/40',
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-[10px] text-[var(--text-tertiary)] font-mono tabular-nums">
+        {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'} Win Rate · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
+      </span>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// BarMetricCard
+//
+// Card for a metric that has a meaningful 0-100% bar visualization:
+// Direction Bias (long vs short %), Distance to Liquidation (% headroom
+// before forced close), Effective Leverage (% of max safe leverage).
+//
+// The visual structure mirrors Hyperdash's Performance/Leverage/Margin
+// Usage/Direction Bias cards in their wallet view: small label at top,
+// large primary value, then a thin filled bar, then a secondary line
+// of context. The `barColor` and `fillPct` are computed by the caller
+// since each metric has different sign semantics.
+// ----------------------------------------------------------------------------
+function BarMetricCard({
+  label,
+  value,
+  valueTone,
+  barColor,
+  fillPct,
+  subtitle,
+  secondaryFillPct,
+  secondaryBarColor,
+}: {
+  label: string;
+  value: string;
+  valueTone?: 'green' | 'red' | 'orange' | 'neutral';
+  /** Tailwind class for the bar fill, e.g. "bg-bulk-green". */
+  barColor: string;
+  /** Primary bar fill 0..1. */
+  fillPct: number;
+  /** Subtitle line — context like "$1.8M Notional · $477.2K Equity". */
+  subtitle?: string;
+  /** Optional second bar fill (used by Direction Bias to show long+short
+   *  as a split — long fills from the left, short from the right). */
+  secondaryFillPct?: number;
+  secondaryBarColor?: string;
+}) {
+  const valueColor =
+    valueTone === 'green' ? 'text-bulk-green' :
+    valueTone === 'red' ? 'text-bulk-red' :
+    valueTone === 'orange' ? 'text-bulk-orange' :
+    'text-[var(--text-primary)]';
+  // Clamp to [0, 1] so a bug doesn't cause the bar to overflow the track.
+  const clampedFill = Math.max(0, Math.min(1, fillPct));
+  const clampedSecondary = secondaryFillPct !== undefined
+    ? Math.max(0, Math.min(1, secondaryFillPct))
+    : null;
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+        {label}
+      </div>
+      <div className={cn('text-2xl font-bold tabular-nums tracking-tight mb-2', valueColor)}>
+        {value}
+      </div>
+      {/* Bar track. We use a single 8px-tall rounded track with two
+          potential fills overlaid — the secondary fill renders from the
+          RIGHT (justify-end via absolute right-0) so long/short splits
+          read intuitively. */}
+      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2">
+        <div
+          className={cn('absolute left-0 top-0 h-full rounded-full', barColor)}
+          style={{ width: `${clampedFill * 100}%` }}
+        />
+        {clampedSecondary !== null && secondaryBarColor && (
+          <div
+            className={cn('absolute right-0 top-0 h-full rounded-full', secondaryBarColor)}
+            style={{ width: `${clampedSecondary * 100}%` }}
+          />
+        )}
+      </div>
+      {subtitle && (
+        <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+          {subtitle}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// AnalysisCard
+//
+// Vertical key/value list of derived analysis stats. Sits in the left
+// column above the positions panel as a compact ~140px-tall summary.
+// Mirrors the "Analysis" sidebar in Hyperdash's wallet view (Longest
+// Win Streak, Avg Trade Duration, Median Trade Duration, PnL Cohort,
+// Size Cohort) but renders horizontally compact since vertical space
+// in our layout is more contested.
+// ----------------------------------------------------------------------------
+function AnalysisCard({
+  longestStreak,
+  avgDuration,
+  medianDuration,
+  pnlCohort,
+  sizeCohort,
+}: {
+  longestStreak: number;
+  avgDuration: number | null;
+  medianDuration: number | null;
+  pnlCohort: { label: string; tone: 'green' | 'red' | 'neutral' };
+  sizeCohort: string;
+}) {
+  // Format ms duration as "Xd Yh" / "Xh Ym" / "Xm" — depending on scale.
+  // Matches Hyperdash's "19d 19h" style. Returns "—" for null/zero.
+  const formatDuration = (ms: number | null): string => {
+    if (ms === null || ms <= 0) return '—';
+    const minutes = Math.floor(ms / 60_000);
+    const hours = Math.floor(ms / 3_600_000);
+    const days = Math.floor(ms / 86_400_000);
+    if (days > 0) {
+      const remainingHours = Math.floor((ms - days * 86_400_000) / 3_600_000);
+      return `${days}d ${remainingHours}h`;
+    }
+    if (hours > 0) {
+      const remainingMinutes = Math.floor((ms - hours * 3_600_000) / 60_000);
+      return `${hours}h ${remainingMinutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const cohortToneClass =
+    pnlCohort.tone === 'green' ? 'text-bulk-green' :
+    pnlCohort.tone === 'red' ? 'text-bulk-red' :
+    'text-[var(--text-secondary)]';
+
+  // Each row is a label/value pair. Two-column flex layout — left
+  // justified label, right justified value — gives a clean read.
+  const rows: { label: string; value: string; valueClass?: string }[] = [
+    { label: 'Longest Win Streak', value: longestStreak > 0 ? `${longestStreak} Trade${longestStreak === 1 ? '' : 's'}` : '—' },
+    { label: 'Avg Trade Duration', value: formatDuration(avgDuration) },
+    { label: 'Median Trade Duration', value: formatDuration(medianDuration) },
+    { label: 'PnL Cohort', value: pnlCohort.label, valueClass: cohortToneClass + ' font-semibold' },
+    { label: 'Size Cohort', value: sizeCohort, valueClass: 'text-bulk-green font-semibold' },
+  ];
+
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
+        Analysis
+      </div>
+      <div className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+              {row.label}
+            </span>
+            <span className={cn('font-mono tabular-nums', row.valueClass ?? 'text-[var(--text-primary)]')}>
+              {row.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function WalletPage() {
   const params = useParams();
   const router = useRouter();
@@ -286,6 +501,14 @@ export default function WalletPage() {
   const [claimLoading, setClaimLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Closed positions used for Tier-1 derived stats (performance bar,
+  // win streak, trade durations, PnL/size cohorts). Fetched in parallel
+  // with the live wallet data. Backend caches this for 60s so a wallet
+  // page that also opens the Recent Trades panel doesn't double-fetch.
+  // Empty array while loading or for new wallets — derivations downstream
+  // guard against zero-length arrays.
+  const [closedPositions, setClosedPositions] = useState<ClosedPosition[]>([]);
 
   // Per-wallet stats sourced from BULK's official indexer. This replaces the
   // DB-tracked aggregates (tracked.total_volume / total_trades / total_pnl)
@@ -373,22 +596,23 @@ export default function WalletPage() {
       }
 
       try {
-        // Two parallel fetches:
+        // Three parallel fetches:
         //  - wallet.getWallet:        live BULK account + tracked DB row
         //  - userApi.getWalletProfile: claimed username if any
-        //
-        // We used to also call wallet.getTrades(50) here for a "recent
-        // trades" panel that was never rendered (the wallet page now
-        // shows BULK fills via ClosedPositionsList instead). Removed —
-        // it was a pure wasted round-trip on every page load and every
-        // 10s background refresh, slowing the page perceptibly.
-        const [walletResult, profileResult] = await Promise.all([
+        //  - wallet.getClosedPositions: closed-position history for the
+        //    derived analysis stats (performance bar, win streak, etc.).
+        //    Backend has a 60s server-side cache so this is cheap; the
+        //    Recent Trades panel hits the same endpoint and shares the
+        //    cache hit.
+        const [walletResult, profileResult, closedResult] = await Promise.all([
           wallet.getWallet(address),
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
+          wallet.getClosedPositions(address, { limit: 200 }).catch(() => ({ positions: [] })),
         ]);
 
         setData(walletResult);
         setProfile((profileResult as any)?.profile || null);
+        setClosedPositions(closedResult.positions || []);
 
         // Only track on first load — no need to re-track every 10s.
         if (!silent) {
@@ -662,6 +886,158 @@ export default function WalletPage() {
   const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
   const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.notional || 0), 0);
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Tier-1 derived stats — performance bar, direction bias, distance to
+  // liquidation, analysis sidebar. All computed locally from data we
+  // already have on the page. No additional fetches required.
+  //
+  // The derivations are co-located here (rather than scattered across
+  // sub-components) so the relationships between them stay visible and
+  // future-you doesn't have to grep five files to understand where the
+  // "Longest Win Streak" number came from.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Performance bar: last 6 trades, newest first, signed by realizedPnl.
+  // BULK already returns closed positions sorted newest-first, so we
+  // can slice straight off the top. When fewer than 6 trades exist we
+  // show what we have — the bar adapts visually.
+  const recentTrades = closedPositions.slice(0, 6);
+  const recentWinLoss: boolean[] = recentTrades.map((p) => p.realizedPnl >= 0);
+
+  // Win rate across ALL closed positions (not just the last 6 — that
+  // would be small-sample noise). Prefer indexer's lifetime win_rate
+  // when available since it reflects the full ledger; fall back to
+  // computing from the 200 we just fetched.
+  const winRate: number | null = (() => {
+    if (typeof bulkRow?.win_rate === 'number') return bulkRow.win_rate;
+    if (closedPositions.length === 0) return null;
+    const wins = closedPositions.filter((p) => p.realizedPnl >= 0).length;
+    return wins / closedPositions.length;
+  })();
+
+  // Direction Bias: aggregate notional of open positions, split by side.
+  // `size > 0` means long, `size < 0` means short. We use notional (size
+  // × price) rather than size alone because comparing 1 BTC long to
+  // 1000 SOL short is meaningless without dollar weighting.
+  const directionBias = (() => {
+    if (positions.length === 0) return null;
+    let longNotional = 0;
+    let shortNotional = 0;
+    for (const p of positions) {
+      const notional = Math.abs((p.size || 0) * (p.price || 0));
+      if ((p.size || 0) > 0) longNotional += notional;
+      else if ((p.size || 0) < 0) shortNotional += notional;
+    }
+    const total = longNotional + shortNotional;
+    if (total === 0) return null;
+    const longPct = longNotional / total;
+    // Label thresholds chosen to match Hyperdash's tonality without
+    // copying their exact numbers (which aren't documented).
+    let label: 'Very Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Very Bearish';
+    if (longPct >= 0.9) label = 'Very Bullish';
+    else if (longPct >= 0.65) label = 'Bullish';
+    else if (longPct >= 0.35) label = 'Neutral';
+    else if (longPct >= 0.1) label = 'Bearish';
+    else label = 'Very Bearish';
+    return { label, longPct, longNotional, shortNotional };
+  })();
+
+  // Distance to Liquidation: per-position % distance from current mark
+  // to liquidation price. We surface the WORST case (smallest distance)
+  // because that's the position most likely to take the wallet down
+  // next. Hidden card when no open positions.
+  const distanceToLiq = (() => {
+    if (positions.length === 0) return null;
+    const distances: { symbol: string; pct: number }[] = [];
+    for (const p of positions) {
+      const liqPrice = (p as any).liquidationPrice;
+      // BULK reports `markPrices` keyed by symbol on WalletData; fall
+      // back to position.price if we don't have a mark for that symbol.
+      const mark = data?.markPrices?.[p.symbol] ?? p.price;
+      if (!liqPrice || !mark || liqPrice === 0) continue;
+      // Long → liquidated below mark; Short → liquidated above mark.
+      const isLong = (p.size || 0) > 0;
+      const rawDist = isLong ? (mark - liqPrice) / mark : (liqPrice - mark) / mark;
+      // Clamp at 0 — negative would mean already liquidated, which
+      // shouldn't show as a healthy distance.
+      distances.push({ symbol: p.symbol, pct: Math.max(0, rawDist) });
+    }
+    if (distances.length === 0) return null;
+    distances.sort((a, b) => a.pct - b.pct);
+    return distances[0]; // worst case
+  })();
+
+  // Effective leverage: total notional ÷ account equity. Mirrors how
+  // Hyperdash shows "3.7X" with notional and equity below — the same
+  // formula they use. Equity = totalBalance (includes unrealized PnL
+  // adjustments per BULK convention).
+  const effectiveLeverage = (() => {
+    if (!margin || margin.totalBalance <= 0) return null;
+    if (totalNotional === 0) return null;
+    return totalNotional / margin.totalBalance;
+  })();
+
+  // Analysis sidebar stats: longest win streak, avg/median trade duration,
+  // PnL cohort, size cohort. All derived from closed positions + bulkRow.
+  const analysisStats = (() => {
+    // Longest consecutive run of wins (realizedPnl >= 0). Walk in
+    // chronological order — BULK returns newest first, so reverse.
+    const chrono = [...closedPositions].reverse();
+    let longestStreak = 0;
+    let currentStreak = 0;
+    for (const p of chrono) {
+      if (p.realizedPnl >= 0) {
+        currentStreak++;
+        if (currentStreak > longestStreak) longestStreak = currentStreak;
+      } else {
+        currentStreak = 0;
+      }
+    }
+
+    // Durations: open→close in ms per position. Filter out zero/invalid
+    // (defensive — BULK has been known to return 0 timestamps on rare
+    // edge cases).
+    const durations = closedPositions
+      .map((p) => p.closedAt - p.openedAt)
+      .filter((d) => d > 0);
+    const avgDuration = durations.length > 0
+      ? durations.reduce((s, d) => s + d, 0) / durations.length
+      : null;
+    const medianDuration = durations.length > 0
+      ? [...durations].sort((a, b) => a - b)[Math.floor(durations.length / 2)]
+      : null;
+
+    // PnL Cohort — categorical label based on lifetime net realized PnL.
+    // Buckets chosen so the highest labels feel earned (most wallets
+    // sit in Break-Even / Profitable; Extremely Profitable + Catastrophic
+    // are reserved for the tails).
+    const pnlForCohort = bulkRealizedPnL;
+    let pnlCohort: { label: string; tone: 'green' | 'red' | 'neutral' };
+    if (pnlForCohort >= 100_000) pnlCohort = { label: 'Extremely Profitable', tone: 'green' };
+    else if (pnlForCohort >= 10_000) pnlCohort = { label: 'Profitable', tone: 'green' };
+    else if (pnlForCohort >= -10_000) pnlCohort = { label: 'Break-Even', tone: 'neutral' };
+    else if (pnlForCohort >= -100_000) pnlCohort = { label: 'Unprofitable', tone: 'red' };
+    else pnlCohort = { label: 'Catastrophic', tone: 'red' };
+
+    // Size Cohort — based on peak balance (more meaningful than volume,
+    // which over-rewards high-frequency tiny traders). Falls back to
+    // current totalBalance when peak isn't available from indexer.
+    const sizeForCohort = bulkRow?.peak_balance ?? margin?.totalBalance ?? 0;
+    let sizeCohort: string;
+    if (sizeForCohort >= 1_000_000) sizeCohort = 'Whale';
+    else if (sizeForCohort >= 100_000) sizeCohort = 'Shark';
+    else if (sizeForCohort >= 10_000) sizeCohort = 'Dolphin';
+    else sizeCohort = 'Fish';
+
+    return {
+      longestStreak,
+      avgDuration,
+      medianDuration,
+      pnlCohort,
+      sizeCohort,
+    };
+  })();
+
   // Breakdown popover for the Total PnL card. Built once here so both
   // StatCard call sites (live + no-live layouts) get the same content.
   // Only rendered when the indexer gave us a gross/fees breakdown —
@@ -822,6 +1198,18 @@ export default function WalletPage() {
                       <BulkRankBadge address={address} />
                     )}
                     <AccountHierarchy address={address} />
+                    {/* Performance bar — last 6 trades W/L visualization
+                        + lifetime win rate. Mimics Hyperdash's wallet
+                        header performance strip. Hidden for system
+                        wallets (BULK protocol accounts) since they don't
+                        have meaningful trade history. */}
+                    {!isSystemWallet(address) && (
+                      <PerformanceBar
+                        recentWinLoss={recentWinLoss}
+                        winRate={winRate}
+                        totalTrades={bulkRow?.closed_count ?? closedPositions.length}
+                      />
+                    )}
                   </div>
                   {/* Claim Wallet button - only for email users who haven't claimed yet */}
                   {canClaimWallet && (
@@ -1026,8 +1414,109 @@ export default function WalletPage() {
               </div>
             )}
 
+            {/* Bar-style metric row — Direction Bias / Distance to
+                Liquidation / Effective Leverage. Visually distinct from
+                the regular stat cards above because each one is a 0-100%
+                progress metric where the bar fill carries equal
+                information to the headline number. Mirrors the
+                Performance/Leverage/Margin Usage/Direction Bias cards
+                in Hyperdash's wallet view.
+
+                Only rendered when there are open positions — these are
+                live-state metrics, not lifetime aggregates. */}
+            {positions.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                {/* Direction Bias — long/short ratio of open positions
+                    weighted by notional. Bar fills from BOTH sides:
+                    green from the left for long, red from the right for
+                    short. The label flips between bullish/bearish tones
+                    based on which side dominates. */}
+                {directionBias && (
+                  <BarMetricCard
+                    label="Direction Bias"
+                    value={directionBias.label}
+                    valueTone={
+                      directionBias.label === 'Very Bullish' || directionBias.label === 'Bullish' ? 'green' :
+                      directionBias.label === 'Very Bearish' || directionBias.label === 'Bearish' ? 'red' :
+                      'neutral'
+                    }
+                    barColor="bg-bulk-green"
+                    fillPct={directionBias.longPct}
+                    secondaryBarColor="bg-bulk-red"
+                    secondaryFillPct={1 - directionBias.longPct}
+                    subtitle={
+                      `${(directionBias.longPct * 100).toFixed(0)}% Long $${formatCompact(directionBias.longNotional)} · ` +
+                      `${((1 - directionBias.longPct) * 100).toFixed(0)}% Short $${formatCompact(directionBias.shortNotional)}`
+                    }
+                  />
+                )}
+
+                {/* Distance to Liquidation — worst-case position. Fill
+                    color flips to red/yellow/green as the headroom
+                    shrinks. Bar fill itself represents the SAFETY margin
+                    (close to liq = thin bar). */}
+                {distanceToLiq && (
+                  <BarMetricCard
+                    label="Distance to Liquidation"
+                    value={`${(distanceToLiq.pct * 100).toFixed(2)}%`}
+                    valueTone={
+                      distanceToLiq.pct < 0.05 ? 'red' :
+                      distanceToLiq.pct < 0.15 ? 'orange' :
+                      'green'
+                    }
+                    barColor={
+                      distanceToLiq.pct < 0.05 ? 'bg-bulk-red' :
+                      distanceToLiq.pct < 0.15 ? 'bg-bulk-orange' :
+                      'bg-bulk-green'
+                    }
+                    fillPct={distanceToLiq.pct}
+                    subtitle={`Closest: ${distanceToLiq.symbol}`}
+                  />
+                )}
+
+                {/* Effective Leverage — total notional / equity. Bar
+                    fills proportionally to a "safe" reference (10x
+                    equals full bar — anything 10x or above is high-risk
+                    territory regardless of the perp). */}
+                {effectiveLeverage !== null && margin && (
+                  <BarMetricCard
+                    label="Effective Leverage"
+                    value={`${effectiveLeverage.toFixed(1)}x`}
+                    valueTone={
+                      effectiveLeverage > 10 ? 'red' :
+                      effectiveLeverage > 5 ? 'orange' :
+                      'green'
+                    }
+                    barColor={
+                      effectiveLeverage > 10 ? 'bg-bulk-red' :
+                      effectiveLeverage > 5 ? 'bg-bulk-orange' :
+                      'bg-bulk-green'
+                    }
+                    fillPct={Math.min(effectiveLeverage / 10, 1)}
+                    subtitle={`$${formatCompact(totalNotional)} Notional · $${formatCompact(margin.totalBalance)} Equity`}
+                  />
+                )}
+              </div>
+            )}
+
             {/* Main Content Grid */}
             <div className="grid lg:grid-cols-2 gap-6">
+              {/* Left column: compact analysis stats stacked above the
+                  positions panel. AnalysisCard is small (~140px) so it
+                  doesn't crowd the positions list visible below — it
+                  reads as a "trader profile summary" above a "trader
+                  activity feed". Hidden when there's no closed-position
+                  history to analyze (brand-new wallets). */}
+              <div className="flex flex-col gap-4">
+                {closedPositions.length > 0 && (
+                  <AnalysisCard
+                    longestStreak={analysisStats.longestStreak}
+                    avgDuration={analysisStats.avgDuration}
+                    medianDuration={analysisStats.medianDuration}
+                    pnlCohort={analysisStats.pnlCohort}
+                    sizeCohort={analysisStats.sizeCohort}
+                  />
+                )}
               {/* Positions panel with Open / Recent tab toggle.
                   Replaces the older two-stacked-panels layout. The default
                   tab is auto-picked: "Open" if the wallet has any active
@@ -1257,6 +1746,7 @@ export default function WalletPage() {
                   )}
                 </div>
               </div>
+              </div>{/* end left column flex-col wrapper */}
 
               {/* PnL History Chart */}
               <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
