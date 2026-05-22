@@ -336,12 +336,15 @@ function OverviewRow({
     'text-[var(--text-primary)]';
   return (
     <div
-      className={cn('relative flex items-center justify-between gap-3 text-xs', Boolean(tooltip) && 'cursor-help')}
+      className={cn('relative flex items-center justify-between gap-3 text-sm', Boolean(tooltip) && 'cursor-help')}
       onMouseEnter={tooltip ? () => setHovered(true) : undefined}
       onMouseLeave={tooltip ? () => setHovered(false) : undefined}
     >
-      <span className="text-[var(--text-tertiary)]">{label}</span>
-      <span className={cn('font-mono tabular-nums', valueColor)}>{value}</span>
+      {/* Label: secondary text (not tertiary) for stronger contrast
+          against the value. The whole row uses text-sm — bumped from
+          text-xs — to give the rail more presence on the page. */}
+      <span className="text-[var(--text-secondary)]">{label}</span>
+      <span className={cn('font-mono tabular-nums font-medium', valueColor)}>{value}</span>
       {tooltip && hovered && (
         <div
           role="tooltip"
@@ -1180,12 +1183,15 @@ export default function WalletPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
       <main className="flex-1 w-full px-4 sm:px-6 py-6">
-        {/* Width: full viewport, not the previous max-w-7xl. The wallet
-            detail page benefits from horizontal real estate — wider
-            stat strips read better, the position cards line up cleaner,
-            and the chart gets more room. The narrow centered layout was
-            making this page feel cramped on 1440px+ displays compared
-            to peer dashboards. */}
+        {/* Page-level width: capped at 1600px and centered. Edge-to-edge
+            felt right at 1280px but looks unbounded on 4K / ultrawide
+            displays where the chart stretches to ~3000px and reads as
+            empty whitespace. The 1600px cap matches the dashboard
+            sidebar convention used by peer trading dashboards (e.g.
+            Hyperdash) — wide enough that left rail + main both breathe,
+            narrow enough that lines of stat rows aren't visually broken
+            by their own length. */}
+        <div className="max-w-[1600px] mx-auto">
         <Link 
           href="/whales"
           className="inline-flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
@@ -1217,10 +1223,21 @@ export default function WalletPage() {
                 (mobile/tablet), so phones see a normal vertical scroll
                 with all the rail content at the top.
                 ────────────────────────────────────────────────────── */}
-            <aside className="flex flex-col gap-6">
+            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 flex flex-col lg:self-start">
+              {/* Card-style left rail matching Hyperdash's sidebar
+                  treatment. Single bordered panel, sections inside
+                  divided by border-t lines. Sections control their own
+                  vertical spacing via border-t + pt-5 so the section
+                  dividers visually align with the section starts.
+                  `lg:self-start` prevents the rail from stretching to
+                  match the main column's height — important on wallets
+                  with long activity feeds where the rail would otherwise
+                  have huge empty space at the bottom. */}
               {/* Identity block — avatar + names + address. Compact
-                  vertical stack since the rail is narrow (~300px). */}
-              <div className="flex flex-col items-start gap-3">
+                  vertical stack since the rail is narrow (~300px). The
+                  pb-5 mirrors the pt-5 that subsequent sections use, so
+                  the visual rhythm of the rail stays consistent. */}
+              <div className="flex flex-col items-start gap-3 pb-5">
                 {twitterAvatar ? (
                   <img
                     src={twitterAvatar}
@@ -1329,10 +1346,10 @@ export default function WalletPage() {
                   treatment is intentional rather than a spinner so the
                   rail layout stays stable. */}
               <div className="border-t border-[var(--border-color)] pt-5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+                <div className="text-xs uppercase tracking-wider text-[var(--text-secondary)] font-semibold mb-2">
                   Account Value
                 </div>
-                <div className="text-3xl font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
+                <div className="text-4xl font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
                   {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
                 </div>
               </div>
@@ -1342,7 +1359,7 @@ export default function WalletPage() {
                   column reads cleanly. Tone applied to the value side
                   only when it carries semantic meaning (PnL sign). */}
               <div className="border-t border-[var(--border-color)] pt-5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
+                <div className="text-xs uppercase tracking-wider text-[var(--text-secondary)] font-semibold mb-3">
                   Overview
                 </div>
                 <div className="flex flex-col gap-2.5">
@@ -1389,7 +1406,7 @@ export default function WalletPage() {
                   one cohesive sidebar with topical sub-sections. */}
               {closedPositions.length > 0 && (
                 <div className="border-t border-[var(--border-color)] pt-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-secondary)] font-semibold mb-3">
                     Analysis
                   </div>
                   <div className="flex flex-col gap-2.5">
@@ -1851,6 +1868,7 @@ export default function WalletPage() {
             </div>{/* end main-column wrapper */}
           </div>
         )}
+        </div>{/* end max-width container */}
       </main>
 
       {/* Position-detail chart modal — opened by clicking a position card.
