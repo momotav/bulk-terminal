@@ -830,7 +830,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
             <Stat
               label="Close"
@@ -843,25 +843,16 @@ export function PositionChartModal({ position, onClose }: Props) {
                   : 'text-bulk-red'
               }
             />
-            <Stat
-              label="Held"
-              value={formatDuration(position.closedAt - position.openedAt)}
-            />
-            {/* Notional at entry — defines the position size in $ terms.
-                Sublabel shows fee + funding accrued over the lifetime so
-                the user sees the cost-of-trading footprint at a glance. */}
+            {/* "Held" stat removed — BULK reports openTime === closeTime
+                on closed positions, so duration always reads as instant.
+                Restore when BULK ships the fix post-competition. */}
+            {/* Notional at entry. Sublabel intentionally omitted: BULK's
+                per-position fees/funding are wallet-cumulative (not
+                per-position), so a "Fees $X" line here would mislead.
+                Lifetime fees are surfaced on the wallet Overview rail. */}
             <Stat
               label="Notional"
               value={`$${formatCompact(Math.abs(position.size * position.entryPrice))}`}
-              sublabel={
-                position.fees !== 0 || position.funding !== 0
-                  ? `Fees $${formatNumber(Math.abs(position.fees), 2)}${
-                      position.funding !== 0
-                        ? ` · Fund ${position.funding >= 0 ? '+' : '-'}$${formatNumber(Math.abs(position.funding), 2)}`
-                        : ''
-                    }`
-                  : undefined
-              }
             />
             <Stat
               label="Realized PnL"
