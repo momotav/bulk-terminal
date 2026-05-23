@@ -248,7 +248,11 @@ export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, den
               <th className="text-right font-medium px-4 py-2.5">Close</th>
               <th className="text-right font-medium px-4 py-2.5">PnL</th>
               <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
-              <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Held</th>
+              {/* "Held" column hidden — BULK's closed-position API
+                  currently reports openTime === closeTime to the
+                  nanosecond on most positions, so duration always
+                  reads as "instant" / "<1s." BULK dev confirmed
+                  fix coming post-competition. Re-enable then. */}
               <th className="text-right font-medium px-4 py-2.5">When</th>
             </tr>
           </thead>
@@ -363,7 +367,7 @@ function ClosedPositionRow({
 
       {/* Stats grid: entry, close, size, duration. Same compact 4-col
           layout as the open positions for visual consistency. */}
-      <div className="grid grid-cols-4 gap-3 text-xs">
+      <div className="grid grid-cols-3 gap-3 text-xs">
         <div>
           <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">
             Entry
@@ -388,14 +392,9 @@ function ClosedPositionRow({
             {formatNumber(p.size, 4)}
           </p>
         </div>
-        <div>
-          <p className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] mb-0.5">
-            Held
-          </p>
-          <p className="font-mono text-[var(--text-primary)] tabular-nums">
-            {formatDuration(duration)}
-          </p>
-        </div>
+        {/* "Held" block hidden — BULK reports openTime === closeTime
+            on closed positions, so duration always reads as instant.
+            Restore when BULK ships the fix post-competition. */}
       </div>
 
       {/* Footer: close time + price-move context. Tertiary color so it
@@ -503,9 +502,9 @@ function ClosedPositionTableRow({
       >
         {isWin ? '+' : ''}{pnlPercent.toFixed(2)}%
       </td>
-      <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums hidden lg:table-cell">
-        {formatDuration(duration)}
-      </td>
+      {/* "Held" cell removed — BULK reports openTime === closeTime so
+          duration always reads as instant. Hidden until BULK ships the
+          fix post-competition. */}
       <td
         className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap"
         title={new Date(p.closedAt).toISOString()}
