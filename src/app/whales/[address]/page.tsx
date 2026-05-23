@@ -605,6 +605,222 @@ function AnalysisCard({
   );
 }
 
+// ----------------------------------------------------------------------------
+// PnlCalendarHeatmap
+//
+// Day-by-day P&L heatmap. Each square is one day; color intensity
+// reflects the day's net PnL (green for winning days, red for losing,
+// muted gray for no-trade days). Mimics Hyperdash's Calendar tab view —
+// at a glance you can see the wallet's good streaks and bad streaks.
+//
+// Aggregation is purely client-side from closedPositions. Each closed
+// position contributes its realizedPnl (already net of fees+funding)
+// to the bucket for the day it closed.
+//
+// Layout: columns are weeks, rows are weekdays (Mon-Sun). The grid
+// renders left-to-right oldest-to-newest, similar to GitHub's
+// contribution heatmap.
+// ----------------------------------------------------------------------------
+function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+  if (closedPositions.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+        <div>
+          <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>No trade history yet</p>
+          <p className="text-xs mt-1">Calendar view appears once the wallet has closed trades</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Bucket positions by day (YYYY-MM-DD in local time). Use a Map so
+  // insertion order is irrelevant — we collect all days then render.
+  const dayBuckets = new Map<string, number>();
+  let earliest = Infinity;
+  let latest = -Infinity;
+  for (const p of closedPositions) {
+    const d = new Date(p.closedAt);
+    // Normalize to start-of-day in local time so all timestamps that
+    // fall on the same calendar day bucket together.
+    const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + p.realizedPnl);
+    if (p.closedAt < earliest) earliest = p.closedAt;
+    if (p.closedAt > latest) latest = p.closedAt;
+  }
+
+  // Window: from the wallet's first trade day to "today" so we have a
+  // continuous strip even on days with no activity. Bound the start at
+  // most ~14 months back so a 5000-trade wallet doesn't try to render
+  // a years-long heatmap (still useful but starts to lose density).
+  const earliestDate = new Date(earliest);
+  earliestDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Cap range at 420 days back (~14 months) to keep render bounded.
+  const fourteenMonthsAgo = new Date(today);
+  fourteenMonthsAgo.setDate(fourteenMonthsAgo.getDate() - 420);
+  const rangeStart = earliestDate > fourteenMonthsAgo ? earliestDate : fourteenMonthsAgo;
+  // Align rangeStart to the previous Monday so columns are full weeks.
+  const startDow = rangeStart.getDay(); // 0=Sun, 1=Mon, ...
+  const daysToBackUp = startDow === 0 ? 6 : startDow - 1;
+  rangeStart.setDate(rangeStart.getDate() - daysToBackUp);
+
+  // Build an array of weeks, each week is an array of 7 day entries.
+  const weeks: Array<Array<{ date: Date; key: string; pnl: number | null; isFuture: boolean }>> = [];
+  const cursor = new Date(rangeStart);
+  while (cursor <= today) {
+    const week: Array<{ date: Date; key: string; pnl: number | null; isFuture: boolean }> = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(cursor);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const isFuture = date > today;
+      const pnl = isFuture ? null : (dayBuckets.get(key) ?? 0);
+      week.push({ date, key, pnl, isFuture });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+
+  // Color intensity: cap at the 90th percentile of absolute daily PnL
+  // to avoid one outlier day swamping the color scale. Days at or above
+  // the cap get full saturation, lesser days get proportional opacity.
+  const absValues = Array.from(dayBuckets.values()).map(Math.abs).sort((a, b) => a - b);
+  const cap = absValues.length > 0 ? absValues[Math.min(absValues.length - 1, Math.floor(absValues.length * 0.9))] : 0;
+  const intensity = (pnl: number): number => {
+    if (cap === 0) return 0;
+    return Math.min(1, Math.abs(pnl) / cap);
+  };
+
+  // Month labels — sample one column per visible month change for the
+  // bottom axis. Track which month each week's first day belongs to;
+  // when it differs from the previous, emit a label for that column.
+  const monthLabels: Array<{ col: number; label: string }> = [];
+  let lastMonth = -1;
+  weeks.forEach((week, col) => {
+    const firstDay = week[0].date;
+    if (firstDay.getMonth() !== lastMonth) {
+      monthLabels.push({
+        col,
+        label: firstDay.toLocaleDateString(undefined, { month: 'short' }),
+      });
+      lastMonth = firstDay.getMonth();
+    }
+  });
+
+  // Summary stats for the strip above the heatmap.
+  let totalWins = 0;
+  let totalLosses = 0;
+  let bestDay = 0;
+  let worstDay = 0;
+  for (const pnl of dayBuckets.values()) {
+    if (pnl > 0) totalWins++;
+    else if (pnl < 0) totalLosses++;
+    if (pnl > bestDay) bestDay = pnl;
+    if (pnl < worstDay) worstDay = pnl;
+  }
+
+  return (
+    <div className="flex-1 p-4 min-h-[300px] overflow-x-auto">
+      {/* Summary strip — gives context for the heatmap below. */}
+      <div className="flex items-center gap-6 mb-4 text-xs flex-wrap">
+        <div>
+          <span className="text-[var(--text-tertiary)]">Winning Days </span>
+          <span className="text-bulk-green font-mono font-semibold tabular-nums">{totalWins}</span>
+        </div>
+        <div>
+          <span className="text-[var(--text-tertiary)]">Losing Days </span>
+          <span className="text-bulk-red font-mono font-semibold tabular-nums">{totalLosses}</span>
+        </div>
+        <div>
+          <span className="text-[var(--text-tertiary)]">Best Day </span>
+          <span className="text-bulk-green font-mono font-semibold tabular-nums">
+            +${formatCompact(bestDay)}
+          </span>
+        </div>
+        <div>
+          <span className="text-[var(--text-tertiary)]">Worst Day </span>
+          <span className="text-bulk-red font-mono font-semibold tabular-nums">
+            -${formatCompact(Math.abs(worstDay))}
+          </span>
+        </div>
+      </div>
+
+      {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
+          12px squares with 3px gap matches GitHub-contributions density. */}
+      <div className="flex items-start">
+        {/* Weekday labels column */}
+        <div className="flex flex-col gap-[3px] mr-2 mt-0">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
+            <div
+              key={d}
+              className="h-3 text-[9px] text-[var(--text-tertiary)] leading-3 tabular-nums"
+              style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+        {/* Week columns */}
+        <div className="flex gap-[3px]">
+          {weeks.map((week, col) => (
+            <div key={col} className="flex flex-col gap-[3px]">
+              {week.map((day, row) => {
+                if (day.isFuture) {
+                  return <div key={row} className="w-3 h-3" />;
+                }
+                const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
+                const isWin = day.pnl !== null && day.pnl > 0;
+                const isLoss = day.pnl !== null && day.pnl < 0;
+                const isNoTrade = day.pnl === 0;
+                // Pick a background. Empty days get a faint border-color
+                // tile; trade days scale opacity by intensity for the
+                // colored variants.
+                const style: React.CSSProperties = isNoTrade
+                  ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
+                  : {
+                      backgroundColor: isWin
+                        ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
+                        : `rgba(239, 68, 68, ${0.2 + i * 0.8})`,
+                    };
+                const titleParts = [
+                  day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+                  isNoTrade
+                    ? 'No trades'
+                    : `${day.pnl! >= 0 ? '+' : '-'}$${formatNumber(Math.abs(day.pnl!), 2)}`,
+                ];
+                return (
+                  <div
+                    key={row}
+                    className="w-3 h-3 rounded-sm"
+                    style={style}
+                    title={titleParts.join(' · ')}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Month labels along the bottom — one per month change in the data. */}
+      <div className="flex mt-2 ml-7 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider">
+        {monthLabels.map((m, idx) => {
+          const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
+          const widthCols = nextCol - m.col;
+          return (
+            <div
+              key={`${m.col}-${m.label}`}
+              style={{ width: `${widthCols * 15}px` }} // 12px square + 3px gap
+            >
+              {m.label}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function WalletPage() {
   const params = useParams();
   const router = useRouter();
@@ -654,6 +870,15 @@ export default function WalletPage() {
   // header. Replaces the older two-panel stacked layout that wasted
   // vertical space.
   const [positionsTab, setPositionsTab] = useState<'open' | 'recent' | 'liquidations'>('open');
+  // PnL History chart: switch between the line chart ('pnl') and a
+  // day-by-day P&L heatmap calendar ('calendar'). Hyperdash signature
+  // pattern — gives the user two complementary views of the same data
+  // (continuous trend vs day-level resolution).
+  const [chartView, setChartView] = useState<'pnl' | 'calendar'>('pnl');
+  // Time range filter for the PnL line chart. Affects what slice of
+  // history is rendered. Default 'all' so users see the full curve on
+  // first load; they can narrow to 24h/7d/30d for recent activity.
+  const [chartRange, setChartRange] = useState<'24h' | '7d' | '30d' | 'all'>('all');
 
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
@@ -1535,37 +1760,120 @@ export default function WalletPage() {
                 visual anchor. Moved above positions in the Hyperdash-
                 style layout because the chart tells the wallet's story
                 first; positions detail comes after. */}
-            {/* PnL History Chart */}
+            {/* PnL History Chart — tabbed between line view (PNL) and
+                day-by-day calendar heatmap. Range toggle controls the
+                line view's time window. Mimics Hyperdash's chart panel
+                with two visualizations of the same closed-position data. */}
             <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-              <div className="p-4 border-b border-[var(--border-color)]">
-                <h2 className="font-semibold flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  PnL History
-                </h2>
+              <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
+                {/* Left side: view tabs (PNL vs Calendar). */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setChartView('pnl')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                      chartView === 'pnl'
+                        ? 'bg-[var(--bg-secondary-20)]/40 text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+                    PnL History
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartView('calendar')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                      chartView === 'calendar'
+                        ? 'bg-[var(--bg-secondary-20)]/40 text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                    Calendar
+                  </button>
+                </div>
+
+                {/* Right side: time range pills, only relevant for the
+                    line view. Hidden in calendar mode since the heatmap
+                    already spans all available history. */}
+                {chartView === 'pnl' && (
+                  <div className="flex items-center gap-0.5 text-[10px] uppercase tracking-wider">
+                    {(['24h', '7d', '30d', 'all'] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setChartRange(r)}
+                        className={cn(
+                          'px-2 py-1 rounded transition-colors font-mono',
+                          chartRange === r
+                            ? 'text-[var(--text-primary)] bg-[var(--bg-secondary-20)]/40'
+                            : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {history.length === 0 ? (
+              {chartView === 'calendar' ? (
+                <PnlCalendarHeatmap closedPositions={closedPositions} />
+              ) : history.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
                   <div>
                     <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p>No history data yet</p>
-                    <p className="text-xs mt-1">PnL snapshots are recorded when wallet has active positions</p>
+                    <p className="text-xs mt-1">Chart appears once the wallet has closed trades</p>
                   </div>
                 </div>
               ) : (() => {
-                const chartData = history.map(h => ({ 
-                  ...h, 
+                // Apply time-range filter. 'all' means show everything;
+                // other ranges cut the series to the last N days from
+                // now. The synthetic "now" row at the end of `history`
+                // is always included so the right edge of the chart
+                // reflects live state regardless of range.
+                const now = Date.now();
+                const windowMs = chartRange === '24h' ? 86_400_000
+                  : chartRange === '7d' ? 7 * 86_400_000
+                  : chartRange === '30d' ? 30 * 86_400_000
+                  : Infinity;
+                const cutoff = now - windowMs;
+                const filtered = chartRange === 'all'
+                  ? history
+                  : history.filter((h) => new Date(h.timestamp).getTime() >= cutoff);
+
+                const chartData = filtered.map(h => ({
+                  ...h,
                   displayPnl: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
                 }));
-                
+
                 // Find min/max for gradient stop calculation
                 const pnlValues = chartData.map(d => d.displayPnl);
-                const minPnl = Math.min(...pnlValues);
-                const maxPnl = Math.max(...pnlValues);
-                
+                const minPnl = pnlValues.length > 0 ? Math.min(...pnlValues) : 0;
+                const maxPnl = pnlValues.length > 0 ? Math.max(...pnlValues) : 0;
+
                 // Calculate where zero line falls in the gradient (0 = top, 1 = bottom)
                 const zeroPosition = maxPnl <= 0 ? 0 : minPnl >= 0 ? 1 : maxPnl / (maxPnl - minPnl);
-                
+
+                // Empty-after-filter guard: if the user picks 24h on a
+                // wallet whose only history is older, show a helpful
+                // hint instead of an empty chart.
+                if (chartData.length === 0) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+                      <div>
+                        <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No trades in this range</p>
+                        <p className="text-xs mt-1">Try a wider range above</p>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="flex-1 p-4 min-h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -1584,19 +1892,25 @@ export default function WalletPage() {
                             <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
                           </linearGradient>
                         </defs>
-                        <XAxis 
-                          dataKey="timestamp" 
-                          tickFormatter={(ts) => new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        <XAxis
+                          dataKey="timestamp"
+                          tickFormatter={(ts) => {
+                            const d = new Date(ts);
+                            // 24h range: show hour:minute. Longer ranges: show date.
+                            return chartRange === '24h'
+                              ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+                              : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                          }}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                         />
-                        <YAxis 
+                        <YAxis
                           tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           domain={['auto', 'auto']}
                         />
-                        <Tooltip 
+                        <Tooltip
                           contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
                           labelStyle={{ color: 'var(--text-secondary)' }}
                           labelFormatter={(ts) => new Date(ts).toLocaleString()}
@@ -1605,9 +1919,9 @@ export default function WalletPage() {
                             return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
                           }}
                         />
-                        <Area 
-                          type="monotone" 
-                          dataKey="displayPnl" 
+                        <Area
+                          type="monotone"
+                          dataKey="displayPnl"
                           stroke="url(#pnlLineGradient)"
                           strokeWidth={2}
                           fill="url(#pnlFillGradient)"
