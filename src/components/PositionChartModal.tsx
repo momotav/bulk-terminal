@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time, MouseEventParams } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import { analytics, wallet, formatNumber, type Candle, type WalletFill } from '@/lib/api';
+import { analytics, wallet, formatNumber, formatCompact, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills, formatDuration } from '@/lib/positionWalk';
 
 // ---------------------------------------------------------------------------
@@ -716,7 +716,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         // handles drag-out clicks correctly. Keeping it would also work
         // but isn't necessary; we leave it off so React can properly track
         // the click target chain.
-        className="relative w-full max-w-5xl max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-[90vw] max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
@@ -771,10 +771,13 @@ export function PositionChartModal({ position, onClose }: Props) {
         </div>
 
         {/* Stat strip — different stats per kind:
-            - live: Entry, Mark, Liquidation, Unrealized PnL
-            - closed: Entry, Close, Held duration, Realized PnL */}
+            - live:   Entry, Mark, Liquidation, Notional, Unrealized PnL, PnL %
+            - closed: Entry, Close, Held, Notional, Realized PnL, ROI %
+            Six stats fit comfortably in the wider modal — gives the
+            trader a complete read on position economics without leaving
+            the chart view. */}
         {position.kind === 'live' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
             <Stat label="Mark" value={`$${formatNumber(position.markPrice, 2)}`} />
             <Stat
@@ -791,14 +794,43 @@ export function PositionChartModal({ position, onClose }: Props) {
                   : undefined
               }
             />
+            {/* Notional = size × mark — the dollar exposure of the position.
+                Doesn't change with PnL; complements Mark by translating
+                price into "how big is this bet really". */}
+            <Stat
+              label="Notional"
+              value={`$${formatCompact(Math.abs(position.size * position.markPrice))}`}
+              sublabel={
+                position.leverage > 0
+                  ? `Margin $${formatCompact(Math.abs(position.size * position.markPrice) / position.leverage)}`
+                  : undefined
+              }
+            />
             <Stat
               label="Unrealized PnL"
               value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
               valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
+            {/* PnL % = PnL / margin (true return on capital risked).
+                Falls back to PnL / notional when leverage isn't known. */}
+            <Stat
+              label="PnL %"
+              value={(() => {
+                const notional = Math.abs(position.size * position.entryPrice);
+                if (notional === 0) return '—';
+                // Prefer return-on-margin (the leveraged ROI) since it
+                // matches what traders mean when they say "this trade is
+                // up X%". Falls back to return-on-notional if we don't
+                // have leverage on the live snapshot.
+                const denom = position.leverage > 0 ? notional / position.leverage : notional;
+                const pct = (position.unrealizedPnl / denom) * 100;
+                return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+              })()}
+              valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
             <Stat
               label="Close"
@@ -814,11 +846,18 @@ export function PositionChartModal({ position, onClose }: Props) {
             <Stat
               label="Held"
               value={formatDuration(position.closedAt - position.openedAt)}
+            />
+            {/* Notional at entry — defines the position size in $ terms.
+                Sublabel shows fee + funding accrued over the lifetime so
+                the user sees the cost-of-trading footprint at a glance. */}
+            <Stat
+              label="Notional"
+              value={`$${formatCompact(Math.abs(position.size * position.entryPrice))}`}
               sublabel={
-                position.fees > 0 || position.funding !== 0
-                  ? `Fees $${formatNumber(position.fees, 2)}${
+                position.fees !== 0 || position.funding !== 0
+                  ? `Fees $${formatNumber(Math.abs(position.fees), 2)}${
                       position.funding !== 0
-                        ? ` · Funding ${position.funding >= 0 ? '+' : ''}$${formatNumber(position.funding, 2)}`
+                        ? ` · Fund ${position.funding >= 0 ? '+' : '-'}$${formatNumber(Math.abs(position.funding), 2)}`
                         : ''
                     }`
                   : undefined
@@ -827,6 +866,20 @@ export function PositionChartModal({ position, onClose }: Props) {
             <Stat
               label="Realized PnL"
               value={`${position.realizedPnl >= 0 ? '+' : ''}$${formatNumber(position.realizedPnl, 2)}`}
+              valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
+            {/* ROI % — closed positions don't carry leverage from BULK
+                (confirmed via curl 2026-05-22), so we can only show
+                return-on-notional. Documented limitation; will become
+                return-on-margin if BULK ever adds the field. */}
+            <Stat
+              label="ROI %"
+              value={(() => {
+                const notional = Math.abs(position.size * position.entryPrice);
+                if (notional === 0) return '—';
+                const pct = (position.realizedPnl / notional) * 100;
+                return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+              })()}
               valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
           </div>
@@ -886,7 +939,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             has a measurable size before lightweight-charts is constructed.
             On large screens this is 60vh-ish; on small screens it falls
             back to 360px so the chart is always usable. */}
-        <div className="h-[60vh] max-h-[560px] min-h-[360px] p-2 relative">
+        <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
 
           {/* Hover tooltip — appears when crosshair lands on a marker.
