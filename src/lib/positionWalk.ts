@@ -171,10 +171,21 @@ export function annotateFills(fills: WalletFill[]): AnnotatedFill[] {
 
 /**
  * Format a duration (in milliseconds) as a compact human-readable string.
- * "47s" / "12m" / "2h 14m" / "3d 5h" / "12d"
+ * "instant" / "47s" / "12m" / "2h 14m" / "3d 5h" / "12d"
+ *
+ * BULK timestamps positions with nanosecond precision but the matching
+ * engine ticks every 20ms — and on testnet we've observed wallets whose
+ * closed positions have `openTime === closeTime` to the nanosecond
+ * (likely position-flip / one-tick-scalp records where the lifecycle
+ * collapses to a single moment). We render 0ms as "instant" so users
+ * can tell this apart from "the display is broken." Anything under 1
+ * second renders as "<1s" for the same reason — communicates that the
+ * trade happened, just very fast.
  */
 export function formatDuration(ms: number): string {
-  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (ms <= 0) return 'instant';
+  const sec = Math.floor(ms / 1000);
+  if (sec === 0) return '<1s';
   if (sec < 60) return `${sec}s`;
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m`;
