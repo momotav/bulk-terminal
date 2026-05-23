@@ -1639,14 +1639,12 @@ export default function WalletPage() {
                       label="Longest Win Streak"
                       value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '—'}
                     />
-                    <OverviewRow
-                      label="Avg Trade Duration"
-                      value={formatDurationShort(analysisStats.avgDuration)}
-                    />
-                    <OverviewRow
-                      label="Median Trade Duration"
-                      value={formatDurationShort(analysisStats.medianDuration)}
-                    />
+                    {/* "Avg Trade Duration" + "Median Trade Duration"
+                        rows hidden — BULK currently reports
+                        openTime === closeTime on closed positions, so
+                        every duration computes to 0 and both rows would
+                        always show "—". Re-enable when BULK ships the
+                        timestamp fix post-competition. */}
                     <OverviewRow
                       label="PnL Cohort"
                       value={analysisStats.pnlCohort.label}
