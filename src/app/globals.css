@@ -189,14 +189,25 @@
     @apply antialiased min-h-screen;
   }
 
-  /* Custom selection colors */
+  /* Custom selection colors — gold to match accent chrome */
   ::selection {
-    background-color: rgba(0, 180, 129, 0.3);
+    background-color: rgba(255, 181, 71, 0.3);
     color: var(--text-primary);
   }
 }
 
 @layer components {
+  /* Editorial serif page title — mirrors BULK mainnet's display
+     typography (e.g. "Subaccounts", "Stake your SOL with BULK").
+     Use for page-level h1s ONLY; section headers, table headers, and
+     all data stay on the sans/mono stack. */
+  .page-title {
+    font-family: var(--font-fraunces), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    @apply text-3xl sm:text-4xl text-[var(--text-primary)];
+  }
+
   .glass-card {
     background-color: var(--bg-muted);
     border: 1px solid var(--border-color);
@@ -217,9 +228,12 @@
   }
 
   .btn-primary {
-    background-color: var(--bids);
-    color: var(--bg-base);
-    @apply px-4 py-2 font-semibold rounded-lg
+    /* Gold pill — matches BULK mainnet's CTA treatment. Green is
+       reserved strictly for market semantics (buy/long/positive). */
+    background-color: var(--accent);
+    color: var(--accent-text);
+    box-shadow: 0 0 16px rgba(255, 181, 71, 0.25);
+    @apply px-4 py-2 font-semibold rounded-full
            hover:brightness-110 transition-all duration-200 active:scale-95 disabled:opacity-50;
   }
 
@@ -257,7 +271,7 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     @apply w-full px-4 py-3 rounded-lg
-           placeholder-[var(--text-tertiary)] focus:outline-none focus:border-bulk-green
+           placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent)]
            transition-colors duration-200;
   }
 
@@ -272,12 +286,13 @@
   }
 
   .tab-btn {
-    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all border border-transparent;
+    @apply px-4 py-2 text-sm font-medium rounded-full transition-all border border-transparent;
   }
 
   .tab-btn.active {
-    background-color: var(--bids);
-    color: var(--bg-base);
+    /* Gold active state — UI chrome uses accent, never market green. */
+    background-color: var(--accent);
+    color: var(--accent-text);
   }
 
   .tab-btn:not(.active) {
@@ -326,16 +341,17 @@
   .toggle-group {
     background-color: var(--bg-muted);
     border: 1px solid var(--border-color);
-    @apply flex rounded-lg p-1;
+    @apply flex rounded-full p-1;
   }
 
   .toggle-btn {
-    @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all;
+    @apply px-3 py-1.5 text-xs font-medium rounded-full transition-all;
   }
 
   .toggle-btn.active {
-    background-color: var(--bids);
-    color: var(--bg-base);
+    /* Gold active state — same chrome rule as .tab-btn.active. */
+    background-color: var(--accent);
+    color: var(--accent-text);
   }
 
   .toggle-btn:not(.active) {
