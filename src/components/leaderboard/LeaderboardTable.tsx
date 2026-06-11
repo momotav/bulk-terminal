@@ -167,7 +167,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
 
                 {/* Value */}
                 <div className="text-right">
-                  <p className={cn("font-display text-sm font-bold", config.color)}>
+                  <p className={cn("font-sans text-sm font-bold", config.color)}>
                     {config.valuePrefix}{formatCompact(entry.value)}
                   </p>
                 </div>
