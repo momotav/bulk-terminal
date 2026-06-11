@@ -104,7 +104,7 @@ export default function WhalesPage() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+          <h1 className="page-title text-[var(--text-primary)] mb-1 flex items-center gap-2">
             <Anchor className="w-6 h-6 text-bulk-green" />
             Whale Tracker
           </h1>
