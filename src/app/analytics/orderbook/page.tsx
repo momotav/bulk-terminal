@@ -503,7 +503,7 @@ export default function OrderBookPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Order Book</h1>
+          <h1 className="page-title text-[var(--text-primary)]">Order Book</h1>
           <p className="text-sm text-[var(--text-tertiary)] mt-1 tabular-nums">
             Live market depth · auto-refreshes every 3s · last update {lastUpdated}
           </p>
