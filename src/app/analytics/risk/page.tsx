@@ -449,7 +449,7 @@ export default function RiskPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">Risk</h1>
+        <h1 className="page-title text-[var(--text-primary)] mb-6">Risk</h1>
 
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
