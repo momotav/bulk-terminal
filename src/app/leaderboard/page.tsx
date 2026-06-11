@@ -27,7 +27,7 @@ export default function LeaderboardPage() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Leaderboard</h1>
+          <h1 className="page-title text-[var(--text-primary)] mb-1">Leaderboard</h1>
           <p className="text-sm text-[var(--text-secondary)]">
             Track the top performers, biggest liquidations, and most active traders.
           </p>
