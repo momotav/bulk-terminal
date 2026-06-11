@@ -125,7 +125,7 @@ export default function FollowingPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+            <h1 className="page-title text-[var(--text-primary)] mb-1 flex items-center gap-2">
               <Users className="w-6 h-6 text-bulk-green" />
               Following
             </h1>
