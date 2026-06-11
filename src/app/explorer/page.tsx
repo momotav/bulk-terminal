@@ -113,7 +113,7 @@ export default function ExplorerPage() {
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+          <h1 className="page-title text-[var(--text-primary)]">
             Block Explorer
           </h1>
           <p className="text-sm text-[var(--text-tertiary)] mt-1">
