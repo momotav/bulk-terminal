@@ -188,7 +188,7 @@ export default function ProfilePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">My Profile</h1>
+        <h1 className="page-title text-[var(--text-primary)] mb-2">My Profile</h1>
         <p className="text-[var(--text-secondary)]">Manage your account and connected wallets</p>
       </div>
 
