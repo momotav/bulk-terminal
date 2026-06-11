@@ -154,7 +154,7 @@ export function RecentActivity() {
                 {/* Value */}
                 <div className="text-right shrink-0">
                   <p className={cn(
-                    "font-display font-bold text-xs",
+                    "font-sans font-bold text-xs",
                     item.type === 'liquidation' ? "text-bulk-red" : "text-[var(--text-primary)]"
                   )}>
                     ${formatCompact(item.value)}
