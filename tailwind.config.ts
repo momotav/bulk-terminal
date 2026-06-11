@@ -113,7 +113,10 @@ const config: Config = {
       fontFamily: {
         sans: ['BULK', 'DIN Alternate', 'Helvetica Neue', 'Arial', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
-        display: ['BULK', 'DIN Alternate', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        // Serif display face for page titles / hero text only — matches
+        // BULK mainnet's editorial-serif headings. Body and data never
+        // use this; numbers stay on sans/mono for legibility.
+        display: ['var(--font-fraunces)', 'Georgia', 'serif'],
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
