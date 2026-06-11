@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Fraunces } from 'next/font/google';
 import localFont from 'next/font/local';
 import './globals.css';
 import { PrivyProvider } from '@/components/PrivyProvider';
@@ -7,6 +7,18 @@ import { Header } from '@/components/Header';
 import { DevnetBanner } from '@/components/DevnetBanner';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+
+// Serif display face for page-level headings — mirrors BULK's mainnet
+// UI which uses an elegant editorial serif ("theSeasons", licensed) for
+// hero text. Fraunces is the closest open alternative: warm, high-
+// contrast, with optical sizing. Used ONLY at display sizes via the
+// `font-display` utility; body copy and data stay on the BULK sans.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  weight: ['400', '500', '600'],
+  style: ['normal', 'italic'],
+});
 
 const bulkFont = localFont({
   src: [
@@ -59,7 +71,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${bulkFont.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${bulkFont.variable} ${fraunces.variable} font-sans antialiased`}>
         <PrivyProvider>
           <div className="min-h-screen flex flex-col">
             <Header />
