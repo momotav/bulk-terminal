@@ -10,9 +10,9 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 // Serif display face for page-level headings — mirrors BULK's mainnet
 // UI which uses an elegant editorial serif ("theSeasons", licensed) for
-// hero text. Fraunces is the closest open alternative: warm, high-
-// contrast, with optical sizing. Used ONLY at display sizes via the
-// `font-display` utility; body copy and data stay on the BULK sans.
+// hero text. Fraunces is the closest open alternative. Used ONLY at
+// display sizes via the `font-display` / `.page-title` utilities; body
+// copy and data stay on the BULK sans.
 const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-fraunces',
