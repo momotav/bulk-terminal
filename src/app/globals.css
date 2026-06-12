@@ -198,9 +198,8 @@
 
 @layer components {
   /* Editorial serif page title — mirrors BULK mainnet's display
-     typography (e.g. "Subaccounts", "Stake your SOL with BULK").
-     Use for page-level h1s ONLY; section headers, table headers, and
-     all data stay on the sans/mono stack. */
+     typography. Use for page-level h1s ONLY; section headers, table
+     headers, and all data stay on the sans/mono stack. */
   .page-title {
     font-family: var(--font-fraunces), Georgia, serif;
     font-weight: 500;
@@ -271,7 +270,7 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     @apply w-full px-4 py-3 rounded-lg
-           placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent)]
+           placeholder-[var(--text-tertiary)] focus:outline-none focus:border-bulk-green
            transition-colors duration-200;
   }
 
@@ -341,7 +340,7 @@
   .toggle-group {
     background-color: var(--bg-muted);
     border: 1px solid var(--border-color);
-    @apply flex rounded-full p-1;
+    @apply flex rounded-lg p-1;
   }
 
   .toggle-btn {
