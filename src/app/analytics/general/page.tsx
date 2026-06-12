@@ -473,7 +473,13 @@ const ChartCard = ({
   rightAxisLabel?: string;
 }) => (
   <div className={cn(
-    "bg-transparent rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300",
+    // h-full + flex-col: in a ResizableChartRow both cards stretch to the
+    // row's height, and the chart body (mt-auto below) pins to the card
+    // bottom — so the two charts' timelines align even when one card's
+    // header wraps into more rows than the other at narrow widths.
+    // min-w-0 + overflow-hidden: at small widths nothing (titles, pills,
+    // timeframe selector) can bleed over the card edge into the neighbor.
+    "bg-transparent rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300 h-full flex flex-col min-w-0 overflow-hidden",
     loading && "opacity-60"
   )}>
     {/* Header layout (matches Hyperliquid):
@@ -481,8 +487,12 @@ const ChartCard = ({
                 so the title never wraps into a second line.
         Row 2: toggles (coin pills + dropdown trigger + any extra pills) span full width below.
         This means even with many pills the title stays on a single line at a readable size. */}
-    <div className="flex items-center justify-between gap-3 mb-3">
-      <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">{title}</h3>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
+      {/* truncate (with min-w-0) instead of whitespace-nowrap: at 25%
+          row width the old nowrap title forced the row past the card
+          edge and the timeframe pills overlapped the neighboring chart.
+          Now the title ellipsizes and the selector wraps below it. */}
+      <h3 className="text-lg font-semibold text-[var(--text-primary)] truncate min-w-0">{title}</h3>
       <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
     </div>
     {toggles && (
@@ -496,7 +506,7 @@ const ChartCard = ({
       </div>
     )}
     <div className={cn(
-      "relative",
+      "relative mt-auto",
       loading && "blur-sm opacity-60",
       // During drag: slight blur and fade
       isDragging && "blur-[1px] opacity-80",
