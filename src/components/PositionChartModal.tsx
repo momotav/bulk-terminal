@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time, MouseEventParams } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import { analytics, wallet, formatNumber, type Candle, type WalletFill } from '@/lib/api';
+import { analytics, wallet, formatNumber, formatCompact, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills, formatDuration } from '@/lib/positionWalk';
 
 // ---------------------------------------------------------------------------
@@ -428,13 +428,19 @@ export function PositionChartModal({ position, onClose }: Props) {
     // Visual rules:
     //   - Buys → green circles labeled "B" below the bar
     //   - Sells → red circles labeled "S" above the bar
-    //   - Liquidations / ADL → orange circles labeled "LIQ" / "ADL"
+    //   - Liquidations / ADL / Sweeps → orange circles labeled "LIQ" / "ADL" / "LSWP"
     //   - Aggregated buckets (multiple fills in same candle, same side,
     //     same reason) show "B ×N" / "S ×N" instead
     //
     // We aggregate fills by (timeBucket, side, reason) so a flurry of
     // small fills against multiple makers in the same minute becomes
     // one readable marker instead of a vertical wall of text.
+    //
+    // BULK v1.0.15 added `liq_sweep` (reasonCode 3) — a partial-liquidation
+    // cascade. We treat it as liquidation-flavored (same orange palette)
+    // but with a distinct "LSWP" label so users can tell at a glance
+    // whether a position was force-closed in one shot (LIQ) or via
+    // multiple partial sweeps (LSWP).
     //
     // Detailed metadata (action label, exact size, exact price, time)
     // is stored in chartMarkerInfoRef and shown in a custom hover
@@ -497,7 +503,10 @@ export function PositionChartModal({ position, onClose }: Props) {
       const infoMap = new Map<number, MarkerInfo>();
       const markers: SeriesMarker<Time>[] = Array.from(groups.values())
         .map((g) => {
-          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl';
+          // `liq_sweep` is liquidation-flavored — share the orange palette
+          // with LIQ and ADL so users can spot all force-close events at
+          // a glance. The label text below distinguishes the three.
+          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl' || g.reason === 'liq_sweep';
           const color = isLiqOrAdl
             ? '#FFB547'
             : g.isBuy
@@ -510,11 +519,13 @@ export function PositionChartModal({ position, onClose }: Props) {
           //
           // Solution: pure circles for normal buy/sell fills. The tooltip
           // (subscribeCrosshairMove below) provides full context on hover.
-          // Only liquidations and ADLs get an on-chart label because
-          // those are rare, important events worth flagging visually.
+          // Only liquidations, ADLs, and sweeps get an on-chart label
+          // because those are rare, important events worth flagging visually.
           const text = isLiqOrAdl
             ? g.reason === 'liq'
               ? g.fills.length > 1 ? `LIQ ×${g.fills.length}` : 'LIQ'
+              : g.reason === 'liq_sweep'
+              ? g.fills.length > 1 ? `LSWP ×${g.fills.length}` : 'LSWP'
               : g.fills.length > 1 ? `ADL ×${g.fills.length}` : 'ADL'
             : undefined;
 
@@ -727,7 +738,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         // handles drag-out clicks correctly. Keeping it would also work
         // but isn't necessary; we leave it off so React can properly track
         // the click target chain.
-        className="relative w-full max-w-5xl max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-[90vw] max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
@@ -782,10 +793,13 @@ export function PositionChartModal({ position, onClose }: Props) {
         </div>
 
         {/* Stat strip — different stats per kind:
-            - live: Entry, Mark, Liquidation, Unrealized PnL
-            - closed: Entry, Close, Held duration, Realized PnL */}
+            - live:   Entry, Mark, Liquidation, Notional, Unrealized PnL, PnL %
+            - closed: Entry, Close, Held, Notional, Realized PnL, ROI %
+            Six stats fit comfortably in the wider modal — gives the
+            trader a complete read on position economics without leaving
+            the chart view. */}
         {position.kind === 'live' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
             <Stat label="Mark" value={`$${formatNumber(position.markPrice, 2)}`} />
             <Stat
@@ -802,14 +816,43 @@ export function PositionChartModal({ position, onClose }: Props) {
                   : undefined
               }
             />
+            {/* Notional = size × mark — the dollar exposure of the position.
+                Doesn't change with PnL; complements Mark by translating
+                price into "how big is this bet really". */}
+            <Stat
+              label="Notional"
+              value={`$${formatCompact(Math.abs(position.size * position.markPrice))}`}
+              sublabel={
+                position.leverage > 0
+                  ? `Margin $${formatCompact(Math.abs(position.size * position.markPrice) / position.leverage)}`
+                  : undefined
+              }
+            />
             <Stat
               label="Unrealized PnL"
               value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
               valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
+            {/* PnL % = PnL / margin (true return on capital risked).
+                Falls back to PnL / notional when leverage isn't known. */}
+            <Stat
+              label="PnL %"
+              value={(() => {
+                const notional = Math.abs(position.size * position.entryPrice);
+                if (notional === 0) return '—';
+                // Prefer return-on-margin (the leveraged ROI) since it
+                // matches what traders mean when they say "this trade is
+                // up X%". Falls back to return-on-notional if we don't
+                // have leverage on the live snapshot.
+                const denom = position.leverage > 0 ? notional / position.leverage : notional;
+                const pct = (position.unrealizedPnl / denom) * 100;
+                return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+              })()}
+              valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
             <Stat
               label="Close"
@@ -822,22 +865,34 @@ export function PositionChartModal({ position, onClose }: Props) {
                   : 'text-bulk-red'
               }
             />
+            {/* "Held" stat removed — BULK reports openTime === closeTime
+                on closed positions, so duration always reads as instant.
+                Restore when BULK ships the fix post-competition. */}
+            {/* Notional at entry. Sublabel intentionally omitted: BULK's
+                per-position fees/funding are wallet-cumulative (not
+                per-position), so a "Fees $X" line here would mislead.
+                Lifetime fees are surfaced on the wallet Overview rail. */}
             <Stat
-              label="Held"
-              value={formatDuration(position.closedAt - position.openedAt)}
-              sublabel={
-                position.fees > 0 || position.funding !== 0
-                  ? `Fees $${formatNumber(position.fees, 2)}${
-                      position.funding !== 0
-                        ? ` · Funding ${position.funding >= 0 ? '+' : ''}$${formatNumber(position.funding, 2)}`
-                        : ''
-                    }`
-                  : undefined
-              }
+              label="Notional"
+              value={`$${formatCompact(Math.abs(position.size * position.entryPrice))}`}
             />
             <Stat
               label="Realized PnL"
               value={`${position.realizedPnl >= 0 ? '+' : ''}$${formatNumber(position.realizedPnl, 2)}`}
+              valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+            />
+            {/* ROI % — closed positions don't carry leverage from BULK
+                (confirmed via curl 2026-05-22), so we can only show
+                return-on-notional. Documented limitation; will become
+                return-on-margin if BULK ever adds the field. */}
+            <Stat
+              label="ROI %"
+              value={(() => {
+                const notional = Math.abs(position.size * position.entryPrice);
+                if (notional === 0) return '—';
+                const pct = (position.realizedPnl / notional) * 100;
+                return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+              })()}
               valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
           </div>
@@ -897,7 +952,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             has a measurable size before lightweight-charts is constructed.
             On large screens this is 60vh-ish; on small screens it falls
             back to 360px so the chart is always usable. */}
-        <div className="h-[60vh] max-h-[560px] min-h-[360px] p-2 relative">
+        <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
 
           {/* Hover tooltip — appears when crosshair lands on a marker.
