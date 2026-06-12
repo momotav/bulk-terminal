@@ -10,6 +10,7 @@ import {
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
+import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { CoinSelector } from '@/components/CoinSelector';
 import {
   DEFAULT_COINS,
@@ -507,7 +508,7 @@ const ChartCard = ({
         {/* Left Y-axis label - positioned to align with chart area (260px height) */}
         {leftAxisLabel && (
           <div className="relative w-6 shrink-0">
-            <div className="absolute top-0 h-[260px] flex items-center justify-center w-full">
+            <div className="absolute top-0 flex items-center justify-center w-full" style={{ height: 'var(--chart-h, 260px)' }}>
               <span 
                 className="transform -rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
                 style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
@@ -526,7 +527,7 @@ const ChartCard = ({
         {/* Right Y-axis label - positioned to align with chart area (260px height) */}
         {rightAxisLabel && (
           <div className="relative w-6 shrink-0">
-            <div className="absolute top-0 h-[260px] flex items-center justify-center w-full">
+            <div className="absolute top-0 flex items-center justify-center w-full" style={{ height: 'var(--chart-h, 260px)' }}>
               <span 
                 className="transform rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
                 style={{ fontFamily: '"Overused Grotesk", sans-serif' }}
@@ -1257,7 +1258,7 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResizableChartRow storageKey="general-volume-oi">
               <ChartCard 
                 title="Total Volume"
                 timeframe={volumeHours}
@@ -1280,7 +1281,7 @@ export default function AnalyticsPage() {
               >
                 {volumeDataFull.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={volumeDataFiltered} 
@@ -1352,7 +1353,7 @@ export default function AnalyticsPage() {
               >
                 {oiChartData.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
                           key={`oi-${oiAnimKey}`}
@@ -1415,9 +1416,9 @@ export default function AnalyticsPage() {
                   </>
                 ) : <NoDataMessage title="open interest" />}
               </ChartCard>
-            </div>
+            </ResizableChartRow>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResizableChartRow storageKey="general-funding-liq">
               {/* Funding Rate - REAL HISTORICAL DATA from ticker_snapshots */}
               <ChartCard 
                 title="Funding Rate"
@@ -1430,7 +1431,7 @@ export default function AnalyticsPage() {
               >
                 {fundingChartData.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
                           key={`funding-${fundingAnimKey}`}
@@ -1519,7 +1520,7 @@ export default function AnalyticsPage() {
               >
                 {liquidationsDataFull.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={liquidationsDataFiltered} 
@@ -1574,14 +1575,14 @@ export default function AnalyticsPage() {
                   </>
                 ) : <NoDataMessage title="liquidation" />}
               </ChartCard>
-            </div>
+            </ResizableChartRow>
 
             {/* Row 3: Protocol Revenue Chart */}
             <div className="grid grid-cols-1 gap-4">
               <ProtocolRevenueChart />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResizableChartRow storageKey="general-trades-adl">
               <ChartCard 
                 title="Number Of Trades"
                 timeframe={tradesHours}
@@ -1604,7 +1605,7 @@ export default function AnalyticsPage() {
               >
                 {tradesDataFull.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={tradesDataFiltered} 
@@ -1682,7 +1683,7 @@ export default function AnalyticsPage() {
               >
                 {adlDataFull.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           
@@ -1730,10 +1731,10 @@ export default function AnalyticsPage() {
                   </>
                 ) : <NoDataMessage title="ADL" />}
               </ChartCard>
-            </div>
+            </ResizableChartRow>
 
             {/* New Row: Unique Traders by Coin + Cumulative New Users (side by side) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResizableChartRow storageKey="general-users-revenue">
               {/* Unique Traders by Coin */}
               <ChartCard 
                 title="Unique Traders By Coin"
@@ -1757,7 +1758,7 @@ export default function AnalyticsPage() {
               >
                 {uniqueTradersData.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`unique-traders-${uniqueTradersAnimKey}`}
@@ -1833,7 +1834,7 @@ export default function AnalyticsPage() {
               >
                 {newUsersData.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`new-users-${newUsersAnimKey}`}
@@ -1869,7 +1870,7 @@ export default function AnalyticsPage() {
                   </>
                 ) : <NoDataMessage title="new users" />}
               </ChartCard>
-            </div>
+            </ResizableChartRow>
 
             {/* Full Width: Daily Active Users */}
             <div className="grid grid-cols-1 gap-4">
@@ -1889,7 +1890,7 @@ export default function AnalyticsPage() {
               >
                 {dauData.length > 0 ? (
                   <>
-                    <div className="h-[260px]">
+                    <div style={{ height: 'var(--chart-h, 260px)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`dau-${dauAnimKey}`}
