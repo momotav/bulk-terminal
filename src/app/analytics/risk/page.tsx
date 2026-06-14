@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
+import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import {
@@ -575,7 +576,7 @@ export default function RiskPage() {
             <MarginSurface />
 
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>
               {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
               <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -612,7 +613,7 @@ export default function RiskPage() {
                 </div>
 
                 {fairSpreadData.length > 0 ? (
-                  <div className="h-[250px]">
+                  <div style={{ height: 'var(--chart-h, 250px)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairSpreadData}>
                         <defs>
@@ -653,7 +654,7 @@ export default function RiskPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
+                  <div className="flex items-center justify-center text-[var(--text-tertiary)]" style={{ height: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
@@ -688,7 +689,7 @@ export default function RiskPage() {
                 </div>
 
                 {volatilityData.length > 0 ? (
-                  <div className="h-[250px]">
+                  <div style={{ height: 'var(--chart-h, 250px)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData.map(row => {
                         // Normalize to {timestamp, coin1, coin2, ...} shape.
@@ -735,12 +736,12 @@ export default function RiskPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-[var(--text-tertiary)]">
+                  <div className="flex items-center justify-center text-[var(--text-tertiary)]" style={{ height: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
               </div>
-            </div>
+            </ResizableChartRow>
 
             {/* Row 3: Volatility Heatmap + Correlation Matrix (side-by-side).
                 Both are driven by the same `heatmapCoins` state so the two
