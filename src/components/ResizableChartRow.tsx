@@ -106,20 +106,27 @@ function CornerGrip({
 export function ResizableChartRow({
   storageKey,
   children,
+  defaultHeight = DEFAULT_H,
 }: {
   storageKey: string;
   children: React.ReactNode;
+  defaultHeight?: number;
 }) {
   const kids = Children.toArray(children).filter(isValidElement);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [split, setSplit] = useState(50);
-  const [rowH, setRowH] = useState(DEFAULT_H);
+  const [rowH, setRowH] = useState(defaultHeight);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [wrapPulse, setWrapPulse] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
   const prevWrapped = useRef(false);
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Captured at pointer-down so dragging applies a DELTA from the start
+  // point rather than snapping size to the absolute cursor position.
+  // Without this, the grip's offset from the chart edge causes an instant
+  // jump on the first move. With it, the chart follows the mouse 1:1.
+  const dragStart = useRef<{ x: number; y: number; split: number; rowH: number } | null>(null);
 
   useEffect(() => {
     const p = loadPersisted(storageKey);
@@ -155,30 +162,33 @@ export function ResizableChartRow({
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      // Anchor the current size to the cursor's start point. Subsequent
+      // moves apply the delta from here, so there's no jump on first move.
+      dragStart.current = { x: e.clientX, y: e.clientY, split, rowH };
       setDragIdx(idx);
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'nwse-resize';
     },
-    [],
+    [split, rowH],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (dragIdx === null || !containerRef.current) return;
+      if (dragIdx === null || !containerRef.current || !dragStart.current) return;
       const rect = containerRef.current.getBoundingClientRect();
+      const start = dragStart.current;
 
-      // Width: cursor-x maps to the left chart's width. Dragging the left
-      // chart's grip sets its width directly; dragging the right chart's
-      // grip grows it as the cursor nears the row's right edge (so the
-      // left split shrinks). Either way "drag toward the outside = this
-      // chart grows".
-      const cursorPct = ((e.clientX - rect.left) / rect.width) * 100;
-      const nextSplit = dragIdx === 0 ? cursorPct : 100 - cursorPct;
+      // Width: convert the cursor's horizontal travel since drag-start into
+      // a percentage of the row, then add it to the split we had at start.
+      // Dragging the left chart's grip right grows it (+); dragging the
+      // right chart's grip right grows IT, which shrinks the left split (−).
+      const dxPct = ((e.clientX - start.x) / rect.width) * 100;
+      const nextSplit = dragIdx === 0 ? start.split + dxPct : start.split - dxPct;
       setSplit(Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, nextSplit)));
 
-      // Height: cursor-y minus card chrome.
-      const h = e.clientY - rect.top - 110;
-      setRowH(Math.min(MAX_H, Math.max(MIN_H, h)));
+      // Height: vertical travel since drag-start added to the start height.
+      const nextH = start.rowH + (e.clientY - start.y);
+      setRowH(Math.min(MAX_H, Math.max(MIN_H, nextH)));
     },
     [dragIdx],
   );
@@ -186,6 +196,7 @@ export function ResizableChartRow({
   const endDrag = useCallback(() => {
     if (dragIdx === null) return;
     setDragIdx(null);
+    dragStart.current = null;
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
     persist(split, rowH);
@@ -193,15 +204,15 @@ export function ResizableChartRow({
 
   const resetBoth = useCallback(() => {
     setSplit(50);
-    setRowH(DEFAULT_H);
-    persist(50, DEFAULT_H);
-  }, [persist]);
+    setRowH(defaultHeight);
+    persist(50, defaultHeight);
+  }, [persist, defaultHeight]);
 
   if (!isDesktop || kids.length < 2) {
     return (
       <div
         className="grid grid-cols-1 gap-4"
-        style={{ ['--chart-h' as string]: `${DEFAULT_H}px` }}
+        style={{ ['--chart-h' as string]: `${defaultHeight}px` }}
       >
         {children}
       </div>
