@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Activity,
   AlertCircle, Clock, Loader2, UserCheck,
   BarChart3, Flame, Shield, PiggyBank, DollarSign,
-  Receipt, Repeat
+  Receipt, Repeat, Share2
 } from 'lucide-react';
 import { wallet, leaderboard, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, type ClosedPosition, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
@@ -640,13 +640,33 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   let earliest = Infinity;
   let latest = -Infinity;
   for (const p of closedPositions) {
-    const d = new Date(p.closedAt);
+    // Guard against ns-precision timestamps slipping through un-converted
+    // (BULK ships closeTime in nanoseconds; if any path forgets the ÷1e6
+    // the date lands in the far future and the whole heatmap renders
+    // empty/blank). Anything past year ~5000 in ms is certainly ns.
+    const closedMs = p.closedAt > 1e15 ? p.closedAt / 1e6 : p.closedAt;
+    if (!closedMs || Number.isNaN(closedMs)) continue;
+    const d = new Date(closedMs);
     // Normalize to start-of-day in local time so all timestamps that
     // fall on the same calendar day bucket together.
     const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + p.realizedPnl);
-    if (p.closedAt < earliest) earliest = p.closedAt;
-    if (p.closedAt > latest) latest = p.closedAt;
+    if (closedMs < earliest) earliest = closedMs;
+    if (closedMs > latest) latest = closedMs;
+  }
+
+  // If every position was filtered out (all bad timestamps), show the
+  // empty state rather than rendering a blank grid from Infinity bounds.
+  if (dayBuckets.size === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+        <div>
+          <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>No dated trade history</p>
+          <p className="text-xs mt-1">Calendar appears once trades have valid close times</p>
+        </div>
+      </div>
+    );
   }
 
   // Window: from the wallet's first trade day to "today" so we have a
@@ -879,6 +899,9 @@ export default function WalletPage() {
   // history is rendered. Default 'all' so users see the full curve on
   // first load; they can narrow to 24h/7d/30d for recent activity.
   const [chartRange, setChartRange] = useState<'24h' | '7d' | '30d' | 'all'>('all');
+  // Tracks which position row's share button was just clicked, to flash a
+  // checkmark for ~1.5s as copy confirmation.
+  const [sharedSymbol, setSharedSymbol] = useState<string | null>(null);
 
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
@@ -1374,12 +1397,69 @@ export default function WalletPage() {
     else if (sizeForCohort >= 10_000) sizeCohort = 'Dolphin';
     else sizeCohort = 'Fish';
 
+    // --- Performance metrics (Hyperdash-style sub-panel) ---
+    // Computed from the chronological realizedPnl series. All three are
+    // derived purely from closed positions, so they're available for any
+    // wallet without extra endpoints.
+    const pnls = chrono.map((p) => p.realizedPnl);
+
+    // Win rate over closed positions (distinct from the BULK indexer's
+    // win_rate, which we show on the Performance top card; this is the
+    // rail's own derivation as a cross-check).
+    const wins = pnls.filter((v) => v > 0).length;
+    const closedWinRate = pnls.length > 0 ? wins / pnls.length : null;
+
+    // Max drawdown of the cumulative realized-PnL curve, expressed as a
+    // percentage of the peak. Walk the curve tracking the running peak;
+    // the largest peak-to-trough drop is the drawdown. A flat/rising
+    // curve yields 0.
+    let cum = 0;
+    let peak = 0;
+    let maxDrawdownPct = 0;
+    for (const v of pnls) {
+      cum += v;
+      if (cum > peak) peak = cum;
+      if (peak > 0) {
+        const dd = ((peak - cum) / peak) * 100;
+        if (dd > maxDrawdownPct) maxDrawdownPct = dd;
+      }
+    }
+    const drawdown = pnls.length > 0 ? maxDrawdownPct : null;
+
+    // Sharpe-like ratio: mean per-trade PnL / stdev of per-trade PnL.
+    // Not annualized (we don't have reliable per-trade timestamps thanks
+    // to the BULK openTime bug), so it's a unitless consistency measure —
+    // higher means more consistent wins relative to volatility. Labeled
+    // "Sharpe" to match Hyperdash's vocabulary; shown to 2dp.
+    let sharpe: number | null = null;
+    if (pnls.length >= 2) {
+      const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+      const variance =
+        pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / (pnls.length - 1);
+      const stdev = Math.sqrt(variance);
+      sharpe = stdev > 0 ? mean / stdev : null;
+    }
+
+    // Trading style — bucket by median hold duration. Hidden-data caveat:
+    // BULK's openTime===closeTime bug zeroes durations, so this falls back
+    // to 'Unknown' until that's fixed. When durations are valid:
+    //   < 1 day  → Intraday, < 1 week → Swing, else → Position.
+    let tradingStyle: string;
+    if (medianDuration === null || medianDuration <= 0) tradingStyle = 'Unknown';
+    else if (medianDuration < 86_400_000) tradingStyle = 'Intraday';
+    else if (medianDuration < 7 * 86_400_000) tradingStyle = 'Swing';
+    else tradingStyle = 'Position';
+
     return {
       longestStreak,
       avgDuration,
       medianDuration,
       pnlCohort,
       sizeCohort,
+      drawdown,
+      closedWinRate,
+      sharpe,
+      tradingStyle,
     };
   })();
 
@@ -1436,7 +1516,7 @@ export default function WalletPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
             {/* ──────────────────────────────────────────────────────
                 LEFT RAIL — identity + headline value + Overview list +
                 Analysis list. Mirrors Hyperdash's wallet view sidebar:
@@ -1467,10 +1547,23 @@ export default function WalletPage() {
                   <img
                     src={twitterAvatar}
                     alt=""
-                    className="w-14 h-14 rounded-full border border-[var(--border-color)]"
+                    width={56}
+                    height={56}
+                    loading="eager"
+                    decoding="async"
+                    // Explicit width/height + a solid placeholder background
+                    // reserve the circle's space immediately, so the avatar
+                    // no longer "pops in" and shoves the name down when it
+                    // finishes loading (the lag you saw). The bg shows while
+                    // loading; on error we hide the broken img and the ring
+                    // + bg remain as a clean fallback.
+                    className="w-14 h-14 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary-20)]/40 object-cover shrink-0"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-full bg-bulk-green/15 border border-bulk-green/30 flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-full bg-bulk-green/15 border border-bulk-green/30 flex items-center justify-center shrink-0">
                     <Wallet className="w-7 h-7 text-bulk-green" />
                   </div>
                 )}
@@ -1639,6 +1732,12 @@ export default function WalletPage() {
                       label="Longest Win Streak"
                       value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '—'}
                     />
+                    {/* Trading Style — only shown when we have valid hold
+                        durations (BULK's openTime bug zeroes them; falls
+                        back to 'Unknown' which we hide rather than show). */}
+                    {analysisStats.tradingStyle !== 'Unknown' && (
+                      <OverviewRow label="Trading Style" value={analysisStats.tradingStyle} />
+                    )}
                     {/* "Avg Trade Duration" + "Median Trade Duration"
                         rows hidden — BULK currently reports
                         openTime === closeTime on closed positions, so
@@ -1658,6 +1757,48 @@ export default function WalletPage() {
                   </div>
                 </div>
               )}
+
+              {/* Performance — Drawdown / Win Rate / Sharpe, mirroring
+                  Hyperdash's performance sub-panel. All derived from the
+                  closed-position series, so available for any wallet with
+                  trade history. */}
+              {closedPositions.length > 0 && (
+                <div className="border-t border-[var(--border-color)] pt-5">
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-secondary)] font-semibold mb-3">
+                    Performance
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    <OverviewRow
+                      label="Max Drawdown"
+                      value={analysisStats.drawdown !== null ? `${analysisStats.drawdown.toFixed(1)}%` : '—'}
+                      tone={
+                        analysisStats.drawdown === null ? 'neutral'
+                          : analysisStats.drawdown >= 50 ? 'red'
+                          : 'neutral'
+                      }
+                    />
+                    <OverviewRow
+                      label="Win Rate"
+                      value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '—'}
+                      tone={
+                        analysisStats.closedWinRate === null ? 'neutral'
+                          : analysisStats.closedWinRate >= 0.5 ? 'green'
+                          : 'red'
+                      }
+                    />
+                    <OverviewRow
+                      label="Sharpe"
+                      value={analysisStats.sharpe !== null ? analysisStats.sharpe.toFixed(2) : '—'}
+                      tone={
+                        analysisStats.sharpe === null ? 'neutral'
+                          : analysisStats.sharpe >= 1 ? 'green'
+                          : analysisStats.sharpe < 0 ? 'red'
+                          : 'neutral'
+                      }
+                    />
+                  </div>
+                </div>
+              )}
             </aside>
 
             {/* ──────────────────────────────────────────────────────
@@ -1666,7 +1807,7 @@ export default function WalletPage() {
                 vertical stack so each block gets the full main-column
                 width.
                 ────────────────────────────────────────────────────── */}
-            <div className="flex flex-col gap-4 min-w-0">
+            <div className="flex flex-col gap-3 min-w-0">
 
             {/* Top strip — 4 bar-style cards that read as the Hyperdash
                 signature: Performance, Direction Bias, Distance to
@@ -1679,7 +1820,7 @@ export default function WalletPage() {
                 positions → Distance to Liq has nothing to compute)
                 render as a placeholder "—" rather than collapsing.
                 Keeps the 4-card strip shape stable across wallets. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {!isSystemWallet(address) ? (
                 <PerformanceCard
                   recentWinLoss={recentWinLoss}
@@ -2034,6 +2175,7 @@ export default function WalletPage() {
                           <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
                           <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Liq</th>
                           <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Opened</th>
+                          <th className="text-right font-medium px-4 py-2.5 w-px"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--border-color)]">
@@ -2116,6 +2258,31 @@ export default function WalletPage() {
                               </td>
                               <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap hidden lg:table-cell">
                                 {ago !== null ? `${formatDuration(ago)} ago` : '—'}
+                              </td>
+                              {/* Per-row share — copies a deep link to this
+                                  wallet + asset. stopPropagation so it
+                                  doesn't also fire the row's open-chart
+                                  click. Mirrors Hyperdash's per-position
+                                  share affordance. */}
+                              <td className="px-2 py-2.5 text-right">
+                                <button
+                                  type="button"
+                                  title="Copy link to this position"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const url = `${window.location.origin}/whales/${address}?asset=${encodeURIComponent(pos.symbol)}`;
+                                    navigator.clipboard?.writeText(url).catch(() => {});
+                                    setSharedSymbol(pos.symbol);
+                                    setTimeout(() => setSharedSymbol(null), 1500);
+                                  }}
+                                  className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--bg-secondary-20)]/40 transition-colors"
+                                >
+                                  {sharedSymbol === pos.symbol ? (
+                                    <Check className="w-3.5 h-3.5 text-bulk-green" />
+                                  ) : (
+                                    <Share2 className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
                               </td>
                             </tr>
                           );
