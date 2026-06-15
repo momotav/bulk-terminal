@@ -83,73 +83,69 @@ export function NetworkHealthStats() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => (
-          <div
-            key={i}
-            className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 animate-pulse"
-          >
-            <div className="h-4 w-20 bg-[var(--bg-secondary-20)] rounded mb-2" />
-            <div className="h-8 w-24 bg-[var(--bg-secondary-20)] rounded" />
-          </div>
-        ))}
+      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-4 py-3 animate-pulse">
+        <div className="h-5 w-full bg-[var(--bg-secondary-20)] rounded" />
       </div>
     );
   }
 
+  // A trading terminal has a status bar, not three more big boxes. The
+  // chain-throughput numbers (TPS / APS / round / block time) collapse
+  // into one compact horizontal strip with a live-status dot — it reads
+  // as "the exchange's pulse" rather than competing with the headline
+  // trading stats above it.
+  const live = data?.status === 'live';
+  const statusColor = live ? 'var(--bids)' : data?.status === 'stale' ? 'var(--accent)' : 'var(--asks)';
+  const items = [
+    { icon: Activity, label: 'TPS', value: formatRate(data?.tps ?? 0), color: 'var(--bids)', sub: `${data?.windowSeconds ?? 60}s avg` },
+    { icon: Zap, label: 'APS', value: formatRate(data?.aps ?? 0), color: '#facc15', sub: 'actions/sec' },
+    { icon: Hash, label: 'Round', value: formatRound(data?.latestRound ?? null), color: '#60a5fa', sub: `${formatBlockTime(data?.blockTimeMs ?? null)} blocks` },
+  ];
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {/* TPS — transactions per second from the explorer block stream */}
-      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Activity className="w-4 h-4 text-bulk-green" />
-          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">
-            TPS
-          </span>
-        </div>
-        <p className="text-2xl font-bold text-bulk-green tabular-nums">
-          <AnimatedNumber value={data?.tps ?? 0} format={formatRate} />
-        </p>
-        <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-          {data?.windowSeconds ?? 60}s avg
-        </p>
+    <div className="flex items-stretch bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg overflow-hidden">
+      {/* Live-status indicator at the head of the strip. */}
+      <div className="flex items-center gap-2 px-4 border-r border-[var(--border-color)]">
+        <span className="relative flex h-2 w-2">
+          {live && (
+            <span
+              className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+              style={{ backgroundColor: statusColor }}
+            />
+          )}
+          <span className="relative inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-[var(--text-secondary)]">
+          {live ? 'Live' : data?.status === 'stale' ? 'Stale' : 'Down'}
+        </span>
       </div>
-
-      {/* APS — actions per second. Actions are sub-transaction units
-          (a single tx can contain many actions). On BULK this is a more
-          meaningful "throughput" number than tx-count alone. */}
-      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Zap className="w-4 h-4 text-yellow-400" />
-          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">
-            APS
-          </span>
-        </div>
-        <p className="text-2xl font-bold text-yellow-400 tabular-nums">
-          <AnimatedNumber value={data?.aps ?? 0} format={formatRate} />
-        </p>
-        <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-          actions / sec
-        </p>
-      </div>
-
-      {/* Current round + block time underneath */}
-      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Hash className="w-4 h-4 text-blue-400" />
-          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">
-            Round
-          </span>
-        </div>
-        <p className="text-2xl font-bold text-blue-400 tabular-nums">
-          <AnimatedNumber
-            value={data?.latestRound ?? null}
-            format={(n) => Math.round(n).toLocaleString()}
-          />
-        </p>
-        <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-          {formatBlockTime(data?.blockTimeMs ?? null)} block time
-        </p>
+      {/* Throughput items, evenly distributed. */}
+      <div className="flex flex-1 divide-x divide-[var(--border-color)]">
+        {items.map((it) => {
+          const Icon = it.icon;
+          return (
+            <div key={it.label} className="flex-1 flex items-center gap-2.5 px-4 py-2.5 min-w-0">
+              <Icon className="w-4 h-4 shrink-0" style={{ color: it.color }} />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+                    {it.label}
+                  </span>
+                  <span className="text-base font-bold tabular-nums leading-none" style={{ color: it.color }}>
+                    {it.label === 'Round' ? (
+                      <AnimatedNumber value={data?.latestRound ?? null} format={(n) => Math.round(n).toLocaleString()} />
+                    ) : it.label === 'TPS' ? (
+                      <AnimatedNumber value={data?.tps ?? 0} format={formatRate} />
+                    ) : (
+                      <AnimatedNumber value={data?.aps ?? 0} format={formatRate} />
+                    )}
+                  </span>
+                </div>
+                <span className="text-[9px] text-[var(--text-tertiary)] truncate block">{it.sub}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
