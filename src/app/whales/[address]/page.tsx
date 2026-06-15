@@ -741,7 +741,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   }
 
   return (
-    <div className="flex-1 p-4 min-h-[300px] overflow-x-auto">
+    <div className="flex-1 p-4 min-h-[300px]">
       {/* Summary strip — gives context for the heatmap below. */}
       <div className="flex items-center gap-6 mb-4 text-xs flex-wrap">
         <div>
@@ -767,75 +767,74 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
       </div>
 
       {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
-          12px squares with 3px gap matches GitHub-contributions density. */}
-      <div className="flex items-start">
-        {/* Weekday labels column */}
-        <div className="flex flex-col gap-[3px] mr-2 mt-0">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
-            <div
-              key={d}
-              className="h-3 text-[9px] text-[var(--text-tertiary)] leading-3 tabular-nums"
-              style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
-            >
-              {d}
-            </div>
-          ))}
+          Columns flex to fill the panel width so the heatmap stretches
+          across its div instead of bunching in the top-left corner.
+          Wrapped in a max-width so a multi-month wallet doesn't make
+          cells microscopic, and a one-week wallet doesn't make them huge. */}
+      <div className="w-full" style={{ maxWidth: `${Math.max(weeks.length, 8) * 22 + 40}px` }}>
+        <div className="flex items-stretch w-full gap-2">
+          {/* Weekday labels column — 7 equal rows matching the grid. */}
+          <div className="flex flex-col shrink-0 w-7" style={{ gap: '8%' }}>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
+              <div
+                key={d}
+                className="flex-1 text-[10px] text-[var(--text-tertiary)] leading-none tabular-nums flex items-center"
+                style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+          {/* Week columns — each flexes equally to fill remaining width. */}
+          <div className="flex flex-1 min-w-0" style={{ gap: '0.4%' }}>
+            {weeks.map((week, col) => (
+              <div key={col} className="flex flex-col flex-1" style={{ gap: '8%' }}>
+                {week.map((day, row) => {
+                  if (day.isFuture) {
+                    return <div key={row} className="w-full aspect-square" />;
+                  }
+                  const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
+                  const isWin = day.pnl !== null && day.pnl > 0;
+                  const isLoss = day.pnl !== null && day.pnl < 0;
+                  const isNoTrade = day.pnl === 0;
+                  const style: React.CSSProperties = isNoTrade
+                    ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
+                    : {
+                        backgroundColor: isWin
+                          ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
+                          : `rgba(239, 68, 68, ${0.2 + i * 0.8})`,
+                      };
+                  const titleParts = [
+                    day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+                    isNoTrade
+                      ? 'No trades'
+                      : `${day.pnl! >= 0 ? '+' : '-'}$${formatNumber(Math.abs(day.pnl!), 2)}`,
+                  ];
+                  return (
+                    <div
+                      key={row}
+                      className="w-full aspect-square rounded-sm"
+                      style={style}
+                      title={titleParts.join(' · ')}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
-        {/* Week columns */}
-        <div className="flex gap-[3px]">
-          {weeks.map((week, col) => (
-            <div key={col} className="flex flex-col gap-[3px]">
-              {week.map((day, row) => {
-                if (day.isFuture) {
-                  return <div key={row} className="w-3 h-3" />;
-                }
-                const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
-                const isWin = day.pnl !== null && day.pnl > 0;
-                const isLoss = day.pnl !== null && day.pnl < 0;
-                const isNoTrade = day.pnl === 0;
-                // Pick a background. Empty days get a faint border-color
-                // tile; trade days scale opacity by intensity for the
-                // colored variants.
-                const style: React.CSSProperties = isNoTrade
-                  ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
-                  : {
-                      backgroundColor: isWin
-                        ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
-                        : `rgba(239, 68, 68, ${0.2 + i * 0.8})`,
-                    };
-                const titleParts = [
-                  day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-                  isNoTrade
-                    ? 'No trades'
-                    : `${day.pnl! >= 0 ? '+' : '-'}$${formatNumber(Math.abs(day.pnl!), 2)}`,
-                ];
-                return (
-                  <div
-                    key={row}
-                    className="w-3 h-3 rounded-sm"
-                    style={style}
-                    title={titleParts.join(' · ')}
-                  />
-                );
-              })}
-            </div>
-          ))}
+        {/* Month labels — proportional to each month's share of the columns. */}
+        <div className="flex mt-2 ml-9 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider">
+          {monthLabels.map((m, idx) => {
+            const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
+            const widthCols = nextCol - m.col;
+            return (
+              <div key={`${m.col}-${m.label}`} style={{ flexGrow: widthCols, flexBasis: 0 }}>
+                {m.label}
+              </div>
+            );
+          })}
         </div>
-      </div>
-      {/* Month labels along the bottom — one per month change in the data. */}
-      <div className="flex mt-2 ml-7 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider">
-        {monthLabels.map((m, idx) => {
-          const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
-          const widthCols = nextCol - m.col;
-          return (
-            <div
-              key={`${m.col}-${m.label}`}
-              style={{ width: `${widthCols * 15}px` }} // 12px square + 3px gap
-            >
-              {m.label}
-            </div>
-          );
-        })}
       </div>
     </div>
   );
