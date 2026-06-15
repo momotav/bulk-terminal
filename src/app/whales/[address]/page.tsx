@@ -779,7 +779,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
               <div
                 key={d}
-                className="h-[22px] text-[10px] text-[var(--text-tertiary)] leading-[22px] tabular-nums"
+                className="h-[25px] text-[10px] text-[var(--text-tertiary)] leading-[25px] tabular-nums"
                 style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
               >
                 {d}
@@ -792,7 +792,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
               <div key={col} className="flex flex-col gap-[4px]">
                 {week.map((day, row) => {
                   if (day.isFuture) {
-                    return <div key={row} className="w-[22px] h-[22px]" />;
+                    return <div key={row} className="w-[25px] h-[25px]" />;
                   }
                   const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
                   const isWin = day.pnl !== null && day.pnl > 0;
@@ -814,7 +814,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
                   return (
                     <div
                       key={row}
-                      className="w-[22px] h-[22px] rounded-sm"
+                      className="w-[25px] h-[25px] rounded-sm"
                       style={style}
                       title={titleParts.join(' · ')}
                     />
@@ -830,7 +830,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
             const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
             const widthCols = nextCol - m.col;
             return (
-              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 26}px` }}>
+              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 29}px` }}>
                 {m.label}
               </div>
             );
