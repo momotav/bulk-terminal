@@ -767,31 +767,32 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
       </div>
 
       {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
-          Columns flex to fill the panel width so the heatmap stretches
-          across its div instead of bunching in the top-left corner.
-          Wrapped in a max-width so a multi-month wallet doesn't make
-          cells microscopic, and a one-week wallet doesn't make them huge. */}
-      <div className="w-full" style={{ maxWidth: `${Math.max(weeks.length, 8) * 22 + 40}px` }}>
-        <div className="flex items-stretch w-full gap-2">
-          {/* Weekday labels column — 7 equal rows matching the grid. */}
-          <div className="flex flex-col shrink-0 w-7" style={{ gap: '8%' }}>
+          GitHub-contributions model: fixed-size cells (14px) with fixed
+          gaps, left-aligned. Cells do NOT stretch to fill the panel — a
+          wallet with one week of data shows a few small squares in the
+          corner, not giant blocks. The panel scrolls horizontally if a
+          very long history overflows. */}
+      <div className="w-full overflow-x-auto">
+        <div className="inline-flex items-start gap-2">
+          {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
+          <div className="flex flex-col gap-[3px] shrink-0 pr-1">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
               <div
                 key={d}
-                className="flex-1 text-[10px] text-[var(--text-tertiary)] leading-none tabular-nums flex items-center"
+                className="h-[14px] text-[10px] text-[var(--text-tertiary)] leading-[14px] tabular-nums"
                 style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
               >
                 {d}
               </div>
             ))}
           </div>
-          {/* Week columns — each flexes equally to fill remaining width. */}
-          <div className="flex flex-1 min-w-0" style={{ gap: '0.4%' }}>
+          {/* Week columns — fixed 14px cells, 3px gaps. */}
+          <div className="flex gap-[3px]">
             {weeks.map((week, col) => (
-              <div key={col} className="flex flex-col flex-1" style={{ gap: '8%' }}>
+              <div key={col} className="flex flex-col gap-[3px]">
                 {week.map((day, row) => {
                   if (day.isFuture) {
-                    return <div key={row} className="w-full aspect-square" />;
+                    return <div key={row} className="w-[14px] h-[14px]" />;
                   }
                   const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
                   const isWin = day.pnl !== null && day.pnl > 0;
@@ -813,7 +814,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
                   return (
                     <div
                       key={row}
-                      className="w-full aspect-square rounded-sm"
+                      className="w-[14px] h-[14px] rounded-sm"
                       style={style}
                       title={titleParts.join(' · ')}
                     />
@@ -823,13 +824,13 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
             ))}
           </div>
         </div>
-        {/* Month labels — proportional to each month's share of the columns. */}
-        <div className="flex mt-2 ml-9 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider">
+        {/* Month labels — fixed 17px per column (14px cell + 3px gap). */}
+        <div className="flex mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider" style={{ marginLeft: '32px' }}>
           {monthLabels.map((m, idx) => {
             const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
             const widthCols = nextCol - m.col;
             return (
-              <div key={`${m.col}-${m.label}`} style={{ flexGrow: widthCols, flexBasis: 0 }}>
+              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 17}px` }}>
                 {m.label}
               </div>
             );
