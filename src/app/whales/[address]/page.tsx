@@ -621,6 +621,74 @@ function AnalysisCard({
 // renders left-to-right oldest-to-newest, similar to GitHub's
 // contribution heatmap.
 // ----------------------------------------------------------------------------
+// A single day cell in the calendar heatmap, with its own styled hover
+// tooltip showing the date and that day's net PnL. Color rules:
+//   green  = positive PnL day
+//   red    = negative PnL day
+//   muted  = no trades (tooltip shows date only)
+// Manages hover state locally so the parent (which returns early before
+// any hooks) stays hooks-free.
+function HeatmapCell({
+  date,
+  pnl,
+  bg,
+  isNoTrade,
+  isWin,
+}: {
+  date: Date;
+  pnl: number | null;
+  bg: string | undefined;
+  isNoTrade: boolean;
+  isWin: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const dateStr = date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const pnlStr =
+    pnl === null || isNoTrade
+      ? null
+      : `${pnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(pnl), 2)}`;
+  return (
+    <div className="relative">
+      <div
+        className="w-[25px] h-[25px] rounded-sm cursor-pointer transition-transform hover:scale-110 hover:ring-1 hover:ring-[var(--text-secondary)]/40"
+        style={
+          isNoTrade
+            ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
+            : { backgroundColor: bg }
+        }
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      />
+      {hovered && (
+        <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-1.5 pointer-events-none whitespace-nowrap">
+          <div className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-lg">
+            <div className="text-[11px] font-medium text-[var(--text-primary)]">{dateStr}</div>
+            {pnlStr ? (
+              <div
+                className={cn(
+                  'text-[11px] font-semibold tabular-nums',
+                  isWin ? 'text-bulk-green' : 'text-red-400',
+                )}
+              >
+                {pnlStr}
+              </div>
+            ) : (
+              <div className="text-[11px] text-[var(--text-tertiary)]">No trades</div>
+            )}
+          </div>
+          {/* little downward arrow */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-[var(--border-color)]" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   if (closedPositions.length === 0) {
     return (
@@ -786,7 +854,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
               </div>
             ))}
           </div>
-          {/* Week columns — fixed 14px cells, 3px gaps. */}
+          {/* Week columns — fixed 25px cells, 4px gaps. */}
           <div className="flex gap-[4px]">
             {weeks.map((week, col) => (
               <div key={col} className="flex flex-col gap-[4px]">
@@ -796,27 +864,20 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
                   }
                   const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
                   const isWin = day.pnl !== null && day.pnl > 0;
-                  const isLoss = day.pnl !== null && day.pnl < 0;
                   const isNoTrade = day.pnl === 0;
-                  const style: React.CSSProperties = isNoTrade
-                    ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
-                    : {
-                        backgroundColor: isWin
-                          ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
-                          : `rgba(239, 68, 68, ${0.2 + i * 0.8})`,
-                      };
-                  const titleParts = [
-                    day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-                    isNoTrade
-                      ? 'No trades'
-                      : `${day.pnl! >= 0 ? '+' : '-'}$${formatNumber(Math.abs(day.pnl!), 2)}`,
-                  ];
+                  const bg = isNoTrade
+                    ? undefined
+                    : isWin
+                      ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
+                      : `rgba(239, 68, 68, ${0.2 + i * 0.8})`;
                   return (
-                    <div
+                    <HeatmapCell
                       key={row}
-                      className="w-[25px] h-[25px] rounded-sm"
-                      style={style}
-                      title={titleParts.join(' · ')}
+                      date={day.date}
+                      pnl={day.pnl}
+                      bg={bg}
+                      isNoTrade={isNoTrade}
+                      isWin={isWin}
                     />
                   );
                 })}
