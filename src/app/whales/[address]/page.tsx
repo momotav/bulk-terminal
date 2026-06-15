@@ -665,7 +665,7 @@ function HeatmapCell({
         onMouseLeave={() => setHovered(false)}
       />
       {hovered && (
-        <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-1.5 pointer-events-none whitespace-nowrap">
+        <div className="absolute z-30 bottom-full left-0 mb-1.5 pointer-events-none whitespace-nowrap">
           <div className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-lg">
             <div className="text-[11px] font-medium text-[var(--text-primary)]">{dateStr}</div>
             {pnlStr ? (
@@ -681,8 +681,8 @@ function HeatmapCell({
               <div className="text-[11px] text-[var(--text-tertiary)]">No trades</div>
             )}
           </div>
-          {/* little downward arrow */}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-[var(--border-color)]" />
+          {/* little downward arrow, aligned to the cell on the left */}
+          <div className="absolute top-full left-[12px] -mt-px border-4 border-transparent border-t-[var(--border-color)]" />
         </div>
       )}
     </div>
@@ -840,7 +840,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
           wallet with one week of data shows a few small squares in the
           corner, not giant blocks. The panel scrolls horizontally if a
           very long history overflows. */}
-      <div className="w-full overflow-x-auto">
+      <div className="w-full">
         <div className="inline-flex items-start gap-2">
           {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
           <div className="flex flex-col gap-[4px] shrink-0 pr-1">
