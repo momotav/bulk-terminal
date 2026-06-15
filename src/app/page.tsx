@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2, Anchor } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
 import { NetworkHealthStats } from '@/components/NetworkHealthStats';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
-import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { RecentActivity } from '@/components/RecentActivity';
 import { userApi, formatAddress, formatCompact, type UserSearchResult } from '@/lib/api';
 
@@ -97,7 +96,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+    <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
       {/* Search Bar */}
       <form onSubmit={handleSearch}>
         <div className="relative" ref={searchRef}>
@@ -179,43 +178,36 @@ export default function HomePage() {
           active traders, liquidations. Sourced from BULK trading API. */}
       <ExchangeHealthStats />
 
-      {/* Network Health Stats — chain throughput: TPS, APS, latest
-          round, connection status. Sourced from BULK's explorer node
-          via a persistent WS connection on our backend. Updates every
-          ~3s; numbers feel alive because BULK is fast. */}
+      {/* Network Health Stats — chain throughput status bar: TPS, APS,
+          latest round + block time, live-status dot. Sourced from BULK's
+          explorer node via a persistent WS on our backend (~3s updates). */}
       <NetworkHealthStats />
 
-      {/* Leaderboards Grid.
-          The Top Traders panel uses BULK's official indexer (matches
-          bulk.trade ranks exactly — critical during the tournament).
-          Liquidations, Whales, and Recent Activity stay on our DB since
-          BULK's indexer only covers the winners side. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="h-[450px]">
-          <BulkLeaderboardTable limit={10} />
+      {/* Activity grid. The Top Traders + Whale Watch panels are hidden
+          until mainnet — they ran on BULK's official indexer leaderboard
+          (indexer.bulk.trade/v1/leaderboard), which was disabled when the
+          trading competition ended ("classic leaderboard routes are
+          disabled"). Rather than show two empty "indexer unavailable"
+          wells, we surface the two panels that run on our OWN collected
+          data and work today: the liquidations leaderboard and the live
+          trade/liquidation feed. When mainnet ships (or BULK exposes a new
+          rankings endpoint) the hidden panels come back. */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-0.5">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+            Market Activity
+          </h2>
+          <span className="text-[11px] text-[var(--text-tertiary)]">
+            Trader rankings return at mainnet
+          </span>
         </div>
-        <div className="h-[450px]">
-          <LeaderboardTable type="liquidated" limit={10} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="h-[450px]">
-          {/* Whale Watch — BULK indexer's volume ranking, all-time. The
-              old DB-backed version only saw wallets we'd collected stats
-              for (often missed real top-volume traders); BULK's indexer
-              is authoritative across every wallet on the exchange. */}
-          <BulkLeaderboardTable
-            limit={10}
-            defaultMetric="volume"
-            defaultWindow="all"
-            allowMetricChange={false}
-            title="Whale Watch"
-            icon={Anchor}
-          />
-        </div>
-        <div className="h-[450px]">
-          <RecentActivity />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="h-[460px]">
+            <LeaderboardTable type="liquidated" limit={10} />
+          </div>
+          <div className="h-[460px]">
+            <RecentActivity />
+          </div>
         </div>
       </div>
     </main>
