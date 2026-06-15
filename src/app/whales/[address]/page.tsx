@@ -775,11 +775,11 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
       <div className="w-full overflow-x-auto">
         <div className="inline-flex items-start gap-2">
           {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
-          <div className="flex flex-col gap-[3px] shrink-0 pr-1">
+          <div className="flex flex-col gap-[4px] shrink-0 pr-1">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
               <div
                 key={d}
-                className="h-[14px] text-[10px] text-[var(--text-tertiary)] leading-[14px] tabular-nums"
+                className="h-[22px] text-[10px] text-[var(--text-tertiary)] leading-[22px] tabular-nums"
                 style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
               >
                 {d}
@@ -787,12 +787,12 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
             ))}
           </div>
           {/* Week columns — fixed 14px cells, 3px gaps. */}
-          <div className="flex gap-[3px]">
+          <div className="flex gap-[4px]">
             {weeks.map((week, col) => (
-              <div key={col} className="flex flex-col gap-[3px]">
+              <div key={col} className="flex flex-col gap-[4px]">
                 {week.map((day, row) => {
                   if (day.isFuture) {
-                    return <div key={row} className="w-[14px] h-[14px]" />;
+                    return <div key={row} className="w-[22px] h-[22px]" />;
                   }
                   const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
                   const isWin = day.pnl !== null && day.pnl > 0;
@@ -814,7 +814,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
                   return (
                     <div
                       key={row}
-                      className="w-[14px] h-[14px] rounded-sm"
+                      className="w-[22px] h-[22px] rounded-sm"
                       style={style}
                       title={titleParts.join(' · ')}
                     />
@@ -830,7 +830,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
             const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
             const widthCols = nextCol - m.col;
             return (
-              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 17}px` }}>
+              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 26}px` }}>
                 {m.label}
               </div>
             );
