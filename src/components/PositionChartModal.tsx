@@ -501,8 +501,51 @@ export function PositionChartModal({ position, onClose }: Props) {
       // the marker time (seconds) — lightweight-charts gives us this
       // back in the crosshair callback.
       const infoMap = new Map<number, MarkerInfo>();
-      const markers: SeriesMarker<Time>[] = Array.from(groups.values())
+
+      // Spread-fix: BULK currently reports many fills with identical (or
+      // near-identical) timestamps — the openTime/closeTime bug. Those
+      // all land in ONE time bucket, so lightweight-charts stacks them in
+      // a vertical column at a single x-position (the cramped tower in the
+      // UI) and only one is hoverable. To make them readable, when 2+
+      // groups share a bucket we fan them out across consecutive candle
+      // slots starting at that bucket. Each then gets its own x-position,
+      // its own hover hit-target, and the sequence reads left-to-right
+      // like a real fill timeline. We cap the fan-out span so a huge
+      // cluster doesn't walk off the visible range.
+      const sortedGroups = Array.from(groups.values()).sort((a, b) => a.time - b.time);
+
+      // Tally how many groups occupy each bucket so we know which need spreading.
+      const bucketCounts = new Map<number, number>();
+      for (const g of sortedGroups) bucketCounts.set(g.time, (bucketCounts.get(g.time) || 0) + 1);
+
+      // Assign a display time to each group: lone groups keep their bucket;
+      // colliding groups step forward by one candle each (bucket, bucket+1
+      // interval, bucket+2 …). A Set guards against a spread slot landing
+      // on top of a real later bucket.
+      const usedTimes = new Set<number>();
+      const spreadByGroup = new Map<typeof sortedGroups[number], number>();
+      let collisionCursor = -1;
+      let collisionBase = -1;
+      for (const g of sortedGroups) {
+        const collides = (bucketCounts.get(g.time) || 0) > 1;
+        let t = g.time;
+        if (collides) {
+          if (collisionBase !== g.time) {
+            collisionBase = g.time;
+            collisionCursor = 0;
+          }
+          t = g.time + collisionCursor * bucket;
+          collisionCursor += 1;
+        }
+        // Avoid colliding with an already-placed marker.
+        while (usedTimes.has(t)) t += bucket;
+        usedTimes.add(t);
+        spreadByGroup.set(g, t);
+      }
+
+      const markers: SeriesMarker<Time>[] = sortedGroups
         .map((g) => {
+          const displayTime = spreadByGroup.get(g) ?? g.time;
           // `liq_sweep` is liquidation-flavored — share the orange palette
           // with LIQ and ADL so users can spot all force-close events at
           // a glance. The label text below distinguishes the three.
@@ -541,7 +584,10 @@ export function PositionChartModal({ position, onClose }: Props) {
           const avgPrice = totalSize > 0 ? weightedPriceSum / totalSize : 0;
           const primary = g.fills[0];
 
-          infoMap.set(g.time, {
+          // Key the hover map by the SPREAD time so the crosshair handler
+          // snaps to the correct fanned-out marker, not the original
+          // collapsed bucket.
+          infoMap.set(displayTime, {
             isBuy: g.isBuy,
             isLiqOrAdl,
             count: g.fills.length,
@@ -571,7 +617,7 @@ export function PositionChartModal({ position, onClose }: Props) {
                 : undefined;
 
           return {
-            time: g.time as UTCTimestamp,
+            time: displayTime as UTCTimestamp,
             position: g.isBuy ? 'belowBar' : 'aboveBar',
             color,
             // Arrows for lifecycle events (entry/exit/flip), circles for
