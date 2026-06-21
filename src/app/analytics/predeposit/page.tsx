@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, LineChart, Line, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Landmark, TrendingUp, TrendingDown, Wallet, Users, Loader2 } from 'lucide-react';
 import { formatCompact, formatAddress } from '@/lib/api';
@@ -23,6 +24,8 @@ interface DistBucket {
   bucket: string; numDepositors: number; totalDeposited: number;
   pctDepositors: number; pctDeposits: number;
 }
+interface GrowthPoint { day: string; newDepositors: number; cumulativeDepositors: number; }
+interface ActivityPoint { day: string; activeDepositors: number; depositTxns: number; }
 interface LeaderRow {
   rank: number; address: string; deposited: number; withdrawn: number;
   net: number; pctOfTotal: number; txns: number;
@@ -35,11 +38,38 @@ interface Status {
 
 const fmtUsd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const fmtUsdC = (n: number) => `$${formatCompact(n)}`;
+const tooltipStyle: React.CSSProperties = {
+  background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12,
+};
+const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// Wrapper card for the secondary charts in the 2-col grid.
+function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
+        {subtitle && <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{subtitle}</p>}
+      </div>
+      <div className="h-[260px]">{children}</div>
+    </div>
+  );
+}
+
+function Empty({ loading }: { loading?: boolean }) {
+  return (
+    <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
+      {loading ? 'Loading…' : 'No data yet'}
+    </div>
+  );
+}
 
 export default function PreDepositPage() {
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [tvl, setTvl] = useState<TvlPoint[]>([]);
   const [dist, setDist] = useState<DistBucket[]>([]);
+  const [growth, setGrowth] = useState<GrowthPoint[]>([]);
+  const [activity, setActivity] = useState<ActivityPoint[]>([]);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,26 +77,40 @@ export default function PreDepositPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    // Fetch helper that treats any non-OK response (404 while the backend
+    // isn't deployed yet, 500s, etc.) as "no data" rather than letting an
+    // error body like {"error":...} through as if it were real data — that
+    // was crashing the KPI cards with `undefined.toLocaleString()`.
+    const getJson = async <T,>(path: string): Promise<T | null> => {
       try {
-        const [k, t, d, l, s] = await Promise.all([
-          fetch(`${API_URL}/api/predeposit/kpis`).then((r) => r.json()),
-          fetch(`${API_URL}/api/predeposit/tvl-history`).then((r) => r.json()),
-          fetch(`${API_URL}/api/predeposit/distribution`).then((r) => r.json()),
-          fetch(`${API_URL}/api/predeposit/leaderboard?limit=100`).then((r) => r.json()),
-          fetch(`${API_URL}/api/predeposit/status`).then((r) => r.json()),
-        ]);
-        if (cancelled) return;
-        setKpis(k);
-        setTvl(t.data || []);
-        setDist(d.data || []);
-        setLeaders(l.data || []);
-        setStatus(s);
-      } catch (e) {
-        console.error('predeposit load error', e);
-      } finally {
-        if (!cancelled) setLoading(false);
+        const r = await fetch(`${API_URL}${path}`);
+        if (!r.ok) return null;
+        return (await r.json()) as T;
+      } catch {
+        return null;
       }
+    };
+    const load = async () => {
+      const [k, t, d, g, a, l, s] = await Promise.all([
+        getJson<Kpis>('/api/predeposit/kpis'),
+        getJson<{ data: TvlPoint[] }>('/api/predeposit/tvl-history'),
+        getJson<{ data: DistBucket[] }>('/api/predeposit/distribution'),
+        getJson<{ data: GrowthPoint[] }>('/api/predeposit/depositor-growth'),
+        getJson<{ data: ActivityPoint[] }>('/api/predeposit/daily-activity'),
+        getJson<{ data: LeaderRow[] }>('/api/predeposit/leaderboard?limit=100'),
+        getJson<Status>('/api/predeposit/status'),
+      ]);
+      if (cancelled) return;
+      // Only accept KPIs if the object actually has the numeric fields —
+      // guards against an error body slipping through.
+      setKpis(k && typeof k.liveTvl === 'number' ? k : null);
+      setTvl(Array.isArray(t?.data) ? t!.data : []);
+      setDist(Array.isArray(d?.data) ? d!.data : []);
+      setGrowth(Array.isArray(g?.data) ? g!.data : []);
+      setActivity(Array.isArray(a?.data) ? a!.data : []);
+      setLeaders(Array.isArray(l?.data) ? l!.data : []);
+      setStatus(s && typeof s.configured === 'boolean' ? s : null);
+      setLoading(false);
     };
     load();
     const iv = setInterval(load, 60_000);
@@ -87,6 +131,11 @@ export default function PreDepositPage() {
       </div>
 
       {/* Indexer status banner while backfilling or if RPC not yet wired. */}
+      {!loading && !status && (
+        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+          Pre-deposit analytics aren&apos;t available yet — the backend service for this section hasn&apos;t been deployed. Data appears here once it&apos;s live.
+        </div>
+      )}
       {status && !status.configured && (
         <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
           Pre-deposit indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
@@ -151,7 +200,7 @@ export default function PreDepositPage() {
                 <XAxis
                   dataKey="day"
                   tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   minTickGap={40}
                 />
                 <YAxis
@@ -161,7 +210,7 @@ export default function PreDepositPage() {
                 />
                 <Tooltip
                   contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   formatter={(v: number, name) => [fmtUsd(v), name === 'liveBalance' ? 'Live TVL' : name]}
                 />
                 <Area type="monotone" dataKey="liveBalance" stroke="var(--accent)" strokeWidth={2} fill="url(#tvlFill)" />
@@ -169,6 +218,80 @@ export default function PreDepositPage() {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      {/* Extra charts — 2-column grid, mirroring the Dune dashboard cuts.
+          All derived from the same predeposit_transfers table. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Daily deposits vs withdrawals (stacked bars) */}
+        <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tvl}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [fmtUsd(v), n === 'deposits' ? 'Deposits' : 'Withdrawals']} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="deposits" stackId="a" fill="var(--bids)" name="Deposits" />
+                <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* New depositors per day + cumulative line */}
+        <ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
+          {growth.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={growth}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis yAxisId="l" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={44}
+                  tickFormatter={(v) => formatCompact(v)} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={2} dot={false} name="Cumulative" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Daily active depositors */}
+        <ChartCard title="Daily Active Depositors" subtitle="Distinct depositors per day">
+          {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={activity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Daily deposit transaction count */}
+        <ChartCard title="Daily Deposit Txns" subtitle="Number of deposits per day">
+          {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={activity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
       </div>
 
       {/* Distribution + Leaderboard side by side on desktop */}
