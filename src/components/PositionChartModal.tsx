@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, UTCTimestamp, CandlestickData, SeriesMarker, Time, MouseEventParams } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, type Candle, type WalletFill } from '@/lib/api';
-import { annotateFills, formatDuration } from '@/lib/positionWalk';
+import { annotateFills } from '@/lib/positionWalk';
 
 // ---------------------------------------------------------------------------
 // PositionChartModal
@@ -89,26 +89,11 @@ const CANDLE_LIMIT = 200;
 // to populate the hover tooltip. Kept outside React state because it
 // doesn't drive rendering — only the ref's current value matters at
 // callback time.
-interface MarkerInfo {
-  isBuy: boolean;
-  isLiqOrAdl: boolean;
-  count: number;
-  totalSize: number;
-  avgPrice: number;
-  /** First fill's action label, e.g. "Open long", "Close short". */
-  actionLabel: string;
-  /** Original (unbucketed) timestamp of the first fill in the group. */
-  timestamp: number;
-}
 
 export function PositionChartModal({ position, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  // Marker metadata indexed by marker time (UTCTimestamp seconds). Populated
-  // when fills load; consumed by the crosshair-move handler to render the
-  // hover tooltip with action label, count, size, etc.
-  const markerInfoRef = useRef<Map<number, MarkerInfo>>(new Map());
 
   // Tracks whether the most recent mousedown on the modal originated on
   // the backdrop itself (vs. on a child like the chart canvas). Used to
@@ -144,14 +129,10 @@ export function PositionChartModal({ position, onClose }: Props) {
   const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Hover tooltip — shown when the crosshair lands on a marker's time bucket.
-  // Tracks viewport-relative pixel position so we can absolutely-position
-  // the tooltip div over the chart container.
-  const [tooltip, setTooltip] = useState<{
-    info: MarkerInfo;
-    x: number;
-    y: number;
-  } | null>(null);
+  // Pixel y of the entry price line within the chart pane, used to float
+  // the PNL/Size badge directly on the entry line (BULK-style). Recomputed
+  // whenever the price scale shifts (pan / zoom / resize).
+  const [entryBadgeY, setEntryBadgeY] = useState<number | null>(null);
 
   // Close on Esc — small UX nicety. Streamers using the keyboard expect this.
   useEffect(() => {
@@ -315,7 +296,6 @@ export function PositionChartModal({ position, onClose }: Props) {
     const gridColor = isLight ? 'rgba(115, 106, 108, 0.15)' : 'rgba(84, 74, 76, 0.15)';
     const borderColor = isLight ? 'rgba(115, 106, 108, 0.4)' : 'rgba(84, 74, 76, 0.4)';
     const textColor = isLight ? '#736A6C' : '#807678';
-    const markLineColor = isLight ? '#1B1A14' : '#FFFEEF';
 
     // Seed with non-zero dimensions even if the container hasn't been
     // measured yet — chart will be resized to actual dimensions on the next
@@ -371,14 +351,14 @@ export function PositionChartModal({ position, onClose }: Props) {
     }));
     series.setData(data);
 
-    // Horizontal price lines. Different sets per kind:
-    //   - live  → Entry (solid, side-colored), Mark (dashed grey), Liq (dashed red)
-    //   - closed → Entry (solid, side-colored), Close (solid grey), no Liq
+    // Horizontal price lines, BULK-style: thin lines with colored axis
+    // tags. Entry (side-colored dashed) + the floating PNL/Size badge,
+    // Liq (amber dashed), Mark (green dotted) for live; Close for closed.
     series.createPriceLine({
       price: position.entryPrice,
       color: position.side === 'long' ? '#00B481' : '#EF4A3C',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
       title: 'Entry',
     });
@@ -386,9 +366,9 @@ export function PositionChartModal({ position, onClose }: Props) {
     if (position.kind === 'live') {
       series.createPriceLine({
         price: position.markPrice,
-        color: markLineColor,
+        color: '#00B481',
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
         title: 'Mark',
       });
@@ -396,302 +376,50 @@ export function PositionChartModal({ position, onClose }: Props) {
       if (position.liquidationPrice > 0) {
         series.createPriceLine({
           price: position.liquidationPrice,
-          color: '#EF4A3C',
-          lineWidth: 2,
+          color: '#F5A623',
+          lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: 'Liq',
+          title: 'Liq.',
         });
       }
     } else {
       // Closed position: draw the close price as the second reference
-      // line. Color it by win/loss so users see "did this trade work"
-      // at a glance (green=profit, red=loss) without reading numbers.
-      // Solid line because, unlike Mark, this is a fixed historical
-      // value — not a moving target.
+      // line, colored by win/loss so users see "did this trade work"
+      // at a glance (green=profit, red=loss).
       const wasProfitable =
         (position.side === 'long' && position.closePrice > position.entryPrice) ||
         (position.side === 'short' && position.closePrice < position.entryPrice);
       series.createPriceLine({
         price: position.closePrice,
         color: wasProfitable ? '#00B481' : '#EF4A3C',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
         title: 'Close',
       });
     }
 
-    // Fill markers — wallet's executed trades on this market, painted on
-    // the candle chart so users see the position's trade story at a glance.
-    //
-    // Visual rules:
-    //   - Buys → green circles labeled "B" below the bar
-    //   - Sells → red circles labeled "S" above the bar
-    //   - Liquidations / ADL / Sweeps → orange circles labeled "LIQ" / "ADL" / "LSWP"
-    //   - Aggregated buckets (multiple fills in same candle, same side,
-    //     same reason) show "B ×N" / "S ×N" instead
-    //
-    // We aggregate fills by (timeBucket, side, reason) so a flurry of
-    // small fills against multiple makers in the same minute becomes
-    // one readable marker instead of a vertical wall of text.
-    //
-    // BULK v1.0.15 added `liq_sweep` (reasonCode 3) — a partial-liquidation
-    // cascade. We treat it as liquidation-flavored (same orange palette)
-    // but with a distinct "LSWP" label so users can tell at a glance
-    // whether a position was force-closed in one shot (LIQ) or via
-    // multiple partial sweeps (LSWP).
-    //
-    // Detailed metadata (action label, exact size, exact price, time)
-    // is stored in chartMarkerInfoRef and shown in a custom hover
-    // tooltip via subscribeCrosshairMove below.
-    if (fills && fills.length > 0) {
-      // Bucket size in seconds — must match the chart interval so fills
-      // within the same candle group together.
-      const bucketSeconds: Record<string, number> = {
-        '5m': 300,
-        '15m': 900,
-        '1h': 3600,
-        '4h': 14400,
-        '1d': 86400,
-      };
-      const bucket = bucketSeconds[interval] ?? 3600;
-
-      // Annotate every fill with its position-state action so the hover
-      // tooltip can say "Open long: 0.5 @ 81200" rather than just
-      // "Buy 0.5 @ 81200". This walks the fills once chronologically.
-      const annotated = annotateFills(fills);
-
-      // currentPositionFills (computed in the useMemo above) is already
-      // sliced to only the fills from the currently-open position.
-      // Reuse it directly so the marker logic stays in sync with the
-      // header's fill count.
-      const currentPosFills = currentPositionFills;
-
-      // Group annotated fills by (timeBucket, side, reason). We iterate
-      // over `currentPosFills` (already filtered to the currently
-      // open position) so previously-closed positions don't show up
-      // on the chart.
-      type Group = {
-        time: number;
-        isBuy: boolean;
-        reason: string;
-        fills: typeof annotated;
-      };
-      const groups = new Map<string, Group>();
-      for (const f of currentPosFills) {
-        const tSec = Math.floor(f.timestamp / 1000);
-        const tBucket = Math.floor(tSec / bucket) * bucket;
-        const reason = (f.reasonCode || 'trade').toLowerCase();
-        const key = `${tBucket}|${f.isBuy ? 'B' : 'S'}|${reason}`;
-        const g = groups.get(key);
-        if (g) {
-          g.fills.push(f);
-        } else {
-          groups.set(key, {
-            time: tBucket,
-            isBuy: f.isBuy,
-            reason,
-            fills: [f],
-          });
-        }
-      }
-
-      // Build markers + a parallel info map for hover. The map key is
-      // the marker time (seconds) — lightweight-charts gives us this
-      // back in the crosshair callback.
-      const infoMap = new Map<number, MarkerInfo>();
-
-      // Spread-fix: BULK currently reports many fills with identical (or
-      // near-identical) timestamps — the openTime/closeTime bug. Those
-      // all land in ONE time bucket, so lightweight-charts stacks them in
-      // a vertical column at a single x-position (the cramped tower in the
-      // UI) and only one is hoverable. To make them readable, when 2+
-      // groups share a bucket we fan them out across consecutive candle
-      // slots starting at that bucket. Each then gets its own x-position,
-      // its own hover hit-target, and the sequence reads left-to-right
-      // like a real fill timeline. We cap the fan-out span so a huge
-      // cluster doesn't walk off the visible range.
-      const sortedGroups = Array.from(groups.values()).sort((a, b) => a.time - b.time);
-
-      // Tally how many groups occupy each bucket so we know which need spreading.
-      const bucketCounts = new Map<number, number>();
-      for (const g of sortedGroups) bucketCounts.set(g.time, (bucketCounts.get(g.time) || 0) + 1);
-
-      // Assign a display time to each group: lone groups keep their bucket;
-      // colliding groups step forward by one candle each (bucket, bucket+1
-      // interval, bucket+2 …). A Set guards against a spread slot landing
-      // on top of a real later bucket.
-      const usedTimes = new Set<number>();
-      const spreadByGroup = new Map<typeof sortedGroups[number], number>();
-      let collisionCursor = -1;
-      let collisionBase = -1;
-      for (const g of sortedGroups) {
-        const collides = (bucketCounts.get(g.time) || 0) > 1;
-        let t = g.time;
-        if (collides) {
-          if (collisionBase !== g.time) {
-            collisionBase = g.time;
-            collisionCursor = 0;
-          }
-          t = g.time + collisionCursor * bucket;
-          collisionCursor += 1;
-        }
-        // Avoid colliding with an already-placed marker.
-        while (usedTimes.has(t)) t += bucket;
-        usedTimes.add(t);
-        spreadByGroup.set(g, t);
-      }
-
-      const markers: SeriesMarker<Time>[] = sortedGroups
-        .map((g) => {
-          const displayTime = spreadByGroup.get(g) ?? g.time;
-          // `liq_sweep` is liquidation-flavored — share the orange palette
-          // with LIQ and ADL so users can spot all force-close events at
-          // a glance. The label text below distinguishes the three.
-          const isLiqOrAdl = g.reason === 'liq' || g.reason === 'adl' || g.reason === 'liq_sweep';
-          const color = isLiqOrAdl
-            ? '#FFB547'
-            : g.isBuy
-            ? '#00B481'
-            : '#EF4A3C';
-
-          // Label strategy: text on the chart is expensive — every label
-          // crowds out chart real estate, and with 500 fills compressed
-          // into 30 minutes the labels become unreadable noise.
-          //
-          // Solution: pure circles for normal buy/sell fills. The tooltip
-          // (subscribeCrosshairMove below) provides full context on hover.
-          // Only liquidations, ADLs, and sweeps get an on-chart label
-          // because those are rare, important events worth flagging visually.
-          const text = isLiqOrAdl
-            ? g.reason === 'liq'
-              ? g.fills.length > 1 ? `LIQ ×${g.fills.length}` : 'LIQ'
-              : g.reason === 'liq_sweep'
-              ? g.fills.length > 1 ? `LSWP ×${g.fills.length}` : 'LSWP'
-              : g.fills.length > 1 ? `ADL ×${g.fills.length}` : 'ADL'
-            : undefined;
-
-          // Compute aggregated metadata for the tooltip. VWAP across the
-          // group's fills, total size, and the action of the *first*
-          // fill in the group (the one that opened/added to the position).
-          let totalSize = 0;
-          let weightedPriceSum = 0;
-          for (const f of g.fills) {
-            totalSize += f.size;
-            weightedPriceSum += f.size * f.price;
-          }
-          const avgPrice = totalSize > 0 ? weightedPriceSum / totalSize : 0;
-          const primary = g.fills[0];
-
-          // Key the hover map by the SPREAD time so the crosshair handler
-          // snaps to the correct fanned-out marker, not the original
-          // collapsed bucket.
-          infoMap.set(displayTime, {
-            isBuy: g.isBuy,
-            isLiqOrAdl,
-            count: g.fills.length,
-            totalSize,
-            avgPrice,
-            actionLabel: primary.actionLabel,
-            timestamp: primary.timestamp,
-          });
-
-          // Lifecycle emphasis — the founder-requested "entries and exits
-          // on the chart" detail. A group is a lifecycle event when it
-          // contains the fill that opened, closed, or flipped the
-          // position (annotateFills classifies every fill). Those get
-          // arrows + labels so the position's story reads at a glance;
-          // intermediate adds/reduces stay as quiet circles and keep
-          // their detail in the hover tooltip.
-          const lifecycle = g.fills.find(
-            (f) => f.action === 'open' || f.action === 'close' || f.action === 'flip',
-          )?.action;
-
-          const lifecycleText = lifecycle === 'open'
-            ? 'Entry'
-            : lifecycle === 'close'
-              ? 'Exit'
-              : lifecycle === 'flip'
-                ? 'Flip'
-                : undefined;
-
-          return {
-            time: displayTime as UTCTimestamp,
-            position: g.isBuy ? 'belowBar' : 'aboveBar',
-            color,
-            // Arrows for lifecycle events (entry/exit/flip), circles for
-            // everything else. LIQ/ADL keep circles + their own labels —
-            // the orange + label already makes them unmissable.
-            shape: lifecycle && !isLiqOrAdl
-              ? (g.isBuy ? ('arrowUp' as const) : ('arrowDown' as const))
-              : ('circle' as const),
-            // Bigger markers for lifecycle + liq/adl so they pop visually.
-            size: lifecycle || isLiqOrAdl ? 2 : 1,
-            text: text ?? lifecycleText,
-          } as SeriesMarker<Time>;
-        })
-        .sort((a, b) => (a.time as number) - (b.time as number));
-
-      series.setMarkers(markers);
-      markerInfoRef.current = infoMap;
-    } else {
-      // Clear out any stale info from a previous render
-      markerInfoRef.current = new Map();
-    }
+    // Fill markers removed — the chart now mirrors BULK's clean reference
+    // view: Entry / Mark / Liq lines plus a floating PNL/Size badge on the
+    // entry line. Per-fill detail lives in the trades table, not the chart.
+    series.setMarkers([]);
 
     // Fit time range immediately and again after the first paint, in case
     // the container was 0px when we created the chart and it's now real.
     chart.timeScale().fitContent();
 
-    // Hover tooltip wiring. Subscribe to crosshair movement and look up
-    // marker metadata by the time the cursor is over. We tolerate small
-    // bucket misalignment (the marker time is bucketed to the candle,
-    // but the cursor time is the candle's open time) by snapping to the
-    // nearest known marker bucket within +/- one candle interval.
-    const bucketSec = (() => {
-      switch (interval) {
-        case '5m': return 300;
-        case '15m': return 900;
-        case '1h': return 3600;
-        case '4h': return 14400;
-        case '1d': return 86400;
-        default: return 3600;
-      }
-    })();
-
-    const handleCrosshair = (param: MouseEventParams) => {
-      // Empty point or off-chart → hide tooltip
-      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
-        setTooltip(null);
-        return;
-      }
-      const cursorSec = Number(param.time);
-      // Find the closest marker bucket within one candle interval. We
-      // snap because lightweight-charts reports the candle's time, not
-      // the exact marker time, so equality won't work directly.
-      let best: { time: number; info: MarkerInfo } | null = null;
-      for (const [time, info] of markerInfoRef.current.entries()) {
-        const dt = Math.abs(time - cursorSec);
-        if (dt <= bucketSec / 2) {
-          if (!best || dt < Math.abs(best.time - cursorSec)) {
-            best = { time, info };
-          }
-        }
-      }
-      if (!best) {
-        setTooltip(null);
-        return;
-      }
-      // Position tooltip next to cursor. We offset slightly so the tip
-      // doesn't sit directly under the cursor (which would steal hover).
-      setTooltip({
-        info: best.info,
-        x: param.point.x + 16,
-        y: param.point.y + 16,
-      });
+    // Keep the floating PNL/Size badge glued to the entry line. The entry
+    // price's pixel-y shifts whenever the visible price range changes (pan,
+    // zoom, autoscale, resize), so recompute on those events.
+    const recomputeBadge = () => {
+      const s = seriesRef.current;
+      if (!s) return;
+      const y = s.priceToCoordinate(position.entryPrice);
+      setEntryBadgeY(typeof y === 'number' ? y : null);
     };
-    chart.subscribeCrosshairMove(handleCrosshair);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(recomputeBadge);
+    recomputeBadge();
 
     // Apply the *actual* measured size as soon as the browser has laid out.
     // Using requestAnimationFrame ensures we read clientWidth/Height after
@@ -703,6 +431,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         if (w > 0 && h > 0) {
           chart.applyOptions({ width: w, height: h });
           chart.timeScale().fitContent();
+          recomputeBadge();
         }
       }
     });
@@ -715,6 +444,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         const h = containerRef.current.clientHeight;
         if (w > 0 && h > 0) {
           chart.applyOptions({ width: w, height: h });
+          recomputeBadge();
         }
       }
     };
@@ -725,14 +455,14 @@ export function PositionChartModal({ position, onClose }: Props) {
       cancelAnimationFrame(raf);
       obs.disconnect();
       try {
-        chart.unsubscribeCrosshairMove(handleCrosshair);
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(recomputeBadge);
       } catch {
         /* chart may already be removed */
       }
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      setTooltip(null);
+      setEntryBadgeY(null);
     };
   }, [candles, fills, currentPositionFills, position, interval]);
 
@@ -1001,66 +731,26 @@ export function PositionChartModal({ position, onClose }: Props) {
         <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
 
-          {/* Hover tooltip — appears when crosshair lands on a marker.
-              Absolutely positioned over the chart at the cursor offset
-              tracked by the crosshair-move handler. Pointer-events:none
-              so it never steals interaction from the chart underneath. */}
-          {tooltip && (
-            <div
-              className="absolute z-10 pointer-events-none bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg shadow-2xl px-3 py-2 text-xs"
-              style={{
-                left: tooltip.x + 8 /* chart container has p-2 padding */,
-                top: tooltip.y + 8,
-                maxWidth: 260,
-              }}
-            >
-              <div className="flex items-center gap-2 mb-1">
+          {/* PNL / Size badge — floats on the entry line, BULK-style. Its
+              vertical position tracks the entry price's pixel-y (entryBadgeY),
+              recomputed on any price-scale change. Pointer-events:none so it
+              never steals chart interaction. */}
+          {entryBadgeY !== null && (() => {
+            const pnl = position.kind === 'live' ? position.unrealizedPnl : position.realizedPnl;
+            const positive = pnl >= 0;
+            return (
+              <div
+                className="absolute z-10 pointer-events-none"
+                style={{ top: entryBadgeY + 8 /* p-2 padding */, left: '58%', transform: 'translate(-50%, -50%)' }}
+              >
                 <span
-                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
-                    tooltip.info.isLiqOrAdl
-                      ? 'bg-bulk-orange/20 text-bulk-orange'
-                      : tooltip.info.isBuy
-                      ? 'bg-bulk-green/20 text-bulk-green'
-                      : 'bg-bulk-red/20 text-bulk-red'
-                  }`}
+                  className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white shadow-lg whitespace-nowrap ${positive ? 'bg-bulk-green' : 'bg-bulk-red'}`}
                 >
-                  {tooltip.info.isLiqOrAdl
-                    ? '!'
-                    : tooltip.info.isBuy
-                    ? 'B'
-                    : 'S'}
+                  PNL {positive ? '+' : '-'}${formatNumber(Math.abs(pnl), 2)} | Size {formatNumber(position.size, 4)}
                 </span>
-                <span className="font-semibold text-[var(--text-primary)]">
-                  {tooltip.info.actionLabel}
-                </span>
-                {tooltip.info.count > 1 && (
-                  <span className="text-[var(--text-tertiary)]">
-                    ×{tooltip.info.count}
-                  </span>
-                )}
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[var(--text-secondary)] tabular-nums">
-                <div>
-                  <span className="text-[var(--text-tertiary)]">Size: </span>
-                  {formatNumber(tooltip.info.totalSize, 4)}
-                </div>
-                <div>
-                  <span className="text-[var(--text-tertiary)]">Price: </span>
-                  ${formatNumber(tooltip.info.avgPrice, 2)}
-                </div>
-              </div>
-              <div className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                {new Date(tooltip.info.timestamp).toLocaleString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-                {' · '}
-                {formatDuration(Date.now() - tooltip.info.timestamp)} ago
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
