@@ -687,7 +687,7 @@ function KpiCard({
   icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 }) {
   return (
-    <div className="relative overflow-hidden bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg pl-4 pr-3 py-3.5 hover:border-[var(--border-secondary)] transition-colors">
+    <div className="relative overflow-hidden bg-transparent border border-[var(--border-color)] rounded-lg pl-4 pr-3 py-3.5 hover:border-[var(--border-secondary)] transition-colors">
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: color, opacity: hero ? 1 : 0.55 }} />
       <div className="flex items-center gap-1.5 mb-1.5">
         {Icon && <Icon className="w-3.5 h-3.5" style={{ color }} />}
