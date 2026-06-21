@@ -94,6 +94,12 @@ export function PositionChartModal({ position, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  // The PNL/Size badge is positioned by directly mutating this element's
+  // style on every price-scale change. We deliberately bypass React state
+  // here: range-change events fire dozens of times per second during a
+  // zoom/pan gesture, and a setState per event would re-render the modal
+  // mid-gesture and stutter the chart's canvas redraw.
+  const badgeRef = useRef<HTMLDivElement | null>(null);
 
   // Tracks whether the most recent mousedown on the modal originated on
   // the backdrop itself (vs. on a child like the chart canvas). Used to
@@ -129,11 +135,6 @@ export function PositionChartModal({ position, onClose }: Props) {
   const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Pixel y of the entry price line within the chart pane, used to float
-  // the PNL/Size badge directly on the entry line (BULK-style). Recomputed
-  // whenever the price scale shifts (pan / zoom / resize).
-  const [entryBadgeY, setEntryBadgeY] = useState<number | null>(null);
-
   // Close on Esc — small UX nicety. Streamers using the keyboard expect this.
   useEffect(() => {
     if (!position) return;
@@ -411,12 +412,21 @@ export function PositionChartModal({ position, onClose }: Props) {
 
     // Keep the floating PNL/Size badge glued to the entry line. The entry
     // price's pixel-y shifts whenever the visible price range changes (pan,
-    // zoom, autoscale, resize), so recompute on those events.
+    // zoom, autoscale, resize). We position the badge by mutating its style
+    // directly — no React state — so the gesture stays smooth. The badge is
+    // hidden when the entry line scrolls outside the visible pane.
     const recomputeBadge = () => {
       const s = seriesRef.current;
-      if (!s) return;
+      const el = badgeRef.current;
+      if (!s || !el) return;
       const y = s.priceToCoordinate(position.entryPrice);
-      setEntryBadgeY(typeof y === 'number' ? y : null);
+      const h = containerRef.current?.clientHeight ?? 0;
+      if (typeof y === 'number' && y >= 0 && (h === 0 || y <= h)) {
+        el.style.top = `${y + 8 /* p-2 padding */}px`;
+        el.style.display = 'block';
+      } else {
+        el.style.display = 'none';
+      }
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(recomputeBadge);
     recomputeBadge();
@@ -462,7 +472,6 @@ export function PositionChartModal({ position, onClose }: Props) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      setEntryBadgeY(null);
     };
   }, [candles, fills, currentPositionFills, position, interval]);
 
@@ -731,17 +740,17 @@ export function PositionChartModal({ position, onClose }: Props) {
         <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
 
-          {/* PNL / Size badge — floats on the entry line, BULK-style. Its
-              vertical position tracks the entry price's pixel-y (entryBadgeY),
-              recomputed on any price-scale change. Pointer-events:none so it
-              never steals chart interaction. */}
-          {entryBadgeY !== null && (() => {
+          {/* PNL / Size badge — floats on the entry line, BULK-style.
+              Always mounted; positioned and shown/hidden via badgeRef in
+              recomputeBadge (direct style mutation, no re-render). */}
+          {(() => {
             const pnl = position.kind === 'live' ? position.unrealizedPnl : position.realizedPnl;
             const positive = pnl >= 0;
             return (
               <div
+                ref={badgeRef}
                 className="absolute z-10 pointer-events-none"
-                style={{ top: entryBadgeY + 8 /* p-2 padding */, left: '58%', transform: 'translate(-50%, -50%)' }}
+                style={{ display: 'none', left: '58%', transform: 'translate(-50%, -50%)' }}
               >
                 <span
                   className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white shadow-lg whitespace-nowrap ${positive ? 'bg-bulk-green' : 'bg-bulk-red'}`}
