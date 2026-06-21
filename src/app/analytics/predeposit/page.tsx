@@ -38,7 +38,7 @@ interface GiniPoint { day: string; gini: number; }
 interface CohortRow { cohortWeek: string; label: string; depositors: number; totalDeposited: number; }
 interface NewReturningPoint { day: string; newDepositors: number; returningDepositors: number; }
 interface HeatCell { dow: number; hour: number; count: number; volume: number; }
-interface Milestone { threshold: number; reachedAt: string | null; daysFromStart: number | null; }
+
 interface TtdBucket { bucket: string; count: number; }
 interface LeaderRow {
   rank: number; address: string; deposited: number; withdrawn: number;
@@ -190,7 +190,6 @@ export default function PreDepositPage() {
   const [cohorts, setCohorts] = useState<CohortRow[]>([]);
   const [newReturning, setNewReturning] = useState<NewReturningPoint[]>([]);
   const [heatmap, setHeatmap] = useState<HeatCell[]>([]);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [ttd, setTtd] = useState<TtdBucket[]>([]);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
@@ -226,7 +225,6 @@ export default function PreDepositPage() {
         getJson<{ data: CohortRow[] }>('/api/predeposit/cohorts'),
         getJson<{ data: NewReturningPoint[] }>('/api/predeposit/new-vs-returning'),
         getJson<{ data: HeatCell[] }>('/api/predeposit/heatmap'),
-        getJson<{ milestones: Milestone[] }>('/api/predeposit/milestones'),
         getJson<{ data: TtdBucket[] }>('/api/predeposit/time-to-deposit'),
         getJson<{ data: LeaderRow[] }>('/api/predeposit/leaderboard?limit=100'),
         getJson<Status>('/api/predeposit/status'),
@@ -245,7 +243,6 @@ export default function PreDepositPage() {
       setCohorts(Array.isArray(co?.data) ? co!.data : []);
       setNewReturning(Array.isArray(nr?.data) ? nr!.data : []);
       setHeatmap(Array.isArray(hm?.data) ? hm!.data : []);
-      setMilestones(Array.isArray(ms?.milestones) ? ms!.milestones : []);
       setTtd(Array.isArray(td?.data) ? td!.data : []);
       setLeaders(Array.isArray(l?.data) ? l!.data : []);
       setStatus(s && typeof s.configured === 'boolean' ? s : null);
@@ -369,26 +366,6 @@ export default function PreDepositPage() {
         </div>
       )}
 
-      {/* TVL milestones — how fast each threshold was hit. Great for
-          competitive bragging. */}
-      {milestones.length > 0 && (
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">TVL Milestones</h3>
-          <p className="text-[11px] text-[var(--text-tertiary)] mb-4">Days from campaign start to each threshold</p>
-          <div className="flex flex-wrap gap-2">
-            {milestones.map((m) => (
-              <div key={m.threshold} className={`flex-1 min-w-[120px] rounded-lg border px-3 py-2.5 ${
-                m.reachedAt ? 'border-[var(--accent)]/30 bg-[var(--accent)]/5' : 'border-[var(--border-color)] opacity-50'
-              }`}>
-                <div className="text-base font-bold tabular-nums text-[var(--text-primary)]">${formatCompact(m.threshold)}</div>
-                <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-                  {m.reachedAt ? `${m.daysFromStart}d` : 'Not reached'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Extra charts — 2-column grid, mirroring the Dune dashboard cuts.
           All derived from the same predeposit_transfers table. */}
