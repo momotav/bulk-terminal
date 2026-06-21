@@ -46,7 +46,7 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 
 // Wrapper card for the secondary charts in the 2-col grid.
 function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
         {subtitle && <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{subtitle}</p>}
@@ -163,7 +163,7 @@ export default function PreDepositPage() {
       </div>
 
       {/* TVL history chart */}
-      <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">TVL History</h2>
           <div className="flex gap-1">
@@ -232,8 +232,8 @@ export default function PreDepositPage() {
                 <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
                   tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate}
-                  formatter={(v: number, n) => [fmtUsd(v), n === 'deposits' ? 'Deposits' : 'Withdrawals']} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [fmtUsd(v), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="deposits" stackId="a" fill="var(--bids)" name="Deposits" />
                 <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
@@ -253,7 +253,7 @@ export default function PreDepositPage() {
                 <YAxis yAxisId="l" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
                 <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={44}
                   tickFormatter={(v) => formatCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
                 <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
                 <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={2} dot={false} name="Cumulative" />
               </BarChart>
@@ -270,7 +270,7 @@ export default function PreDepositPage() {
                 <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
                   tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
                 <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -286,7 +286,7 @@ export default function PreDepositPage() {
                 <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
                   tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
                 <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -297,7 +297,7 @@ export default function PreDepositPage() {
       {/* Distribution + Leaderboard side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
         {/* Distribution buckets */}
-        <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Deposit Distribution</h2>
           <div className="space-y-2.5">
             {dist.length === 0 ? (
@@ -324,7 +324,7 @@ export default function PreDepositPage() {
         </div>
 
         {/* Depositor leaderboard — the wallet-linked differentiator */}
-        <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Top Depositors</h2>
             <span className="text-[11px] text-[var(--text-tertiary)]">Linked to wallet profiles</span>
