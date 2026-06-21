@@ -134,14 +134,11 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
                   return (
                     <div
                       key={hour}
-                      className="flex-1 aspect-square mx-[1px] rounded-sm cursor-pointer transition-transform relative"
+                      className="flex-1 aspect-square mx-[1px] rounded-sm cursor-pointer"
                       style={{
                         backgroundColor: intensity > 0 ? `rgba(255, 181, 71, ${0.15 + intensity * 0.85})` : 'var(--border-color)',
                         opacity: intensity > 0 ? 1 : 0.3,
-                        transform: isHover ? 'scale(1.4)' : undefined,
-                        transformOrigin: 'center',
                         outline: isHover ? '1px solid var(--text-secondary)' : undefined,
-                        zIndex: isHover ? 20 : undefined,
                       }}
                       onMouseEnter={(e) => {
                         const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
