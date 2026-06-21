@@ -27,6 +27,18 @@ interface DistBucket {
 interface GrowthPoint { day: string; newDepositors: number; cumulativeDepositors: number; }
 interface ActivityPoint { day: string; activeDepositors: number; depositTxns: number; }
 interface AvgTrendPoint { day: string; avgDeposit: number; medianDeposit: number; }
+interface Concentration {
+  total: number; depositors: number;
+  top1: { usd: number; pct: number };
+  top10: { usd: number; pct: number };
+  top100: { usd: number; pct: number };
+}
+interface GiniPoint { day: string; gini: number; }
+interface CohortRow { cohortWeek: string; label: string; depositors: number; totalDeposited: number; }
+interface NewReturningPoint { day: string; newDepositors: number; returningDepositors: number; }
+interface HeatCell { dow: number; hour: number; count: number; volume: number; }
+interface Milestone { threshold: number; reachedAt: string | null; daysFromStart: number | null; }
+interface TtdBucket { bucket: string; count: number; }
 interface LeaderRow {
   rank: number; address: string; deposited: number; withdrawn: number;
   net: number; pctOfTotal: number; txns: number;
@@ -65,6 +77,72 @@ function Empty({ loading }: { loading?: boolean }) {
   );
 }
 
+function ConcentrationCard({ label, pct, usd }: { label: string; pct: number; usd: number }) {
+  return (
+    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-[0.12em] font-medium mb-1.5">{label}</div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-bold tabular-nums text-[var(--accent)]">{pct.toFixed(1)}%</span>
+        <span className="text-xs text-[var(--text-tertiary)] tabular-nums">${formatCompact(usd)}</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-[var(--bg-secondary-20)] overflow-hidden">
+        <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.min(pct, 100)}%`, opacity: 0.85 }} />
+      </div>
+    </div>
+  );
+}
+
+// Day-of-week × hour-of-day heatmap of deposit activity. Color intensity
+// scales with deposit count per cell. Hours are UTC.
+function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean }) {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const max = data.reduce((m, c) => Math.max(m, c.count), 0) || 1;
+  const lookup = new Map<string, HeatCell>();
+  for (const c of data) lookup.set(`${c.dow}-${c.hour}`, c);
+  return (
+    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Deposit Heatmap</h3>
+      <p className="text-[11px] text-[var(--text-tertiary)] mb-4">When deposits happen — day of week × hour (UTC)</p>
+      {data.length === 0 ? (
+        <div className="h-[180px]"><Empty loading={loading} /></div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[640px]">
+            {/* hour axis */}
+            <div className="flex pl-10 mb-1">
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={h} className="flex-1 text-center text-[8px] text-[var(--text-tertiary)] tabular-nums">
+                  {h % 3 === 0 ? h : ''}
+                </div>
+              ))}
+            </div>
+            {days.map((dayName, dow) => (
+              <div key={dow} className="flex items-center mb-[2px]">
+                <div className="w-10 text-[10px] text-[var(--text-tertiary)] shrink-0">{dayName}</div>
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const cell = lookup.get(`${dow}-${hour}`);
+                  const intensity = cell ? cell.count / max : 0;
+                  return (
+                    <div
+                      key={hour}
+                      className="flex-1 aspect-square mx-[1px] rounded-sm"
+                      style={{
+                        backgroundColor: intensity > 0 ? `rgba(255, 181, 71, ${0.15 + intensity * 0.85})` : 'var(--border-color)',
+                        opacity: intensity > 0 ? 1 : 0.3,
+                      }}
+                      title={cell ? `${dayName} ${hour}:00 UTC · ${cell.count} deposits · $${formatCompact(cell.volume)}` : `${dayName} ${hour}:00 UTC · 0`}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PreDepositPage() {
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [tvl, setTvl] = useState<TvlPoint[]>([]);
@@ -72,6 +150,13 @@ export default function PreDepositPage() {
   const [growth, setGrowth] = useState<GrowthPoint[]>([]);
   const [activity, setActivity] = useState<ActivityPoint[]>([]);
   const [avgTrend, setAvgTrend] = useState<AvgTrendPoint[]>([]);
+  const [concentration, setConcentration] = useState<Concentration | null>(null);
+  const [gini, setGini] = useState<GiniPoint[]>([]);
+  const [cohorts, setCohorts] = useState<CohortRow[]>([]);
+  const [newReturning, setNewReturning] = useState<NewReturningPoint[]>([]);
+  const [heatmap, setHeatmap] = useState<HeatCell[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [ttd, setTtd] = useState<TtdBucket[]>([]);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,13 +179,20 @@ export default function PreDepositPage() {
       }
     };
     const load = async () => {
-      const [k, t, d, g, a, av, l, s] = await Promise.all([
+      const [k, t, d, g, a, av, con, gi, co, nr, hm, ms, td, l, s] = await Promise.all([
         getJson<Kpis>('/api/predeposit/kpis'),
         getJson<{ data: TvlPoint[] }>('/api/predeposit/tvl-history'),
         getJson<{ data: DistBucket[] }>('/api/predeposit/distribution'),
         getJson<{ data: GrowthPoint[] }>('/api/predeposit/depositor-growth'),
         getJson<{ data: ActivityPoint[] }>('/api/predeposit/daily-activity'),
         getJson<{ data: AvgTrendPoint[] }>('/api/predeposit/avg-deposit-trend'),
+        getJson<Concentration>('/api/predeposit/concentration'),
+        getJson<{ data: GiniPoint[] }>('/api/predeposit/gini'),
+        getJson<{ data: CohortRow[] }>('/api/predeposit/cohorts'),
+        getJson<{ data: NewReturningPoint[] }>('/api/predeposit/new-vs-returning'),
+        getJson<{ data: HeatCell[] }>('/api/predeposit/heatmap'),
+        getJson<{ milestones: Milestone[] }>('/api/predeposit/milestones'),
+        getJson<{ data: TtdBucket[] }>('/api/predeposit/time-to-deposit'),
         getJson<{ data: LeaderRow[] }>('/api/predeposit/leaderboard?limit=100'),
         getJson<Status>('/api/predeposit/status'),
       ]);
@@ -113,6 +205,13 @@ export default function PreDepositPage() {
       setGrowth(Array.isArray(g?.data) ? g!.data : []);
       setActivity(Array.isArray(a?.data) ? a!.data : []);
       setAvgTrend(Array.isArray(av?.data) ? av!.data : []);
+      setConcentration(con && typeof con.total === 'number' ? con : null);
+      setGini(Array.isArray(gi?.data) ? gi!.data : []);
+      setCohorts(Array.isArray(co?.data) ? co!.data : []);
+      setNewReturning(Array.isArray(nr?.data) ? nr!.data : []);
+      setHeatmap(Array.isArray(hm?.data) ? hm!.data : []);
+      setMilestones(Array.isArray(ms?.milestones) ? ms!.milestones : []);
+      setTtd(Array.isArray(td?.data) ? td!.data : []);
       setLeaders(Array.isArray(l?.data) ? l!.data : []);
       setStatus(s && typeof s.configured === 'boolean' ? s : null);
       setLoading(false);
@@ -364,6 +463,111 @@ export default function PreDepositPage() {
           )}
         </ChartCard>
       </div>
+
+      {/* Wallet concentration — top 1/10/100 share. The decentralization
+          story crypto users grok instantly. */}
+      {concentration && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <ConcentrationCard label="Top 1 Wallet" pct={concentration.top1.pct} usd={concentration.top1.usd} />
+          <ConcentrationCard label="Top 10 Wallets" pct={concentration.top10.pct} usd={concentration.top10.usd} />
+          <ConcentrationCard label="Top 100 Wallets" pct={concentration.top100.pct} usd={concentration.top100.usd} />
+        </div>
+      )}
+
+      {/* TVL milestones — how fast each threshold was hit. Great for
+          competitive bragging. */}
+      {milestones.length > 0 && (
+        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">TVL Milestones</h3>
+          <p className="text-[11px] text-[var(--text-tertiary)] mb-4">Days from campaign start to each threshold</p>
+          <div className="flex flex-wrap gap-2">
+            {milestones.map((m) => (
+              <div key={m.threshold} className={`flex-1 min-w-[120px] rounded-lg border px-3 py-2.5 ${
+                m.reachedAt ? 'border-[var(--accent)]/30 bg-[var(--accent)]/5' : 'border-[var(--border-color)] opacity-50'
+              }`}>
+                <div className="text-base font-bold tabular-nums text-[var(--text-primary)]">${formatCompact(m.threshold)}</div>
+                <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+                  {m.reachedAt ? `${m.daysFromStart}d` : 'Not reached'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Second chart grid: cohorts, new-vs-returning, gini, time-to-deposit */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Cohort analysis — deposits by join-week */}
+        <ChartCard title="Cohort Analysis" subtitle="Total deposited by join week">
+          {cohorts.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={cohorts}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="label" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle}
+                  formatter={(v: number, n) => [n === 'totalDeposited' ? fmtUsd(v) : v, n === 'totalDeposited' ? 'Deposited' : 'Depositors']} />
+                <Bar dataKey="totalDeposited" fill="var(--accent)" name="totalDeposited" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* New vs returning depositors */}
+        <ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
+          {newReturning.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={newReturning}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [v, n === 'newDepositors' ? 'New' : 'Returning']} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="newDepositors" stackId="a" fill="#c084fc" name="New" />
+                <Bar dataKey="returningDepositors" stackId="a" fill="#60a5fa" name="Returning" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Gini coefficient over time */}
+        <ChartCard title="Gini Coefficient" subtitle="Deposit inequality over time (0 = equal, 1 = concentrated)">
+          {gini.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={gini}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} domain={[0, 1]} tickFormatter={(v) => v.toFixed(1)} />
+                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number) => [v.toFixed(3), 'Gini']} />
+                <Line type="monotone" dataKey="gini" stroke="#c084fc" strokeWidth={2} dot={false} name="Gini" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Time-to-deposit histogram */}
+        <ChartCard title="Time to Deposit" subtitle="How soon after launch wallets first deposited">
+          {ttd.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ttd}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="bucket" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle}
+                  formatter={(v: number) => [v, 'Depositors']} />
+                <Bar dataKey="count" fill="var(--bids)" name="Depositors" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Deposit heatmap — day-of-week × hour-of-day */}
+      <DepositHeatmap data={heatmap} loading={loading} />
 
       {/* Distribution + Leaderboard side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
