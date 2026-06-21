@@ -213,7 +213,7 @@ export default function PreDepositPage() {
       }
     };
     const load = async () => {
-      const [k, t, d, g, a, av, con, gi, co, nr, hm, ms, td, l, s] = await Promise.all([
+      const [k, t, d, g, a, av, con, gi, co, nr, hm, td, l, s] = await Promise.all([
         getJson<Kpis>('/api/predeposit/kpis'),
         getJson<{ data: TvlPoint[] }>('/api/predeposit/tvl-history'),
         getJson<{ data: DistBucket[] }>('/api/predeposit/distribution'),
