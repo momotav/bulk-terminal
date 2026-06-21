@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line, Legend,
+  AreaChart, Area, BarChart, Bar, LineChart, Line, Legend, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Landmark, TrendingUp, TrendingDown, Wallet, Users, Loader2 } from 'lucide-react';
@@ -26,6 +26,7 @@ interface DistBucket {
 }
 interface GrowthPoint { day: string; newDepositors: number; cumulativeDepositors: number; }
 interface ActivityPoint { day: string; activeDepositors: number; depositTxns: number; }
+interface AvgTrendPoint { day: string; avgDeposit: number; medianDeposit: number; }
 interface LeaderRow {
   rank: number; address: string; deposited: number; withdrawn: number;
   net: number; pctOfTotal: number; txns: number;
@@ -70,10 +71,12 @@ export default function PreDepositPage() {
   const [dist, setDist] = useState<DistBucket[]>([]);
   const [growth, setGrowth] = useState<GrowthPoint[]>([]);
   const [activity, setActivity] = useState<ActivityPoint[]>([]);
+  const [avgTrend, setAvgTrend] = useState<AvgTrendPoint[]>([]);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<'7d' | '30d' | 'all'>('all');
+  const [leaderLimit, setLeaderLimit] = useState<5 | 10 | 25 | 50 | 100>(5);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,12 +94,13 @@ export default function PreDepositPage() {
       }
     };
     const load = async () => {
-      const [k, t, d, g, a, l, s] = await Promise.all([
+      const [k, t, d, g, a, av, l, s] = await Promise.all([
         getJson<Kpis>('/api/predeposit/kpis'),
         getJson<{ data: TvlPoint[] }>('/api/predeposit/tvl-history'),
         getJson<{ data: DistBucket[] }>('/api/predeposit/distribution'),
         getJson<{ data: GrowthPoint[] }>('/api/predeposit/depositor-growth'),
         getJson<{ data: ActivityPoint[] }>('/api/predeposit/daily-activity'),
+        getJson<{ data: AvgTrendPoint[] }>('/api/predeposit/avg-deposit-trend'),
         getJson<{ data: LeaderRow[] }>('/api/predeposit/leaderboard?limit=100'),
         getJson<Status>('/api/predeposit/status'),
       ]);
@@ -108,6 +112,7 @@ export default function PreDepositPage() {
       setDist(Array.isArray(d?.data) ? d!.data : []);
       setGrowth(Array.isArray(g?.data) ? g!.data : []);
       setActivity(Array.isArray(a?.data) ? a!.data : []);
+      setAvgTrend(Array.isArray(av?.data) ? av!.data : []);
       setLeaders(Array.isArray(l?.data) ? l!.data : []);
       setStatus(s && typeof s.configured === 'boolean' ? s : null);
       setLoading(false);
@@ -255,7 +260,8 @@ export default function PreDepositPage() {
                   tickFormatter={(v) => formatCompact(v)} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
                 <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={2} dot={false} name="Cumulative" />
+                <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={3} dot={false} name="Cumulative" />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -289,6 +295,71 @@ export default function PreDepositPage() {
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
                 <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
               </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Net flow per day — deposits minus withdrawals, green/red by sign.
+            Shows momentum: are people net-adding or net-pulling? */}
+        <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tvl}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={56} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmtUsd(v)}`, 'Net flow']} />
+                <Bar dataKey="netFlow" name="Net flow" radius={[2, 2, 0, 0]}>
+                  {tvl.map((p, i) => (
+                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--bids)' : 'var(--asks)'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Withdrawal rate — % of each day's gross flow that's withdrawals.
+            High = people pulling out (panic/profit-taking); low = sticky. */}
+        <ChartCard title="Withdrawal Rate" subtitle="Withdrawals as % of daily gross flow">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={tvl.map((p) => ({
+                day: p.day,
+                rate: p.deposits + p.withdrawals > 0
+                  ? (p.withdrawals / (p.deposits + p.withdrawals)) * 100
+                  : 0,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} width={40} domain={[0, 100]} />
+                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number) => [`${v.toFixed(1)}%`, 'Withdrawal rate']} />
+                <Line type="monotone" dataKey="rate" stroke="var(--asks)" strokeWidth={2} dot={false} name="Withdrawal rate" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Avg vs median deposit size over time — rising avg with flat median
+            signals whales arriving; both flat = steady retail. */}
+        <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
+          {avgTrend.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={avgTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
+                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [fmtUsd(v), n]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="avgDeposit" stroke="var(--accent)" strokeWidth={2} dot={false} name="Average" />
+                <Line type="monotone" dataKey="medianDeposit" stroke="#60a5fa" strokeWidth={2} dot={false} name="Median" />
+              </LineChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
@@ -327,7 +398,24 @@ export default function PreDepositPage() {
         <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Top Depositors</h2>
-            <span className="text-[11px] text-[var(--text-tertiary)]">Linked to wallet profiles</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-[var(--text-tertiary)] hidden sm:inline">Linked to wallet profiles</span>
+              <div className="flex items-center gap-1 bg-[var(--bg-base)] rounded-lg p-0.5">
+                {([5, 10, 25, 50, 100] as const).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setLeaderLimit(n)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      leaderLimit === n
+                        ? 'bg-[var(--accent)] text-[var(--accent-text)]'
+                        : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -345,7 +433,7 @@ export default function PreDepositPage() {
                 {leaders.length === 0 ? (
                   <tr><td colSpan={6} className="text-center py-8 text-[var(--text-tertiary)]">{loading ? 'Loading…' : 'No depositors yet'}</td></tr>
                 ) : (
-                  leaders.map((row) => (
+                  leaders.slice(0, leaderLimit).map((row) => (
                     <tr key={row.address} className="border-b border-[var(--border-color)]/50 hover:bg-[var(--bg-secondary-20)]/30 transition-colors">
                       <td className="px-2 py-2.5 text-[var(--text-tertiary)] tabular-nums">{row.rank}</td>
                       <td className="px-2 py-2.5">
