@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { Landmark, TrendingUp, TrendingDown, Wallet, Users, Loader2 } from 'lucide-react';
 import { formatCompact, formatAddress } from '@/lib/api';
+import { ResizableChartRow } from '@/components/ResizableChartRow';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
@@ -53,18 +54,23 @@ const fmtUsd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionD
 const fmtUsdC = (n: number) => `$${formatCompact(n)}`;
 const tooltipStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12,
+  color: 'var(--text-primary)',
 };
+// Recharts colors tooltip item text by series by default, which on the
+// Net Flow chart resolved to near-black. Force readable light text.
+const tooltipItemStyle: React.CSSProperties = { color: 'var(--text-primary)' };
+const tooltipLabelStyle: React.CSSProperties = { color: 'var(--text-secondary)' };
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 // Wrapper card for the secondary charts in the 2-col grid.
-function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function ChartCard({ title, subtitle, children, isDragging }: { title: string; subtitle?: string; children: React.ReactNode; isDragging?: boolean }) {
   return (
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 h-full flex flex-col min-w-0 overflow-hidden">
       <div className="mb-3">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
-        {subtitle && <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{subtitle}</p>}
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate">{title}</h3>
+        {subtitle && <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5 truncate">{subtitle}</p>}
       </div>
-      <div className="h-[260px]">{children}</div>
+      <div className={`mt-auto ${isDragging ? 'blur-[1px] opacity-70' : ''}`} style={{ height: 'var(--chart-h, 260px)' }}>{children}</div>
     </div>
   );
 }
@@ -99,8 +105,10 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
   const max = data.reduce((m, c) => Math.max(m, c.count), 0) || 1;
   const lookup = new Map<string, HeatCell>();
   for (const c of data) lookup.set(`${c.dow}-${c.hour}`, c);
+  const [hover, setHover] = useState<{ dow: number; hour: number; x: number; y: number } | null>(null);
+  const hoverCell = hover ? lookup.get(`${hover.dow}-${hover.hour}`) : null;
   return (
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 relative">
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Deposit Heatmap</h3>
       <p className="text-[11px] text-[var(--text-tertiary)] mb-4">When deposits happen — day of week × hour (UTC)</p>
       {data.length === 0 ? (
@@ -122,20 +130,47 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
                 {Array.from({ length: 24 }, (_, hour) => {
                   const cell = lookup.get(`${dow}-${hour}`);
                   const intensity = cell ? cell.count / max : 0;
+                  const isHover = hover?.dow === dow && hover?.hour === hour;
                   return (
                     <div
                       key={hour}
-                      className="flex-1 aspect-square mx-[1px] rounded-sm"
+                      className="flex-1 aspect-square mx-[1px] rounded-sm cursor-pointer transition-transform"
                       style={{
                         backgroundColor: intensity > 0 ? `rgba(255, 181, 71, ${0.15 + intensity * 0.85})` : 'var(--border-color)',
                         opacity: intensity > 0 ? 1 : 0.3,
+                        transform: isHover ? 'scale(1.4)' : undefined,
+                        outline: isHover ? '1px solid var(--text-secondary)' : undefined,
                       }}
-                      title={cell ? `${dayName} ${hour}:00 UTC · ${cell.count} deposits · $${formatCompact(cell.volume)}` : `${dayName} ${hour}:00 UTC · 0`}
+                      onMouseEnter={(e) => {
+                        const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
+                        const cr = e.currentTarget.getBoundingClientRect();
+                        setHover({ dow, hour, x: cr.left - (rect?.left ?? 0) + cr.width / 2, y: cr.top - (rect?.top ?? 0) });
+                      }}
+                      onMouseLeave={() => setHover(null)}
                     />
                   );
                 })}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      {/* Styled hover tooltip */}
+      {hover && (
+        <div
+          className="absolute z-30 pointer-events-none -translate-x-1/2 -translate-y-full"
+          style={{ left: hover.x, top: hover.y - 6 }}
+        >
+          <div className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-lg whitespace-nowrap">
+            <div className="text-[11px] font-medium text-[var(--text-primary)]">
+              {days[hover.dow]} {String(hover.hour).padStart(2, '0')}:00 UTC
+            </div>
+            <div className="text-[11px] text-[var(--accent)] font-semibold tabular-nums">
+              {hoverCell ? `${hoverCell.count} deposits` : '0 deposits'}
+            </div>
+            {hoverCell && hoverCell.volume > 0 && (
+              <div className="text-[10px] text-[var(--text-tertiary)] tabular-nums">${formatCompact(hoverCell.volume)} volume</div>
+            )}
           </div>
         </div>
       )}
@@ -324,146 +359,6 @@ export default function PreDepositPage() {
         </div>
       </div>
 
-      {/* Extra charts — 2-column grid, mirroring the Dune dashboard cuts.
-          All derived from the same predeposit_transfers table. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Daily deposits vs withdrawals (stacked bars) */}
-        <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
-          {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tvl}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
-                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
-                  formatter={(v: number, n) => [fmtUsd(v), n]} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="deposits" stackId="a" fill="var(--bids)" name="Deposits" />
-                <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* New depositors per day + cumulative line */}
-        <ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
-          {growth.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={growth}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis yAxisId="l" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
-                <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={44}
-                  tickFormatter={(v) => formatCompact(v)} />
-                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
-                <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={3} dot={false} name="Cumulative" />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* Daily active depositors */}
-        <ChartCard title="Daily Active Depositors" subtitle="Distinct depositors per day">
-          {activity.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={activity}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
-                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
-                <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* Daily deposit transaction count */}
-        <ChartCard title="Daily Deposit Txns" subtitle="Number of deposits per day">
-          {activity.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={activity}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
-                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
-                <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* Net flow per day — deposits minus withdrawals, green/red by sign.
-            Shows momentum: are people net-adding or net-pulling? */}
-        <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
-          {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tvl}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={56} />
-                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
-                  formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmtUsd(v)}`, 'Net flow']} />
-                <Bar dataKey="netFlow" name="Net flow" radius={[2, 2, 0, 0]}>
-                  {tvl.map((p, i) => (
-                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--bids)' : 'var(--asks)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* Withdrawal rate — % of each day's gross flow that's withdrawals.
-            High = people pulling out (panic/profit-taking); low = sticky. */}
-        <ChartCard title="Withdrawal Rate" subtitle="Withdrawals as % of daily gross flow">
-          {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tvl.map((p) => ({
-                day: p.day,
-                rate: p.deposits + p.withdrawals > 0
-                  ? (p.withdrawals / (p.deposits + p.withdrawals)) * 100
-                  : 0,
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} width={40} domain={[0, 100]} />
-                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
-                  formatter={(v: number) => [`${v.toFixed(1)}%`, 'Withdrawal rate']} />
-                <Line type="monotone" dataKey="rate" stroke="var(--asks)" strokeWidth={2} dot={false} name="Withdrawal rate" />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* Avg vs median deposit size over time — rising avg with flat median
-            signals whales arriving; both flat = steady retail. */}
-        <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
-          {avgTrend.length === 0 ? <Empty loading={loading} /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={avgTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
-                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
-                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
-                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
-                  formatter={(v: number, n) => [fmtUsd(v), n]} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="avgDeposit" stroke="var(--accent)" strokeWidth={2} dot={false} name="Average" />
-                <Line type="monotone" dataKey="medianDeposit" stroke="#60a5fa" strokeWidth={2} dot={false} name="Median" />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-      </div>
-
       {/* Wallet concentration — top 1/10/100 share. The decentralization
           story crypto users grok instantly. */}
       {concentration && (
@@ -495,10 +390,144 @@ export default function PreDepositPage() {
         </div>
       )}
 
+      {/* Extra charts — 2-column grid, mirroring the Dune dashboard cuts.
+          All derived from the same predeposit_transfers table. */}
+      <div className="space-y-4">
+        <ResizableChartRow storageKey="predeposit-row-a-1">
+<ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tvl}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [fmtUsd(v), n]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="deposits" stackId="a" fill="var(--bids)" name="Deposits" />
+                <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+<ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
+          {growth.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={growth}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis yAxisId="l" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={44}
+                  tickFormatter={(v) => formatCompact(v)} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={3} dot={false} name="Cumulative" />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+        </ResizableChartRow>
+        <ResizableChartRow storageKey="predeposit-row-a-2">
+<ChartCard title="Daily Active Depositors" subtitle="Distinct depositors per day">
+          {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={activity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+<ChartCard title="Daily Deposit Txns" subtitle="Number of deposits per day">
+          {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={activity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
+                <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+        </ResizableChartRow>
+        <ResizableChartRow storageKey="predeposit-row-a-3">
+<ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tvl}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={56} />
+                <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={fmtDate}
+                  formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmtUsd(v)}`, 'Net flow']} />
+                <Bar dataKey="netFlow" name="Net flow" radius={[2, 2, 0, 0]}>
+                  {tvl.map((p, i) => (
+                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--bids)' : 'var(--asks)'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+<ChartCard title="Withdrawal Rate" subtitle="Withdrawals as % of daily gross flow">
+          {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={tvl.map((p) => ({
+                day: p.day,
+                rate: p.deposits + p.withdrawals > 0
+                  ? (p.withdrawals / (p.deposits + p.withdrawals)) * 100
+                  : 0,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} width={40} domain={[0, 100]} />
+                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number) => [`${v.toFixed(1)}%`, 'Withdrawal rate']} />
+                <Line type="monotone" dataKey="rate" stroke="var(--asks)" strokeWidth={2} dot={false} name="Withdrawal rate" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+        </ResizableChartRow>
+      </div>
+
+      {/* Deposit Size Trend — full width */}
+      <div className="grid grid-cols-1 gap-4">
+        <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
+          {avgTrend.length === 0 ? <Empty loading={loading} /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={avgTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
+                <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `$${formatCompact(v)}`} width={52} />
+                <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
+                  formatter={(v: number, n) => [fmtUsd(v), n]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="avgDeposit" stroke="var(--accent)" strokeWidth={2} dot={false} name="Average" />
+                <Line type="monotone" dataKey="medianDeposit" stroke="#60a5fa" strokeWidth={2} dot={false} name="Median" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
       {/* Second chart grid: cohorts, new-vs-returning, gini, time-to-deposit */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Cohort analysis — deposits by join-week */}
-        <ChartCard title="Cohort Analysis" subtitle="Total deposited by join week">
+      <div className="space-y-4">
+        <ResizableChartRow storageKey="predeposit-row-b-1">
+<ChartCard title="Cohort Analysis" subtitle="Total deposited by join week">
           {cohorts.length === 0 ? <Empty loading={loading} /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={cohorts}>
@@ -512,9 +541,7 @@ export default function PreDepositPage() {
             </ResponsiveContainer>
           )}
         </ChartCard>
-
-        {/* New vs returning depositors */}
-        <ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
+<ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
           {newReturning.length === 0 ? <Empty loading={loading} /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={newReturning}>
@@ -531,9 +558,9 @@ export default function PreDepositPage() {
             </ResponsiveContainer>
           )}
         </ChartCard>
-
-        {/* Gini coefficient over time */}
-        <ChartCard title="Gini Coefficient" subtitle="Deposit inequality over time (0 = equal, 1 = concentrated)">
+        </ResizableChartRow>
+        <ResizableChartRow storageKey="predeposit-row-b-2">
+<ChartCard title="Gini Coefficient" subtitle="Deposit inequality over time (0 = equal, 1 = concentrated)">
           {gini.length === 0 ? <Empty loading={loading} /> : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={gini}>
@@ -548,9 +575,7 @@ export default function PreDepositPage() {
             </ResponsiveContainer>
           )}
         </ChartCard>
-
-        {/* Time-to-deposit histogram */}
-        <ChartCard title="Time to Deposit" subtitle="How soon after launch wallets first deposited">
+<ChartCard title="Time to Deposit" subtitle="How soon after launch wallets first deposited">
           {ttd.length === 0 ? <Empty loading={loading} /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ttd}>
@@ -564,6 +589,7 @@ export default function PreDepositPage() {
             </ResponsiveContainer>
           )}
         </ChartCard>
+        </ResizableChartRow>
       </div>
 
       {/* Deposit heatmap — day-of-week × hour-of-day */}
