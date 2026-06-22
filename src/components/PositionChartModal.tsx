@@ -437,26 +437,41 @@ export function PositionChartModal({ position, onClose }: Props) {
     // the container was 0px when we created the chart and it's now real.
     chart.timeScale().fitContent();
 
-    // Keep the floating PNL/Size badge glued to the entry line. The entry
-    // price's pixel-y shifts whenever the visible price range changes (pan,
-    // zoom, autoscale, resize). We position the badge by mutating its style
-    // directly — no React state — so the gesture stays smooth. The badge is
-    // hidden when the entry line scrolls outside the visible pane.
+    // Glue the PNL/Size badge to the entry line every animation frame.
+    // lightweight-charts has no "price scale changed" event, so dragging the
+    // price axis (vertical zoom) wouldn't otherwise reposition the badge.
+    // A rAF loop keeps it locked to the line through any pan / zoom /
+    // price-drag / autoscale. Crucially we move it with `transform`
+    // (translateY) and toggle it with `opacity` — both compositor-only — so
+    // there's no per-frame layout reflow fighting the chart's canvas redraw
+    // during a drag. No React re-render either.
+    let lastBadgeY = Number.NaN;
+    let badgeShown = false;
     const recomputeBadge = () => {
       const s = seriesRef.current;
       const el = badgeRef.current;
       if (!s || !el) return;
       const y = s.priceToCoordinate(position.entryPrice);
       const h = containerRef.current?.clientHeight ?? 0;
-      if (typeof y === 'number' && y >= 0 && (h === 0 || y <= h)) {
-        el.style.top = `${y + 8 /* p-2 padding */}px`;
-        el.style.display = 'block';
-      } else {
-        el.style.display = 'none';
+      const show = typeof y === 'number' && y >= 0 && (h === 0 || y <= h);
+      if (show) {
+        const top = Math.round((y as number) + 8 /* p-2 padding */);
+        if (top !== lastBadgeY) {
+          // translate(-50%) keeps it horizontally centered on left:58%;
+          // translateY(-50%) centers it on the line; translateY(top) places it.
+          el.style.transform = `translate(-50%, -50%) translateY(${top}px)`;
+          lastBadgeY = top;
+        }
+        if (!badgeShown) { el.style.opacity = '1'; badgeShown = true; }
+      } else if (badgeShown) {
+        el.style.opacity = '0';
+        badgeShown = false;
       }
     };
-    chart.timeScale().subscribeVisibleLogicalRangeChange(recomputeBadge);
-    recomputeBadge();
+    let badgeRaf = requestAnimationFrame(function loop() {
+      recomputeBadge();
+      badgeRaf = requestAnimationFrame(loop);
+    });
 
     // Apply the *actual* measured size as soon as the browser has laid out.
     // Using requestAnimationFrame ensures we read clientWidth/Height after
@@ -533,7 +548,6 @@ export function PositionChartModal({ position, onClose }: Props) {
           markLineRef.current?.applyOptions({ price });
           latestMarkRef.current = price;
         }
-        recomputeBadge();
       };
       // Don't spam the console on transient reconnects — EventSource retries
       // on its own (server sends `retry:`).
@@ -554,11 +568,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       markLineRef.current = null;
       liveBarRef.current = null;
       latestMarkRef.current = null;
-      try {
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(recomputeBadge);
-      } catch {
-        /* chart may already be removed */
-      }
+      cancelAnimationFrame(badgeRaf);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -853,7 +863,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               <div
                 ref={badgeRef}
                 className="absolute z-10 pointer-events-none"
-                style={{ display: 'none', left: '58%', transform: 'translate(-50%, -50%)' }}
+                style={{ left: '58%', top: 0, opacity: 0, willChange: 'transform, opacity' }}
               >
                 <span
                   className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white shadow-lg whitespace-nowrap ${positive ? 'bg-bulk-green' : 'bg-bulk-red'}`}
