@@ -4,6 +4,12 @@ import { withNetwork } from './network';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
+// Live market price stream (SSE). Used by PositionChartModal to update the
+// last candle + mark line in real time. One stream per open modal.
+export function marketStreamUrl(symbol: string): string {
+  return `${API_URL}/api/stream/market/${encodeURIComponent(symbol)}`;
+}
+
 // Types
 export interface User {
   id: number;
