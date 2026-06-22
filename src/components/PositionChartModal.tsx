@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import { analytics, wallet, formatNumber, formatCompact, type Candle, type WalletFill } from '@/lib/api';
+import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills } from '@/lib/positionWalk';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +100,13 @@ export function PositionChartModal({ position, onClose }: Props) {
   // zoom/pan gesture, and a setState per event would re-render the modal
   // mid-gesture and stutter the chart's canvas redraw.
   const badgeRef = useRef<HTMLDivElement | null>(null);
+  // Live-update plumbing (live positions only). markLineRef is the mark
+  // price line we mutate on each tick; liveBarRef is the in-progress last
+  // candle we extend via series.update(); latestMarkRef holds the newest
+  // mark price, flushed to the throttled header state on an interval.
+  const markLineRef = useRef<IPriceLine | null>(null);
+  const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
+  const latestMarkRef = useRef<number | null>(null);
 
   // Tracks whether the most recent mousedown on the modal originated on
   // the backdrop itself (vs. on a child like the chart canvas). Used to
@@ -125,10 +132,15 @@ export function PositionChartModal({ position, onClose }: Props) {
 
   const [interval, setInterval] = useState(initialInterval);
 
+  // Throttled live mark price (live positions only). null until the first
+  // SSE tick arrives; the header falls back to the snapshot mark until then.
+  const [liveMark, setLiveMark] = useState<number | null>(null);
+
   // Reset interval when the active position changes — otherwise switching
   // from a 5-minute scalp to a 5-day swing would keep the wrong interval.
   useEffect(() => {
     setInterval(initialInterval);
+    setLiveMark(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -352,6 +364,19 @@ export function PositionChartModal({ position, onClose }: Props) {
     }));
     series.setData(data);
 
+    // Seed the in-progress bar with the most recent candle so live ticks
+    // extend it (rather than dropping the first tick into a fresh bar).
+    if (candles.length > 0) {
+      const lc = candles[candles.length - 1];
+      liveBarRef.current = {
+        time: Math.floor(lc.t / 1000),
+        open: lc.o,
+        high: lc.h,
+        low: lc.l,
+        close: lc.c,
+      };
+    }
+
     // Horizontal price lines, BULK-style: thin lines with colored axis
     // tags. Entry (side-colored dashed) + the floating PNL/Size badge,
     // Liq (amber dashed), Mark (green dotted) for live; Close for closed.
@@ -365,7 +390,9 @@ export function PositionChartModal({ position, onClose }: Props) {
     });
 
     if (position.kind === 'live') {
-      series.createPriceLine({
+      // Keep a handle on the mark line so live ticks can move it in place
+      // (applyOptions) instead of recreating it.
+      markLineRef.current = series.createPriceLine({
         price: position.markPrice,
         color: '#00B481',
         lineWidth: 1,
@@ -461,9 +488,72 @@ export function PositionChartModal({ position, onClose }: Props) {
     const obs = new ResizeObserver(resize);
     obs.observe(container);
 
+    // --- Live updates (live positions only) -------------------------------
+    // Open an SSE stream of mark/last prices for this symbol while the modal
+    // is mounted. Chart updates go through the imperative lightweight-charts
+    // API (series.update / priceLine.applyOptions) so they never trigger a
+    // React re-render; the header mark is throttled to a few updates/sec.
+    let es: EventSource | null = null;
+    let headerFlush: number | null = null;
+    if (position.kind === 'live') {
+      const bucketSec =
+        interval === '5m' ? 300 :
+        interval === '15m' ? 900 :
+        interval === '1h' ? 3600 :
+        interval === '4h' ? 14400 :
+        interval === '1d' ? 86400 : 3600;
+
+      es = new EventSource(marketStreamUrl(position.symbol));
+      es.onmessage = (ev) => {
+        let msg: { price: number; kind: string; ts: number };
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        const price = Number(msg.price);
+        if (!(price > 0)) return;
+        const s = seriesRef.current;
+        if (!s) return;
+
+        // Extend / append the in-progress candle from any price print.
+        const tSec = Math.floor((msg.ts || Date.now()) / 1000);
+        const bucketStart = Math.floor(tSec / bucketSec) * bucketSec;
+        const bar = liveBarRef.current;
+        if (!bar || bucketStart > bar.time) {
+          const nb = { time: bucketStart, open: price, high: price, low: price, close: price };
+          liveBarRef.current = nb;
+          s.update({ time: nb.time as UTCTimestamp, open: nb.open, high: nb.high, low: nb.low, close: nb.close });
+        } else if (bucketStart === bar.time) {
+          bar.close = price;
+          if (price > bar.high) bar.high = price;
+          if (price < bar.low) bar.low = price;
+          s.update({ time: bar.time as UTCTimestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+        }
+        // else: stale (older than current bar) — ignore.
+
+        // Mark ticks move the mark line + feed the throttled header.
+        if (msg.kind === 'mark') {
+          markLineRef.current?.applyOptions({ price });
+          latestMarkRef.current = price;
+        }
+        recomputeBadge();
+      };
+      // Don't spam the console on transient reconnects — EventSource retries
+      // on its own (server sends `retry:`).
+      es.onerror = () => { /* auto-reconnect handled by EventSource */ };
+
+      // Flush the newest mark into React state a few times a second.
+      headerFlush = window.setInterval(() => {
+        const m = latestMarkRef.current;
+        if (m != null) setLiveMark((prev) => (prev === m ? prev : m));
+      }, 300);
+    }
+
     return () => {
       cancelAnimationFrame(raf);
       obs.disconnect();
+      if (es) { es.close(); es = null; }
+      if (headerFlush) { window.clearInterval(headerFlush); headerFlush = null; }
+      markLineRef.current = null;
+      liveBarRef.current = null;
+      latestMarkRef.current = null;
       try {
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(recomputeBadge);
       } catch {
@@ -477,14 +567,27 @@ export function PositionChartModal({ position, onClose }: Props) {
 
   if (!position) return null;
 
+  // Effective mark for live positions: the latest streamed mark if we have
+  // one, else the snapshot value the modal opened with. Drives the header
+  // Mark/Notional/distance and the PNL badge so they tick in real time.
+  const effMark = position.kind === 'live' ? (liveMark ?? position.markPrice) : position.closePrice;
+
+  // PnL to display. For live positions, anchor to BULK's exact unrealized
+  // PnL at open and adjust by the mark delta since (so funding/fees baked
+  // into the snapshot aren't lost). Closed positions show realized PnL.
+  const displayPnl =
+    position.kind === 'live'
+      ? position.unrealizedPnl + (position.side === 'long' ? 1 : -1) * (effMark - position.markPrice) * position.size
+      : position.realizedPnl;
+
   // Pre-compute distance-to-liq for live positions (only meaningful while
   // the position is open). Closed positions use their realized PnL story
   // for the same horizontal screen real estate.
   const distanceToLiqPct =
     position.kind === 'live' &&
     position.liquidationPrice > 0 &&
-    position.markPrice > 0
-      ? Math.abs((position.markPrice - position.liquidationPrice) / position.markPrice) * 100
+    effMark > 0
+      ? Math.abs((effMark - position.liquidationPrice) / effMark) * 100
       : null;
 
   return (
@@ -586,7 +689,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         {position.kind === 'live' ? (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
             <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
-            <Stat label="Mark" value={`$${formatNumber(position.markPrice, 2)}`} />
+            <Stat label="Mark" value={`$${formatNumber(effMark, 2)}`} />
             <Stat
               label="Liquidation"
               value={
@@ -606,17 +709,17 @@ export function PositionChartModal({ position, onClose }: Props) {
                 price into "how big is this bet really". */}
             <Stat
               label="Notional"
-              value={`$${formatCompact(Math.abs(position.size * position.markPrice))}`}
+              value={`$${formatCompact(Math.abs(position.size * effMark))}`}
               sublabel={
                 position.leverage > 0
-                  ? `Margin $${formatCompact(Math.abs(position.size * position.markPrice) / position.leverage)}`
+                  ? `Margin $${formatCompact(Math.abs(position.size * effMark) / position.leverage)}`
                   : undefined
               }
             />
             <Stat
               label="Unrealized PnL"
-              value={`${position.unrealizedPnl >= 0 ? '+' : ''}$${formatNumber(position.unrealizedPnl, 2)}`}
-              valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+              value={`${displayPnl >= 0 ? '+' : ''}$${formatNumber(displayPnl, 2)}`}
+              valueClass={displayPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
             {/* PnL % = PnL / margin (true return on capital risked).
                 Falls back to PnL / notional when leverage isn't known. */}
@@ -630,10 +733,10 @@ export function PositionChartModal({ position, onClose }: Props) {
                 // up X%". Falls back to return-on-notional if we don't
                 // have leverage on the live snapshot.
                 const denom = position.leverage > 0 ? notional / position.leverage : notional;
-                const pct = (position.unrealizedPnl / denom) * 100;
+                const pct = (displayPnl / denom) * 100;
                 return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
               })()}
-              valueClass={position.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
+              valueClass={displayPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
           </div>
         ) : (
@@ -744,7 +847,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               Always mounted; positioned and shown/hidden via badgeRef in
               recomputeBadge (direct style mutation, no re-render). */}
           {(() => {
-            const pnl = position.kind === 'live' ? position.unrealizedPnl : position.realizedPnl;
+            const pnl = displayPnl;
             const positive = pnl >= 0;
             return (
               <div
