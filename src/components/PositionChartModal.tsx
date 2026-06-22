@@ -147,6 +147,23 @@ export function PositionChartModal({ position, onClose }: Props) {
   const [fills, setFills] = useState<WalletFill[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // BULK returns placeholder candles (zero/empty OHLC) for hours with no
+  // trading — e.g. the testnet's quiet/upgrade stretches. lightweight-charts
+  // plots those as empty index slots, which shows up as a blank "gap" in the
+  // middle of the chart. Drop them so only real candles are plotted and they
+  // sit adjacent (a genuinely flat candle keeps a valid >0 price, so it stays).
+  const plottedCandles = useMemo(
+    () =>
+      (candles ?? []).filter(
+        (c) =>
+          Number.isFinite(c.o) && c.o > 0 &&
+          Number.isFinite(c.h) && c.h > 0 &&
+          Number.isFinite(c.l) && c.l > 0 &&
+          Number.isFinite(c.c) && c.c > 0,
+      ),
+    [candles],
+  );
   // Close on Esc — small UX nicety. Streamers using the keyboard expect this.
   useEffect(() => {
     if (!position) return;
@@ -355,7 +372,8 @@ export function PositionChartModal({ position, onClose }: Props) {
 
     // Convert BULK kline shape to lightweight-charts CandlestickData.
     // BULK uses ms timestamps; lightweight-charts expects seconds (Unix).
-    const data: CandlestickData[] = candles.map((c) => ({
+    // plottedCandles has already dropped the empty no-trade filler candles.
+    const data: CandlestickData[] = plottedCandles.map((c) => ({
       time: Math.floor(c.t / 1000) as UTCTimestamp,
       open: c.o,
       high: c.h,
@@ -366,8 +384,8 @@ export function PositionChartModal({ position, onClose }: Props) {
 
     // Seed the in-progress bar with the most recent candle so live ticks
     // extend it (rather than dropping the first tick into a fresh bar).
-    if (candles.length > 0) {
-      const lc = candles[candles.length - 1];
+    if (plottedCandles.length > 0) {
+      const lc = plottedCandles[plottedCandles.length - 1];
       liveBarRef.current = {
         time: Math.floor(lc.t / 1000),
         open: lc.o,
@@ -573,7 +591,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [candles, fills, currentPositionFills, position, interval]);
+  }, [plottedCandles, fills, currentPositionFills, position, interval]);
 
   if (!position) return null;
 
@@ -821,7 +839,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             {error && <span className="text-bulk-red">{error}</span>}
             {!loading && !error && candles && (
               <span>
-                <span className="font-mono">{candles.length}</span> candles
+                <span className="font-mono">{plottedCandles.length}</span> candles
                 {/* Three states for fills, distinct from candles loading:
                     - null  → still fetching (no badge, avoid layout flicker)
                     - []    → loaded but empty (show subtle "no fills" hint
