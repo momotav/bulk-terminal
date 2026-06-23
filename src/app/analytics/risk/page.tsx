@@ -643,12 +643,16 @@ export default function RiskPage() {
                         <Tooltip content={<ChartTooltip />} />
                         <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
                         <Area
-                          type="monotone"
+                          type="linear"
                           dataKey="spreadBps"
                           name="Spread (bps)"
                           stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
                           fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
                           strokeWidth={2}
+                          dot={{ r: 2, strokeWidth: 0, fill: fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C' }}
+                          activeDot={{ r: 4 }}
+                          connectNulls={false}
+                          isAnimationActive={false}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
