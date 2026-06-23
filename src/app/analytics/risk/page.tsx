@@ -578,7 +578,7 @@ export default function RiskPage() {
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>
               {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -613,7 +613,7 @@ export default function RiskPage() {
                 </div>
 
                 {fairSpreadData.length > 0 ? (
-                  <div style={{ height: 'var(--chart-h, 250px)' }}>
+                  <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairSpreadData}>
                         <defs>
@@ -643,29 +643,25 @@ export default function RiskPage() {
                         <Tooltip content={<ChartTooltip />} />
                         <ReferenceLine y={0} stroke="var(--text-tertiary)" strokeDasharray="3 3" />
                         <Area
-                          type="linear"
+                          type="monotone"
                           dataKey="spreadBps"
                           name="Spread (bps)"
                           stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C'}
                           fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
                           strokeWidth={2}
-                          dot={{ r: 2, strokeWidth: 0, fill: fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#00B482' : '#EF4A3C' }}
-                          activeDot={{ r: 4 }}
-                          connectNulls={false}
-                          isAnimationActive={false}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center text-[var(--text-tertiary)]" style={{ height: 'var(--chart-h, 250px)' }}>
+                  <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
               </div>
 
               {/* Volatility History. */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -693,7 +689,7 @@ export default function RiskPage() {
                 </div>
 
                 {volatilityData.length > 0 ? (
-                  <div style={{ height: 'var(--chart-h, 250px)' }}>
+                  <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData.map(row => {
                         // Normalize to {timestamp, coin1, coin2, ...} shape.
@@ -740,7 +736,7 @@ export default function RiskPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center text-[var(--text-tertiary)]" style={{ height: 'var(--chart-h, 250px)' }}>
+                  <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
                   </div>
                 )}
