@@ -20,6 +20,7 @@ import {
   adaptLegacyRow,
 } from '@/lib/coins';
 import { withNetwork } from '@/lib/network';
+import { ChartFrame } from '@/components/ChartFrame';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -1292,6 +1293,7 @@ export default function AnalyticsPage() {
                 {volumeDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Total Volume" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={volumeDataFiltered} 
@@ -1338,6 +1340,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={volumeDataFull} 
@@ -1364,6 +1367,7 @@ export default function AnalyticsPage() {
                 {oiChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Open Interest" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
                           key={`oi-${oiAnimKey}`}
@@ -1411,6 +1415,7 @@ export default function AnalyticsPage() {
                           ))}
                         </AreaChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={oiChartData} 
@@ -1442,6 +1447,7 @@ export default function AnalyticsPage() {
                 {fundingChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Funding Rate" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
                           key={`funding-${fundingAnimKey}`}
@@ -1492,6 +1498,7 @@ export default function AnalyticsPage() {
                             ))}
                         </LineChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={fundingChartData} 
@@ -1531,6 +1538,7 @@ export default function AnalyticsPage() {
                 {liquidationsDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Liquidations" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={liquidationsDataFiltered} 
@@ -1573,6 +1581,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={liquidationsDataFull} 
@@ -1616,6 +1625,7 @@ export default function AnalyticsPage() {
                 {tradesDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Number Of Trades" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={tradesDataFiltered} 
@@ -1658,6 +1668,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={tradesDataFull} 
@@ -1694,6 +1705,7 @@ export default function AnalyticsPage() {
                 {adlDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Auto-Deleveraging (ADL)" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           
@@ -1729,6 +1741,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="Cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={adlDataFull} 
@@ -1769,6 +1782,7 @@ export default function AnalyticsPage() {
                 {uniqueTradersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Unique Traders By Coin" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`unique-traders-${uniqueTradersAnimKey}`}
@@ -1812,6 +1826,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="total" stroke={COLORS.total} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={uniqueTradersData} 
@@ -1845,6 +1860,7 @@ export default function AnalyticsPage() {
                 {newUsersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Cumulative New Users" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`new-users-${newUsersAnimKey}`}
@@ -1868,6 +1884,7 @@ export default function AnalyticsPage() {
                           <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke={COLORS.cumulative} strokeWidth={2} dot={false} isAnimationActive={true} animationDuration={500} animationEasing="ease-in-out" />
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={newUsersData} 
@@ -1901,6 +1918,7 @@ export default function AnalyticsPage() {
                 {dauData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
+                      <ChartFrame title="Daily Active Users" className="h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`dau-${dauAnimKey}`}
@@ -1922,6 +1940,7 @@ export default function AnalyticsPage() {
                           </Bar>
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </ChartFrame>
                     </div>
                     <InteractiveRangeSlider 
                       data={dauData} 
