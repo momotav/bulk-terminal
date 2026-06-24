@@ -1293,7 +1293,7 @@ export default function AnalyticsPage() {
                 {volumeDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Total Volume" className="h-full">
+                      <ChartFrame title="Total Volume" className="h-full" legend={[...orderedSeriesFor(volumeCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={volumeDataFiltered} 
@@ -1367,7 +1367,7 @@ export default function AnalyticsPage() {
                 {oiChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Open Interest" className="h-full">
+                      <ChartFrame title="Open Interest" className="h-full" legend={orderedSeriesFor(oiCoins).map(c => ({ label: c, color: getCoinColor(c) }))}>
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
                           key={`oi-${oiAnimKey}`}
@@ -1447,7 +1447,7 @@ export default function AnalyticsPage() {
                 {fundingChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Funding Rate" className="h-full">
+                      <ChartFrame title="Funding Rate" className="h-full" legend={orderedSeriesFor(fundingCoins).filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
                           key={`funding-${fundingAnimKey}`}
@@ -1538,7 +1538,7 @@ export default function AnalyticsPage() {
                 {liquidationsDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Liquidations" className="h-full">
+                      <ChartFrame title="Liquidations" className="h-full" legend={[...orderedSeriesFor(liquidationsCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={liquidationsDataFiltered} 
@@ -1625,7 +1625,7 @@ export default function AnalyticsPage() {
                 {tradesDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Number Of Trades" className="h-full">
+                      <ChartFrame title="Number Of Trades" className="h-full" legend={[...orderedSeriesFor(tradesCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={tradesDataFiltered} 
@@ -1705,7 +1705,7 @@ export default function AnalyticsPage() {
                 {adlDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Auto-Deleveraging (ADL)" className="h-full">
+                      <ChartFrame title="Auto-Deleveraging (ADL)" className="h-full" legend={[...orderedSeriesFor(adlCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           
@@ -1782,7 +1782,7 @@ export default function AnalyticsPage() {
                 {uniqueTradersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Unique Traders By Coin" className="h-full">
+                      <ChartFrame title="Unique Traders By Coin" className="h-full" legend={[...orderedSeriesFor(uniqueTradersCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Total', color: COLORS.total }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`unique-traders-${uniqueTradersAnimKey}`}
@@ -1860,7 +1860,7 @@ export default function AnalyticsPage() {
                 {newUsersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Cumulative New Users" className="h-full">
+                      <ChartFrame title="Cumulative New Users" className="h-full" legend={[{ label: 'New Users', color: COLORS.BTC }, { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`new-users-${newUsersAnimKey}`}
