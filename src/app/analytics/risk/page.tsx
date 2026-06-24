@@ -693,7 +693,7 @@ export default function RiskPage() {
 
                 {volatilityData.length > 0 ? (
                   <div className="flex-1 min-h-0 relative" style={{ minHeight: 'var(--chart-h, 250px)' }}>
-                    <div className="absolute inset-0">
+                    <ChartFrame title="Volatility" className="h-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData.map(row => {
                         // Normalize to {timestamp, coin1, coin2, ...} shape.
@@ -738,7 +738,7 @@ export default function RiskPage() {
                           ))}
                       </LineChart>
                     </ResponsiveContainer>
-                    </div>
+                    </ChartFrame>
                   </div>
                 ) : (
                   <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
