@@ -6,6 +6,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Bar, BarChart, Line, ComposedChart
 } from 'recharts';
+import { ChartFrame } from '@/components/ChartFrame';
 
 const COLORS = {
   protocol: '#00B482',
@@ -291,6 +292,7 @@ export function ProtocolRevenueChart() {
           {/* Chart content */}
           <div className="flex-1 min-w-0">
             <div className="h-[350px]">
+              <ChartFrame title="Protocol Revenue" className="h-full">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart 
                   data={displayData} 
@@ -370,6 +372,7 @@ export function ProtocolRevenueChart() {
                   )}
                 </ComposedChart>
               </ResponsiveContainer>
+              </ChartFrame>
             </div>
           </div>
 
