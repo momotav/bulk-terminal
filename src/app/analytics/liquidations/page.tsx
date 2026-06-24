@@ -861,7 +861,7 @@ export default function LiquidationsPage() {
             <div className="space-y-0">
               {/* Main Chart - uses sliced data */}
               <div className="h-64">
-                <ChartFrame title="Total Liquidations" className="h-full">
+                <ChartFrame title="Total Liquidations" className="h-full" legend={[{ label: 'Long', color: COLORS.long }, { label: 'Short', color: COLORS.short }]}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
                     data={slicedChartData.map((d: any) => ({
