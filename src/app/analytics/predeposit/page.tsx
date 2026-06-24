@@ -9,6 +9,7 @@ import {
 import { Landmark, TrendingUp, TrendingDown, Wallet, Users, Loader2 } from 'lucide-react';
 import { formatCompact, formatAddress } from '@/lib/api';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
+import { ChartFrame } from '@/components/ChartFrame';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
@@ -323,6 +324,7 @@ export default function PreDepositPage() {
               {loading ? 'Loading…' : 'No data yet'}
             </div>
           ) : (
+            <ChartFrame title="TVL History" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={tvlSliced}>
                 <defs>
@@ -351,6 +353,7 @@ export default function PreDepositPage() {
                 <Area type="monotone" dataKey="liveBalance" stroke="var(--accent)" strokeWidth={2} fill="url(#tvlFill)" />
               </AreaChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </div>
       </div>
@@ -372,6 +375,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-1">
 <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -385,10 +389,12 @@ export default function PreDepositPage() {
                 <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
 <ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
           {growth.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="New Depositors per Day" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={growth}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -403,12 +409,14 @@ export default function PreDepositPage() {
                 <Legend wrapperStyle={{ fontSize: 11 }} />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
         </ResizableChartRow>
         <ResizableChartRow storageKey="predeposit-row-a-2">
 <ChartCard title="Daily Active Depositors" subtitle="Distinct depositors per day">
           {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Daily Active Depositors" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={activity}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -419,10 +427,12 @@ export default function PreDepositPage() {
                 <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
 <ChartCard title="Daily Deposit Txns" subtitle="Number of deposits per day">
           {activity.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Daily Deposit Txns" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={activity}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -433,12 +443,14 @@ export default function PreDepositPage() {
                 <Bar dataKey="depositTxns" fill="var(--accent)" name="Txns" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
         </ResizableChartRow>
         <ResizableChartRow storageKey="predeposit-row-a-3">
 <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Net Flow per Day" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -454,10 +466,12 @@ export default function PreDepositPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
 <ChartCard title="Withdrawal Rate" subtitle="Withdrawals as % of daily gross flow">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Withdrawal Rate" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={tvl.map((p) => ({
                 day: p.day,
@@ -474,6 +488,7 @@ export default function PreDepositPage() {
                 <Line type="monotone" dataKey="rate" stroke="var(--asks)" strokeWidth={2} dot={false} name="Withdrawal rate" />
               </LineChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
         </ResizableChartRow>
@@ -483,6 +498,7 @@ export default function PreDepositPage() {
       <div className="grid grid-cols-1 gap-4">
         <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
           {avgTrend.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Deposit Size Trend" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={avgTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -496,6 +512,7 @@ export default function PreDepositPage() {
                 <Line type="monotone" dataKey="medianDeposit" stroke="#60a5fa" strokeWidth={2} dot={false} name="Median" />
               </LineChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
       </div>
@@ -505,6 +522,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-b-1">
 <ChartCard title="Cohort Analysis" subtitle="Total deposited by join week">
           {cohorts.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Cohort Analysis" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={cohorts}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -515,10 +533,12 @@ export default function PreDepositPage() {
                 <Bar dataKey="totalDeposited" fill="var(--accent)" name="totalDeposited" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
 <ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
           {newReturning.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="New vs Returning" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={newReturning}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -532,12 +552,14 @@ export default function PreDepositPage() {
                 <Bar dataKey="returningDepositors" stackId="a" fill="#60a5fa" name="Returning" />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
         </ResizableChartRow>
         <ResizableChartRow storageKey="predeposit-row-b-2">
 <ChartCard title="Gini Coefficient" subtitle="Deposit inequality over time (0 = equal, 1 = concentrated)">
           {gini.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Gini Coefficient" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={gini}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -549,10 +571,12 @@ export default function PreDepositPage() {
                 <Line type="monotone" dataKey="gini" stroke="#c084fc" strokeWidth={2} dot={false} name="Gini" />
               </LineChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
 <ChartCard title="Time to Deposit" subtitle="How soon after launch wallets first deposited">
           {ttd.length === 0 ? <Empty loading={loading} /> : (
+            <ChartFrame title="Time to Deposit" className="h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ttd}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -563,6 +587,7 @@ export default function PreDepositPage() {
                 <Bar dataKey="count" fill="var(--bids)" name="Depositors" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </ChartCard>
         </ResizableChartRow>
