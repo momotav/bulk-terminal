@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
-  XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, 
   Bar, BarChart, Line, ComposedChart
 } from 'recharts';
 import { ChartFrame } from '@/components/ChartFrame';
@@ -327,6 +327,14 @@ export function ProtocolRevenueChart() {
                     />
                   )}
                   <Tooltip content={<RevenueTooltip showTime={revenueHours <= 24} />} />
+                  <Legend
+                    verticalAlign="top"
+                    align="left"
+                    height={30}
+                    iconType="circle"
+                    iconSize={9}
+                    wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}
+                  />
                   
                   {/* Grouped bars - NOT stacked, side by side with gaps */}
                   {showMaker && (
