@@ -132,7 +132,13 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
           </div>
         )}
 
-        <div className="relative z-10 flex-1 min-h-0">{children}</div>
+        <div className="relative z-10 flex-1 min-h-0">
+          {/* Absolutely positioned so the chart SVG fills the box exactly and
+              never contributes to the flex parent's content height — otherwise
+              recharts' ResponsiveContainer ratchets taller on each resize
+              (e.g. when the export title strip toggles). */}
+          <div className="absolute inset-0">{children}</div>
+        </div>
       </div>
     </div>
   );
