@@ -48,7 +48,7 @@ export function NetworkSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
+        className="flex items-center gap-2 h-9 px-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
         title={`Network: ${NETWORK_LABELS[network]}`}
       >
         <Globe className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
