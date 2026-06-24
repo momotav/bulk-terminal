@@ -6,7 +6,7 @@ import { toBlob } from 'html-to-image';
 
 interface ChartFrameProps {
   children: React.ReactNode;
-  /** Used for the download filename and (optionally) the export header. */
+  /** Chart name. Baked into the top-left of the exported image + filename. */
   title?: string;
   /** Classes for the outer wrapper — pass sizing here (e.g. "h-full"). */
   className?: string;
@@ -15,16 +15,18 @@ interface ChartFrameProps {
 }
 
 /**
- * Wraps a chart with a DefiLlama-style grayscale watermark and a hover toolbar
- * that exports the chart as a PNG (download or copy-to-clipboard). The captured
- * region includes the watermark + a small bulkstats.com mark, so screenshots
- * shared elsewhere stay branded. The toolbar itself sits outside the captured
- * node, so it never appears in the export.
+ * Wraps a chart with a centered BULKSTATS watermark (themed text, so it shows
+ * on both light and dark) and a hover toolbar that exports the chart as a PNG
+ * (download or copy). The chart's name is injected top-left only during the
+ * capture, so in-app the chart stays clean but shared screenshots are titled
+ * and branded. The toolbar lives outside the captured node, so it's never in
+ * the export.
  */
 export function ChartFrame({ children, title, className = '', watermarkOpacity = 0.06 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const themedBg = () =>
     getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#141310';
@@ -32,11 +34,21 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
   const render = useCallback(async (): Promise<Blob | null> => {
     const node = captureRef.current;
     if (!node) return null;
-    return toBlob(node, {
-      pixelRatio: 2,
-      backgroundColor: themedBg(),
-      filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
-    });
+    // Reveal the export-only title, wait two frames for it to paint, capture,
+    // then hide it again.
+    setExporting(true);
+    await new Promise<void>((res) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => res())),
+    );
+    try {
+      return await toBlob(node, {
+        pixelRatio: 2,
+        backgroundColor: themedBg(),
+        filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
+      });
+    } finally {
+      setExporting(false);
+    }
   }, []);
 
   const download = useCallback(async () => {
@@ -92,22 +104,30 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
         </button>
       </div>
 
-      {/* Captured region: watermark (behind) + chart + branding. */}
+      {/* Captured region: watermark (behind) + chart + (export-only) title. */}
       <div ref={captureRef} className="relative h-full">
+        {/* Themed text watermark, centered behind the data. */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/bulkstats.png"
-            alt=""
-            draggable={false}
-            className="w-1/3 max-w-[180px] select-none"
-            style={{ filter: 'grayscale(1)', opacity: watermarkOpacity }}
-          />
+          <span
+            className="font-bold tracking-[0.18em] select-none whitespace-nowrap"
+            style={{
+              color: 'var(--text-primary)',
+              opacity: watermarkOpacity,
+              fontSize: 'clamp(28px, 8vw, 60px)',
+            }}
+          >
+            BULKSTATS
+          </span>
         </div>
+
+        {/* Chart name — shown only while exporting, so it lands in the PNG. */}
+        {exporting && title && (
+          <div className="absolute top-2 left-3 z-20 text-sm font-semibold text-[var(--text-primary)]">
+            {title}
+          </div>
+        )}
+
         <div className="relative z-10 h-full">{children}</div>
-        <div className="pointer-events-none absolute bottom-1 right-2 z-10 text-[10px] text-[var(--text-tertiary)] opacity-60">
-          bulkstats.com
-        </div>
       </div>
     </div>
   );
