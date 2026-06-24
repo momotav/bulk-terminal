@@ -375,7 +375,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-1">
 <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full">
+            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full" legend={[{ label: 'Deposits', color: 'var(--bids)' }, { label: 'Withdrawals', color: 'var(--asks)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -394,7 +394,7 @@ export default function PreDepositPage() {
         </ChartCard>
 <ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
           {growth.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="New Depositors per Day" className="h-full">
+            <ChartFrame title="New Depositors per Day" className="h-full" legend={[{ label: 'New', color: '#c084fc' }, { label: 'Cumulative', color: 'var(--accent)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={growth}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -450,7 +450,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-3">
 <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Net Flow per Day" className="h-full">
+            <ChartFrame title="Net Flow per Day" className="h-full" legend={[{ label: 'Inflow', color: 'var(--bids)' }, { label: 'Outflow', color: 'var(--asks)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -498,7 +498,7 @@ export default function PreDepositPage() {
       <div className="grid grid-cols-1 gap-4">
         <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
           {avgTrend.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Deposit Size Trend" className="h-full">
+            <ChartFrame title="Deposit Size Trend" className="h-full" legend={[{ label: 'Average', color: 'var(--accent)' }, { label: 'Median', color: '#60a5fa' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={avgTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -538,7 +538,7 @@ export default function PreDepositPage() {
         </ChartCard>
 <ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
           {newReturning.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="New vs Returning" className="h-full">
+            <ChartFrame title="New vs Returning" className="h-full" legend={[{ label: 'New', color: '#c084fc' }, { label: 'Returning', color: '#60a5fa' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={newReturning}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
