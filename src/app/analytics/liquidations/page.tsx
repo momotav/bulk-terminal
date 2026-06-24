@@ -9,6 +9,7 @@ import {
 import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
 import { HIDDEN_COINS } from '@/lib/coins';
+import { ChartFrame } from '@/components/ChartFrame';
 
 // Time period options
 const PERIODS = [
@@ -860,6 +861,7 @@ export default function LiquidationsPage() {
             <div className="space-y-0">
               {/* Main Chart - uses sliced data */}
               <div className="h-64">
+                <ChartFrame title="Total Liquidations" className="h-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
                     data={slicedChartData.map((d: any) => ({
@@ -898,6 +900,7 @@ export default function LiquidationsPage() {
                     <Bar dataKey="shortValueNegative" name="Short" stackId="ls" fill={COLORS.short} maxBarSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
+                </ChartFrame>
               </div>
               
               {/* Interactive Range Slider */}
