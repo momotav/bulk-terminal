@@ -169,7 +169,12 @@ export function ChartFrame({
             }}
           />
         </div>
-        <div className="relative z-10 h-full">{children}</div>
+        {/* Absolutely positioned so the chart SVG fills the box but never
+            contributes to layout height — otherwise recharts' ResponsiveContainer
+            props the container open and the height can be grown but not shrunk. */}
+        <div className="relative z-10 h-full">
+          <div className="absolute inset-0">{children}</div>
+        </div>
       </div>
     </div>
   );
