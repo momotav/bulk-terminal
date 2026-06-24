@@ -275,7 +275,7 @@ function MidPriceIndicator(props: any) {
 function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
   return (
     <div className="h-[320px] w-full">
-      <ChartFrame title="Depth Chart" className="h-full">
+      <ChartFrame title="Depth Chart" className="h-full" legend={[{ label: 'Bids', color: COLORS.bid }, { label: 'Asks', color: COLORS.ask }]}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 28, right: 10, bottom: 5, left: 10 }}>
           <defs>
