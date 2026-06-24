@@ -18,6 +18,8 @@ interface ChartFrameProps {
   watermarkOffsetX?: string;
   /** Shifts the watermark up (positive raises it). */
   watermarkOffsetY?: string;
+  /** Series labels drawn in the top-right of the EXPORT only (not the live chart). */
+  legend?: { label: string; color: string }[];
 }
 
 /**
@@ -36,6 +38,7 @@ export function ChartFrame({
   watermarkOpacity = 0.06,
   watermarkOffsetX = '50px',
   watermarkOffsetY = '8%',
+  legend,
 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
@@ -62,7 +65,8 @@ export function ChartFrame({
       filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
     });
 
-    if (!title) return chart;
+    const hasLegend = !!legend && legend.length > 0;
+    if (!title && !hasLegend) return chart;
 
     const titleH = Math.round(38 * ratio);
     const padX = Math.round(18 * ratio);
@@ -76,16 +80,54 @@ export function ChartFrame({
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, out.width, out.height);
 
-    ctx.fillStyle = cssVar('--text-primary', '#ffffff');
-    ctx.textBaseline = 'middle';
-    ctx.font = `600 ${Math.round(15 * ratio)}px ${getComputedStyle(node).fontFamily || 'sans-serif'}`;
-    ctx.fillText(title, padX, Math.round(titleH / 2));
+    const fontFamily = getComputedStyle(node).fontFamily || 'sans-serif';
+    const cy = Math.round(titleH / 2);
+
+    // Title — top-left.
+    if (title) {
+      ctx.fillStyle = cssVar('--text-primary', '#ffffff');
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.font = `600 ${Math.round(15 * ratio)}px ${fontFamily}`;
+      ctx.fillText(title, padX, cy);
+    }
+
+    // Legend — top-right. Resolve CSS-var colours to concrete values so the
+    // canvas can fill them.
+    if (hasLegend) {
+      const resolveColor = (c: string) =>
+        c.startsWith('var(') ? cssVar(c.slice(4, -1).trim(), '#888888') : c;
+
+      ctx.font = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+
+      const dotR = 4.5 * ratio;
+      const dotGap = 6 * ratio; // dot → its label
+      const itemGap = 16 * ratio; // between items
+      const widths = legend!.map(
+        (it) => dotR * 2 + dotGap + ctx.measureText(it.label).width,
+      );
+      const total =
+        widths.reduce((a, b) => a + b, 0) + itemGap * (legend!.length - 1);
+
+      let x = out.width - padX - total;
+      legend!.forEach((it, i) => {
+        ctx.beginPath();
+        ctx.fillStyle = resolveColor(it.color);
+        ctx.arc(x + dotR, cy, dotR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
+        ctx.fillText(it.label, x + dotR * 2 + dotGap, cy);
+        x += widths[i] + itemGap;
+      });
+    }
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(chart, 0, titleH);
     return out;
-  }, [title]);
+  }, [title, legend]);
 
   const toBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
     new Promise((res) => canvas.toBlob(res, 'image/png'));
