@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Download, Copy, Check } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 
@@ -27,16 +27,6 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
-
-  // Pick the theme-correct logo so the watermark shows on both themes.
-  const [isDark, setIsDark] = useState(true);
-  useEffect(() => {
-    const read = () => setIsDark(document.documentElement.getAttribute('data-theme') !== 'light');
-    read();
-    const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => obs.disconnect();
-  }, []);
 
   const themedBg = () =>
     getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#141310';
@@ -116,15 +106,23 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
 
       {/* Captured region: watermark (behind) + chart + (export-only) title. */}
       <div ref={captureRef} className="relative h-full">
-        {/* Theme-aware logo watermark, centered behind the data. */}
+        {/* Watermark: a single mono chartlogo.png, recolored to the theme via
+            CSS mask so one file reads correctly on both light and dark. */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={isDark ? '/bulkstats.png' : '/bulkstats2.png'}
-            alt=""
-            draggable={false}
-            className="w-1/3 max-w-[260px] select-none object-contain"
-            style={{ opacity: watermarkOpacity }}
+          <div
+            className="w-1/3 max-w-[260px] aspect-square"
+            style={{
+              backgroundColor: 'var(--text-primary)',
+              opacity: watermarkOpacity,
+              WebkitMaskImage: 'url(/chartlogo.png)',
+              maskImage: 'url(/chartlogo.png)',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+            }}
           />
         </div>
 
