@@ -34,12 +34,10 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
   const render = useCallback(async (): Promise<Blob | null> => {
     const node = captureRef.current;
     if (!node) return null;
-    // Reveal the export-only title, wait two frames for it to paint, capture,
-    // then hide it again.
+    // Reveal the export-only title strip, wait for the chart to re-layout to
+    // the reduced height (recharts resizes via its own observer), then capture.
     setExporting(true);
-    await new Promise<void>((res) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => res())),
-    );
+    await new Promise<void>((res) => setTimeout(res, 180));
     try {
       return await toBlob(node, {
         pixelRatio: 2,
@@ -104,10 +102,9 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
         </button>
       </div>
 
-      {/* Captured region: watermark (behind) + chart + (export-only) title. */}
-      <div ref={captureRef} className="relative h-full">
-        {/* Watermark: a single mono chartlogo.png, recolored to the theme via
-            CSS mask so one file reads correctly on both light and dark. */}
+      {/* Captured region: watermark (behind) + (export-only) title strip + chart. */}
+      <div ref={captureRef} className="relative h-full flex flex-col">
+        {/* Watermark — spans the whole captured area, behind everything. */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <div
             className="w-1/3 max-w-[260px] aspect-square"
@@ -126,14 +123,16 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
           />
         </div>
 
-        {/* Chart name — shown only while exporting, so it lands in the PNG. */}
+        {/* Title strip — only present while exporting, so it reserves space
+            above the chart in the PNG without overlapping the plot (and
+            leaves the in-app chart untouched). */}
         {exporting && title && (
-          <div className="absolute top-2 left-3 z-20 text-sm font-semibold text-[var(--text-primary)]">
+          <div className="relative z-10 shrink-0 px-3 pt-1 pb-2 text-sm font-semibold text-[var(--text-primary)]">
             {title}
           </div>
         )}
 
-        <div className="relative z-10 h-full">{children}</div>
+        <div className="relative z-10 flex-1 min-h-0">{children}</div>
       </div>
     </div>
   );
