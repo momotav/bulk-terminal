@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { CoinPicker } from '@/components/CoinPicker';
+import { ChartFrame } from '@/components/ChartFrame';
 
 // ----------------------------------------------------------------------------
 // Constants & helpers
@@ -274,6 +275,7 @@ function MidPriceIndicator(props: any) {
 function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
   return (
     <div className="h-[320px] w-full">
+      <ChartFrame title="Depth Chart" className="h-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 28, right: 10, bottom: 5, left: 10 }}>
           <defs>
@@ -365,6 +367,7 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
           />
         </AreaChart>
       </ResponsiveContainer>
+      </ChartFrame>
     </div>
   );
 }
