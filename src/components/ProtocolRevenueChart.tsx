@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, 
+  XAxis, YAxis, Tooltip, ResponsiveContainer, 
   Bar, BarChart, Line, ComposedChart
 } from 'recharts';
 import { ChartFrame } from '@/components/ChartFrame';
@@ -292,7 +292,16 @@ export function ProtocolRevenueChart() {
           {/* Chart content */}
           <div className="flex-1 min-w-0">
             <div className="h-[350px]">
-              <ChartFrame title="Protocol Revenue" className="h-full">
+              <ChartFrame
+                title="Protocol Revenue"
+                className="h-full"
+                legend={[
+                  showProtocol && { label: 'Protocol', color: COLORS.protocol },
+                  showMaker && { label: 'Maker', color: COLORS.maker },
+                  showTaker && { label: 'Taker', color: COLORS.taker },
+                  showCumulative && { label: 'Cumulative', color: COLORS.cumulative },
+                ].filter(Boolean) as { label: string; color: string }[]}
+              >
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart 
                   data={displayData} 
@@ -327,14 +336,6 @@ export function ProtocolRevenueChart() {
                     />
                   )}
                   <Tooltip content={<RevenueTooltip showTime={revenueHours <= 24} />} />
-                  <Legend
-                    verticalAlign="top"
-                    align="left"
-                    height={30}
-                    iconType="circle"
-                    iconSize={9}
-                    wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}
-                  />
                   
                   {/* Grouped bars - NOT stacked, side by side with gaps */}
                   {showMaker && (
