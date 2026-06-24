@@ -120,58 +120,95 @@ export function ChartFrame({
     const hasLegend = !!legend && legend.length > 0;
     if (!title && !hasLegend) return chart;
 
-    const titleH = Math.round(38 * ratio);
     const padX = Math.round(18 * ratio);
-    const out = document.createElement('canvas');
-    out.width = chart.width;
-    out.height = chart.height + titleH;
+    const baseH = Math.round(38 * ratio);
+    const lh = Math.round(24 * ratio); // row height for title / legend rows
+    const fontFamily = getComputedStyle(node).fontFamily || 'sans-serif';
+    const titleFont = `600 ${Math.round(15 * ratio)}px ${fontFamily}`;
+    const legendFont = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
+    const dotR = 4.5 * ratio;
+    const dotGap = 6 * ratio; // dot → its label
+    const itemGap = 16 * ratio; // between items
+    const gapAfterTitle = title ? Math.round(24 * ratio) : 0;
+    const resolveColor = (c: string) =>
+      c.startsWith('var(') ? cssVar(c.slice(4, -1).trim(), '#888888') : c;
 
+    const out = document.createElement('canvas');
     const ctx = out.getContext('2d');
     if (!ctx) return chart;
+
+    // --- Measure title + lay legend out into right-aligned rows ----------
+    ctx.font = titleFont;
+    const titleW = title ? ctx.measureText(title).width : 0;
+
+    ctx.font = legendFont;
+    const items = (legend ?? []).map((it) => ({
+      ...it,
+      w: dotR * 2 + dotGap + ctx.measureText(it.label).width,
+    }));
+
+    const rightEdge = chart.width - padX;
+    // Row 0 keeps clear of the title; later rows use the full width.
+    const leftBound = (rowIdx: number) => padX + (rowIdx === 0 ? titleW + gapAfterTitle : 0);
+
+    const rows: (typeof items)[] = [];
+    let cur: typeof items = [];
+    let curW = 0;
+    for (const it of items) {
+      const add = (cur.length ? itemGap : 0) + it.w;
+      const avail = rightEdge - leftBound(rows.length);
+      if (cur.length && curW + add > avail) {
+        rows.push(cur);
+        cur = [];
+        curW = 0;
+      }
+      cur.push(it);
+      curW += (cur.length > 1 ? itemGap : 0) + it.w;
+    }
+    if (cur.length) rows.push(cur);
+
+    const numRows = Math.max(1, rows.length);
+    const titleH = Math.max(baseH, Math.round(9 * ratio) * 2 + numRows * lh);
+
+    // --- Size the canvas and draw ---------------------------------------
+    out.width = chart.width;
+    out.height = chart.height + titleH;
 
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, out.width, out.height);
 
-    const fontFamily = getComputedStyle(node).fontFamily || 'sans-serif';
-    const cy = Math.round(titleH / 2);
+    const contentH = numRows * lh;
+    const startY = Math.round((titleH - contentH) / 2);
+    const rowCenterY = (rowIdx: number) => startY + lh * rowIdx + lh / 2;
 
-    // Title — top-left.
+    // Title — top-left, on the first row.
     if (title) {
       ctx.fillStyle = cssVar('--text-primary', '#ffffff');
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
-      ctx.font = `600 ${Math.round(15 * ratio)}px ${fontFamily}`;
-      ctx.fillText(title, padX, cy);
+      ctx.font = titleFont;
+      ctx.fillText(title, padX, rowCenterY(0));
     }
 
-    // Legend — top-right. Resolve CSS-var colours to concrete values so the
-    // canvas can fill them.
+    // Legend — each row right-aligned, stacked top→down.
     if (hasLegend) {
-      const resolveColor = (c: string) =>
-        c.startsWith('var(') ? cssVar(c.slice(4, -1).trim(), '#888888') : c;
-
-      ctx.font = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
+      ctx.font = legendFont;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
-
-      const dotR = 4.5 * ratio;
-      const dotGap = 6 * ratio; // dot → its label
-      const itemGap = 16 * ratio; // between items
-      const widths = legend!.map(
-        (it) => dotR * 2 + dotGap + ctx.measureText(it.label).width,
-      );
-      const total =
-        widths.reduce((a, b) => a + b, 0) + itemGap * (legend!.length - 1);
-
-      let x = out.width - padX - total;
-      legend!.forEach((it, i) => {
-        ctx.beginPath();
-        ctx.fillStyle = resolveColor(it.color);
-        ctx.arc(x + dotR, cy, dotR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
-        ctx.fillText(it.label, x + dotR * 2 + dotGap, cy);
-        x += widths[i] + itemGap;
+      rows.forEach((row, r) => {
+        const rowW =
+          row.reduce((a, it) => a + it.w, 0) + itemGap * (row.length - 1);
+        let x = rightEdge - rowW;
+        const y = rowCenterY(r);
+        for (const it of row) {
+          ctx.beginPath();
+          ctx.fillStyle = resolveColor(it.color);
+          ctx.arc(x + dotR, y, dotR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
+          ctx.fillText(it.label, x + dotR * 2 + dotGap, y);
+          x += it.w + itemGap;
+        }
       });
     }
 
