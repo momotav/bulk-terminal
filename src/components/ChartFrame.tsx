@@ -14,6 +14,8 @@ interface ChartFrameProps {
   watermarkOpacity?: number;
   /** Shifts the watermark right to center it over the plot, past the y-axis labels. */
   watermarkOffsetX?: string;
+  /** Shifts the watermark up (positive raises it). */
+  watermarkOffsetY?: string;
 }
 
 /**
@@ -31,6 +33,7 @@ export function ChartFrame({
   className = '',
   watermarkOpacity = 0.06,
   watermarkOffsetX = '7%',
+  watermarkOffsetY = '8%',
 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
@@ -44,7 +47,11 @@ export function ChartFrame({
     const node = captureRef.current;
     if (!node) return null;
 
-    const ratio = 3;
+    // Derive the scale so the export is ~4K wide regardless of how small the
+    // chart is on-screen (these sit half-width in a row, so a fixed ratio
+    // wouldn't get there). Capped to keep memory sane.
+    const rect = node.getBoundingClientRect();
+    const ratio = Math.min(6, Math.max(3, 3840 / Math.max(rect.width, 1)));
     const bg = cssVar('--bg-base', '#141310');
 
     const chart = await toCanvas(node, {
@@ -142,7 +149,7 @@ export function ChartFrame({
       <div ref={captureRef} className="relative h-full">
         <div
           className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
-          style={{ paddingLeft: watermarkOffsetX }}
+          style={{ paddingLeft: watermarkOffsetX, paddingBottom: watermarkOffsetY }}
         >
           <div
             className="w-1/3 max-w-[260px] aspect-square"
