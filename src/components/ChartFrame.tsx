@@ -2,11 +2,11 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Download, Copy, Check } from 'lucide-react';
-import { toBlob } from 'html-to-image';
+import { toCanvas } from 'html-to-image';
 
 interface ChartFrameProps {
   children: React.ReactNode;
-  /** Chart name. Baked into the top-left of the exported image + filename. */
+  /** Chart name. Drawn above the chart in the exported image + used for the filename. */
   title?: string;
   /** Classes for the outer wrapper — pass sizing here (e.g. "h-full"). */
   className?: string;
@@ -15,44 +15,68 @@ interface ChartFrameProps {
 }
 
 /**
- * Wraps a chart with a centered BULKSTATS watermark (themed text, so it shows
- * on both light and dark) and a hover toolbar that exports the chart as a PNG
- * (download or copy). The chart's name is injected top-left only during the
- * capture, so in-app the chart stays clean but shared screenshots are titled
- * and branded. The toolbar lives outside the captured node, so it's never in
- * the export.
+ * Wraps a chart with a centered BULKSTATS watermark and a hover toolbar that
+ * exports the chart as a PNG (download or copy).
+ *
+ * The export is composited entirely off-screen: we rasterize the chart node
+ * to a canvas (the watermark is part of that node, so it comes along), then
+ * draw a titled header bar above it on a second canvas. Nothing in the live
+ * DOM is mutated, so there's no flash / resize / scale jump while exporting.
  */
 export function ChartFrame({ children, title, className = '', watermarkOpacity = 0.06 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [exporting, setExporting] = useState(false);
 
-  const themedBg = () =>
-    getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#141310';
+  const cssVar = (name: string, fallback: string) =>
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
-  const render = useCallback(async (): Promise<Blob | null> => {
+  /** Rasterize the chart (with watermark), then composite a title bar on top. */
+  const buildCanvas = useCallback(async (): Promise<HTMLCanvasElement | null> => {
     const node = captureRef.current;
     if (!node) return null;
-    // Reveal the export-only title strip, wait for the chart to re-layout to
-    // the reduced height (recharts resizes via its own observer), then capture.
-    setExporting(true);
-    await new Promise<void>((res) => setTimeout(res, 180));
-    try {
-      return await toBlob(node, {
-        pixelRatio: 2,
-        backgroundColor: themedBg(),
-        filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
-      });
-    } finally {
-      setExporting(false);
-    }
-  }, []);
+
+    const ratio = 2;
+    const bg = cssVar('--bg-base', '#141310');
+
+    const chart = await toCanvas(node, {
+      pixelRatio: ratio,
+      backgroundColor: bg,
+      filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
+    });
+
+    if (!title) return chart;
+
+    const titleH = Math.round(38 * ratio);
+    const padX = Math.round(18 * ratio);
+    const out = document.createElement('canvas');
+    out.width = chart.width;
+    out.height = chart.height + titleH;
+
+    const ctx = out.getContext('2d');
+    if (!ctx) return chart;
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    ctx.fillStyle = cssVar('--text-primary', '#ffffff');
+    ctx.textBaseline = 'middle';
+    ctx.font = `600 ${Math.round(15 * ratio)}px ${getComputedStyle(node).fontFamily || 'sans-serif'}`;
+    ctx.fillText(title, padX, Math.round(titleH / 2));
+
+    ctx.drawImage(chart, 0, titleH);
+    return out;
+  }, [title]);
+
+  const toBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
+    new Promise((res) => canvas.toBlob(res, 'image/png'));
 
   const download = useCallback(async () => {
     setBusy(true);
     try {
-      const blob = await render();
+      const canvas = await buildCanvas();
+      if (!canvas) return;
+      const blob = await toBlob(canvas);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -63,12 +87,14 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
     } finally {
       setBusy(false);
     }
-  }, [render, title]);
+  }, [buildCanvas, title]);
 
   const copy = useCallback(async () => {
     setBusy(true);
     try {
-      const blob = await render();
+      const canvas = await buildCanvas();
+      if (!canvas) return;
+      const blob = await toBlob(canvas);
       if (!blob) return;
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       setCopied(true);
@@ -78,7 +104,7 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
     } finally {
       setBusy(false);
     }
-  }, [render]);
+  }, [buildCanvas]);
 
   return (
     <div className={`group relative ${className}`}>
@@ -102,9 +128,8 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
         </button>
       </div>
 
-      {/* Captured region: watermark (behind) + (export-only) title strip + chart. */}
-      <div ref={captureRef} className="relative h-full flex flex-col">
-        {/* Watermark — spans the whole captured area, behind everything. */}
+      {/* Captured region: watermark (behind) + chart. */}
+      <div ref={captureRef} className="relative h-full">
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <div
             className="w-1/3 max-w-[260px] aspect-square"
@@ -122,23 +147,7 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
             }}
           />
         </div>
-
-        {/* Title strip — only present while exporting, so it reserves space
-            above the chart in the PNG without overlapping the plot (and
-            leaves the in-app chart untouched). */}
-        {exporting && title && (
-          <div className="relative z-10 shrink-0 px-3 pt-1 pb-2 text-sm font-semibold text-[var(--text-primary)]">
-            {title}
-          </div>
-        )}
-
-        <div className="relative z-10 flex-1 min-h-0">
-          {/* Absolutely positioned so the chart SVG fills the box exactly and
-              never contributes to the flex parent's content height — otherwise
-              recharts' ResponsiveContainer ratchets taller on each resize
-              (e.g. when the export title strip toggles). */}
-          <div className="absolute inset-0">{children}</div>
-        </div>
+        <div className="relative z-10 h-full">{children}</div>
       </div>
     </div>
   );
