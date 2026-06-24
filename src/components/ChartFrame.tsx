@@ -12,7 +12,9 @@ interface ChartFrameProps {
   className?: string;
   /** Watermark opacity. Subtle by default so it sits behind the data. */
   watermarkOpacity?: number;
-  /** Shifts the watermark right to center it over the plot, past the y-axis labels. */
+  /** Shifts the watermark right to center it over the plot, past the y-axis
+   *  labels. Use a fixed px value — the y-axis gutter is ~constant in pixels,
+   *  not a fraction of width, so a % drifts left as the chart narrows. */
   watermarkOffsetX?: string;
   /** Shifts the watermark up (positive raises it). */
   watermarkOffsetY?: string;
@@ -32,7 +34,7 @@ export function ChartFrame({
   title,
   className = '',
   watermarkOpacity = 0.06,
-  watermarkOffsetX = '7%',
+  watermarkOffsetX = '50px',
   watermarkOffsetY = '8%',
 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
