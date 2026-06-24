@@ -69,7 +69,11 @@ export function ChartFrame({
     const xAxis = node.querySelector('.recharts-xAxis');
     const xH = xAxis ? xAxis.getBoundingClientRect().height : 0;
 
-    const next = { x: (leftG - rightG) / 2, y: xH / 2 };
+    // Center over the plot (x-axis labels sit below the plot, so half their
+    // height lifts to true plot-center), then a small extra lift so the logo
+    // reads a touch above center on every chart.
+    const EXTRA_LIFT = 0.07; // fraction of chart height
+    const next = { x: (leftG - rightG) / 2, y: xH / 2 + nodeRect.height * EXTRA_LIFT };
     setWm((prev) =>
       Math.abs(prev.x - next.x) > 0.5 || Math.abs(prev.y - next.y) > 0.5 ? next : prev,
     );
