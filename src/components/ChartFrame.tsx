@@ -14,6 +14,10 @@ interface ChartFrameProps {
   watermarkOpacity?: number;
   /** Series labels drawn in the top-right of the EXPORT only (not the live chart). */
   legend?: { label: string; color: string }[];
+  /** Vertical axis description on the left (e.g. "Daily Volume (USD)"). Shows in-app and in exports. */
+  yLabel?: string;
+  /** Vertical axis description on the right (e.g. "Cumulative Volume (USD)"). For dual-axis charts. */
+  yLabelRight?: string;
 }
 
 /**
@@ -37,6 +41,8 @@ export function ChartFrame({
   className = '',
   watermarkOpacity = 0.06,
   legend,
+  yLabel,
+  yLabelRight,
 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
@@ -278,8 +284,8 @@ export function ChartFrame({
         </button>
       </div>
 
-      {/* Captured region: watermark (behind) + chart. */}
-      <div ref={captureRef} className="relative h-full">
+      {/* Captured region: watermark (behind) + optional axis labels + chart. */}
+      <div ref={captureRef} className="relative h-full flex">
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <div
             className="w-1/3 max-w-[260px] aspect-square"
@@ -298,12 +304,31 @@ export function ChartFrame({
             }}
           />
         </div>
-        {/* Absolutely positioned so the chart SVG fills the box but never
-            contributes to layout height — otherwise recharts' ResponsiveContainer
-            props the container open and the height can be grown but not shrunk. */}
-        <div className="relative z-10 h-full">
+
+        {/* Left axis description — vertical, in a slim gutter so it's part of
+            the captured node (shows in-app AND in the exported PNG). */}
+        {yLabel && (
+          <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
+            <span className="-rotate-90 whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide">
+              {yLabel}
+            </span>
+          </div>
+        )}
+
+        {/* Chart — flex-1; inner absolute layer keeps recharts from propping
+            the height open (grow-but-not-shrink bug). */}
+        <div className="relative z-10 flex-1 min-w-0 h-full">
           <div className="absolute inset-0">{children}</div>
         </div>
+
+        {/* Right axis description (dual-axis charts). */}
+        {yLabelRight && (
+          <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
+            <span className="rotate-90 whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide">
+              {yLabelRight}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
