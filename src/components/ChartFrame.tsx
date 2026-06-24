@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Copy, Check } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 
@@ -27,6 +27,16 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Pick the theme-correct logo so the watermark shows on both themes.
+  const [isDark, setIsDark] = useState(true);
+  useEffect(() => {
+    const read = () => setIsDark(document.documentElement.getAttribute('data-theme') !== 'light');
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
 
   const themedBg = () =>
     getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#141310';
@@ -106,18 +116,16 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
 
       {/* Captured region: watermark (behind) + chart + (export-only) title. */}
       <div ref={captureRef} className="relative h-full">
-        {/* Themed text watermark, centered behind the data. */}
+        {/* Theme-aware logo watermark, centered behind the data. */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
-          <span
-            className="font-bold tracking-[0.18em] select-none whitespace-nowrap"
-            style={{
-              color: 'var(--text-primary)',
-              opacity: watermarkOpacity,
-              fontSize: 'clamp(28px, 8vw, 60px)',
-            }}
-          >
-            BULKSTATS
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={isDark ? '/bulkstats.png' : '/bulkstats2.png'}
+            alt=""
+            draggable={false}
+            className="w-1/3 max-w-[260px] select-none object-contain"
+            style={{ opacity: watermarkOpacity }}
+          />
         </div>
 
         {/* Chart name — shown only while exporting, so it lands in the PNG. */}
