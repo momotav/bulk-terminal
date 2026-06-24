@@ -9,6 +9,7 @@ import {
 import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
+import { ChartFrame } from '@/components/ChartFrame';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import {
@@ -614,6 +615,7 @@ export default function RiskPage() {
 
                 {fairSpreadData.length > 0 ? (
                   <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
+                    <ChartFrame title="Fair vs Mark Spread" className="h-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairSpreadData}>
                         <defs>
@@ -652,6 +654,7 @@ export default function RiskPage() {
                         />
                       </AreaChart>
                     </ResponsiveContainer>
+                    </ChartFrame>
                   </div>
                 ) : (
                   <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
