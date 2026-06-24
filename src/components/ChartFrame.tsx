@@ -12,6 +12,8 @@ interface ChartFrameProps {
   className?: string;
   /** Watermark opacity. Subtle by default so it sits behind the data. */
   watermarkOpacity?: number;
+  /** Shifts the watermark right to center it over the plot, past the y-axis labels. */
+  watermarkOffsetX?: string;
 }
 
 /**
@@ -23,7 +25,13 @@ interface ChartFrameProps {
  * draw a titled header bar above it on a second canvas. Nothing in the live
  * DOM is mutated, so there's no flash / resize / scale jump while exporting.
  */
-export function ChartFrame({ children, title, className = '', watermarkOpacity = 0.06 }: ChartFrameProps) {
+export function ChartFrame({
+  children,
+  title,
+  className = '',
+  watermarkOpacity = 0.06,
+  watermarkOffsetX = '7%',
+}: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,7 +44,7 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
     const node = captureRef.current;
     if (!node) return null;
 
-    const ratio = 2;
+    const ratio = 3;
     const bg = cssVar('--bg-base', '#141310');
 
     const chart = await toCanvas(node, {
@@ -64,6 +72,8 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
     ctx.font = `600 ${Math.round(15 * ratio)}px ${getComputedStyle(node).fontFamily || 'sans-serif'}`;
     ctx.fillText(title, padX, Math.round(titleH / 2));
 
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(chart, 0, titleH);
     return out;
   }, [title]);
@@ -130,7 +140,10 @@ export function ChartFrame({ children, title, className = '', watermarkOpacity =
 
       {/* Captured region: watermark (behind) + chart. */}
       <div ref={captureRef} className="relative h-full">
-        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+        <div
+          className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
+          style={{ paddingLeft: watermarkOffsetX }}
+        >
           <div
             className="w-1/3 max-w-[260px] aspect-square"
             style={{
