@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { request } from '@/lib/api';
 import { DEFAULT_COINS, HIDDEN_COINS } from '@/lib/coins';
+import { useCurrentNetwork } from './useCurrentNetwork';
+import type { NetworkId } from '@/lib/network';
 
 /**
  * Minimal market metadata shape returned by the backend's `/exchange-info`
@@ -38,27 +40,33 @@ export interface UseAvailableCoinsResult {
   error: string | null;
 }
 
-// Module-level cache so multiple components sharing this hook in one page
-// render only trigger a single network request per session.
-let cachedMarkets: MarketInfo[] | null = null;
-let inflight: Promise<MarketInfo[]> | null = null;
+// Per-network, module-level cache so components sharing this hook on one page
+// trigger a single request per network — and switching networks fetches the
+// other network's market list (devnet lists markets testnet doesn't).
+const cachedMarkets = new Map<NetworkId, MarketInfo[]>();
+const inflight = new Map<NetworkId, Promise<MarketInfo[]>>();
 
-async function fetchMarkets(): Promise<MarketInfo[]> {
-  if (cachedMarkets) return cachedMarkets;
-  if (inflight) return inflight;
+async function fetchMarkets(net: NetworkId): Promise<MarketInfo[]> {
+  const hit = cachedMarkets.get(net);
+  if (hit) return hit;
+  const pending = inflight.get(net);
+  if (pending) return pending;
 
-  inflight = (async () => {
+  const p = (async () => {
     try {
+      // request() appends ?net=<current> so the backend routes /exchangeInfo
+      // to the matching BULK host.
       const data = await request<ExchangeInfoResponse>('/api/analytics/exchange-info');
       const markets = Array.isArray(data?.markets) ? data.markets : [];
-      cachedMarkets = markets;
+      cachedMarkets.set(net, markets);
       return markets;
     } finally {
-      inflight = null;
+      inflight.delete(net);
     }
   })();
 
-  return inflight;
+  inflight.set(net, p);
+  return p;
 }
 
 /**
@@ -70,18 +78,22 @@ async function fetchMarkets(): Promise<MarketInfo[]> {
  * site still works — a chart with BTC/ETH/SOL is better than a blank chart.
  */
 export function useAvailableCoins(): UseAvailableCoinsResult {
-  const [markets, setMarkets] = useState<MarketInfo[]>(() => cachedMarkets ?? []);
-  const [loading, setLoading] = useState<boolean>(() => cachedMarkets === null);
+  const { network } = useCurrentNetwork();
+  const [markets, setMarkets] = useState<MarketInfo[]>(() => cachedMarkets.get(network) ?? []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedMarkets.has(network));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    if (cachedMarkets) {
-      // Already cached — no work needed, state is already populated.
+    const hit = cachedMarkets.get(network);
+    if (hit) {
+      // Already cached for this network — populate state and skip the fetch.
+      setMarkets(hit);
       setLoading(false);
       return;
     }
-    fetchMarkets()
+    setLoading(true);
+    fetchMarkets(network)
       .then((m) => {
         if (cancelled) return;
         setMarkets(m);
@@ -98,7 +110,7 @@ export function useAvailableCoins(): UseAvailableCoinsResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [network]);
 
   // Filter out any coins listed in HIDDEN_COINS (e.g. XAU) so they never
   // appear in pickers, dropdowns, chart toggles, or the treemap. One
