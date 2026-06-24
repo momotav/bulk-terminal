@@ -22,6 +22,7 @@ import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
+import { ChartFrame } from '@/components/ChartFrame';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -2076,6 +2077,7 @@ export default function WalletPage() {
 
                 return (
                   <div className="flex-1 p-4 min-h-[300px]">
+                    <ChartFrame title="PnL History" className="h-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData}>
                         <defs>
@@ -2128,6 +2130,7 @@ export default function WalletPage() {
                         />
                       </AreaChart>
                     </ResponsiveContainer>
+                    </ChartFrame>
                   </div>
                 );
               })()}
