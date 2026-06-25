@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import Link from 'next/link';
 import { Trophy } from 'lucide-react';
 import {
@@ -55,6 +56,7 @@ export function BulkRankBadge({
   window = '24h',
   metric = 'cashflow_adjusted_roi',
 }: Props) {
+  const { network } = useCurrentNetwork();
   const [data, setData] = useState<BulkLeaderboardRankResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,7 +79,7 @@ export function BulkRankBadge({
     return () => {
       cancelled = true;
     };
-  }, [address, window, metric]);
+  }, [address, window, metric, network]);
 
   // Don't render anything while loading or if wallet isn't ranked.
   // No skeleton — this is auxiliary info, not load-blocking.
