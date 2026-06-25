@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Activity, Zap, Hash } from 'lucide-react';
 import { AnimatedNumber } from './AnimatedNumber';
 import { withNetwork } from '@/lib/network';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 // Mirror of the backend's `getThroughput()` response shape. Kept inline
 // rather than imported from a shared types module since this is the
@@ -51,6 +52,7 @@ function formatBlockTime(ms: number | null): string {
 }
 
 export function NetworkHealthStats() {
+  const { network } = useCurrentNetwork();
   const [data, setData] = useState<ThroughputData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,7 +81,7 @@ export function NetworkHealthStats() {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, []);
+  }, [network]);
 
   if (loading) {
     return (
