@@ -15,6 +15,7 @@ import { isSystemWallet } from '@/lib/systemWallets';
 import { computePositionOpenTime, formatDuration, type PositionOpenInfo } from '@/lib/positionWalk';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { useStore } from '@/store';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
@@ -907,6 +908,8 @@ export default function WalletPage() {
   const params = useParams();
   const router = useRouter();
   const address = params.address as string;
+  // Wallet positions/PnL are per-network — refetch when the network changes.
+  const { network } = useCurrentNetwork();
   
   const { following, addFollowing, removeFollowing, user, claimedWallet, setClaimedWallet, setUser } = useStore();
   const { authenticated, login, getAccessToken, user: privyUser } = usePrivy();
@@ -1067,7 +1070,7 @@ export default function WalletPage() {
     // user action.
     const tick = window.setInterval(() => fetchData(true), 10_000);
     return () => window.clearInterval(tick);
-  }, [address]);
+  }, [address, network]);
 
   // Fetch this wallet's stats from BULK's official indexer. We use the
   // 'all' window with `volume` metric because we want lifetime numbers
@@ -1099,7 +1102,7 @@ export default function WalletPage() {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, [address]);
+  }, [address, network]);
 
   // Fetch fills for each open position and compute when it was opened.
   // BULK doesn't expose a per-position open timestamp on the position
@@ -1150,7 +1153,7 @@ export default function WalletPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, openSymbolKey]);
+  }, [address, openSymbolKey, network]);
 
   // Track whether the user has manually clicked a tab. Once they have, we
   // never auto-switch on data changes — that would be jarring (e.g. their
