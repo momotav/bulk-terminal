@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Flame, TrendingUp, TrendingDown, Zap } from 'lucide-react';
 import { formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
@@ -19,6 +20,7 @@ interface ActivityItem {
 }
 
 export function RecentActivity() {
+  const { network } = useCurrentNetwork();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'all' | 'liquidations' | 'trades'>('all');
@@ -49,7 +51,7 @@ export function RecentActivity() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   const filtered = activities.filter((a) => {
     if (tab === 'all') return true;
