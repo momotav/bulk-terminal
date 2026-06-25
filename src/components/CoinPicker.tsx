@@ -48,6 +48,22 @@ export function CoinPicker({
   const { coins: liveCoins, loading } = useAvailableCoins();
   const coins = coinsProp ?? liveCoins;
 
+  // Self-heal on network switch: if the currently-selected coin isn't in the
+  // available list for the new network (e.g. MINIMAX after switching from
+  // Devnet to Testnet), fall back to the first available default coin so the
+  // chart doesn't keep requesting a market that doesn't exist here. "ALL" is
+  // always valid; guarded by `loading` and an empty-list check.
+  const availKey = coins.join(',');
+  useEffect(() => {
+    if (loading || coins.length === 0) return;
+    if (value === 'ALL') return;
+    if (!coins.includes(value)) {
+      const fallback = (DEFAULT_COINS as readonly string[]).find((c) => coins.includes(c)) ?? coins[0];
+      onChange(fallback);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availKey, loading]);
+
   // Open/close + search + outside-click close.
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
