@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { CoinSelector } from '@/components/CoinSelector';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -555,6 +556,11 @@ const ChartCard = ({
 
 export default function AnalyticsPage() {
   // Per-chart timeframes - default to 24h since BULK just launched
+  // Active network — added to the mount-fetch deps below so switching
+  // networks triggers one full refresh (otherwise charts keep the old
+  // network's data until a timeframe toggle forces a refetch).
+  const { network } = useCurrentNetwork();
+
   const [volumeHours, setVolumeHours] = useState(24);
   const [oiHours, setOiHours] = useState(24);
   const [fundingHours, setFundingHours] = useState(24);
@@ -718,7 +724,7 @@ export default function AnalyticsPage() {
     fetchLiveOI();
     const interval = setInterval(fetchLiveOI, 30000); // Refresh every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   // Fetch ALL-time reference datasets once (and refresh every 5 minutes so new days appear).
   // These are used purely as a source of per-coin historical totals — they anchor the
@@ -746,7 +752,7 @@ export default function AnalyticsPage() {
     fetchAllTimeReferences();
     const id = setInterval(fetchAllTimeReferences, 5 * 60 * 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [network]);
 
   // Fetch volume data when timeframe changes - now from BULK API klines
   useEffect(() => {
@@ -966,7 +972,7 @@ export default function AnalyticsPage() {
       }
     };
     fetchInitialData();
-  }, []);
+  }, [network]);
 
   // Slice data by range (for range slider)
   const sliceDataByRange = useCallback(<T,>(data: T[], range: { start: number; end: number }): T[] => {
