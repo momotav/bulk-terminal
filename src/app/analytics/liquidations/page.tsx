@@ -10,6 +10,7 @@ import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
 import { HIDDEN_COINS } from '@/lib/coins';
 import { ChartFrame } from '@/components/ChartFrame';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 // Time period options
 const PERIODS = [
@@ -645,6 +646,9 @@ export default function LiquidationsPage() {
   // still only one network request per session.
 
   // State
+  // Refetch all liquidation data when the network changes.
+  const { network } = useCurrentNetwork();
+
   const [treemapPeriod, setTreemapPeriod] = useState('24h');
   const [chartPeriod, setChartPeriod] = useState('all');
   const [summaryPeriod, setSummaryPeriod] = useState('7d');
@@ -676,7 +680,7 @@ export default function LiquidationsPage() {
       .then(setTreemapData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, treemap: false })));
-  }, [treemapPeriod]);
+  }, [treemapPeriod, network]);
 
   // Fetch chart data
   useEffect(() => {
@@ -686,7 +690,7 @@ export default function LiquidationsPage() {
       .then(setChartData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, chart: false })));
-  }, [chartPeriod]);
+  }, [chartPeriod, network]);
 
   // Slice chart data by range
   const slicedChartData = useMemo(() => {
@@ -721,7 +725,7 @@ export default function LiquidationsPage() {
       .then(setSummaryData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, summary: false })));
-  }, [selectedCoin, summaryPeriod]);
+  }, [selectedCoin, summaryPeriod, network]);
 
   // Fetch market data
   useEffect(() => {
@@ -730,7 +734,7 @@ export default function LiquidationsPage() {
       .then(setMarketData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, market: false })));
-  }, [selectedCoin, marketPeriod]);
+  }, [selectedCoin, marketPeriod, network]);
 
   // Fetch featured liquidations
   useEffect(() => {
@@ -739,7 +743,7 @@ export default function LiquidationsPage() {
       .then(setFeaturedData)
       .catch(console.error)
       .finally(() => setLoading(l => ({ ...l, featured: false })));
-  }, [featuredFilter]);
+  }, [featuredFilter, network]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
