@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -60,6 +61,7 @@ const RevenueTooltip = ({ active, payload, label, showTime }: any) => {
 };
 
 export function ProtocolRevenueChart() {
+  const { network } = useCurrentNetwork();
   const [revenueHours, setRevenueHours] = useState(168);
   const [revenueData, setRevenueData] = useState<{ 
     timestamp: string; 
@@ -104,7 +106,7 @@ export function ProtocolRevenueChart() {
       }
     };
     fetchRevenue();
-  }, [revenueHours]);
+  }, [revenueHours, network]);
 
   useEffect(() => {
     const fetchFeeState = async () => {
@@ -123,7 +125,7 @@ export function ProtocolRevenueChart() {
     fetchFeeState();
     const interval = setInterval(fetchFeeState, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   const formatDateForChart = (ts: string) => {
     const date = new Date(ts);
