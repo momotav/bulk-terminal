@@ -1008,9 +1008,7 @@ function PositionExposure({ positions }: { positions: NonNullable<WalletData['li
               return (
                 <div className="relative h-24 w-24 shrink-0">
                   <div className="h-full w-full rounded-full" style={{ background: `conic-gradient(${stops})` }} />
-                  <div className="absolute inset-[26%] rounded-full bg-[var(--bg-muted)] flex items-center justify-center">
-                    <span className="text-[10px] font-mono text-[var(--text-tertiary)]">{intel.coins.length}{intel.coins.length === 1 ? ' mkt' : ' mkts'}</span>
-                  </div>
+                  <div className="absolute inset-[26%] rounded-full bg-[var(--bg-muted)]" />
                 </div>
               );
             })()}
@@ -1156,6 +1154,10 @@ export default function WalletPage() {
   const [positionOpenTimes, setPositionOpenTimes] = useState<
     Record<string, PositionOpenInfo | null>
   >({});
+
+  // Traded volume bucketed by trailing window (7d / 14d / 30d / 90d),
+  // derived client-side from the wallet's recent fills. Null while loading.
+  const [volByWindow, setVolByWindow] = useState<{ d7: number; d14: number; d30: number; d90: number } | null>(null);
 
   // Get current user's wallet address from multiple sources
   const solanaWalletAddress = solanaWallets?.[0]?.address;
@@ -1333,6 +1335,33 @@ export default function WalletPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, openSymbolKey, network]);
+
+  // Compute traded volume per trailing window from the wallet's recent
+  // fills. One unfiltered /fills call (capped at 1000) covers most wallets;
+  // for extremely active accounts the longer windows are a lower bound,
+  // which we flag in the UI. Volume per fill = |size| × price.
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    wallet.getFills(address, { limit: 1000 })
+      .then((res) => {
+        if (cancelled) return;
+        const now = Date.now();
+        const D = 86_400_000;
+        const acc = { d7: 0, d14: 0, d30: 0, d90: 0 };
+        for (const f of res.fills || []) {
+          const v = Math.abs(f.size || 0) * (f.price || 0);
+          const age = now - f.timestamp;
+          if (age <= 7 * D) acc.d7 += v;
+          if (age <= 14 * D) acc.d14 += v;
+          if (age <= 30 * D) acc.d30 += v;
+          if (age <= 90 * D) acc.d90 += v;
+        }
+        setVolByWindow(acc);
+      })
+      .catch(() => { if (!cancelled) setVolByWindow(null); });
+    return () => { cancelled = true; };
+  }, [address, network]);
 
   // Track whether the user has manually clicked a tab. Once they have, we
   // never auto-switch on data changes — that would be jarring (e.g. their
@@ -1960,6 +1989,21 @@ export default function WalletPage() {
                     label="Liquidations"
                     value={String(tracked?.total_liquidations || 0)}
                   />
+                </div>
+              </div>
+
+              {/* Volume by period — traded volume over trailing windows,
+                  derived from recent fills. Complements the lifetime Volume
+                  row above with a recency view of how active the wallet is. */}
+              <div className="border-t border-[var(--border-color)] pt-5">
+                <div className="text-xs uppercase tracking-wider text-[var(--text-secondary)] font-semibold mb-3">
+                  Volume
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  <OverviewRow label="7D" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '—'} />
+                  <OverviewRow label="14D" value={volByWindow ? `$${formatCompact(volByWindow.d14)}` : '—'} />
+                  <OverviewRow label="30D" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '—'} />
+                  <OverviewRow label="90D" value={volByWindow ? `$${formatCompact(volByWindow.d90)}` : '—'} />
                 </div>
               </div>
 
