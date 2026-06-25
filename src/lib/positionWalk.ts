@@ -49,39 +49,45 @@ export function computePositionOpenTime(fills: WalletFill[]): PositionOpenInfo |
   // earliest to latest to know when transitions happen.
   const sorted = [...fills].sort((a, b) => a.timestamp - b.timestamp);
 
-  // Walk the position state, tracking the index of the most recent
-  // "zero → nonzero" transition. That's the index we'll use to read the
-  // open metadata at the end.
-  let runningSize = 0;
+  // First pass: build the running net-size series and track the peak
+  // absolute size. We treat "flat" RELATIVE to that peak (within ~1%)
+  // rather than against an absolute 1e-9. On testnet, wallets routinely
+  // reduce a position down to a tiny dust residual instead of exactly
+  // zero; with an absolute epsilon the walk never sees a flat moment, so
+  // it reports the position as continuously open since the very first
+  // non-flat fill — days older than the real (re)open the user remembers.
+  const running: number[] = [];
+  let r = 0;
+  let maxAbs = 0;
+  for (const f of sorted) {
+    r += f.isBuy ? f.size : -f.size;
+    running.push(r);
+    if (Math.abs(r) > maxAbs) maxAbs = Math.abs(r);
+  }
+  // Flat = within 1% of the largest size ever held (floored at ZERO_EPS so
+  // a genuinely tiny scalper still works). Reducing below this counts as
+  // effectively closed, so the next add registers as a fresh open.
+  const eps = Math.max(ZERO_EPS, maxAbs * 0.01);
+
+  // Walk, tracking the index of the most recent flat→nonflat transition.
   let lastOpenIndex: number | null = null;
   let lastOpenSize = 0;
-
   for (let i = 0; i < sorted.length; i++) {
-    const f = sorted[i];
-    const wasFlat = Math.abs(runningSize) < ZERO_EPS;
-
-    // Apply this fill to the running net. isBuy=true adds size, false
-    // subtracts. (Backend already gives us positive `size` regardless of
-    // direction, so we sign it here.)
-    const signedDelta = f.isBuy ? f.size : -f.size;
-    runningSize += signedDelta;
-
-    // Did this fill take us off zero? That's an "open" event.
-    const isNowOpen = Math.abs(runningSize) >= ZERO_EPS;
+    const prev = i === 0 ? 0 : running[i - 1];
+    const wasFlat = Math.abs(prev) < eps;
+    const isNowOpen = Math.abs(running[i]) >= eps;
     if (wasFlat && isNowOpen) {
       lastOpenIndex = i;
-      lastOpenSize = runningSize;
+      lastOpenSize = running[i];
     }
   }
 
-  // If the position is currently flat, there's no "open" to report — even
-  // if there were prior opens, they've all been closed.
-  if (Math.abs(runningSize) < ZERO_EPS) return null;
+  // Currently flat (or dust) — nothing to report.
+  if (Math.abs(r) < eps) return null;
 
-  // If we never saw a flat→nonflat transition, it means the fills don't
-  // cover the position's actual open. This can happen when BULK truncates
-  // history at 5000 fills and the position is older than that. Return null
-  // — better to show nothing than a wrong time.
+  // Never saw a flat→nonflat transition — fills don't cover the real open
+  // (e.g. truncated at BULK's 5000-fill window). Better to show nothing
+  // than a wrong time.
   if (lastOpenIndex === null) return null;
 
   const opener = sorted[lastOpenIndex];
