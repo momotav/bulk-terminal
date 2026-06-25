@@ -293,15 +293,15 @@ function PlaceholderCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 opacity-60">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 opacity-60">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         {label}
       </div>
-      <div className="text-2xl font-bold tabular-nums tracking-tight text-[var(--text-tertiary)] mb-2">
+      <div className="text-xl font-bold tabular-nums tracking-tight text-[var(--text-tertiary)] mb-1.5">
         —
       </div>
-      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2" />
-      <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5" />
+      <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
         {subtitle}
       </div>
     </div>
@@ -413,23 +413,23 @@ function PerformanceCard({
     'text-bulk-red';
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         Performance
       </div>
-      <div className={cn('text-2xl font-bold tabular-nums tracking-tight mb-2', winRateColor)}>
+      <div className={cn('text-xl font-bold tabular-nums tracking-tight mb-1.5', winRateColor)}>
         {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'}
       </div>
       {/* Single win-rate fill bar — matches the BarMetricCard treatment on
           the neighbouring cards so the top strip reads as one coordinated
           row rather than four different visual styles. */}
-      <div className="h-1.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2">
+      <div className="h-1.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5">
         <div
           className={cn('h-full rounded-full', winRate !== null && winRate < 0.4 ? 'bg-bulk-red' : 'bg-bulk-green')}
           style={{ width: `${Math.round((winRate ?? 0) * 100)}%` }}
         />
       </div>
-      <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+      <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
         {winRate !== null ? `${(winRate * 100).toFixed(0)}% Win Rate` : 'N/A Win Rate'} · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
       </div>
     </div>
@@ -484,18 +484,18 @@ function BarMetricCard({
     ? Math.max(0, Math.min(1, secondaryFillPct))
     : null;
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-2">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         {label}
       </div>
-      <div className={cn('text-2xl font-bold tabular-nums tracking-tight mb-2', valueColor)}>
+      <div className={cn('text-xl font-bold tabular-nums tracking-tight mb-1.5', valueColor)}>
         {value}
       </div>
       {/* Bar track. We use a single 8px-tall rounded track with two
           potential fills overlaid — the secondary fill renders from the
           RIGHT (justify-end via absolute right-0) so long/short splits
           read intuitively. */}
-      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2">
+      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5">
         <div
           className={cn('absolute left-0 top-0 h-full rounded-full', barColor)}
           style={{ width: `${clampedFill * 100}%` }}
@@ -508,7 +508,7 @@ function BarMetricCard({
         )}
       </div>
       {subtitle && (
-        <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+        <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
           {subtitle}
         </div>
       )}
@@ -1801,16 +1801,12 @@ export default function WalletPage() {
                 (mobile/tablet), so phones see a normal vertical scroll
                 with all the rail content at the top.
                 ────────────────────────────────────────────────────── */}
-            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 flex flex-col lg:self-start">
+            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 flex flex-col lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
               {/* Card-style left rail matching Hyperdash's sidebar
-                  treatment. Single bordered panel, sections inside
-                  divided by border-t lines. Sections control their own
-                  vertical spacing via border-t + pt-5 so the section
-                  dividers visually align with the section starts.
-                  `lg:self-start` prevents the rail from stretching to
-                  match the main column's height — important on wallets
-                  with long activity feeds where the rail would otherwise
-                  have huge empty space at the bottom. */}
+                  treatment. Sticky on lg+ so the identity + stats stay in
+                  view while the main column scrolls — this is what keeps
+                  the rail visually "ending with" the content instead of
+                  leaving a tall empty gap beside a long activity feed. */}
               {/* Identity block — avatar + names + address. Compact
                   vertical stack since the rail is narrow (~300px). The
                   pb-5 mirrors the pt-5 that subsequent sections use, so
@@ -2181,14 +2177,6 @@ export default function WalletPage() {
               )}
             </div>
 
-            {/* Position Intelligence (per-coin exposure) + Trade Timeline. */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-              <PositionExposure positions={data?.live?.positions ?? []} />
-              <TradeTimeline closedPositions={closedPositions} />
-            </div>
-
-
-
             {/* PnL chart — full width of the main column, prominent
                 visual anchor. Moved above positions in the Hyperdash-
                 style layout because the chart tells the wallet's story
@@ -2396,6 +2384,14 @@ export default function WalletPage() {
                   </div>
                 );
               })()}
+            </div>
+
+            {/* Position Intelligence (per-coin exposure) + Trade Timeline —
+                placed under the chart so the page reads metrics → chart →
+                detail top-to-bottom, keeping the chart high on the page. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <PositionExposure positions={data?.live?.positions ?? []} />
+              <TradeTimeline closedPositions={closedPositions} />
             </div>
 
             {/* Positions panel — full width below the chart with
