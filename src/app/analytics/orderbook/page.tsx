@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { CoinPicker } from '@/components/CoinPicker';
 import { ChartFrame } from '@/components/ChartFrame';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 // ----------------------------------------------------------------------------
 // Constants & helpers
@@ -447,6 +448,9 @@ function Ladder({
 
 export default function OrderBookPage() {
   const [coin, setCoin] = useState<Market>('BTC-USD');
+  // Refetch the book when the network changes (same coin can exist on both
+  // networks, so a coin change alone won't always trigger a refetch).
+  const { network } = useCurrentNetwork();
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -473,14 +477,14 @@ export default function OrderBookPage() {
     lastFetchedCoinRef.current = coin;
     setBook(null);
     fetchBook(coin, true);
-  }, [coin, fetchBook]);
+  }, [coin, fetchBook, network]);
 
   useEffect(() => {
     const id = setInterval(() => {
       fetchBook(coin, false);
     }, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [coin, fetchBook]);
+  }, [coin, fetchBook, network]);
 
   const depthData = useMemo(() => (book ? buildDepthSeries(book) : []), [book]);
   const stats = book?.stats;
