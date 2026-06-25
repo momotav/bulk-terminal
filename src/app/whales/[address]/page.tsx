@@ -406,13 +406,6 @@ function PerformanceCard({
   winRate: number | null;
   totalTrades: number;
 }) {
-  // Pad to 6 slots so the bar shape is stable regardless of trade count.
-  // Slot value: true = win, false = loss, null = no trade yet (placeholder).
-  const slots: (boolean | null)[] = [...recentWinLoss];
-  while (slots.length < 6) slots.push(null);
-  // We computed slots newest-first; rendering reverses to show
-  // newest-rightmost (timeline convention).
-
   const winRateColor =
     winRate === null ? 'text-[var(--text-tertiary)]' :
     winRate >= 0.6 ? 'text-bulk-green' :
@@ -427,22 +420,14 @@ function PerformanceCard({
       <div className={cn('text-2xl font-bold tabular-nums tracking-tight mb-2', winRateColor)}>
         {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'}
       </div>
-      {/* 6 bars rendered as a horizontal strip. We use h-1.5 to match
-          the bar height on neighbor cards (BarMetricCard) so they line
-          up visually across the strip. Width auto-flexes to fill the
-          card's content width via flex-1 on each slot. */}
-      <div className="flex items-center gap-1 mb-2">
-        {[...slots].reverse().map((slot, i) => (
-          <div
-            key={i}
-            className={cn(
-              'flex-1 h-1.5 rounded-full',
-              slot === true && 'bg-bulk-green',
-              slot === false && 'bg-bulk-red',
-              slot === null && 'bg-[var(--bg-secondary-20)]/40',
-            )}
-          />
-        ))}
+      {/* Single win-rate fill bar — matches the BarMetricCard treatment on
+          the neighbouring cards so the top strip reads as one coordinated
+          row rather than four different visual styles. */}
+      <div className="h-1.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-2">
+        <div
+          className={cn('h-full rounded-full', winRate !== null && winRate < 0.4 ? 'bg-bulk-red' : 'bg-bulk-green')}
+          style={{ width: `${Math.round((winRate ?? 0) * 100)}%` }}
+        />
       </div>
       <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
         {winRate !== null ? `${(winRate * 100).toFixed(0)}% Win Rate` : 'N/A Win Rate'} · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
@@ -695,7 +680,7 @@ function HeatmapCell({
 function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   if (closedPositions.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
         <div>
           <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>No trade history yet</p>
@@ -730,7 +715,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   // empty state rather than rendering a blank grid from Infinity bounds.
   if (dayBuckets.size === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
         <div>
           <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>No dated trade history</p>
@@ -812,7 +797,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   }
 
   return (
-    <div className="flex-1 p-4 min-h-[300px]">
+    <div className="flex-1 p-4 min-h-[420px]">
       {/* Summary strip — gives context for the heatmap below. */}
       <div className="flex items-center gap-6 mb-4 text-xs flex-wrap">
         <div>
@@ -908,7 +893,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
 // Shared empty state for the chart-body views.
 function ChartEmpty({ label }: { label: string }) {
   return (
-    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
       <div>
         <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
         <p>{label}</p>
@@ -930,7 +915,7 @@ function DrawdownChart({ history }: { history: WalletData['history'] }) {
   }, [history]);
   if (!history.length) return <ChartEmpty label="No history data yet" />;
   return (
-    <div className="flex-1 p-4 min-h-[300px]">
+    <div className="flex-1 p-4 min-h-[420px]">
       <ChartFrame title="Drawdown" className="h-full" yLabel="Drawdown (USD)">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
@@ -941,8 +926,15 @@ function DrawdownChart({ history }: { history: WalletData['history'] }) {
               </linearGradient>
             </defs>
             <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
-            <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
-            <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }} labelFormatter={(ts) => new Date(ts).toLocaleDateString()} formatter={(v: number) => [`-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']} />
+            <YAxis tickFormatter={(v) => (v === 0 ? '$0' : `-$${formatCompact(Math.abs(v))}`)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} domain={[(min: number) => (min < 0 ? min * 1.1 : -1), 0]} />
+            <Tooltip
+              cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
+              contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+              labelStyle={{ color: 'var(--text-secondary)' }}
+              itemStyle={{ color: 'var(--text-primary)' }}
+              labelFormatter={(ts) => new Date(ts).toLocaleDateString()}
+              formatter={(v: number) => [Math.abs(v) < 0.005 ? '$0.00' : `-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']}
+            />
             <Area type="monotone" dataKey="dd" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" />
           </AreaChart>
         </ResponsiveContainer>
@@ -958,13 +950,20 @@ function PerTradeChart({ closedPositions }: { closedPositions: ClosedPosition[] 
   [closedPositions]);
   if (!data.length) return <ChartEmpty label="No closed trades yet" />;
   return (
-    <div className="flex-1 p-4 min-h-[300px]">
+    <div className="flex-1 p-4 min-h-[420px]">
       <ChartFrame title="Per-Trade PnL" className="h-full" yLabel="Trade PnL (USD)">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <XAxis dataKey="i" tick={false} axisLine={{ stroke: 'var(--border-color)' }} />
             <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
-            <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }} labelFormatter={() => ''} formatter={(v: number) => [`${v >= 0 ? '+' : '-'}$${formatNumber(Math.abs(v), 2)}`, 'Trade PnL']} />
+            <Tooltip
+              cursor={{ fill: 'var(--text-tertiary)', fillOpacity: 0.1 }}
+              contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+              labelStyle={{ color: 'var(--text-secondary)' }}
+              itemStyle={{ color: 'var(--text-primary)' }}
+              labelFormatter={() => ''}
+              formatter={(v: number) => [`${v >= 0 ? '+' : '-'}$${formatNumber(Math.abs(v), 2)}`, 'Trade PnL']}
+            />
             <ReferenceLine y={0} stroke="var(--border-color)" />
             <Bar dataKey="v" radius={[2, 2, 0, 0]}>
               {data.map((d, i) => <Cell key={i} fill={d.v >= 0 ? '#22c55e' : '#ef4444'} />)}
@@ -998,33 +997,47 @@ function PositionExposure({ positions }: { positions: NonNullable<WalletData['li
   }, [positions]);
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">Position Intelligence</div>
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 h-full flex flex-col">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-4">Position Intelligence</div>
       {intel ? (
-        <div className="flex items-center gap-4">
-          {(() => {
-            let acc = 0;
-            const stops = intel.coins.map((c) => { const f = acc * 100; acc += c.share; return `${c.color} ${f}% ${acc * 100}%`; }).join(', ');
-            return (
-              <div className="relative h-20 w-20 shrink-0">
-                <div className="h-full w-full rounded-full" style={{ background: `conic-gradient(${stops})` }} />
-                <div className="absolute inset-[22%] rounded-full bg-[var(--bg-muted)]" />
+        <div className="flex-1 flex flex-col justify-center gap-4">
+          <div className="flex items-center gap-5">
+            {(() => {
+              let acc = 0;
+              const stops = intel.coins.map((c) => { const f = acc * 100; acc += c.share; return `${c.color} ${f}% ${acc * 100}%`; }).join(', ');
+              return (
+                <div className="relative h-24 w-24 shrink-0">
+                  <div className="h-full w-full rounded-full" style={{ background: `conic-gradient(${stops})` }} />
+                  <div className="absolute inset-[26%] rounded-full bg-[var(--bg-muted)] flex items-center justify-center">
+                    <span className="text-[10px] font-mono text-[var(--text-tertiary)]">{intel.coins.length}{intel.coins.length === 1 ? ' mkt' : ' mkts'}</span>
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Net Exposure</div>
+                <div className={cn('font-mono font-semibold text-base', intel.netSide === 'Long' ? 'text-bulk-green' : 'text-bulk-red')}>
+                  {(intel.netPct * 100).toFixed(0)}% {intel.netSide}
+                </div>
               </div>
-            );
-          })()}
-          <div className="flex-1 space-y-2">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Net Exposure</div>
-              <div className={cn('font-mono font-semibold text-sm', intel.netSide === 'Long' ? 'text-bulk-green' : 'text-bulk-red')}>
-                {(intel.netPct * 100).toFixed(0)}% {intel.netSide}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Concentration</div>
+                <div className="font-mono font-semibold text-base text-[var(--text-primary)]">{(intel.concentration * 100).toFixed(0)}%</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{intel.coins[0]?.coin}</div>
               </div>
             </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Concentration</div>
-              <div className="font-mono font-semibold text-sm text-[var(--text-primary)]">{(intel.concentration * 100).toFixed(0)}% {intel.coins[0]?.coin}</div>
+          </div>
+
+          {/* Stacked exposure bar — fills the card width and reads at a glance. */}
+          <div>
+            <div className="flex h-2.5 w-full overflow-hidden rounded-full">
+              {intel.coins.map((c) => (
+                <div key={c.coin} style={{ width: `${c.share * 100}%`, background: c.color }} title={`${c.coin} ${(c.share * 100).toFixed(0)}%`} />
+              ))}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
-              {intel.coins.slice(0, 4).map((c) => (
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {intel.coins.slice(0, 5).map((c) => (
                 <span key={c.coin} className="inline-flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                   <span className="h-2 w-2 rounded-sm" style={{ background: c.color }} />{c.coin} {(c.share * 100).toFixed(0)}%
                 </span>
@@ -1032,7 +1045,7 @@ function PositionExposure({ positions }: { positions: NonNullable<WalletData['li
             </div>
           </div>
         </div>
-      ) : <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">No open positions</div>}
+      ) : <div className="flex-1 flex items-center justify-center py-6 text-center text-xs text-[var(--text-tertiary)]">No open positions</div>}
     </div>
   );
 }
@@ -2018,14 +2031,14 @@ export default function WalletPage() {
                       }
                     />
                     <OverviewRow
-                      label="Sharpe"
-                      value={analysisStats.sharpe !== null ? analysisStats.sharpe.toFixed(2) : '—'}
-                      tone={
-                        analysisStats.sharpe === null ? 'neutral'
-                          : analysisStats.sharpe >= 1 ? 'green'
-                          : analysisStats.sharpe < 0 ? 'red'
-                          : 'neutral'
-                      }
+                      label="Profit Factor"
+                      value={(() => {
+                        const gp = closedPositions.filter((p) => p.realizedPnl > 0).reduce((s, p) => s + p.realizedPnl, 0);
+                        const gl = Math.abs(closedPositions.filter((p) => p.realizedPnl < 0).reduce((s, p) => s + p.realizedPnl, 0));
+                        if (gp === 0 && gl === 0) return '—';
+                        return gl > 0 ? (gp / gl).toFixed(2) : '∞';
+                      })()}
+                      tone="neutral"
                     />
                   </div>
                 </div>
@@ -2229,7 +2242,7 @@ export default function WalletPage() {
               ) : chartView === 'trade' ? (
                 <PerTradeChart closedPositions={closedPositions} />
               ) : history.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+                <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
                   <div>
                     <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p>No history data yet</p>
@@ -2270,7 +2283,7 @@ export default function WalletPage() {
                 // hint instead of an empty chart.
                 if (chartData.length === 0) {
                   return (
-                    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+                    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
                       <div>
                         <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
                         <p>No trades in this range</p>
@@ -2281,7 +2294,7 @@ export default function WalletPage() {
                 }
 
                 return (
-                  <div className="flex-1 p-4 min-h-[300px]">
+                  <div className="flex-1 p-4 min-h-[420px]">
                     <ChartFrame title="PnL History" className="h-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData}>
