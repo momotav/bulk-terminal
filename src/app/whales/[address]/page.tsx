@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -17,13 +17,14 @@ import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { useStore } from '@/store';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, BarChart, Bar, Cell, ReferenceLine, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
 import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 import { ChartFrame } from '@/components/ChartFrame';
+import { getCoinColor } from '@/lib/coins';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -904,6 +905,171 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   );
 }
 
+// Shared empty state for the chart-body views.
+function ChartEmpty({ label }: { label: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
+      <div>
+        <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p>{label}</p>
+      </div>
+    </div>
+  );
+}
+
+// Drawdown of the cumulative-PnL curve (peak-to-current), from the same
+// derived `history` series the PnL line chart uses.
+function DrawdownChart({ history }: { history: WalletData['history'] }) {
+  const data = useMemo(() => {
+    let peak = -Infinity;
+    return history.map((h) => {
+      const cum = (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0);
+      peak = Math.max(peak, cum);
+      return { timestamp: h.timestamp, dd: cum - peak };
+    });
+  }, [history]);
+  if (!history.length) return <ChartEmpty label="No history data yet" />;
+  return (
+    <div className="flex-1 p-4 min-h-[300px]">
+      <ChartFrame title="Drawdown" className="h-full" yLabel="Drawdown (USD)">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ef4444" stopOpacity={0} />
+                <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
+            <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
+            <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }} labelFormatter={(ts) => new Date(ts).toLocaleDateString()} formatter={(v: number) => [`-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']} />
+            <Area type="monotone" dataKey="dd" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </ChartFrame>
+    </div>
+  );
+}
+
+// Per-trade realized PnL — one bar per closed position, chronological.
+function PerTradeChart({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+  const data = useMemo(() =>
+    [...closedPositions].sort((a, b) => a.closedAt - b.closedAt).map((p, i) => ({ i, v: p.realizedPnl })),
+  [closedPositions]);
+  if (!data.length) return <ChartEmpty label="No closed trades yet" />;
+  return (
+    <div className="flex-1 p-4 min-h-[300px]">
+      <ChartFrame title="Per-Trade PnL" className="h-full" yLabel="Trade PnL (USD)">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <XAxis dataKey="i" tick={false} axisLine={{ stroke: 'var(--border-color)' }} />
+            <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
+            <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }} labelFormatter={() => ''} formatter={(v: number) => [`${v >= 0 ? '+' : '-'}$${formatNumber(Math.abs(v), 2)}`, 'Trade PnL']} />
+            <ReferenceLine y={0} stroke="var(--border-color)" />
+            <Bar dataKey="v" radius={[2, 2, 0, 0]}>
+              {data.map((d, i) => <Cell key={i} fill={d.v >= 0 ? '#22c55e' : '#ef4444'} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartFrame>
+    </div>
+  );
+}
+
+// Position Intelligence: per-coin exposure donut + net long/short +
+// concentration. Computed from the wallet's live open positions.
+function PositionExposure({ positions }: { positions: NonNullable<WalletData['live']>['positions'] }) {
+  const intel = useMemo(() => {
+    if (!positions?.length) return null;
+    let long = 0, short = 0;
+    const byCoin = new Map<string, number>();
+    for (const p of positions) {
+      const n = Math.abs((p.size || 0) * (p.price || 0));
+      if ((p.size || 0) > 0) long += n; else short += n;
+      const c = p.symbol.replace(/-USD$/, '');
+      byCoin.set(c, (byCoin.get(c) || 0) + n);
+    }
+    const total = long + short;
+    if (total <= 0) return null;
+    const coins = [...byCoin.entries()]
+      .map(([coin, n]) => ({ coin, share: n / total, color: getCoinColor(coin) }))
+      .sort((a, b) => b.share - a.share);
+    return { coins, netSide: long >= short ? 'Long' : 'Short', netPct: Math.abs(long - short) / total, concentration: coins[0]?.share ?? 0 };
+  }, [positions]);
+
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">Position Intelligence</div>
+      {intel ? (
+        <div className="flex items-center gap-4">
+          {(() => {
+            let acc = 0;
+            const stops = intel.coins.map((c) => { const f = acc * 100; acc += c.share; return `${c.color} ${f}% ${acc * 100}%`; }).join(', ');
+            return (
+              <div className="relative h-20 w-20 shrink-0">
+                <div className="h-full w-full rounded-full" style={{ background: `conic-gradient(${stops})` }} />
+                <div className="absolute inset-[22%] rounded-full bg-[var(--bg-muted)]" />
+              </div>
+            );
+          })()}
+          <div className="flex-1 space-y-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Net Exposure</div>
+              <div className={cn('font-mono font-semibold text-sm', intel.netSide === 'Long' ? 'text-bulk-green' : 'text-bulk-red')}>
+                {(intel.netPct * 100).toFixed(0)}% {intel.netSide}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Concentration</div>
+              <div className="font-mono font-semibold text-sm text-[var(--text-primary)]">{(intel.concentration * 100).toFixed(0)}% {intel.coins[0]?.coin}</div>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+              {intel.coins.slice(0, 4).map((c) => (
+                <span key={c.coin} className="inline-flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: c.color }} />{c.coin} {(c.share * 100).toFixed(0)}%
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">No open positions</div>}
+    </div>
+  );
+}
+
+// Trade Timeline: recent closed positions rendered as plain-language events.
+function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+  const items = useMemo(() =>
+    [...closedPositions].sort((a, b) => b.closedAt - a.closedAt).slice(0, 8),
+  [closedPositions]);
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3 flex items-center gap-1.5">
+        <Clock className="w-3 h-3" /> Trade Timeline
+      </div>
+      {items.length ? (
+        <ol className="relative space-y-2.5 pl-4">
+          {items.map((p, i) => (
+            <li key={i} className="relative">
+              <span className="absolute -left-4 top-1.5 h-2 w-2 rounded-full" style={{ background: p.realizedPnl >= 0 ? '#22c55e' : '#ef4444' }} />
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--text-primary)]">Closed {p.symbol.replace(/-USD$/, '')} {p.side === 'short' ? 'Short' : 'Long'}</span>
+                <span className={cn('font-mono font-semibold tabular-nums', p.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red')}>
+                  {p.realizedPnl >= 0 ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
+                </span>
+              </div>
+              <div className="text-[10px] text-[var(--text-tertiary)]">
+                {new Date(p.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · held {formatDuration(p.closedAt - p.openedAt)}
+                {p.liquidated && ' · liquidated'}
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">No closed trades yet</div>}
+    </div>
+  );
+}
+
 export default function WalletPage() {
   const params = useParams();
   const router = useRouter();
@@ -959,7 +1125,7 @@ export default function WalletPage() {
   // day-by-day P&L heatmap calendar ('calendar'). Hyperdash signature
   // pattern — gives the user two complementary views of the same data
   // (continuous trend vs day-level resolution).
-  const [chartView, setChartView] = useState<'pnl' | 'calendar'>('pnl');
+  const [chartView, setChartView] = useState<'pnl' | 'calendar' | 'drawdown' | 'trade'>('pnl');
   // Time range filter for the PnL line chart. Affects what slice of
   // history is rendered. Default 'all' so users see the full curve on
   // first load; they can narrow to 24h/7d/30d for recent activity.
@@ -1958,6 +2124,12 @@ export default function WalletPage() {
               )}
             </div>
 
+            {/* Position Intelligence (per-coin exposure) + Trade Timeline. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+              <PositionExposure positions={data?.live?.positions ?? []} />
+              <TradeTimeline closedPositions={closedPositions} />
+            </div>
+
 
 
             {/* PnL chart — full width of the main column, prominent
@@ -1998,6 +2170,32 @@ export default function WalletPage() {
                     <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
                     Calendar
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartView('drawdown')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                      chartView === 'drawdown'
+                        ? 'bg-[var(--bg-secondary-20)]/40 text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <Activity className="w-3.5 h-3.5 text-red-400" />
+                    Drawdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartView('trade')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
+                      chartView === 'trade'
+                        ? 'bg-[var(--bg-secondary-20)]/40 text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                    Per-Trade
+                  </button>
                 </div>
 
                 {/* Right side: time range pills, only relevant for the
@@ -2026,6 +2224,10 @@ export default function WalletPage() {
 
               {chartView === 'calendar' ? (
                 <PnlCalendarHeatmap closedPositions={closedPositions} />
+              ) : chartView === 'drawdown' ? (
+                <DrawdownChart history={history} />
+              ) : chartView === 'trade' ? (
+                <PerTradeChart closedPositions={closedPositions} />
               ) : history.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[300px]">
                   <div>
