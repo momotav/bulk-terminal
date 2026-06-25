@@ -771,7 +771,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchVolumeData();
-  }, [volumeHours]);
+  }, [volumeHours, network]);
 
   // Fetch OI data - REAL HISTORICAL from ticker_snapshots (WebSocket collected)
   useEffect(() => {
@@ -790,7 +790,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchOiData();
-  }, [oiHours]);
+  }, [oiHours, network]);
 
   // Fetch funding data - REAL HISTORICAL from ticker_snapshots (WebSocket collected)
   useEffect(() => {
@@ -809,7 +809,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchFundingData();
-  }, [fundingHours]);
+  }, [fundingHours, network]);
 
   // Fetch liquidations data when timeframe changes
   useEffect(() => {
@@ -828,7 +828,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchLiquidationsData();
-  }, [liquidationsHours]);
+  }, [liquidationsHours, network]);
 
   // Fetch trades data when timeframe changes - from PostgreSQL database
   useEffect(() => {
@@ -847,7 +847,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchTradesData();
-  }, [tradesHours]);
+  }, [tradesHours, network]);
 
   // Fetch ADL data when timeframe changes
   useEffect(() => {
@@ -866,7 +866,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchAdlData();
-  }, [adlHours]);
+  }, [adlHours, network]);
 
   // Fetch Unique Traders by Coin
   useEffect(() => {
@@ -885,7 +885,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchData();
-  }, [uniqueTradersHours]);
+  }, [uniqueTradersHours, network]);
 
   // Fetch Daily Active Users
   useEffect(() => {
@@ -904,7 +904,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchData();
-  }, [dauHours]);
+  }, [dauHours, network]);
 
   // Fetch Cumulative New Users
   useEffect(() => {
@@ -923,7 +923,7 @@ export default function AnalyticsPage() {
     // Skip on initial mount — fetchInitialData already did this fetch.
     // Fire only when the user changes the timeframe, marked by the ref.
     if (hasInitiallyLoadedRef.current) fetchData();
-  }, [newUsersHours]);
+  }, [newUsersHours, network]);
 
   // Initial data fetch - REAL DATA ONLY
   useEffect(() => {
@@ -972,6 +972,15 @@ export default function AnalyticsPage() {
       }
     };
     fetchInitialData();
+  }, []);
+
+  // Refetch network-scoped SUMMARY data (stat cards + top users) when the
+  // network changes. The per-chart effects below handle their own charts
+  // (same path as a timeframe toggle), so this only covers what they don't.
+  useEffect(() => {
+    if (!hasInitiallyLoadedRef.current) return;
+    analytics.getStats().then(setStats).catch(e => console.error('stats refetch failed:', e));
+    leaderboard.getMostActive('all', 100).then(setTopUsers).catch(e => console.error('topUsers refetch failed:', e));
   }, [network]);
 
   // Slice data by range (for range slider)
