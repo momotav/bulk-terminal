@@ -699,7 +699,7 @@ export default function RiskPage() {
 
                 {volatilityData.length > 0 ? (
                   <div className="flex-1 min-h-0 relative" style={{ minHeight: 'var(--chart-h, 250px)' }}>
-                    <ChartFrame title="Volatility" className="h-full" yLabel="Volatility (%)" legend={volatilityCoins.filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
+                    <ChartFrame title="Volatility" className="h-full" yLabel="Volatility (bps)" legend={volatilityCoins.filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={volatilityData.map(row => {
                         // Normalize to {timestamp, coin1, coin2, ...} shape.
@@ -712,7 +712,8 @@ export default function RiskPage() {
                         const out: Record<string, unknown> = { timestamp: row.timestamp };
                         for (const coin of volatilityCoins) {
                           if (coin === OTHER_KEY) continue;
-                          if (typeof dict[coin] === 'number') out[coin] = dict[coin];
+                          // regime_vol is percent-scaled; ×100 → basis points.
+                          if (typeof dict[coin] === 'number') out[coin] = dict[coin] * 100;
                         }
                         return out;
                       })}>
@@ -727,7 +728,7 @@ export default function RiskPage() {
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
-                          tickFormatter={(v) => `${v}%`}
+                          tickFormatter={(v) => formatCompact(v)}
                         />
                         <Tooltip content={<ChartTooltip />} />
                         {volatilityCoins
