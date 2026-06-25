@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { Percent } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const FeeTierCard = ({ tier, isActive }: { tier: { thresholdVolume: number; make
 );
 
 export function FeeTiersWidget() {
+  const { network } = useCurrentNetwork();
   const [feeTiers, setFeeTiers] = useState<{
     tiers: { thresholdVolume: number; makerBps: number; takerBps: number }[];
     totalProtocolSettlement: number;
@@ -51,7 +53,7 @@ export function FeeTiersWidget() {
     // Refresh every 5 minutes
     const interval = setInterval(fetchFees, 300000);
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   return (
     <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
