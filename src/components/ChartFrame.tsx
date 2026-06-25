@@ -49,6 +49,10 @@ export function ChartFrame({
   const [busy, setBusy] = useState(false);
   // Watermark shift in px to center it over the plot: +x right, +y up.
   const [wm, setWm] = useState({ x: 0, y: 0 });
+  // Vertical lift (px) to move the axis labels from frame-center up to
+  // plot-center — the x-axis labels sit below the plot, so half their height
+  // is the offset. Same idea as the watermark's `xH/2` term.
+  const [axisLift, setAxisLift] = useState(0);
 
   const cssVar = (name: string, fallback: string) =>
     getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -74,6 +78,8 @@ export function ChartFrame({
 
     const xAxis = node.querySelector('.recharts-xAxis');
     const xH = xAxis ? xAxis.getBoundingClientRect().height : 0;
+
+    setAxisLift((prev) => (Math.abs(prev - xH / 2) > 0.5 ? xH / 2 : prev));
 
     // Center over the plot (x-axis labels sit below the plot, so half their
     // height lifts to true plot-center), then a small extra lift so the logo
@@ -309,7 +315,10 @@ export function ChartFrame({
             the captured node (shows in-app AND in the exported PNG). */}
         {yLabel && (
           <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
-            <span className="-rotate-90 whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide">
+            <span
+              className="whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide"
+              style={{ transform: `translateY(${-axisLift}px) rotate(-90deg)` }}
+            >
               {yLabel}
             </span>
           </div>
@@ -324,7 +333,10 @@ export function ChartFrame({
         {/* Right axis description (dual-axis charts). */}
         {yLabelRight && (
           <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
-            <span className="rotate-90 whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide">
+            <span
+              className="whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide"
+              style={{ transform: `translateY(${-axisLift}px) rotate(90deg)` }}
+            >
               {yLabelRight}
             </span>
           </div>
