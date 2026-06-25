@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Flame, Anchor, Activity, Crown, Medal } from 'lucide-react';
 import { leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useStore } from '@/store';
 import Link from 'next/link';
 
@@ -50,6 +51,7 @@ const typeConfig = {
 };
 
 export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: LeaderboardTableProps) {
+  const { network } = useCurrentNetwork();
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const { timeframe, setTimeframe } = useStore();
@@ -84,7 +86,7 @@ export function LeaderboardTable({ type, limit = 10, showTimeframe = true }: Lea
     };
 
     fetchData();
-  }, [type, timeframe, limit]);
+  }, [type, timeframe, limit, network]);
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Crown className="w-4 h-4 text-bulk-orange" />;
