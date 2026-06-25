@@ -66,6 +66,22 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   const { coins: allCoins, loading } = useAvailableCoins();
   const enabledSet = new Set(enabled);
 
+  // Self-heal on network switch: when the available-coin list changes (e.g.
+  // Devnet → Testnet), drop any selected coin that doesn't exist on the new
+  // network. Otherwise a devnet-only market like MINIMAX stays selected (and
+  // its dead series keeps rendering) after switching to testnet. Defaults and
+  // the "Others" aggregate are always valid, so they're never pruned. Keyed on
+  // the joined list so it only runs when the set actually changes, and guarded
+  // by `loading` so we never prune against a half-loaded (fallback) list.
+  const availKey = allCoins.join(',');
+  useEffect(() => {
+    if (loading) return;
+    const valid = new Set<string>([...allCoins, OTHER_KEY, ...DEFAULT_COINS]);
+    const pruned = enabled.filter((c) => valid.has(c));
+    if (pruned.length !== enabled.length) onChange(pruned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availKey, loading]);
+
   // Count coins toward the `maxCount` cap — Others and extra pills don't count.
   const coinCount = enabled.filter(c => c !== OTHER_KEY).length;
   const atCap = typeof maxCount === 'number' && coinCount >= maxCount;
