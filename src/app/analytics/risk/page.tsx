@@ -10,6 +10,7 @@ import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { ChartFrame } from '@/components/ChartFrame';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import {
@@ -311,6 +312,11 @@ export default function RiskPage() {
     aggregateRegime: number;
     markets: { symbol: string; regime: number; regimeDt: number; regimeVol: number; fairBookPx: number; markPrice: number }[];
   } | null>(null);
+  // Active network — included in fetch deps below so switching networks
+  // immediately refetches every chart with the new network's data (otherwise
+  // the chart keeps the old network's series until the timeframe is toggled).
+  const { network } = useCurrentNetwork();
+
   // Market Regime coin selection — capped at 4 via CoinSelector's maxCount so
   // the gauge grid stays visually manageable. Aggregate card + up to 4 coins
   // fits one row on desktop. The asset table below the gauges is filtered to
@@ -346,7 +352,7 @@ export default function RiskPage() {
     fetchRegime();
     const interval = setInterval(fetchRegime, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   // Fetch volatility chart
   useEffect(() => {
@@ -359,7 +365,7 @@ export default function RiskPage() {
       }
     };
     fetchVolatility();
-  }, [volatilityHours]);
+  }, [volatilityHours, network]);
 
   // Fetch fair spread chart
   useEffect(() => {
@@ -372,7 +378,7 @@ export default function RiskPage() {
       }
     };
     fetchFairSpread();
-  }, [fairSpreadHours, fairSpreadSymbol]);
+  }, [fairSpreadHours, fairSpreadSymbol, network]);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1000);
