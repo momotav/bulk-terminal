@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, Users, Flame, RefreshCw } from 'lucide-react';
 import { withNetwork } from '@/lib/network';
+import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 interface ExchangeStats {
   volume24h: number;
@@ -15,6 +16,7 @@ interface ExchangeStats {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
 
 export function ExchangeHealthStats() {
+  const { network } = useCurrentNetwork();
   const [stats, setStats] = useState<ExchangeStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function ExchangeHealthStats() {
     // Refresh every 30 seconds
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [network]);
 
   const formatNumber = (num: number | undefined | null): string => {
     if (num === undefined || num === null || isNaN(num)) return '$0.00';
