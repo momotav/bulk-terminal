@@ -1276,8 +1276,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setVolumeHours}
                 loading={chartLoading.volume}
                 isDragging={volumeDragging}
-                leftAxisLabel="Daily Volume (USD)"
-                rightAxisLabel="Cumulative Volume (USD)"
                 toggles={<CoinSelector
                   enabled={volumeCoins}
                   onChange={setVolumeCoins}
@@ -1293,7 +1291,7 @@ export default function AnalyticsPage() {
                 {volumeDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Total Volume" className="h-full" legend={[...orderedSeriesFor(volumeCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
+                      <ChartFrame title="Total Volume" className="h-full" yLabel="Daily Volume (USD)" yLabelRight="Cumulative Volume (USD)" legend={[...orderedSeriesFor(volumeCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={volumeDataFiltered} 
@@ -1361,13 +1359,12 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setOiHours}
                 loading={chartLoading.oi}
                 isDragging={oiDragging}
-                leftAxisLabel="Open Interest (USD)"
                 toggles={<CoinSelector enabled={oiCoins} onChange={setOiCoins} />}
               >
                 {oiChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Open Interest" className="h-full" legend={orderedSeriesFor(oiCoins).map(c => ({ label: c, color: getCoinColor(c) }))}>
+                      <ChartFrame title="Open Interest" className="h-full" yLabel="Open Interest (USD)" legend={orderedSeriesFor(oiCoins).map(c => ({ label: c, color: getCoinColor(c) }))}>
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart 
                           key={`oi-${oiAnimKey}`}
@@ -1441,13 +1438,12 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setFundingHours}
                 loading={chartLoading.funding}
                 isDragging={fundingDragging}
-                leftAxisLabel="Funding Rate (%)"
                 toggles={<CoinSelector enabled={fundingCoins} onChange={setFundingCoins} />}
               >
                 {fundingChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Funding Rate" className="h-full" legend={orderedSeriesFor(fundingCoins).filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
+                      <ChartFrame title="Funding Rate" className="h-full" yLabel="Funding Rate (%)" legend={orderedSeriesFor(fundingCoins).filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart 
                           key={`funding-${fundingAnimKey}`}
@@ -1521,8 +1517,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setLiquidationsHours}
                 loading={chartLoading.liquidations}
                 isDragging={liquidationsDragging}
-                leftAxisLabel="Daily Liquidations (USD)"
-                rightAxisLabel="Cumulative (USD)"
                 toggles={<CoinSelector
                   enabled={liquidationsCoins}
                   onChange={setLiquidationsCoins}
@@ -1538,7 +1532,7 @@ export default function AnalyticsPage() {
                 {liquidationsDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Liquidations" className="h-full" legend={[...orderedSeriesFor(liquidationsCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
+                      <ChartFrame title="Liquidations" className="h-full" yLabel="Daily Liquidations (USD)" yLabelRight="Cumulative (USD)" legend={[...orderedSeriesFor(liquidationsCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={liquidationsDataFiltered} 
@@ -1608,8 +1602,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setTradesHours}
                 loading={chartLoading.trades}
                 isDragging={tradesDragging}
-                leftAxisLabel="Daily Trades"
-                rightAxisLabel="Cumulative Trades"
                 toggles={<CoinSelector
                   enabled={tradesCoins}
                   onChange={setTradesCoins}
@@ -1625,7 +1617,7 @@ export default function AnalyticsPage() {
                 {tradesDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Number Of Trades" className="h-full" legend={[...orderedSeriesFor(tradesCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
+                      <ChartFrame title="Number Of Trades" className="h-full" yLabel="Daily Trades" yLabelRight="Cumulative Trades" legend={[...orderedSeriesFor(tradesCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={tradesDataFiltered} 
@@ -1688,8 +1680,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setAdlHours}
                 loading={chartLoading.adl}
                 isDragging={adlDragging}
-                leftAxisLabel="Daily ADL (USD)"
-                rightAxisLabel="Cumulative ADL (USD)"
                 toggles={<CoinSelector
                   enabled={adlCoins}
                   onChange={setAdlCoins}
@@ -1705,7 +1695,7 @@ export default function AnalyticsPage() {
                 {adlDataFull.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Auto-Deleveraging (ADL)" className="h-full" legend={[...orderedSeriesFor(adlCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
+                      <ChartFrame title="Auto-Deleveraging (ADL)" className="h-full" yLabel="Daily ADL (USD)" yLabelRight="Cumulative ADL (USD)" legend={[...orderedSeriesFor(adlCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           
@@ -1765,8 +1755,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setUniqueTradersHours}
                 loading={chartLoading.uniqueTraders}
                 isDragging={uniqueTradersDragging}
-                leftAxisLabel="Traders per Coin"
-                rightAxisLabel="Total Unique"
                 toggles={<CoinSelector
                   enabled={uniqueTradersCoins}
                   onChange={setUniqueTradersCoins}
@@ -1782,7 +1770,7 @@ export default function AnalyticsPage() {
                 {uniqueTradersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Unique Traders By Coin" className="h-full" legend={[...orderedSeriesFor(uniqueTradersCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Total', color: COLORS.total }]}>
+                      <ChartFrame title="Unique Traders By Coin" className="h-full" yLabel="Traders per Coin" yLabelRight="Total Unique" legend={[...orderedSeriesFor(uniqueTradersCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Total', color: COLORS.total }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`unique-traders-${uniqueTradersAnimKey}`}
@@ -1847,8 +1835,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setNewUsersHours}
                 loading={chartLoading.newUsers}
                 isDragging={newUsersDragging}
-                leftAxisLabel="Daily New Users"
-                rightAxisLabel="Cumulative"
                 toggles={<>
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
                     <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
@@ -1860,7 +1846,7 @@ export default function AnalyticsPage() {
                 {newUsersData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Cumulative New Users" className="h-full" legend={[{ label: 'New Users', color: COLORS.BTC }, { label: 'Cumulative', color: COLORS.cumulative }]}>
+                      <ChartFrame title="Cumulative New Users" className="h-full" yLabel="Daily New Users" yLabelRight="Cumulative" legend={[{ label: 'New Users', color: COLORS.BTC }, { label: 'Cumulative', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`new-users-${newUsersAnimKey}`}
@@ -1907,7 +1893,6 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setDauHours}
                 loading={chartLoading.dau}
                 isDragging={dauDragging}
-                leftAxisLabel="Active Users"
                 toggles={<>
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
                     <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
@@ -1918,7 +1903,7 @@ export default function AnalyticsPage() {
                 {dauData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Daily Active Users" className="h-full">
+                      <ChartFrame title="Daily Active Users" className="h-full" yLabel="Active Users">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           key={`dau-${dauAnimKey}`}
