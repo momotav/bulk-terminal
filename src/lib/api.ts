@@ -385,8 +385,12 @@ export interface RiskSurfaces {
   liveRegime: number;
   /** One entry per regime the market publishes a surface for. */
   surfaces: RiskSurfaceEntry[];
-  /** BULK's portfolio-margining correlation coefficients. Shape: [[[coinA, coinB], rho], ...]. */
-  corrs: Array<[[string, string], number]>;
+  /** BULK's portfolio-margining correlation coefficients.
+   *  Shape: [["COINA:COINB", rho], ...] — the pair is a single colon-joined
+   *  string (e.g. "BTC:ETH"), not a tuple. Upper-triangle only (each
+   *  unordered pair appears once). Same full matrix on every market's
+   *  response, so any one /risk-surfaces call carries all pairs. */
+  corrs: Array<[string, number]>;
 }
 
 // Helper to get auth token (for legacy auth only)
