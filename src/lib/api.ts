@@ -354,7 +354,8 @@ export interface OrderbookSnapshot {
 // buy vs sell sides. Each cell tells you:
 //   mmrO = maintenance margin rate for OPENING a new position at that size/lev
 //   mmrE = maintenance margin rate for an EXISTING position (usually looser)
-//   p    = portfolio margining factor (credit when hedging across markets)
+//   p    = regime time-decay factor. λ(t) = mmrE + (mmrO − mmrE)·p^t, where
+//          t = regimeDt (time elapsed in the current regime). t=0 ⇒ mmrO.
 //
 // regime is an integer in roughly [-12, +12]: negative = bearish stress,
 // 0 = neutral, positive = bullish stress. `liveRegime` tells you which one
