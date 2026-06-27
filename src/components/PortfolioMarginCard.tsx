@@ -99,7 +99,8 @@ export function PortfolioMarginCard() {
   ]);
   const [nextId, setNextId] = useState(3);
   const [collateral, setCollateral] = useState(25_000);
-  const [regime, setRegime] = useState(0);
+  const [regimeSel, setRegimeSel] = useState<number | 'live'>('live');
+  const [aggRegime, setAggRegime] = useState<number | null>(null);
   const [mode, setMode] = useState<'live' | 'strict'>('live');
 
   const [surfaces, setSurfaces] = useState<Record<string, RiskSurfaces | null>>({});
@@ -134,6 +135,7 @@ export function PortfolioMarginCard() {
         const m: Record<string, number> = {};
         for (const mk of d.markets) m[norm(mk.symbol)] = mk.regimeDt;
         setRegimeDts(m);
+        setAggRegime(d.aggregateRegime);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -165,7 +167,8 @@ export function PortfolioMarginCard() {
 
     // Per-position λ at portfolio leverage, then signed margins.
     const dtFor = (p: Position) => (mode === 'strict' ? 0 : (regimeDts[norm(p.asset)] ?? 0));
-    const lambdas = pos.map((p) => lookupLambda(surfaces[norm(p.asset)] ?? null, regime, p.notional, portLev, p.side, dtFor(p)));
+    const regimeFor = (p: Position) => (regimeSel === 'live' ? (surfaces[norm(p.asset)]?.liveRegime ?? 0) : regimeSel);
+    const lambdas = pos.map((p) => lookupLambda(surfaces[norm(p.asset)] ?? null, regimeFor(p), p.notional, portLev, p.side, dtFor(p)));
     const M = pos.map((p, i) => sign(p) * lambdas[i] * p.notional);
 
     let mpSq = 0;
@@ -187,7 +190,7 @@ export function PortfolioMarginCard() {
     const rows = pos.map((p, i) => ({ asset: norm(p.asset), side: p.side, notional: p.notional, lambda: lambdas[i], margin: Math.abs(M[i]) }));
 
     return { sumN, nEff, portLev, sumM, mp, hedgeDiscount, marginUsage, efficiency, pairs, rows };
-  }, [positions, collateral, regime, mode, surfaces, regimeDts, corrs]);
+  }, [positions, collateral, regimeSel, mode, surfaces, regimeDts, corrs]);
 
   const addPos = () => {
     setPositions((p) => [...p, { id: nextId, asset: 'SOL', side: 'long', notional: 50_000 }]);
@@ -237,10 +240,13 @@ export function PortfolioMarginCard() {
         <label className="block">
           <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Regime</span>
           <select
-            value={regime}
-            onChange={(e) => setRegime(Number(e.target.value))}
+            value={regimeSel === 'live' ? 'live' : String(regimeSel)}
+            onChange={(e) => setRegimeSel(e.target.value === 'live' ? 'live' : Number(e.target.value))}
             className="mt-1 w-full bg-[var(--bg-base)] border border-[var(--border-color)] rounded-md px-2.5 py-1.5 text-sm text-[var(--text-primary)] outline-none cursor-pointer"
           >
+            <option value="live">
+              Live · current{aggRegime !== null ? ` (${aggRegime >= 0 ? '+' : ''}${Math.round(aggRegime)})` : ''}
+            </option>
             {REGIMES.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.label}</option>)}
           </select>
         </label>
