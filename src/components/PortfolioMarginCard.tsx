@@ -249,22 +249,35 @@ export function PortfolioMarginCard() {
       {/* Positions */}
       <div className="space-y-2 mb-4">
         {positions.map((p) => (
-          <div key={p.id} className="flex items-center gap-2 bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg p-2">
-            <div className="w-[92px] shrink-0"><CoinPicker value={p.asset} onChange={(c) => update(p.id, { asset: c })} ariaLabel="Asset" /></div>
-            <div className="flex rounded-md border border-[var(--border-color)] overflow-hidden text-[11px] font-bold shrink-0">
-              <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1', p.side === 'long' ? 'bg-bulk-green/20 text-bulk-green' : 'text-[var(--text-tertiary)]')}>LONG</button>
-              <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1', p.side === 'short' ? 'bg-bulk-red/20 text-bulk-red' : 'text-[var(--text-tertiary)]')}>SHORT</button>
+          <div key={p.id} className="bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg p-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-[92px] shrink-0"><CoinPicker value={p.asset} onChange={(c) => update(p.id, { asset: c })} ariaLabel="Asset" /></div>
+              <div className="flex rounded-md border border-[var(--border-color)] overflow-hidden text-[11px] font-bold shrink-0">
+                <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1', p.side === 'long' ? 'bg-bulk-green/20 text-bulk-green' : 'text-[var(--text-tertiary)]')}>LONG</button>
+                <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1', p.side === 'short' ? 'bg-bulk-red/20 text-bulk-red' : 'text-[var(--text-tertiary)]')}>SHORT</button>
+              </div>
+              <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
+                <span className="text-[var(--text-tertiary)] text-sm">$</span>
+                <input
+                  type="text"
+                  value={p.notional.toLocaleString('en-US')}
+                  onChange={(e) => update(p.id, { notional: Number(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
+                  className="w-24 bg-transparent text-sm font-mono text-right text-[var(--text-primary)] outline-none min-w-0"
+                />
+              </div>
+              <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--text-tertiary)] hover:text-bulk-red transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
             </div>
-            <div className="flex-1 flex items-center gap-1 min-w-0">
-              <span className="text-[var(--text-tertiary)] text-sm">$</span>
-              <input
-                type="text"
-                value={p.notional.toLocaleString('en-US')}
-                onChange={(e) => update(p.id, { notional: Number(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
-                className="w-full bg-transparent text-sm font-mono text-[var(--text-primary)] outline-none min-w-0"
-              />
-            </div>
-            <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--text-tertiary)] hover:text-bulk-red transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+            {/* Drag to set notional — the bit everyone likes to play with. */}
+            <input
+              type="range"
+              min={10_000}
+              max={1_000_000}
+              step={10_000}
+              value={Math.min(1_000_000, Math.max(10_000, p.notional))}
+              onChange={(e) => update(p.id, { notional: Number(e.target.value) })}
+              className="w-full mt-2 h-1.5 cursor-pointer"
+              style={{ accentColor: p.side === 'long' ? '#22c55e' : '#ef4444' }}
+            />
           </div>
         ))}
         <button onClick={addPos} className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-[var(--border-color)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-base)] transition-colors">
