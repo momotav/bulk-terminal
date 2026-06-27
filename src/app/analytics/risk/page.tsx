@@ -13,6 +13,7 @@ import { ChartFrame } from '@/components/ChartFrame';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
+import { PortfolioMarginCard } from '@/components/PortfolioMarginCard';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -581,6 +582,12 @@ export default function RiskPage() {
                 regime mean for your margin?" — the natural follow-up
                 question after seeing the regime score. */}
             <MarginSurface />
+
+            {/* Row 1.6: Portfolio Margining explainer — full width.
+                Follows the margin surface ("what does one position cost?")
+                with "what does a HEDGE cost?" — the cross-asset netting that
+                the single-coin surface can't show on its own. */}
+            <PortfolioMarginCard />
 
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>
