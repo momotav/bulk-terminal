@@ -31,7 +31,10 @@ import { Layers } from 'lucide-react';
 // which we note in the footer.
 // ----------------------------------------------------------------------------
 
-const FALLBACK_MMR = 0.005; // 0.5% — BULK's documented <$250K maintenance tier.
+const FALLBACK_MMR = 0.02; // 2% — BULK's real base maintenance rate (from the
+                           // live surfaces; only used if a surface fails to load).
+const MAX_CREDIT = 0.7;    // BULK caps the portfolio-margin credit at 70% per docs,
+                           // so the netted requirement never drops below 30%.
 
 /** Read a representative maintenance-margin rate for a leg from its surface. */
 function legMmr(surf: RiskSurfaces | null, notional: number, side: 'long' | 'short'): number {
@@ -55,14 +58,17 @@ function legMmr(surf: RiskSurfaces | null, notional: number, side: 'long' | 'sho
   return cell?.mmrE ?? cell?.mmrO ?? FALLBACK_MMR;
 }
 
-/** Look up BULK's correlation coefficient for an unordered coin pair. */
+/** Look up BULK's correlation coefficient for an unordered coin pair.
+ *  corrs entries are ["COINA:COINB", rho] with bare coin names (no -USD). */
 function lookupRho(surf: RiskSurfaces | null, a: string, b: string): number | null {
   if (!surf?.corrs) return null;
-  const norm = (s: string) => s.replace(/-USD$/i, '').toUpperCase();
+  const norm = (s: string) => s.replace(/-USD$/i, '').trim().toUpperCase();
   const A = norm(a);
   const B = norm(b);
   if (A === B) return 1;
-  for (const [[x, y], r] of surf.corrs) {
+  for (const [pair, r] of surf.corrs) {
+    const [x, y] = String(pair).split(':');
+    if (x === undefined || y === undefined) continue;
     const X = norm(x);
     const Y = norm(y);
     if ((X === A && Y === B) || (X === B && Y === A)) return r;
@@ -112,7 +118,9 @@ export function PortfolioMarginCard() {
     const effNotional = Math.sqrt(
       longNotional ** 2 + shortNotional ** 2 - 2 * rho * longNotional * shortNotional,
     );
-    const nettingRatio = gross > 0 ? Math.min(1, effNotional / gross) : 1;
+    const nettingRatio = gross > 0
+      ? Math.max(1 - MAX_CREDIT, Math.min(1, effNotional / gross))
+      : 1;
     const bulkMargin = standardMargin * nettingRatio;
     const efficiency = bulkMargin > 0 ? standardMargin / bulkMargin : 0;
     const savedPct = standardMargin > 0 ? 1 - bulkMargin / standardMargin : 0;
@@ -178,9 +186,10 @@ export function PortfolioMarginCard() {
 
       {/* Honest footnote — on-brand for a transparent venue. */}
       <p className="text-[10px] text-[var(--text-tertiary)] mt-4 leading-relaxed">
-        Uses BULK&apos;s published per-asset maintenance rates and its live correlation coefficient.
-        Netting follows the standard portfolio-risk model; the exact on-chain requirement also reflects
-        the active volatility regime (see the margin surface above).
+        Uses BULK&apos;s live correlation coefficient and published per-asset maintenance rates.
+        Netting follows the standard portfolio-risk model, capped at BULK&apos;s documented 70% max
+        credit; the exact on-chain requirement also reflects the active volatility regime (see the
+        margin surface above).
       </p>
     </div>
   );
