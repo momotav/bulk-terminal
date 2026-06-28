@@ -630,7 +630,7 @@ function HeatmapCell({
   isWin: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const dateStr = date.toLocaleDateString(undefined, {
+  const dateStr = date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -778,7 +778,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
     if (firstDay.getMonth() !== lastMonth) {
       monthLabels.push({
         col,
-        label: firstDay.toLocaleDateString(undefined, { month: 'short' }),
+        label: firstDay.toLocaleDateString('en-US', { month: 'short' }),
       });
       lastMonth = firstDay.getMonth();
     }
@@ -904,7 +904,7 @@ function ChartEmpty({ label }: { label: string }) {
 
 // Drawdown of the cumulative-PnL curve (peak-to-current), from the same
 // derived `history` series the PnL line chart uses.
-function DrawdownChart({ history }: { history: WalletData['history'] }) {
+function DrawdownChart({ history, address }: { history: WalletData['history']; address?: string }) {
   const data = useMemo(() => {
     let peak = -Infinity;
     return history.map((h) => {
@@ -916,7 +916,7 @@ function DrawdownChart({ history }: { history: WalletData['history'] }) {
   if (!history.length) return <ChartEmpty label="No history data yet" />;
   return (
     <div className="flex-1 p-4 min-h-[420px]">
-      <ChartFrame title="Drawdown" className="h-full" yLabel="Drawdown (USD)">
+      <ChartFrame title="Drawdown" className="h-full" yLabel="Drawdown (USD)" walletAddress={address}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
@@ -925,14 +925,14 @@ function DrawdownChart({ history }: { history: WalletData['history'] }) {
                 <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
+            <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
             <YAxis tickFormatter={(v) => (v === 0 ? '$0' : `-$${formatCompact(Math.abs(v))}`)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} domain={[(min: number) => (min < 0 ? min * 1.1 : -1), 0]} />
             <Tooltip
               cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
               contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
               labelStyle={{ color: 'var(--text-secondary)' }}
               itemStyle={{ color: 'var(--text-primary)' }}
-              labelFormatter={(ts) => new Date(ts).toLocaleDateString()}
+              labelFormatter={(ts) => new Date(ts).toLocaleDateString('en-US')}
               formatter={(v: number) => [Math.abs(v) < 0.005 ? '$0.00' : `-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']}
             />
             <Area type="monotone" dataKey="dd" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" />
@@ -944,14 +944,14 @@ function DrawdownChart({ history }: { history: WalletData['history'] }) {
 }
 
 // Per-trade realized PnL — one bar per closed position, chronological.
-function PerTradeChart({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPosition[]; address?: string }) {
   const data = useMemo(() =>
     [...closedPositions].sort((a, b) => a.closedAt - b.closedAt).map((p, i) => ({ i, v: p.realizedPnl })),
   [closedPositions]);
   if (!data.length) return <ChartEmpty label="No closed trades yet" />;
   return (
     <div className="flex-1 p-4 min-h-[420px]">
-      <ChartFrame title="Per-Trade PnL" className="h-full" yLabel="Trade PnL (USD)">
+      <ChartFrame title="Per-Trade PnL" className="h-full" yLabel="Trade PnL (USD)" walletAddress={address}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <XAxis dataKey="i" tick={false} axisLine={{ stroke: 'var(--border-color)' }} />
@@ -1070,7 +1070,7 @@ function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] 
                 </span>
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)]">
-                {new Date(p.closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · held {formatDuration(p.closedAt - p.openedAt)}
+                {new Date(p.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · held {formatDuration(p.closedAt - p.openedAt)}
                 {p.liquidated && ' · liquidated'}
               </div>
             </li>
@@ -2270,9 +2270,9 @@ export default function WalletPage() {
               {chartView === 'calendar' ? (
                 <PnlCalendarHeatmap closedPositions={closedPositions} />
               ) : chartView === 'drawdown' ? (
-                <DrawdownChart history={history} />
+                <DrawdownChart history={history} address={address} />
               ) : chartView === 'trade' ? (
-                <PerTradeChart closedPositions={closedPositions} />
+                <PerTradeChart closedPositions={closedPositions} address={address} />
               ) : history.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
                   <div>
@@ -2327,7 +2327,7 @@ export default function WalletPage() {
 
                 return (
                   <div className="flex-1 p-4 min-h-[420px]">
-                    <ChartFrame title="PnL History" className="h-full">
+                    <ChartFrame title="PnL History" className="h-full" yLabel="Cumulative PnL (USD)" walletAddress={address}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData}>
                         <defs>
@@ -2350,8 +2350,8 @@ export default function WalletPage() {
                             const d = new Date(ts);
                             // 24h range: show hour:minute. Longer ranges: show date.
                             return chartRange === '24h'
-                              ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
-                              : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                              ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+                              : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                           }}
                           tick={{ fill: '#666', fontSize: 10 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
@@ -2365,7 +2365,7 @@ export default function WalletPage() {
                         <Tooltip
                           contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
                           labelStyle={{ color: 'var(--text-secondary)' }}
-                          labelFormatter={(ts) => new Date(ts).toLocaleString()}
+                          labelFormatter={(ts) => new Date(ts).toLocaleString('en-US')}
                           formatter={(value: number) => {
                             const color = value >= 0 ? '#22c55e' : '#ef4444';
                             return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
