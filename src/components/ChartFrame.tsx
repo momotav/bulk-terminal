@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Copy, Check } from 'lucide-react';
+import { Download, Copy, Check, Share2, X } from 'lucide-react';
 import { toCanvas } from 'html-to-image';
 
 interface ChartFrameProps {
@@ -18,6 +18,9 @@ interface ChartFrameProps {
   yLabel?: string;
   /** Vertical axis description on the right (e.g. "Cumulative Volume (USD)"). For dual-axis charts. */
   yLabelRight?: string;
+  /** When set, the toolbar shows a Share button that opens a preview modal with
+   *  a "show wallet" toggle; the wallet is composited into a footer on export. */
+  walletAddress?: string;
 }
 
 /**
@@ -43,10 +46,12 @@ export function ChartFrame({
   legend,
   yLabel,
   yLabelRight,
+  walletAddress,
 }: ChartFrameProps) {
   const captureRef = useRef<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // Watermark shift in px to center it over the plot: +x right, +y up.
   const [wm, setWm] = useState({ x: 0, y: 0 });
   // Vertical lift (px) to move the axis labels from frame-center up to
@@ -104,8 +109,9 @@ export function ChartFrame({
     };
   }, [measure]);
 
-  /** Rasterize the chart (with watermark), then composite a title bar on top. */
-  const buildCanvas = useCallback(async (): Promise<HTMLCanvasElement | null> => {
+  /** Rasterize the chart (with watermark), composite a title bar on top, and
+   *  optionally a wallet footer at the bottom (for share cards). */
+  const buildCanvas = useCallback(async (showWallet = false): Promise<HTMLCanvasElement | null> => {
     const node = captureRef.current;
     if (!node) return null;
 
@@ -129,106 +135,122 @@ export function ChartFrame({
       filter: (el) => !(el instanceof HTMLElement && el.dataset.noExport === 'true'),
     });
 
-    const hasLegend = !!legend && legend.length > 0;
-    if (!title && !hasLegend) return chart;
-
-    const padX = Math.round(18 * ratio);
-    const baseH = Math.round(38 * ratio);
-    const lh = Math.round(24 * ratio); // row height for title / legend rows
     const fontFamily = getComputedStyle(node).fontFamily || 'sans-serif';
-    const titleFont = `600 ${Math.round(15 * ratio)}px ${fontFamily}`;
-    const legendFont = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
-    const dotR = 4.5 * ratio;
-    const dotGap = 6 * ratio; // dot → its label
-    const itemGap = 16 * ratio; // between items
-    const gapAfterTitle = title ? Math.round(24 * ratio) : 0;
-    const resolveColor = (c: string) =>
-      c.startsWith('var(') ? cssVar(c.slice(4, -1).trim(), '#888888') : c;
+    const padX = Math.round(18 * ratio);
+    const hasLegend = !!legend && legend.length > 0;
 
-    const out = document.createElement('canvas');
-    const ctx = out.getContext('2d');
-    if (!ctx) return chart;
+    // --- Header (title + legend) over the chart, if either is present -------
+    let base: HTMLCanvasElement = chart;
+    if (title || hasLegend) {
+      const baseH = Math.round(38 * ratio);
+      const lh = Math.round(24 * ratio); // row height for title / legend rows
+      const titleFont = `600 ${Math.round(15 * ratio)}px ${fontFamily}`;
+      const legendFont = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
+      const dotR = 4.5 * ratio;
+      const dotGap = 6 * ratio; // dot → its label
+      const itemGap = 16 * ratio; // between items
+      const gapAfterTitle = title ? Math.round(24 * ratio) : 0;
+      const resolveColor = (c: string) =>
+        c.startsWith('var(') ? cssVar(c.slice(4, -1).trim(), '#888888') : c;
 
-    // --- Measure title + lay legend out into right-aligned rows ----------
-    ctx.font = titleFont;
-    const titleW = title ? ctx.measureText(title).width : 0;
-
-    ctx.font = legendFont;
-    const items = (legend ?? []).map((it) => ({
-      ...it,
-      w: dotR * 2 + dotGap + ctx.measureText(it.label).width,
-    }));
-
-    const rightEdge = chart.width - padX;
-    // Row 0 keeps clear of the title; later rows use the full width.
-    const leftBound = (rowIdx: number) => padX + (rowIdx === 0 ? titleW + gapAfterTitle : 0);
-
-    const rows: (typeof items)[] = [];
-    let cur: typeof items = [];
-    let curW = 0;
-    for (const it of items) {
-      const add = (cur.length ? itemGap : 0) + it.w;
-      const avail = rightEdge - leftBound(rows.length);
-      if (cur.length && curW + add > avail) {
-        rows.push(cur);
-        cur = [];
-        curW = 0;
-      }
-      cur.push(it);
-      curW += (cur.length > 1 ? itemGap : 0) + it.w;
-    }
-    if (cur.length) rows.push(cur);
-
-    const numRows = Math.max(1, rows.length);
-    const titleH = Math.max(baseH, Math.round(9 * ratio) * 2 + numRows * lh);
-
-    // --- Size the canvas and draw ---------------------------------------
-    out.width = chart.width;
-    out.height = chart.height + titleH;
-
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, out.width, out.height);
-
-    const contentH = numRows * lh;
-    const startY = Math.round((titleH - contentH) / 2);
-    const rowCenterY = (rowIdx: number) => startY + lh * rowIdx + lh / 2;
-
-    // Title — top-left, on the first row.
-    if (title) {
-      ctx.fillStyle = cssVar('--text-primary', '#ffffff');
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
-      ctx.font = titleFont;
-      ctx.fillText(title, padX, rowCenterY(0));
-    }
-
-    // Legend — each row right-aligned, stacked top→down.
-    if (hasLegend) {
-      ctx.font = legendFont;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
-      rows.forEach((row, r) => {
-        const rowW =
-          row.reduce((a, it) => a + it.w, 0) + itemGap * (row.length - 1);
-        let x = rightEdge - rowW;
-        const y = rowCenterY(r);
-        for (const it of row) {
-          ctx.beginPath();
-          ctx.fillStyle = resolveColor(it.color);
-          ctx.arc(x + dotR, y, dotR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
-          ctx.fillText(it.label, x + dotR * 2 + dotGap, y);
-          x += it.w + itemGap;
+      const out = document.createElement('canvas');
+      const ctx = out.getContext('2d');
+      if (ctx) {
+        ctx.font = titleFont;
+        const titleW = title ? ctx.measureText(title).width : 0;
+        ctx.font = legendFont;
+        const items = (legend ?? []).map((it) => ({
+          ...it,
+          w: dotR * 2 + dotGap + ctx.measureText(it.label).width,
+        }));
+        const rightEdge = chart.width - padX;
+        const leftBound = (rowIdx: number) => padX + (rowIdx === 0 ? titleW + gapAfterTitle : 0);
+        const rows: (typeof items)[] = [];
+        let cur: typeof items = [];
+        let curW = 0;
+        for (const it of items) {
+          const add = (cur.length ? itemGap : 0) + it.w;
+          const avail = rightEdge - leftBound(rows.length);
+          if (cur.length && curW + add > avail) { rows.push(cur); cur = []; curW = 0; }
+          cur.push(it);
+          curW += (cur.length > 1 ? itemGap : 0) + it.w;
         }
-      });
+        if (cur.length) rows.push(cur);
+        const numRows = Math.max(1, rows.length);
+        const titleH = Math.max(baseH, Math.round(9 * ratio) * 2 + numRows * lh);
+        out.width = chart.width;
+        out.height = chart.height + titleH;
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, out.width, out.height);
+        const contentH = numRows * lh;
+        const startY = Math.round((titleH - contentH) / 2);
+        const rowCenterY = (rowIdx: number) => startY + lh * rowIdx + lh / 2;
+        if (title) {
+          ctx.fillStyle = cssVar('--text-primary', '#ffffff');
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left';
+          ctx.font = titleFont;
+          ctx.fillText(title, padX, rowCenterY(0));
+        }
+        if (hasLegend) {
+          ctx.font = legendFont;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left';
+          rows.forEach((row, r) => {
+            const rowW = row.reduce((a, it) => a + it.w, 0) + itemGap * (row.length - 1);
+            let x = rightEdge - rowW;
+            const y = rowCenterY(r);
+            for (const it of row) {
+              ctx.beginPath();
+              ctx.fillStyle = resolveColor(it.color);
+              ctx.arc(x + dotR, y, dotR, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
+              ctx.fillText(it.label, x + dotR * 2 + dotGap, y);
+              x += it.w + itemGap;
+            }
+          });
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(chart, 0, titleH);
+        base = out;
+      }
     }
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(chart, 0, titleH);
-    return out;
-  }, [title, legend, measure]);
+    // --- Optional wallet footer (share cards) ------------------------------
+    if (showWallet && walletAddress) {
+      const footH = Math.round(40 * ratio);
+      const f = document.createElement('canvas');
+      f.width = base.width;
+      f.height = base.height + footH;
+      const fx = f.getContext('2d');
+      if (fx) {
+        fx.fillStyle = bg;
+        fx.fillRect(0, 0, f.width, f.height);
+        fx.drawImage(base, 0, 0);
+        fx.strokeStyle = cssVar('--border-color', '#2a2a2a');
+        fx.lineWidth = Math.max(1, ratio);
+        fx.beginPath();
+        fx.moveTo(0, base.height + ratio / 2);
+        fx.lineTo(f.width, base.height + ratio / 2);
+        fx.stroke();
+        fx.textBaseline = 'middle';
+        const fy = base.height + footH / 2;
+        const short = walletAddress.length > 14 ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : walletAddress;
+        fx.textAlign = 'left';
+        fx.font = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
+        fx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
+        fx.fillText(`wallet  ${short}`, padX, fy);
+        fx.textAlign = 'right';
+        fx.fillStyle = cssVar('--text-tertiary', '#888888');
+        fx.fillText('bulkstats.com', f.width - padX, fy);
+        return f;
+      }
+    }
+
+    return base;
+  }, [title, legend, measure, walletAddress]);
 
   const toBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
     new Promise((res) => canvas.toBlob(res, 'image/png'));
@@ -272,6 +294,16 @@ export function ChartFrame({
     <div className={`group relative ${className}`}>
       {/* Hover toolbar — outside the captured node, so never in the export. */}
       <div className="absolute top-1 right-1 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {walletAddress && (
+          <button
+            onClick={() => setShareOpen(true)}
+            disabled={busy}
+            title="Share"
+            className="p-1.5 rounded-md bg-[var(--bg-muted)] border border-[var(--border-color)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button
           onClick={copy}
           disabled={busy}
@@ -289,6 +321,15 @@ export function ChartFrame({
           <Download className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {shareOpen && walletAddress && (
+        <ChartShareModal
+          title={title}
+          walletAddress={walletAddress}
+          build={buildCanvas}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
 
       {/* Captured region: watermark (behind) + optional axis labels + chart. */}
       <div ref={captureRef} className="relative h-full flex">
@@ -341,6 +382,124 @@ export function ChartFrame({
             </span>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// ChartShareModal — preview-and-share popup. Shows the rendered card (built by
+// ChartFrame's buildCanvas), a "show wallet" toggle that re-composites the
+// footer, and Download / Copy / Share-on-X actions.
+// ----------------------------------------------------------------------------
+function ChartShareModal({
+  title, walletAddress, build, onClose,
+}: {
+  title?: string;
+  walletAddress: string;
+  build: (showWallet: boolean) => Promise<HTMLCanvasElement | null>;
+  onClose: () => void;
+}) {
+  const [showWallet, setShowWallet] = useState(true);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Rebuild the preview whenever the wallet toggle flips.
+  useEffect(() => {
+    let cancelled = false;
+    setPreview(null);
+    build(showWallet).then((cv) => {
+      if (cancelled || !cv) return;
+      setPreview(cv.toDataURL('image/png'));
+    });
+    return () => { cancelled = true; };
+  }, [showWallet, build]);
+
+  const fileName = `${(title || 'bulkstats-chart').replace(/\s+/g, '-').toLowerCase()}.png`;
+
+  const withBlob = async (fn: (blob: Blob) => void | Promise<void>) => {
+    setBusy(true);
+    try {
+      const cv = await build(showWallet);
+      if (!cv) return;
+      const blob = await new Promise<Blob | null>((r) => cv.toBlob(r, 'image/png'));
+      if (blob) await fn(blob);
+    } finally { setBusy(false); }
+  };
+
+  const doDownload = () => withBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  const doCopy = () => withBlob(async (blob) => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard image unsupported — ignore */ }
+  });
+
+  const doShareX = () => withBlob(async (blob) => {
+    // X can't accept an image via URL, so copy it for the user to paste, then
+    // open the composer with prefilled text.
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch { /* ignore */ }
+    const text = `${title || 'My BULK stats'} — via bulkstats.com`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
+          <span className="text-sm font-semibold text-[var(--text-primary)]">Share {title || 'chart'}</span>
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors" aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Preview */}
+        <div className="p-4">
+          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] overflow-hidden min-h-[160px] flex items-center justify-center">
+            {preview
+              ? <img src={preview} alt="Share preview" className="w-full h-auto block" />
+              : <span className="text-xs text-[var(--text-tertiary)] py-10">Rendering preview…</span>}
+          </div>
+
+          {/* Wallet toggle */}
+          <button
+            onClick={() => setShowWallet((v) => !v)}
+            className="mt-3 w-full flex items-center justify-between px-1 py-1.5"
+          >
+            <span className="text-sm text-[var(--text-secondary)]">Show wallet address</span>
+            <span className={`relative w-9 h-5 rounded-full transition-colors ${showWallet ? 'bg-[var(--accent)]' : 'bg-[var(--bg-secondary-20)]'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showWallet ? 'translate-x-4' : ''}`} />
+            </span>
+          </button>
+        </div>
+
+        {/* Actions */}
+        <div className="px-4 pb-4 grid grid-cols-3 gap-2">
+          <button onClick={doShareX} disabled={busy} className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] text-sm text-[var(--text-primary)] hover:bg-[var(--bg-muted)] transition-colors disabled:opacity-50">
+            <Share2 className="w-3.5 h-3.5" /> X
+          </button>
+          <button onClick={doCopy} disabled={busy} className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] text-sm text-[var(--text-primary)] hover:bg-[var(--bg-muted)] transition-colors disabled:opacity-50">
+            {copied ? <Check className="w-3.5 h-3.5 text-bulk-green" /> : <Copy className="w-3.5 h-3.5" />} Copy
+          </button>
+          <button onClick={doDownload} disabled={busy} className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-text)] text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+            <Download className="w-3.5 h-3.5" /> Save
+          </button>
+        </div>
       </div>
     </div>
   );
