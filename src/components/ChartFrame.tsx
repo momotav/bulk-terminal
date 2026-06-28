@@ -192,6 +192,16 @@ export function ChartFrame({
           ctx.font = titleFont;
           ctx.fillText(title, padX, rowCenterY(0));
         }
+        // Wallet — top-right of the header bar (share cards). Only when there's
+        // no legend competing for that space (profile charts have none).
+        if (showWallet && walletAddress && !hasLegend) {
+          const short = walletAddress.length > 14 ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : walletAddress;
+          ctx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'right';
+          ctx.font = legendFont;
+          ctx.fillText(short, chart.width - padX, rowCenterY(0));
+        }
         if (hasLegend) {
           ctx.font = legendFont;
           ctx.textBaseline = 'middle';
@@ -215,37 +225,6 @@ export function ChartFrame({
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(chart, 0, titleH);
         base = out;
-      }
-    }
-
-    // --- Optional wallet footer (share cards) ------------------------------
-    if (showWallet && walletAddress) {
-      const footH = Math.round(40 * ratio);
-      const f = document.createElement('canvas');
-      f.width = base.width;
-      f.height = base.height + footH;
-      const fx = f.getContext('2d');
-      if (fx) {
-        fx.fillStyle = bg;
-        fx.fillRect(0, 0, f.width, f.height);
-        fx.drawImage(base, 0, 0);
-        fx.strokeStyle = cssVar('--border-color', '#2a2a2a');
-        fx.lineWidth = Math.max(1, ratio);
-        fx.beginPath();
-        fx.moveTo(0, base.height + ratio / 2);
-        fx.lineTo(f.width, base.height + ratio / 2);
-        fx.stroke();
-        fx.textBaseline = 'middle';
-        const fy = base.height + footH / 2;
-        const short = walletAddress.length > 14 ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : walletAddress;
-        fx.textAlign = 'left';
-        fx.font = `500 ${Math.round(13 * ratio)}px ${fontFamily}`;
-        fx.fillStyle = cssVar('--text-secondary', '#aaaaaa');
-        fx.fillText(`wallet  ${short}`, padX, fy);
-        fx.textAlign = 'right';
-        fx.fillStyle = cssVar('--text-tertiary', '#888888');
-        fx.fillText('bulkstats.com', f.width - padX, fy);
-        return f;
       }
     }
 
