@@ -170,7 +170,7 @@ function StatCard({
   return (
     <div
       className={cn(
-        'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4',
+        'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4',
         // Anchor for the optional popover; cursor-help signals interactivity.
         Boolean(tooltip) && 'relative cursor-help',
       )}
@@ -293,7 +293,7 @@ function PlaceholderCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 opacity-60">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4 opacity-60">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         {label}
       </div>
@@ -413,7 +413,7 @@ function PerformanceCard({
     'text-bulk-red';
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         Performance
       </div>
@@ -484,7 +484,7 @@ function BarMetricCard({
     ? Math.max(0, Math.min(1, secondaryFillPct))
     : null;
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">
         {label}
       </div>
@@ -573,7 +573,7 @@ function AnalysisCard({
   ];
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3">
         Analysis
       </div>
@@ -997,7 +997,7 @@ function PositionExposure({ positions }: { positions: NonNullable<WalletData['li
   }, [positions]);
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 h-full flex flex-col">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4 h-full flex flex-col">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-4">Position Intelligence</div>
       {intel ? (
         <div className="flex-1 flex flex-col justify-center gap-4">
@@ -1054,7 +1054,7 @@ function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] 
     [...closedPositions].sort((a, b) => b.closedAt - a.closedAt).slice(0, 8),
   [closedPositions]);
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-3 flex items-center gap-1.5">
         <Clock className="w-3 h-3" /> Trade Timeline
       </div>
@@ -1779,7 +1779,7 @@ export default function WalletPage() {
         </Link>
 
         {error && !hasTrackedData ? (
-          <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-8 text-center">
+          <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-8 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-400 opacity-50" />
             <h2 className="text-xl font-bold mb-2">Wallet Not Found</h2>
             <p className="text-[var(--text-secondary)] mb-4">{error}</p>
@@ -1801,7 +1801,7 @@ export default function WalletPage() {
                 (mobile/tablet), so phones see a normal vertical scroll
                 with all the rail content at the top.
                 ────────────────────────────────────────────────────── */}
-            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 flex flex-col lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-5 flex flex-col lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
               {/* Card-style left rail matching Hyperdash's sidebar
                   treatment. Sticky on lg+ so the identity + stats stay in
                   view while the main column scrolls — this is what keeps
@@ -2212,7 +2212,7 @@ export default function WalletPage() {
                         : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                     )}
                   >
-                    <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                    <BarChart3 className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                     Calendar
                   </button>
                   <button
@@ -2448,7 +2448,7 @@ export default function WalletPage() {
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                       )}
                     >
-                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                       Recent Trades
                     </button>
                     {/* Liquidations tab — surfaces the riskHistory feed
@@ -2554,7 +2554,7 @@ export default function WalletPage() {
                               {/* Mark — colored to indicate live-data
                                   status. Blue accent stays consistent
                                   with the original card rendering. */}
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-blue-400">
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-primary)]">
                                 ${formatNumber(markPrice, 4)}
                               </td>
                               <td className="px-4 py-2.5 text-right">
