@@ -4,12 +4,13 @@
 // Staking analytics — native validator section (BulkSOL liquid section: TODO).
 //
 // Mainnet-only, like pre-deposit: plain fetch to the backend, no ?net scoping.
-// Data comes from services/stakingIndexer.ts via /api/staking/native/*.
+// Uses the same design system as the Pre-Deposit page (KpiCard, page-title,
+// bordered chart cards) so the two read as one product.
 // ----------------------------------------------------------------------------
 
 import { useEffect, useState } from 'react';
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Coins, Users, Percent, TrendingUp, Loader2 } from 'lucide-react';
+import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
 
@@ -49,7 +50,7 @@ export default function StakingPage() {
           fetch(`${API_URL}/api/staking/native/history`).then((r) => r.json()),
         ]);
         if (cancelled) return;
-        setSummary(s);
+        setSummary(s && !s.error ? s : null);
         setHistory(Array.isArray(h) ? h : []);
       } catch {
         /* leave empty on failure */
@@ -60,96 +61,87 @@ export default function StakingPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const net = (summary?.activating ?? 0) - (summary?.deactivating ?? 0);
+
   return (
-    <div className="space-y-4">
+    <main className="flex-1 w-full px-4 sm:px-6 py-6 space-y-5 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Staking</h1>
-        <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
-          Native delegation to the BULK validator on Solana mainnet.
-          {summary?.epoch != null && <span> · Epoch {summary.epoch}</span>}
-        </p>
+      <div className="flex items-center gap-3">
+        <Coins className="w-6 h-6 text-[var(--accent)]" />
+        <h1 className="page-title text-[var(--text-primary)]">Staking</h1>
       </div>
 
-      {/* Native section */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Coins className="w-4 h-4 text-[var(--accent)]" />
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Native Staking</h2>
+      {/* Status banner while the indexer hasn't produced a snapshot yet. */}
+      {!loading && !summary && (
+        <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
+          Staking indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
         </div>
+      )}
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi
-            label="Total Staked"
-            value={loading ? '—' : `${formatCompact(summary?.activeStake ?? 0)} SOL`}
-            caption={summary && (summary.activating > 0 || summary.deactivating > 0)
-              ? `+${formatCompact(summary.activating)} activating · −${formatCompact(summary.deactivating)} leaving`
-              : 'active stake'}
-            icon={<Coins className="w-3.5 h-3.5" />}
-            loading={loading}
-          />
-          <Kpi
-            label="Delegators"
-            value={loading ? '—' : formatNumber(summary?.delegatorCount ?? 0, 0)}
-            caption="stake accounts"
-            icon={<Users className="w-3.5 h-3.5" />}
-            loading={loading}
-          />
-          <Kpi
-            label="Commission"
-            value={loading ? '—' : `${summary?.commission ?? 0}%`}
-            caption="validator fee"
-            icon={<Percent className="w-3.5 h-3.5" />}
-            loading={loading}
-          />
-          <Kpi
-            label="APY"
-            value={loading ? '—' : summary?.apy != null ? `≈ ${summary.apy.toFixed(2)}%` : '—'}
-            caption="net of commission"
-            icon={<TrendingUp className="w-3.5 h-3.5" />}
-            loading={loading}
-          />
+      <div className="flex items-center gap-2">
+        <Coins className="w-4 h-4 text-[var(--accent)]" />
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+          Native Staking
+          {summary?.epoch != null && (
+            <span className="text-[var(--text-tertiary)] font-normal"> · Epoch {summary.epoch}</span>
+          )}
+        </h2>
+      </div>
+
+      {/* KPI band — Total Staked is the hero. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <KpiCard label="Total Staked" value={summary ? `${formatCompact(summary.activeStake)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
+        <KpiCard label="APY" value={summary?.apy != null ? `≈ ${summary.apy.toFixed(2)}%` : '—'} color="var(--bids)" loading={loading} icon={TrendingUp} />
+        <KpiCard label="Delegators" value={summary ? summary.delegatorCount.toLocaleString() : '—'} color="#60a5fa" loading={loading} icon={Users} />
+        <KpiCard label="Commission" value={summary ? `${summary.commission}%` : '—'} color="#c084fc" loading={loading} icon={Percent} />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <KpiCard label="Activating" value={summary ? `${formatCompact(summary.activating)} SOL` : '—'} color="var(--bids)" small loading={loading} icon={ArrowUpRight} />
+        <KpiCard label="Deactivating" value={summary ? `${formatCompact(summary.deactivating)} SOL` : '—'} color="var(--asks)" small loading={loading} icon={ArrowDownRight} />
+        <KpiCard label="Net Epoch Flow" value={summary ? `${net >= 0 ? '+' : '−'}${formatCompact(Math.abs(net))} SOL` : '—'} color={net >= 0 ? 'var(--bids)' : 'var(--asks)'} small loading={loading} />
+        <KpiCard label="Epoch" value={summary?.epoch != null ? `#${summary.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
+      </div>
+
+      {/* Stake-over-time chart */}
+      <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">Staked SOL by Epoch</h2>
         </div>
-
-        {/* Stake over time */}
-        <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
-          <div className="h-[340px]">
+        <div className="h-[320px]">
+          {history.length > 1 ? (
             <ChartFrame title="Staked SOL by Epoch" className="h-full" yLabel="Active Stake (SOL)">
-              {history.length > 1 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={history} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
-                    <defs>
-                      <linearGradient id="stakeGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="epoch" tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} tickFormatter={(e) => `#${e}`} />
-                    <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
-                    <Tooltip
-                      cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
-                      contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                      labelStyle={{ color: 'var(--text-secondary)' }}
-                      itemStyle={{ color: 'var(--text-primary)' }}
-                      labelFormatter={(e) => `Epoch ${e}`}
-                      formatter={(v: number) => [`${formatNumber(v, 0)} SOL`, 'Active Stake']}
-                    />
-                    <Area type="monotone" dataKey="activeStake" stroke="var(--accent)" strokeWidth={2} fill="url(#stakeGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-center text-xs text-[var(--text-tertiary)]">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'History builds up as the indexer records each epoch.'}
-                </div>
-              )}
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={history} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
+                  <defs>
+                    <linearGradient id="stakeGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="epoch" tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} tickFormatter={(e) => `#${e}`} />
+                  <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
+                  <Tooltip
+                    cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
+                    contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                    labelStyle={{ color: 'var(--text-secondary)' }}
+                    itemStyle={{ color: 'var(--text-primary)' }}
+                    labelFormatter={(e) => `Epoch ${e}`}
+                    formatter={(v: number) => [`${formatNumber(v, 0)} SOL`, 'Active Stake']}
+                  />
+                  <Area type="monotone" dataKey="activeStake" stroke="var(--accent)" strokeWidth={2} fill="url(#stakeGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </ChartFrame>
-          </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
+              {loading ? 'Loading…' : 'History builds up as the indexer records each epoch.'}
+            </div>
+          )}
         </div>
-      </section>
+      </div>
 
-      {/* BulkSOL placeholder — next build step */}
-      <section className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4 opacity-70">
+      {/* BulkSOL — next build step */}
+      <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 opacity-70">
         <div className="flex items-center gap-2 mb-1">
           <Coins className="w-4 h-4 text-[var(--text-tertiary)]" />
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">BulkSOL (Liquid Staking)</h2>
@@ -157,27 +149,37 @@ export default function StakingPage() {
         <p className="text-xs text-[var(--text-tertiary)]">
           Supply, SOL backing, exchange rate and holders — coming next.
         </p>
-      </section>
-    </div>
+      </div>
+    </main>
   );
 }
 
-function Kpi({ label, value, caption, icon, loading }: {
-  label: string;
-  value: string;
-  caption: string;
-  icon: React.ReactNode;
-  loading?: boolean;
+// Copied verbatim from the Pre-Deposit page so both pages share one KPI look:
+// accent side-bar, colored value, uppercase tracked label, optional icon.
+function KpiCard({
+  label, value, color, hero, small, loading, icon: Icon,
+}: {
+  label: string; value: string; color: string;
+  hero?: boolean; small?: boolean; loading?: boolean;
+  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 }) {
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl p-4">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1.5">
-        <span className="text-[var(--text-tertiary)]">{icon}</span>{label}
+    <div className="relative overflow-hidden bg-transparent border border-[var(--border-color)] rounded-lg pl-4 pr-3 py-3.5 hover:border-[var(--border-secondary)] transition-colors">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: color, opacity: hero ? 1 : 0.55 }} />
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {Icon && <Icon className="w-3.5 h-3.5" style={{ color }} />}
+        <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-[0.12em] font-medium">{label}</span>
       </div>
-      <div className="text-xl font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" /> : value}
-      </div>
-      <div className="text-[10px] text-[var(--text-tertiary)] mt-1 truncate">{caption}</div>
+      {loading ? (
+        <div className="h-7 w-24 bg-[var(--bg-secondary-20)] rounded animate-pulse" />
+      ) : (
+        <p
+          className={`${hero ? 'text-[26px]' : small ? 'text-xl' : 'text-2xl'} font-bold tabular-nums tracking-tight leading-none`}
+          style={{ color: color === 'var(--text-secondary)' ? 'var(--text-primary)' : color }}
+        >
+          {value}
+        </p>
+      )}
     </div>
   );
 }
