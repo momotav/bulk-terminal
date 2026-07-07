@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Flame, Gauge, BookOpen, Landmark } from 'lucide-react';
+import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins } from 'lucide-react';
 
 const menuItems = [
   {
@@ -30,6 +30,11 @@ const menuItems = [
     name: 'Pre-Deposit',
     href: '/analytics/predeposit',
     icon: Landmark,
+  },
+  {
+    name: 'Staking',
+    href: '/analytics/staking',
+    icon: Coins,
   },
 ];
 
