@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Droplet, Layers, Repeat } from 'lucide-react';
+import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Droplet, Layers, Repeat, Loader2 } from 'lucide-react';
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
 
@@ -33,18 +33,19 @@ export default function StakingPage() {
   const [validators, setValidators] = useState<{ voteAccount: string; activeStake: number; share: number }[]>([]);
   const [flows, setFlows] = useState<{ t: number; mint: number; burn: number; net: number; supply: number; cumWallets: number }[]>([]);
   const [holders, setHolders] = useState<{ holders: number; total: number; distribution: { label: string; holders: number; total: number }[]; concentration: { count: number; amount: number; share: number }[] } | null>(null);
+  const [status, setStatus] = useState<{ configured: boolean; backfillComplete: boolean; totalIndexed: number; earliestDay: string | null; days: number; progress: number } | null>(null);
   const [range, setRange] = useState<Range>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const get = (p: string) => fetch(`${API_URL}${p}`).then((r) => r.json()).catch(() => null);
-    (async () => {
-      const [ns, nh, bs, bh, vd, fl, ho] = await Promise.all([
+    const load = async () => {
+      const [ns, nh, bs, bh, vd, fl, ho, stt] = await Promise.all([
         get('/api/staking/native/summary'), get('/api/staking/native/history'),
         get('/api/staking/bulksol/summary'), get('/api/staking/bulksol/history'),
         get('/api/staking/bulksol/validators'), get('/api/staking/bulksol/flows'),
-        get('/api/staking/bulksol/holders'),
+        get('/api/staking/bulksol/holders'), get('/api/staking/bulksol/status'),
       ]);
       if (cancelled) return;
       setNative(ns && !ns.error ? ns : null);
@@ -54,9 +55,13 @@ export default function StakingPage() {
       setValidators(vd && Array.isArray(vd.validators) ? vd.validators : []);
       setFlows(Array.isArray(fl) ? fl : []);
       setHolders(ho && !ho.error ? ho : null);
+      setStatus(stt && !stt.error ? stt : null);
       setLoading(false);
-    })();
-    return () => { cancelled = true; };
+    };
+    load();
+    // While the backfill is running, refresh every 30s so progress ticks up.
+    const iv = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
   const nativeTvl = native?.activeStake ?? 0;
@@ -274,6 +279,33 @@ export default function StakingPage() {
               ));
             })()}
           </div>
+        </div>
+      )}
+
+      {/* Backfill progress — shows how far back the indexer has walked. */}
+      {status && status.configured && !status.backfillComplete && (
+        <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
+              Backfilling BulkSOL history from chain…
+            </div>
+            <span className="text-xs font-mono text-[var(--text-tertiary)] tabular-nums">{Math.round(status.progress * 100)}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-[var(--bg-secondary-20)] overflow-hidden">
+            <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${Math.max(2, status.progress * 100)}%` }} />
+          </div>
+          <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+            {status.totalIndexed.toLocaleString()} transactions indexed
+            {status.earliestDay && <> · reached back to {new Date(status.earliestDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>}
+            {status.days > 0 && <> · {status.days} days of data</>}
+          </div>
+        </div>
+      )}
+      {status && status.backfillComplete && status.earliestDay && (
+        <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-bulk-green inline-block" />
+          BulkSOL history complete — {status.totalIndexed.toLocaleString()} txns since {new Date(status.earliestDay).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
         </div>
       )}
 
