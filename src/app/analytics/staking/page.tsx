@@ -34,6 +34,7 @@ export default function StakingPage() {
   const [flows, setFlows] = useState<{ t: number; mint: number; burn: number; net: number; supply: number; cumWallets: number }[]>([]);
   const [holders, setHolders] = useState<{ holders: number; total: number; distribution: { label: string; holders: number; total: number }[]; concentration: { count: number; amount: number; share: number }[] } | null>(null);
   const [status, setStatus] = useState<{ configured: boolean; backfillComplete: boolean; totalIndexed: number; earliestDay: string | null; days: number; progress: number } | null>(null);
+  const [nativeEpochs, setNativeEpochs] = useState<{ epoch: number; t: number; activeStake: number }[]>([]);
   const [range, setRange] = useState<Range>('all');
   const [loading, setLoading] = useState(true);
 
@@ -41,11 +42,12 @@ export default function StakingPage() {
     let cancelled = false;
     const get = (p: string) => fetch(`${API_URL}${p}`).then((r) => r.json()).catch(() => null);
     const load = async () => {
-      const [ns, nh, bs, bh, vd, fl, ho, stt] = await Promise.all([
+      const [ns, nh, bs, bh, vd, fl, ho, stt, ne] = await Promise.all([
         get('/api/staking/native/summary'), get('/api/staking/native/history'),
         get('/api/staking/bulksol/summary'), get('/api/staking/bulksol/history'),
         get('/api/staking/bulksol/validators'), get('/api/staking/bulksol/flows'),
         get('/api/staking/bulksol/holders'), get('/api/staking/bulksol/status'),
+        get('/api/staking/native/epochs'),
       ]);
       if (cancelled) return;
       setNative(ns && !ns.error ? ns : null);
@@ -56,6 +58,7 @@ export default function StakingPage() {
       setFlows(Array.isArray(fl) ? fl : []);
       setHolders(ho && !ho.error ? ho : null);
       setStatus(stt && !stt.error ? stt : null);
+      setNativeEpochs(Array.isArray(ne) ? ne : []);
       setLoading(false);
     };
     load();
@@ -69,21 +72,59 @@ export default function StakingPage() {
   const totalTvl = nativeTvl + liquidTvl;
   const nativeShare = totalTvl > 0 ? nativeTvl / totalTvl : 0;
 
-  // Combine the two time-series into one native-vs-liquid dataset. Both rows
-  // are written in the same indexer run, so zipping by index aligns them.
+  // ---- All-time series merges ----------------------------------------------
+  const BULKSOL_LAUNCH = new Date('2025-10-29').getTime();
+
+  // Native stake: Stakewiz per-epoch history (all-time) + our live 20-min
+  // snapshots from deploy onward. Epoch points older than the first live
+  // point are prepended.
+  const mergedNative = useMemo(() => {
+    const liveStart = nativeHist.length ? Number(nativeHist[0].t) : Infinity;
+    const older = nativeEpochs
+      .filter((e) => e.t < liveStart)
+      .map((e) => ({ t: e.t, activeStake: e.activeStake }));
+    return [...older, ...nativeHist.map((p) => ({ t: Number(p.t), activeStake: Number(p.activeStake) || 0 }))];
+  }, [nativeEpochs, nativeHist]);
+
+  // Liquid SOL backing: real supply history (mint/burn indexer) × exchange
+  // rate interpolated linearly from 1.0 at launch to the current live rate —
+  // the pool rate only accrues staking rewards, so it moves smoothly and the
+  // estimate error is <1%. Only used once the backfill is COMPLETE (partial
+  // supply history is cumulative and would chart garbage). Live ts wins from
+  // deploy onward.
+  const mergedLiquid = useMemo(() => {
+    const liveStart = bulksolHist.length ? Number(bulksolHist[0].t) : Infinity;
+    const curRate = bulksol?.exchangeRate && bulksol.exchangeRate > 0 ? bulksol.exchangeRate : 1.0897;
+    const now = Date.now();
+    const rateAt = (t: number) => {
+      if (now <= BULKSOL_LAUNCH) return 1;
+      const f = Math.min(1, Math.max(0, (t - BULKSOL_LAUNCH) / (now - BULKSOL_LAUNCH)));
+      return 1 + (curRate - 1) * f;
+    };
+    const older = (status?.backfillComplete ? flows : [])
+      .filter((f) => f.t < liveStart && f.supply > 0)
+      .map((f) => ({ t: f.t, tvlSol: f.supply * rateAt(f.t) }));
+    return [...older, ...bulksolHist.map((p) => ({ t: Number(p.t), tvlSol: Number(p.tvlSol) || 0 }))];
+  }, [flows, bulksolHist, bulksol, status]);
+
+  // Combined TVL: union of both time axes, step-forward fill so each point
+  // carries the last known value of the other series.
   const combinedTvl = useMemo(() => {
-    const n = nativeHist.length, l = bulksolHist.length;
-    const len = Math.min(n, l);
+    if (!mergedNative.length && !mergedLiquid.length) return [] as { t: number; native: number; liquid: number }[];
+    const ts = Array.from(new Set([...mergedNative.map((p) => p.t), ...mergedLiquid.map((p) => p.t)])).sort((a, b) => a - b);
     const out: { t: number; native: number; liquid: number }[] = [];
-    for (let i = 0; i < len; i++) {
+    let ni = -1, li = -1;
+    for (const t of ts) {
+      while (ni + 1 < mergedNative.length && mergedNative[ni + 1].t <= t) ni++;
+      while (li + 1 < mergedLiquid.length && mergedLiquid[li + 1].t <= t) li++;
       out.push({
-        t: nativeHist[n - len + i].t,
-        native: Number(nativeHist[n - len + i].activeStake) || 0,
-        liquid: Number(bulksolHist[l - len + i].tvlSol) || 0,
+        t,
+        native: ni >= 0 ? mergedNative[ni].activeStake : 0,
+        liquid: li >= 0 ? mergedLiquid[li].tvlSol : 0,
       });
     }
     return out;
-  }, [nativeHist, bulksolHist]);
+  }, [mergedNative, mergedLiquid]);
 
   const net = (native?.activating ?? 0) - (native?.deactivating ?? 0);
 
@@ -160,6 +201,10 @@ export default function StakingPage() {
             </div>
           )}
         </div>
+        <p className="text-[10px] text-[var(--text-tertiary)] mt-2 leading-relaxed">
+          Pre-launch native stake from Stakewiz per-epoch data; liquid backing before deploy is real
+          BulkSOL supply × exchange rate interpolated from 1.00 at launch to the current live rate (est., &lt;1% error).
+        </p>
       </div>
 
       {/* ============================ NATIVE ============================ */}
@@ -184,7 +229,7 @@ export default function StakingPage() {
         <KpiCard label="Epoch" value={native?.epoch != null ? `#${native.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
-      <TimeChart title="Staked SOL" yLabel="Active Stake (SOL)" data={nativeHist} dataKey="activeStake" unit="SOL" range={range} setRange={setRange} loading={loading} />
+      <TimeChart title="Staked SOL" yLabel="Active Stake (SOL)" data={mergedNative} dataKey="activeStake" unit="SOL" range={range} setRange={setRange} loading={loading} />
 
       {/* ============================ BULKSOL ============================ */}
       <div className="flex items-center gap-2 pt-1">
@@ -208,7 +253,7 @@ export default function StakingPage() {
         <KpiCard label="Epoch" value={bulksol?.epoch != null ? `#${bulksol.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
-      <TimeChart title="SOL Backing" yLabel="SOL Backing" data={bulksolHist} dataKey="tvlSol" unit="SOL" range={range} setRange={setRange} loading={loading} />
+      <TimeChart title="SOL Backing" yLabel="SOL Backing" data={mergedLiquid} dataKey="tvlSol" unit="SOL" range={range} setRange={setRange} loading={loading} />
 
       {/* Validator Distribution — where the pool stakes its SOL */}
       {validators.length > 0 && (
