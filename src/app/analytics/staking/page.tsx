@@ -2,35 +2,35 @@
 
 // ----------------------------------------------------------------------------
 // Staking analytics — native validator + BulkSOL liquid staking.
-//
-// Mainnet-only, like pre-deposit: plain fetch, no ?net. Shares the Pre-Deposit
-// design system (KpiCard, page-title, bordered chart cards).
+// Mainnet-only (plain fetch, no ?net). Shares the Pre-Deposit design system.
+// Charts are time-series (a point every indexer run) with 7D/30D/ALL ranges.
 // ----------------------------------------------------------------------------
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Droplet, Layers, Repeat } from 'lucide-react';
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+type Range = '7d' | '30d' | 'all';
 
 interface NativeSummary {
   epoch: number | null; activeStake: number; delegatorCount: number; commission: number;
   activating: number; deactivating: number; apy: number | null;
 }
-interface NativePoint { epoch: number; activeStake: number; }
 interface BulkSolSummary {
   epoch: number | null; tvlSol: number; supply: number; exchangeRate: number;
   holders: number | null; validators: number | null; apy: number | null;
 }
-interface BulkSolPoint { epoch: number; tvlSol: number; exchangeRate: number; }
+interface TsPoint { t: number; [k: string]: number | null; }
 
 export default function StakingPage() {
   const [native, setNative] = useState<NativeSummary | null>(null);
-  const [nativeHist, setNativeHist] = useState<NativePoint[]>([]);
+  const [nativeHist, setNativeHist] = useState<TsPoint[]>([]);
   const [bulksol, setBulksol] = useState<BulkSolSummary | null>(null);
-  const [bulksolHist, setBulksolHist] = useState<BulkSolPoint[]>([]);
+  const [bulksolHist, setBulksolHist] = useState<TsPoint[]>([]);
+  const [range, setRange] = useState<Range>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function StakingPage() {
         <KpiCard label="Epoch" value={native?.epoch != null ? `#${native.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
-      <EpochChart title="Staked SOL by Epoch" yLabel="Active Stake (SOL)" data={nativeHist} dataKey="activeStake" unit="SOL" loading={loading} />
+      <TimeChart title="Staked SOL" yLabel="Active Stake (SOL)" data={nativeHist} dataKey="activeStake" unit="SOL" range={range} setRange={setRange} loading={loading} />
 
       {/* ============================ BULKSOL ============================ */}
       <div className="flex items-center gap-2 pt-1">
@@ -112,39 +112,62 @@ export default function StakingPage() {
         <KpiCard label="Epoch" value={bulksol?.epoch != null ? `#${bulksol.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
-      <EpochChart title="SOL Backing by Epoch" yLabel="SOL Backing" data={bulksolHist} dataKey="tvlSol" unit="SOL" loading={loading} />
+      <TimeChart title="SOL Backing" yLabel="SOL Backing" data={bulksolHist} dataKey="tvlSol" unit="SOL" range={range} setRange={setRange} loading={loading} />
     </main>
   );
 }
 
-// Bordered chart card matching the Pre-Deposit TVL card.
-function EpochChart({ title, yLabel, data, dataKey, unit, loading }: {
-  title: string; yLabel: string; data: any[]; dataKey: string; unit: string; loading?: boolean;
+// Time-series chart card with 7D/30D/ALL range tabs (matches Pre-Deposit).
+function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loading }: {
+  title: string; yLabel: string; data: TsPoint[]; dataKey: string; unit: string;
+  range: Range; setRange: (r: Range) => void; loading?: boolean;
 }) {
+  const sliced = useMemo(() => {
+    if (range === 'all' || data.length === 0) return data;
+    const days = range === '7d' ? 7 : 30;
+    const cutoff = Date.now() - days * 86_400_000;
+    return data.filter((d) => d.t >= cutoff);
+  }, [data, range]);
+
   return (
     <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
+        <div className="flex gap-1">
+          {(['7d', '30d', 'all'] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                range === r ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {r.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="h-[320px]">
-        {data.length > 1 ? (
+        {sliced.length > 1 ? (
           <ChartFrame title={title} className="h-full" yLabel={yLabel}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
+              <AreaChart data={sliced} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                 <defs>
                   <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
                     <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="epoch" tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} tickFormatter={(e) => `#${e}`} />
+                <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
+                  tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40}
+                  tickFormatter={(t) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
                 <Tooltip
                   cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
                   contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
                   labelStyle={{ color: 'var(--text-secondary)' }}
                   itemStyle={{ color: 'var(--text-primary)' }}
-                  labelFormatter={(e) => `Epoch ${e}`}
+                  labelFormatter={(t) => new Date(t as number).toLocaleString('en-US')}
                   formatter={(v: number) => [`${formatNumber(v, 0)} ${unit}`, yLabel]}
                 />
                 <Area type="monotone" dataKey={dataKey} stroke="var(--accent)" strokeWidth={2} fill={`url(#grad-${dataKey})`} />
@@ -153,7 +176,7 @@ function EpochChart({ title, yLabel, data, dataKey, unit, loading }: {
           </ChartFrame>
         ) : (
           <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-            {loading ? 'Loading…' : 'History builds up as the indexer records each epoch.'}
+            {loading ? 'Loading…' : 'Collecting data — the chart fills in as snapshots are recorded.'}
           </div>
         )}
       </div>
