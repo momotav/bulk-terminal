@@ -73,6 +73,12 @@
   --asks: #EF4A3C;
   --bids-secondary: #134A55;
   --asks-secondary: #6E1742;
+  /* Monochrome shade scale (defaults to the site amber; overridden per page) */
+  --shade-1: #FFD9A8;
+  --shade-2: #FFC57E;
+  --shade-3: #FFB457;
+  --shade-4: #D98A2E;
+  --shade-5: #8C5417;
   
   /* Muted colors */
   --muted-danger: rgba(239, 74, 60, 0.2);
@@ -538,19 +544,23 @@
   --accent: #00B481;          /* BULK green */
   --accent-text: #06231B;
   --accent-secondary: #134A3A;
+  --shade-1: #8FEBCB; --shade-2: #33CC9C; --shade-3: #00B481; --shade-4: #008A63; --shade-5: #0E5943;
 }
 .page-accent-purple {
   --accent: #A78BFA;          /* BULK purple */
   --accent-text: #1E1533;
   --accent-secondary: #4C3A78;
+  --shade-1: #DCCFFF; --shade-2: #BEA5FC; --shade-3: #A78BFA; --shade-4: #7E5CE0; --shade-5: #53389E;
 }
 .page-accent-orange {
   --accent: #FFB457;          /* BULK amber (site default, explicit for clarity) */
   --accent-text: #1B1A14;
   --accent-secondary: #6E3A17;
+  --shade-1: #FFD9A8; --shade-2: #FFC57E; --shade-3: #FFB457; --shade-4: #D98A2E; --shade-5: #8C5417;
 }
 .page-accent-blue {
   --accent: #60A5FA;          /* BULK blue */
   --accent-text: #0C1B2E;
   --accent-secondary: #1E3A5F;
+  --shade-1: #BDDBFE; --shade-2: #8AC0FC; --shade-3: #60A5FA; --shade-4: #3B7BD4; --shade-5: #24549B;
 }
