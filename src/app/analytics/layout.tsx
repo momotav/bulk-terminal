@@ -45,8 +45,19 @@ export default function AnalyticsLayout({
 }) {
   const pathname = usePathname();
 
+  // ASXN-style per-page theming: each analytics page gets its own accent hue.
+  // Applied on the layout wrapper so the sidebar's active pill tints too.
+  // Liquidations intentionally keeps the site default (looks right already).
+  const accentClass =
+    pathname?.startsWith('/analytics/risk') ? 'page-accent-purple'
+    : pathname?.startsWith('/analytics/predeposit') ? 'page-accent-orange'
+    : pathname?.startsWith('/analytics/staking') ? 'page-accent-blue'
+    : pathname?.startsWith('/analytics/liquidations') ? ''
+    : pathname?.startsWith('/analytics/orderbook') ? ''
+    : 'page-accent-green'; // general (and /analytics root)
+
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className={`min-h-screen flex flex-col md:flex-row ${accentClass}`}>
       {/* Desktop Sidebar */}
       <aside className="hidden md:block w-56 flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)]">
         <div className="sticky top-14 pt-6 pb-4">
