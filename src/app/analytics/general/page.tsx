@@ -36,9 +36,9 @@ const timeRanges = [
 // and a few isolated places. All NEW code should use `getCoinColor(coin)` from
 // '@/lib/coins' instead so every coin gets a color, not just BTC/ETH/SOL.
 const COLORS = {
-  BTC: '#00B482',
-  ETH: '#2271B5',
-  SOL: '#7570B3',
+  BTC: 'var(--shade-2)',
+  ETH: 'var(--shade-1)',
+  SOL: 'var(--shade-4)',
   [OTHER_KEY]: getCoinColor(OTHER_KEY),
   cumulative: '#FFB548',
   total: '#FFB548',
@@ -72,7 +72,7 @@ function orderedSeriesFor(enabled: readonly string[]): string[] {
 // Fixed Interactive Range Slider - follows cursor 1:1
 const InteractiveRangeSlider = ({ 
   data, 
-  color = '#00B482',
+  color = 'var(--accent)',
   rangeStart,
   rangeEnd,
   onRangeChange,
