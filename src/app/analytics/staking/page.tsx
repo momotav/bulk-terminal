@@ -145,7 +145,7 @@ export default function StakingPage() {
       {/* ======================= TOTAL / OVERVIEW ======================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
         <KpiCard label="Total SOL Secured" value={totalTvl > 0 ? `${formatCompact(totalTvl)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="Native" value={nativeTvl > 0 ? `${formatCompact(nativeTvl)} SOL` : '—'} color="#60a5fa" loading={loading} icon={Coins} />
+        <KpiCard label="Native" value={nativeTvl > 0 ? `${formatCompact(nativeTvl)} SOL` : '—'} color="var(--accent)" loading={loading} icon={Coins} />
         <KpiCard label="Liquid (BulkSOL)" value={liquidTvl > 0 ? `${formatCompact(liquidTvl)} SOL` : '—'} color="var(--bids)" loading={loading} icon={Droplet} />
       </div>
 
@@ -159,11 +159,11 @@ export default function StakingPage() {
             </span>
           </div>
           <div className="flex h-3 w-full overflow-hidden rounded-full">
-            <div style={{ width: `${nativeShare * 100}%`, background: '#60a5fa' }} title="Native" />
+            <div style={{ width: `${nativeShare * 100}%`, background: 'var(--accent)' }} title="Native" />
             <div style={{ width: `${(1 - nativeShare) * 100}%`, background: 'var(--bids)' }} title="Liquid" />
           </div>
           <div className="mt-2 flex gap-4 text-[11px] text-[var(--text-secondary)]">
-            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#60a5fa' }} />Native {formatCompact(nativeTvl)} SOL</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />Native {formatCompact(nativeTvl)} SOL</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--bids)' }} />Liquid {formatCompact(liquidTvl)} SOL</span>
           </div>
         </div>
@@ -177,11 +177,11 @@ export default function StakingPage() {
         <div className="h-[320px]">
           {combinedTvl.length > 1 ? (
             <ChartFrame title="TVL Over Time" className="h-full" yLabel="SOL"
-              legend={[{ label: 'Native', color: '#60a5fa' }, { label: 'Liquid', color: 'var(--bids)' }]}>
+              legend={[{ label: 'Native', color: 'var(--accent)' }, { label: 'Liquid', color: 'var(--bids)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={combinedTvl} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                   <defs>
-                    <linearGradient id="gradNative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={0.3} /><stop offset="100%" stopColor="#60a5fa" stopOpacity={0} /></linearGradient>
+                    <linearGradient id="gradNative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0} /></linearGradient>
                     <linearGradient id="gradLiquid" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--bids)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--bids)" stopOpacity={0} /></linearGradient>
                   </defs>
                   <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40}
@@ -192,7 +192,7 @@ export default function StakingPage() {
                     labelFormatter={(t) => new Date(t as number).toLocaleString('en-US')}
                     formatter={(v: number, n) => [`${formatNumber(v, 0)} SOL`, n === 'native' ? 'Native' : 'Liquid']} />
                   <Area type="monotone" dataKey="liquid" stackId="1" stroke="var(--bids)" strokeWidth={2} fill="url(#gradLiquid)" />
-                  <Area type="monotone" dataKey="native" stackId="1" stroke="#60a5fa" strokeWidth={2} fill="url(#gradNative)" />
+                  <Area type="monotone" dataKey="native" stackId="1" stroke="var(--accent)" strokeWidth={2} fill="url(#gradNative)" />
                 </AreaChart>
               </ResponsiveContainer>
             </ChartFrame>
@@ -220,8 +220,8 @@ export default function StakingPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Total Staked" value={native ? `${formatCompact(native.activeStake)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
         <KpiCard label="APY" value={native?.apy != null ? `≈ ${native.apy.toFixed(2)}%` : '—'} color="var(--bids)" loading={loading} icon={TrendingUp} />
-        <KpiCard label="Delegators" value={native ? native.delegatorCount.toLocaleString() : '—'} color="#60a5fa" loading={loading} icon={Users} />
-        <KpiCard label="Commission" value={native ? `${native.commission}%` : '—'} color="#c084fc" loading={loading} icon={Percent} />
+        <KpiCard label="Delegators" value={native ? native.delegatorCount.toLocaleString() : '—'} color="var(--accent)" loading={loading} icon={Users} />
+        <KpiCard label="Commission" value={native ? `${native.commission}%` : '—'} color="#93C5FD" loading={loading} icon={Percent} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Activating" value={native ? `${formatCompact(native.activating)} SOL` : '—'} color="var(--bids)" small loading={loading} icon={ArrowUpRight} />
@@ -234,7 +234,7 @@ export default function StakingPage() {
 
       {/* ============================ BULKSOL ============================ */}
       <div className="flex items-center gap-2 pt-1">
-        <Droplet className="w-4 h-4 text-[#60a5fa]" />
+        <Droplet className="w-4 h-4 text-[var(--accent)]" />
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
           BulkSOL · Liquid Staking
           {bulksol?.epoch != null && <span className="text-[var(--text-tertiary)] font-normal"> · Epoch {bulksol.epoch}</span>}
@@ -243,9 +243,9 @@ export default function StakingPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="SOL Backing" value={bulksol ? `${formatCompact(bulksol.tvlSol)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="BulkSOL Supply" value={bulksol ? formatCompact(bulksol.supply) : '—'} color="#60a5fa" loading={loading} icon={Droplet} />
+        <KpiCard label="BulkSOL Supply" value={bulksol ? formatCompact(bulksol.supply) : '—'} color="var(--accent)" loading={loading} icon={Droplet} />
         <KpiCard label="Exchange Rate" value={bulksol && bulksol.exchangeRate > 0 ? `${bulksol.exchangeRate.toFixed(4)} SOL` : '—'} color="var(--bids)" loading={loading} icon={Repeat} />
-        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '—'} color="#c084fc" loading={loading} icon={Users} />
+        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '—'} color="#93C5FD" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Validators" value={bulksol?.validators != null ? String(bulksol.validators) : '—'} color="var(--text-secondary)" small loading={loading} icon={Layers} />
@@ -326,7 +326,7 @@ export default function StakingPage() {
                 <div key={d.label} className="flex items-center gap-3">
                   <span className="w-20 shrink-0 text-[11px] text-[var(--text-secondary)] text-right">{d.label} SOL</span>
                   <div className="flex-1 h-2.5 rounded-full bg-[var(--bg-secondary-20)] overflow-hidden">
-                    <div className="h-full rounded-full bg-[#60a5fa]" style={{ width: `${(d.holders / maxH) * 100}%`, opacity: 0.85 }} />
+                    <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${(d.holders / maxH) * 100}%`, opacity: 0.85 }} />
                   </div>
                   <span className="w-16 shrink-0 text-right font-mono text-[11px] text-[var(--text-primary)] tabular-nums">{d.holders.toLocaleString()}</span>
                 </div>
