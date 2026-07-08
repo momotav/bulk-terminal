@@ -146,7 +146,7 @@ export default function StakingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
         <KpiCard label="Total SOL Secured" value={totalTvl > 0 ? `${formatCompact(totalTvl)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
         <KpiCard label="Native" value={nativeTvl > 0 ? `${formatCompact(nativeTvl)} SOL` : '—'} color="var(--accent)" loading={loading} icon={Coins} />
-        <KpiCard label="Liquid (BulkSOL)" value={liquidTvl > 0 ? `${formatCompact(liquidTvl)} SOL` : '—'} color="var(--bids)" loading={loading} icon={Droplet} />
+        <KpiCard label="Liquid (BulkSOL)" value={liquidTvl > 0 ? `${formatCompact(liquidTvl)} SOL` : '—'} color="var(--shade-1)" loading={loading} icon={Droplet} />
       </div>
 
       {/* Native vs Liquid share */}
@@ -160,11 +160,11 @@ export default function StakingPage() {
           </div>
           <div className="flex h-3 w-full overflow-hidden rounded-full">
             <div style={{ width: `${nativeShare * 100}%`, background: 'var(--accent)' }} title="Native" />
-            <div style={{ width: `${(1 - nativeShare) * 100}%`, background: 'var(--bids)' }} title="Liquid" />
+            <div style={{ width: `${(1 - nativeShare) * 100}%`, background: 'var(--shade-1)' }} title="Liquid" />
           </div>
           <div className="mt-2 flex gap-4 text-[11px] text-[var(--text-secondary)]">
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />Native {formatCompact(nativeTvl)} SOL</span>
-            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--bids)' }} />Liquid {formatCompact(liquidTvl)} SOL</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--shade-1)' }} />Liquid {formatCompact(liquidTvl)} SOL</span>
           </div>
         </div>
       )}
@@ -177,12 +177,12 @@ export default function StakingPage() {
         <div className="h-[320px]">
           {combinedTvl.length > 1 ? (
             <ChartFrame title="TVL Over Time" className="h-full" yLabel="SOL"
-              legend={[{ label: 'Native', color: 'var(--accent)' }, { label: 'Liquid', color: 'var(--bids)' }]}>
+              legend={[{ label: 'Native', color: 'var(--accent)' }, { label: 'Liquid', color: 'var(--shade-1)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={combinedTvl} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                   <defs>
                     <linearGradient id="gradNative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0} /></linearGradient>
-                    <linearGradient id="gradLiquid" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--bids)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--bids)" stopOpacity={0} /></linearGradient>
+                    <linearGradient id="gradLiquid" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--shade-1)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--shade-1)" stopOpacity={0} /></linearGradient>
                   </defs>
                   <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40}
                     tickFormatter={(t) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
@@ -191,7 +191,7 @@ export default function StakingPage() {
                     labelStyle={{ color: 'var(--text-secondary)' }} itemStyle={{ color: 'var(--text-primary)' }}
                     labelFormatter={(t) => new Date(t as number).toLocaleString('en-US')}
                     formatter={(v: number, n) => [`${formatNumber(v, 0)} SOL`, n === 'native' ? 'Native' : 'Liquid']} />
-                  <Area type="monotone" dataKey="liquid" stackId="1" stroke="var(--bids)" strokeWidth={2} fill="url(#gradLiquid)" />
+                  <Area type="monotone" dataKey="liquid" stackId="1" stroke="var(--shade-1)" strokeWidth={2} fill="url(#gradLiquid)" />
                   <Area type="monotone" dataKey="native" stackId="1" stroke="var(--accent)" strokeWidth={2} fill="url(#gradNative)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -219,14 +219,14 @@ export default function StakingPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Total Staked" value={native ? `${formatCompact(native.activeStake)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="APY" value={native?.apy != null ? `≈ ${native.apy.toFixed(2)}%` : '—'} color="var(--bids)" loading={loading} icon={TrendingUp} />
+        <KpiCard label="APY" value={native?.apy != null ? `≈ ${native.apy.toFixed(2)}%` : '—'} color="var(--shade-1)" loading={loading} icon={TrendingUp} />
         <KpiCard label="Delegators" value={native ? native.delegatorCount.toLocaleString() : '—'} color="var(--accent)" loading={loading} icon={Users} />
-        <KpiCard label="Commission" value={native ? `${native.commission}%` : '—'} color="#93C5FD" loading={loading} icon={Percent} />
+        <KpiCard label="Commission" value={native ? `${native.commission}%` : '—'} color="var(--shade-2)" loading={loading} icon={Percent} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Activating" value={native ? `${formatCompact(native.activating)} SOL` : '—'} color="var(--bids)" small loading={loading} icon={ArrowUpRight} />
-        <KpiCard label="Deactivating" value={native ? `${formatCompact(native.deactivating)} SOL` : '—'} color="var(--asks)" small loading={loading} icon={ArrowDownRight} />
-        <KpiCard label="Net Epoch Flow" value={native ? `${net >= 0 ? '+' : '−'}${formatCompact(Math.abs(net))} SOL` : '—'} color={net >= 0 ? 'var(--bids)' : 'var(--asks)'} small loading={loading} />
+        <KpiCard label="Activating" value={native ? `${formatCompact(native.activating)} SOL` : '—'} color="var(--shade-1)" small loading={loading} icon={ArrowUpRight} />
+        <KpiCard label="Deactivating" value={native ? `${formatCompact(native.deactivating)} SOL` : '—'} color="var(--shade-5)" small loading={loading} icon={ArrowDownRight} />
+        <KpiCard label="Net Epoch Flow" value={native ? `${net >= 0 ? '+' : '−'}${formatCompact(Math.abs(net))} SOL` : '—'} color={net >= 0 ? 'var(--shade-1)' : 'var(--shade-5)'} small loading={loading} />
         <KpiCard label="Epoch" value={native?.epoch != null ? `#${native.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
@@ -244,13 +244,13 @@ export default function StakingPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="SOL Backing" value={bulksol ? `${formatCompact(bulksol.tvlSol)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
         <KpiCard label="BulkSOL Supply" value={bulksol ? formatCompact(bulksol.supply) : '—'} color="var(--accent)" loading={loading} icon={Droplet} />
-        <KpiCard label="Exchange Rate" value={bulksol && bulksol.exchangeRate > 0 ? `${bulksol.exchangeRate.toFixed(4)} SOL` : '—'} color="var(--bids)" loading={loading} icon={Repeat} />
-        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '—'} color="#93C5FD" loading={loading} icon={Users} />
+        <KpiCard label="Exchange Rate" value={bulksol && bulksol.exchangeRate > 0 ? `${bulksol.exchangeRate.toFixed(4)} SOL` : '—'} color="var(--shade-1)" loading={loading} icon={Repeat} />
+        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '—'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Validators" value={bulksol?.validators != null ? String(bulksol.validators) : '—'} color="var(--text-secondary)" small loading={loading} icon={Layers} />
-        <KpiCard label="APY" value={bulksol?.apy != null ? `≈ ${bulksol.apy.toFixed(2)}%` : '—'} color="var(--bids)" small loading={loading} icon={TrendingUp} />
-        <KpiCard label="TVL (USD)" value={bulksol?.solPriceUsd && bulksol.tvlSol > 0 ? `$${formatCompact(bulksol.tvlSol * bulksol.solPriceUsd)}` : '—'} color="var(--bids)" small loading={loading} />
+        <KpiCard label="APY" value={bulksol?.apy != null ? `≈ ${bulksol.apy.toFixed(2)}%` : '—'} color="var(--shade-1)" small loading={loading} icon={TrendingUp} />
+        <KpiCard label="TVL (USD)" value={bulksol?.solPriceUsd && bulksol.tvlSol > 0 ? `$${formatCompact(bulksol.tvlSol * bulksol.solPriceUsd)}` : '—'} color="var(--shade-1)" small loading={loading} />
         <KpiCard label="Epoch" value={bulksol?.epoch != null ? `#${bulksol.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
@@ -496,7 +496,7 @@ function MintBurnChart({ flows, loading }: {
       <div className="h-[300px]">
         {data.length > 1 ? (
           <ChartFrame title="Stakes vs Unstakes per Day" className="h-full" yLabel="BulkSOL"
-            legend={[{ label: 'Staked (mint)', color: '#22c55e' }, { label: 'Unstaked (burn)', color: '#ef4444' }]}>
+            legend={[{ label: 'Staked (mint)', color: 'var(--accent)' }, { label: 'Unstaked (burn)', color: 'var(--shade-5)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 8, right: 18, bottom: 4, left: 4 }} stackOffset="sign">
                 <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40}
@@ -511,8 +511,8 @@ function MintBurnChart({ flows, loading }: {
                   formatter={(v: number, name) => [`${formatNumber(Math.abs(v), 2)} BulkSOL`, name === 'mint' ? 'Staked' : 'Unstaked']}
                 />
                 <ReferenceLine y={0} stroke="var(--border-color)" />
-                <Bar dataKey="mint" stackId="s" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="burnNeg" stackId="s" fill="#ef4444" radius={[0, 0, 2, 2]} />
+                <Bar dataKey="mint" stackId="s" fill="var(--accent)" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="burnNeg" stackId="s" fill="var(--shade-5)" radius={[0, 0, 2, 2]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartFrame>
