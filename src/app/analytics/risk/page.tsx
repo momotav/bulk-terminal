@@ -25,12 +25,12 @@ import {
 // used by regime indicators). All coin colors should come from getCoinColor()
 // so BNB/DOGE/SUI/ZEC etc. render with proper distinct colors.
 const COLORS = {
-  BTC: '#00B482',
-  ETH: '#2271B5',
-  SOL: '#7570B3',
+  BTC: 'var(--shade-2)',
+  ETH: 'var(--shade-1)',
+  SOL: 'var(--shade-4)',
   positive: '#00B482',
   negative: '#EF4A3C',
-  neutral: '#FFB548',
+  neutral: 'var(--accent)',
 };
 
 // Regime labels based on value
