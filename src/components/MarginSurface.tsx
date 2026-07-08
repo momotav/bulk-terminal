@@ -103,32 +103,22 @@ function decayedLambda(mmrO: number, mmrE: number, p: number, t: number | null):
 // the variation to invisibility. We use a square-root scale so small lifts
 // above baseline are visually noticeable but extreme values still stand out.
 //
-// Color ramp: dark green (low MM%, "loose") → orange → red (high MM%, "tight").
+// Color ramp: BULK blue (low MM%, "loose") → BULK purple (high MM%, "tight") —
+// matches BULK's own blue/purple (Buy/Sell) palette, per-page monochrome.
 // ----------------------------------------------------------------------------
 function cellColor(value: number, baseline: number, maxMmr: number): string {
   if (maxMmr <= baseline) {
-    // No variation in the surface — everything at baseline. Show as flat green.
-    return 'rgb(0, 180, 130)';
+    // No variation in the surface — everything at baseline. Show as flat blue.
+    return 'rgb(96, 165, 250)';
   }
   // Map value into [0, 1] using sqrt scaling so small variations near the
   // baseline get visual range.
   const t = Math.sqrt(Math.max(0, Math.min(1, (value - baseline) / (maxMmr - baseline))));
-  // Interpolate green → orange → red.
-  if (t < 0.5) {
-    // green → orange
-    const u = t / 0.5;
-    const r = Math.round(0 + (255 - 0) * u);
-    const g = Math.round(180 + (165 - 180) * u);
-    const b = Math.round(130 + (0 - 130) * u);
-    return `rgb(${r}, ${g}, ${b})`;
-  } else {
-    // orange → red
-    const u = (t - 0.5) / 0.5;
-    const r = Math.round(255 + (239 - 255) * u);
-    const g = Math.round(165 + (74 - 165) * u);
-    const b = Math.round(0 + (60 - 0) * u);
-    return `rgb(${r}, ${g}, ${b})`;
-  }
+  // Interpolate BULK blue rgb(96,165,250) → deep purple rgb(124,58,237).
+  const r = Math.round(96 + (124 - 96) * t);
+  const g = Math.round(165 + (58 - 165) * t);
+  const b = Math.round(250 + (237 - 250) * t);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 interface HoveredCell {
@@ -587,8 +577,8 @@ function Heatmap({
           style={{
             background:
               maxMmr <= baseline
-                ? 'rgb(0, 180, 130)'
-                : 'linear-gradient(to right, rgb(0, 180, 130), rgb(255, 165, 0), rgb(239, 74, 60))',
+                ? 'rgb(96, 165, 250)'
+                : 'linear-gradient(to right, rgb(96, 165, 250), rgb(124, 58, 237))',
           }}
         />
         <span className="font-mono">{(maxMmr * 100).toFixed(2)}%</span>
