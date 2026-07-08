@@ -359,9 +359,6 @@ export default function StakingPage() {
 
       {/* Net inflows per day */}
       <FlowChart title="Net Inflows per Day" yLabel="Net BulkSOL" data={flows} dataKey="net" unit="BulkSOL" bar loading={loading} />
-
-      {/* Cumulative new stakers */}
-      <FlowChart title="Cumulative Stakers" yLabel="Wallets" data={flows} dataKey="cumWallets" unit="wallets" loading={loading} />
     </main>
   );
 }
