@@ -526,3 +526,31 @@
     }
   }
 }
+
+/* ----------------------------------------------------------------------------
+   Per-page analytics accents (ASXN-style monochrome theming).
+   Applied by the analytics layout based on the current route; everything that
+   uses var(--accent) inside the page — nav pill, KPI bars, chart fills,
+   buttons, banners — re-tints automatically. Semantic colors (bids/asks,
+   regime scale, per-coin colors) are intentionally NOT affected.
+---------------------------------------------------------------------------- */
+.page-accent-green {
+  --accent: #00B481;          /* BULK green */
+  --accent-text: #06231B;
+  --accent-secondary: #134A3A;
+}
+.page-accent-purple {
+  --accent: #A78BFA;          /* BULK purple */
+  --accent-text: #1E1533;
+  --accent-secondary: #4C3A78;
+}
+.page-accent-orange {
+  --accent: #FFB457;          /* BULK amber (site default, explicit for clarity) */
+  --accent-text: #1B1A14;
+  --accent-secondary: #6E3A17;
+}
+.page-accent-blue {
+  --accent: #60A5FA;          /* BULK blue */
+  --accent-text: #0C1B2E;
+  --accent-secondary: #1E3A5F;
+}
