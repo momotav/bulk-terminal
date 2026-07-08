@@ -259,11 +259,11 @@ export function PortfolioMarginCard() {
             <div className="flex items-center gap-2">
               <div className="shrink-0"><CoinPicker value={p.asset} onChange={(c) => update(p.id, { asset: c })} ariaLabel="Asset" /></div>
               <div className="flex rounded-md border border-[var(--border-color)] overflow-hidden text-[11px] font-bold shrink-0">
-                <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1', p.side === 'long' ? 'bg-bulk-green/20 text-bulk-green' : 'text-[var(--text-tertiary)]')}>LONG</button>
-                <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1', p.side === 'short' ? 'bg-bulk-red/20 text-bulk-red' : 'text-[var(--text-tertiary)]')}>SHORT</button>
+                <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1', p.side === 'long' ? 'bg-[#60A5FA]/20 text-[#60A5FA]' : 'text-[var(--text-tertiary)]')}>LONG</button>
+                <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1', p.side === 'short' ? 'bg-[#A78BFA]/20 text-[#A78BFA]' : 'text-[var(--text-tertiary)]')}>SHORT</button>
               </div>
               <div className="flex-1" />
-              <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--text-tertiary)] hover:text-bulk-red transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+              <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--text-tertiary)] hover:text-[#A78BFA] transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
             </div>
             {/* Notional: type it or drag it. Own line so long coin names never collide. */}
             <div className="flex items-center gap-2 mt-2">
@@ -284,7 +284,7 @@ export function PortfolioMarginCard() {
                 value={Math.min(1_000_000, Math.max(10_000, p.notional))}
                 onChange={(e) => update(p.id, { notional: Number(e.target.value) })}
                 className="flex-1 h-1.5 cursor-pointer min-w-0"
-                style={{ accentColor: p.side === 'long' ? '#22c55e' : '#ef4444' }}
+                style={{ accentColor: p.side === 'long' ? '#60A5FA' : '#A78BFA' }}
               />
             </div>
           </div>
@@ -299,7 +299,7 @@ export function PortfolioMarginCard() {
         <>
           <div className="space-y-2.5 mb-4">
             <CompareBar label="Sum of legs" sub="margined separately (other DEXs)" value={calc.sumM} widthPct={1} barClass="bg-[var(--text-tertiary)]/50" />
-            <CompareBar label="BULK portfolio" sub="netted by live correlation" value={calc.mp} widthPct={calc.sumM > 0 ? calc.mp / calc.sumM : 0} barClass="bg-bulk-green" highlight />
+            <CompareBar label="BULK portfolio" sub="netted by live correlation" value={calc.mp} widthPct={calc.sumM > 0 ? calc.mp / calc.sumM : 0} barClass="bg-[#60A5FA]" highlight />
           </div>
 
           {/* Headline metrics */}
@@ -346,10 +346,10 @@ function CompareBar({ label, sub, value, widthPct, barClass, highlight }: { labe
     <div>
       <div className="flex items-baseline justify-between mb-1">
         <div className="flex items-baseline gap-2">
-          <span className={cn('text-xs font-medium', highlight ? 'text-bulk-green' : 'text-[var(--text-secondary)]')}>{label}</span>
+          <span className={cn('text-xs font-medium', highlight ? 'text-[#60A5FA]' : 'text-[var(--text-secondary)]')}>{label}</span>
           <span className="text-[10px] text-[var(--text-tertiary)]">{sub}</span>
         </div>
-        <span className={cn('font-mono font-semibold text-sm tabular-nums', highlight ? 'text-bulk-green' : 'text-[var(--text-primary)]')}>${formatNumber(value, 0)}</span>
+        <span className={cn('font-mono font-semibold text-sm tabular-nums', highlight ? 'text-[#60A5FA]' : 'text-[var(--text-primary)]')}>${formatNumber(value, 0)}</span>
       </div>
       <div className="h-2.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden">
         <div className={cn('h-full rounded-full transition-all duration-300', barClass)} style={{ width: `${Math.max(2, Math.min(100, widthPct * 100))}%` }} />
@@ -362,7 +362,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: 'g
   return (
     <div className="bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg p-2.5 text-center">
       <div className="text-[9px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1">{label}</div>
-      <div className={cn('font-mono font-bold tabular-nums text-sm', tone === 'green' ? 'text-bulk-green' : 'text-[var(--text-primary)]')}>{value}</div>
+      <div className={cn('font-mono font-bold tabular-nums text-sm', tone === 'green' ? 'text-[#60A5FA]' : 'text-[var(--text-primary)]')}>{value}</div>
     </div>
   );
 }
