@@ -73,7 +73,7 @@ export default function StakingPage() {
   const nativeShare = totalTvl > 0 ? nativeTvl / totalTvl : 0;
 
   // ---- All-time series merges ----------------------------------------------
-  const BULKSOL_LAUNCH = new Date('2025-10-29').getTime();
+  const BULKSOL_LAUNCH = new Date('2025-10-21').getTime(); // unified staking-era floor
 
   // Native stake: Stakewiz per-epoch history (all-time) + our live 20-min
   // snapshots from deploy onward. Epoch points older than the first live
