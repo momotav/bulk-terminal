@@ -287,12 +287,12 @@ export default function PreDepositPage() {
       {/* KPI band — Current TVL is the hero. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Current TVL" value={kpis ? fmtUsd(kpis.liveTvl) : '—'} color="var(--accent)" hero loading={loading} />
-        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '—'} color="var(--bids)" loading={loading} />
-        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '—'} color="var(--asks)" loading={loading} />
-        <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '—'} color="#60a5fa" loading={loading} icon={Users} />
+        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '—'} color="var(--shade-1)" loading={loading} />
+        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '—'} color="var(--shade-5)" loading={loading} />
+        <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '—'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Program Txns" value={kpis ? kpis.programTxns.toLocaleString() : '—'} color="#c084fc" small loading={loading} />
+        <KpiCard label="Program Txns" value={kpis ? kpis.programTxns.toLocaleString() : '—'} color="var(--shade-4)" small loading={loading} />
         <KpiCard label="Avg Deposit" value={kpis ? fmtUsdC(kpis.avgDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
         <KpiCard label="Median Deposit" value={kpis ? fmtUsdC(kpis.medianDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
         <KpiCard label="Largest Deposit" value={kpis ? fmtUsdC(kpis.largestDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
@@ -375,7 +375,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-1">
 <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full" legend={[{ label: 'Deposits', color: 'var(--bids)' }, { label: 'Withdrawals', color: 'var(--asks)' }]}>
+            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full" legend={[{ label: 'Deposits', color: 'var(--shade-1)' }, { label: 'Withdrawals', color: 'var(--shade-5)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -385,8 +385,8 @@ export default function PreDepositPage() {
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number, n) => [fmtUsd(v), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="deposits" stackId="a" fill="var(--bids)" name="Deposits" />
-                <Bar dataKey="withdrawals" stackId="a" fill="var(--asks)" name="Withdrawals" />
+                <Bar dataKey="deposits" stackId="a" fill="var(--shade-1)" name="Deposits" />
+                <Bar dataKey="withdrawals" stackId="a" fill="var(--shade-5)" name="Withdrawals" />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -394,7 +394,7 @@ export default function PreDepositPage() {
         </ChartCard>
 <ChartCard title="New Depositors per Day" subtitle="First-time depositors + cumulative">
           {growth.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="New Depositors per Day" className="h-full" legend={[{ label: 'New', color: '#c084fc' }, { label: 'Cumulative', color: 'var(--accent)' }]}>
+            <ChartFrame title="New Depositors per Day" className="h-full" legend={[{ label: 'New', color: 'var(--shade-4)' }, { label: 'Cumulative', color: 'var(--accent)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={growth}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -404,7 +404,7 @@ export default function PreDepositPage() {
                 <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={44}
                   tickFormatter={(v) => formatCompact(v)} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
-                <Bar yAxisId="l" dataKey="newDepositors" fill="#c084fc" name="New" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="l" dataKey="newDepositors" fill="var(--shade-4)" name="New" radius={[2, 2, 0, 0]} />
                 <Line yAxisId="r" type="monotone" dataKey="cumulativeDepositors" stroke="var(--accent)" strokeWidth={3} dot={false} name="Cumulative" />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
               </BarChart>
@@ -424,7 +424,7 @@ export default function PreDepositPage() {
                   tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} minTickGap={30} />
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate} />
-                <Bar dataKey="activeDepositors" fill="#60a5fa" name="Active" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="activeDepositors" fill="var(--shade-2)" name="Active" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -450,7 +450,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-3">
 <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Net Flow per Day" className="h-full" legend={[{ label: 'Inflow', color: 'var(--bids)' }, { label: 'Outflow', color: 'var(--asks)' }]}>
+            <ChartFrame title="Net Flow per Day" className="h-full" legend={[{ label: 'Inflow', color: 'var(--shade-1)' }, { label: 'Outflow', color: 'var(--shade-5)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -461,7 +461,7 @@ export default function PreDepositPage() {
                   formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmtUsd(v)}`, 'Net flow']} />
                 <Bar dataKey="netFlow" name="Net flow" radius={[2, 2, 0, 0]}>
                   {tvl.map((p, i) => (
-                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--bids)' : 'var(--asks)'} />
+                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--shade-1)' : 'var(--shade-5)'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -485,7 +485,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} width={40} domain={[0, 100]} />
                 <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number) => [`${v.toFixed(1)}%`, 'Withdrawal rate']} />
-                <Line type="monotone" dataKey="rate" stroke="var(--asks)" strokeWidth={2} dot={false} name="Withdrawal rate" />
+                <Line type="monotone" dataKey="rate" stroke="var(--shade-5)" strokeWidth={2} dot={false} name="Withdrawal rate" />
               </LineChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -498,7 +498,7 @@ export default function PreDepositPage() {
       <div className="grid grid-cols-1 gap-4">
         <ChartCard title="Deposit Size Trend" subtitle="Average vs median deposit per day">
           {avgTrend.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Deposit Size Trend" className="h-full" legend={[{ label: 'Average', color: 'var(--accent)' }, { label: 'Median', color: '#60a5fa' }]}>
+            <ChartFrame title="Deposit Size Trend" className="h-full" legend={[{ label: 'Average', color: 'var(--accent)' }, { label: 'Median', color: 'var(--shade-2)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={avgTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -509,7 +509,7 @@ export default function PreDepositPage() {
                   formatter={(v: number, n) => [fmtUsd(v), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Line type="monotone" dataKey="avgDeposit" stroke="var(--accent)" strokeWidth={2} dot={false} name="Average" />
-                <Line type="monotone" dataKey="medianDeposit" stroke="#60a5fa" strokeWidth={2} dot={false} name="Median" />
+                <Line type="monotone" dataKey="medianDeposit" stroke="var(--shade-2)" strokeWidth={2} dot={false} name="Median" />
               </LineChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -538,7 +538,7 @@ export default function PreDepositPage() {
         </ChartCard>
 <ChartCard title="New vs Returning" subtitle="Acquisition vs conviction per day">
           {newReturning.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="New vs Returning" className="h-full" legend={[{ label: 'New', color: '#c084fc' }, { label: 'Returning', color: '#60a5fa' }]}>
+            <ChartFrame title="New vs Returning" className="h-full" legend={[{ label: 'New', color: 'var(--shade-4)' }, { label: 'Returning', color: 'var(--shade-2)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={newReturning}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -548,8 +548,8 @@ export default function PreDepositPage() {
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number, n) => [v, n === 'newDepositors' ? 'New' : 'Returning']} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="newDepositors" stackId="a" fill="#c084fc" name="New" />
-                <Bar dataKey="returningDepositors" stackId="a" fill="#60a5fa" name="Returning" />
+                <Bar dataKey="newDepositors" stackId="a" fill="var(--shade-4)" name="New" />
+                <Bar dataKey="returningDepositors" stackId="a" fill="var(--shade-2)" name="Returning" />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -568,7 +568,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} domain={[0, 1]} tickFormatter={(v) => v.toFixed(1)} />
                 <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number) => [v.toFixed(3), 'Gini']} />
-                <Line type="monotone" dataKey="gini" stroke="#c084fc" strokeWidth={2} dot={false} name="Gini" />
+                <Line type="monotone" dataKey="gini" stroke="var(--shade-4)" strokeWidth={2} dot={false} name="Gini" />
               </LineChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -584,7 +584,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle}
                   formatter={(v: number) => [v, 'Depositors']} />
-                <Bar dataKey="count" fill="var(--bids)" name="Depositors" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="count" fill="var(--shade-1)" name="Depositors" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
