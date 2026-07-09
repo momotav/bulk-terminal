@@ -19,7 +19,7 @@ const FeeTierCard = ({ tier, isActive }: { tier: { thresholdVolume: number; make
     <div className="flex justify-between items-center">
       <div>
         <p className="text-xs text-[var(--text-tertiary)]">Maker</p>
-        <p className={cn("text-sm font-medium", tier.makerBps <= 0 ? "text-[#00B482]" : "text-[var(--text-primary)]")}>
+        <p className={cn("text-sm font-medium", tier.makerBps <= 0 ? "text-[var(--pos)]" : "text-[var(--text-primary)]")}>
           {tier.makerBps <= 0 ? `${tier.makerBps}` : tier.makerBps} bps
         </p>
       </div>
@@ -78,7 +78,7 @@ export function FeeTiersWidget() {
             </div>
             <div className="flex justify-between items-center mt-2">
               <span className="text-sm text-[var(--text-tertiary)]">Protocol Revenue</span>
-              <span className="text-sm font-medium text-[#00B482]">
+              <span className="text-sm font-medium text-[var(--pos)]">
                 ${formatCompact(feeTiers.totalProtocolSettlement)}
               </span>
             </div>
