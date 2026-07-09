@@ -28,8 +28,8 @@ const PERIODS = [
 
 // Colors
 const COLORS = {
-  long: '#00B481',  // Green (bids)
-  short: '#EF4A3C', // Red (asks)
+  long: 'var(--pos)',  // Green (bids)
+  short: 'var(--neg)', // Red (asks)
   BTC: '#F7931A',
   ETH: '#627EEA',
   SOL: '#00FFA3',
