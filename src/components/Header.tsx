@@ -9,6 +9,7 @@ import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
 import { ThemeToggle } from './ThemeToggle';
+import { PaletteSwitcher } from './PaletteSwitcher';
 import { NetworkSwitcher } from './NetworkSwitcher';
 
 const navItems = [
@@ -251,6 +252,7 @@ export function Header() {
 
             {/* Theme Toggle - hidden on mobile */}
             <div className="hidden sm:block">
+              <PaletteSwitcher />
               <ThemeToggle />
             </div>
             
@@ -422,6 +424,7 @@ export function Header() {
             <div className="px-4 py-3 border-t border-[var(--border-color)]">
               <div className="flex items-center justify-between px-4">
                 <span className="text-sm text-[var(--text-secondary)]">Theme</span>
+                <PaletteSwitcher />
                 <ThemeToggle />
               </div>
             </div>
