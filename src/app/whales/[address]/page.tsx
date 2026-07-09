@@ -856,8 +856,8 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
                   const bg = isNoTrade
                     ? undefined
                     : isWin
-                      ? `rgba(34, 197, 94, ${0.2 + i * 0.8})`
-                      : `rgba(239, 68, 68, ${0.2 + i * 0.8})`;
+                      ? `rgb(var(--pos-rgb) / ${0.2 + i * 0.8})`
+                      : `rgb(var(--neg-rgb) / ${0.2 + i * 0.8})`;
                   return (
                     <HeatmapCell
                       key={row}
@@ -1919,7 +1919,7 @@ export default function WalletPage() {
                       "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-full font-medium transition-all disabled:opacity-50",
                       isFollowing
                         ? "bg-bulk-accent/10 text-[var(--accent)] border border-bulk-accent/30 hover:bg-bulk-accent/20"
-                        : "bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 shadow-[0_0_16px_rgba(255,181,71,0.25)]"
+                        : "bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 shadow-[0_0_16px_rgb(var(--accent-rgb) / 0.25)]"
                     )}
                   >
                     {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? (<><StarOff className="w-4 h-4" />Unfollow</>) : (<><Star className="w-4 h-4" />Follow</>)}
