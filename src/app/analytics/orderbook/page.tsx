@@ -27,8 +27,8 @@ import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 type Market = string;
 
 const COLORS = {
-  bid: '#00B481',
-  ask: '#EF4A3C',
+  bid: 'var(--pos)',
+  ask: 'var(--neg)',
   mid: 'var(--text-secondary)',
 };
 
@@ -127,9 +127,9 @@ function FlashingValue({
 
   const flashBg =
     accent === 'bid'
-      ? 'bg-[#00B481]/20'
+      ? 'bg-bulk-green/20'
       : accent === 'ask'
-      ? 'bg-[#EF4A3C]/20'
+      ? 'bg-bulk-red/20'
       : 'bg-[var(--text-primary)]/10';
 
   return (
@@ -169,9 +169,9 @@ function StatCell({
 }) {
   const valueColor =
     accent === 'bid'
-      ? 'text-[#00B481]'
+      ? 'text-[var(--pos)]'
       : accent === 'ask'
-      ? 'text-[#EF4A3C]'
+      ? 'text-[var(--neg)]'
       : 'text-[var(--text-primary)]';
   const resolvedFlashAccent =
     flashAccent ?? (accent === 'bid' ? 'bid' : accent === 'ask' ? 'ask' : 'auto');
@@ -318,7 +318,7 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
                   </p>
                   {typeof p.bid === 'number' && (
                     <p className="text-sm flex items-center gap-2 tabular-nums">
-                      <span className="inline-block w-2 h-2 rounded-full bg-[#00B481]" />
+                      <span className="inline-block w-2 h-2 rounded-full bg-[var(--pos)]" />
                       <span className="text-[var(--text-tertiary)]">bids</span>
                       <span className="text-[var(--text-primary)] font-medium ml-auto">
                         ${formatCompact(p.bid)}
@@ -327,7 +327,7 @@ function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
                   )}
                   {typeof p.ask === 'number' && (
                     <p className="text-sm flex items-center gap-2 tabular-nums">
-                      <span className="inline-block w-2 h-2 rounded-full bg-[#EF4A3C]" />
+                      <span className="inline-block w-2 h-2 rounded-full bg-[var(--neg)]" />
                       <span className="text-[var(--text-tertiary)]">asks</span>
                       <span className="text-[var(--text-primary)] font-medium ml-auto">
                         ${formatCompact(p.ask)}
@@ -387,7 +387,7 @@ function Ladder({
   levels: { px: number; sz: number; n: number }[];
 }) {
   const maxSz = Math.max(1e-9, ...levels.map((l) => l.sz));
-  const pxColor = side === 'bid' ? 'text-[#00B481]' : 'text-[#EF4A3C]';
+  const pxColor = side === 'bid' ? 'text-[var(--pos)]' : 'text-[var(--neg)]';
   const fillColor = side === 'bid' ? 'rgba(0, 180, 129, 0.15)' : 'rgba(239, 74, 60, 0.15)';
 
   return (
@@ -519,7 +519,7 @@ export default function OrderBookPage() {
       </div>
 
       {error && !initialLoading && (
-        <div className="bg-[#EF4A3C]/10 border border-[#EF4A3C]/30 text-[#EF4A3C] text-sm rounded-lg px-4 py-2">
+        <div className="bg-bulk-red/10 border border-bulk-red/30 text-[var(--neg)] text-sm rounded-lg px-4 py-2">
           {error}
         </div>
       )}
