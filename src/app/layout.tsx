@@ -65,6 +65,8 @@ export default function RootLayout({
                   document.documentElement.classList.remove('dark', 'light');
                   document.documentElement.classList.add(theme);
                   document.documentElement.setAttribute('data-theme', theme);
+                  var palette = localStorage.getItem('bulkstats-palette') || 'classic';
+                  document.documentElement.setAttribute('data-palette', palette);
                 } catch (e) {}
               })();
             `,
