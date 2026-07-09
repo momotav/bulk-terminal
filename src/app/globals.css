@@ -534,33 +534,41 @@
 }
 
 /* ----------------------------------------------------------------------------
-   Per-page analytics accents (ASXN-style monochrome theming).
-   Applied by the analytics layout based on the current route; everything that
-   uses var(--accent) inside the page — nav pill, KPI bars, chart fills,
-   buttons, banners — re-tints automatically. Semantic colors (bids/asks,
-   regime scale, per-coin colors) are intentionally NOT affected.
+   Site-wide color palettes. Set via data-palette on <html> (persisted to
+   localStorage by the PaletteSwitcher). Each palette defines:
+     --pos / --neg      semantic up/down pair
+     --accent + shades  brand accent scale (KPI bars, chart fills, buttons)
+     --coin-1..8        neutral series palette for coins / multi-series charts
+   Combined with .dark / .light. Default (no attribute) = classic.
 ---------------------------------------------------------------------------- */
-.page-accent-green {
-  --accent: #00B481;          /* BULK green */
-  --accent-text: #06231B;
-  --accent-secondary: #134A3A;
-  --shade-1: #8FEBCB; --shade-2: #33CC9C; --shade-3: #00B481; --shade-4: #008A63; --shade-5: #0E5943;
-}
-.page-accent-purple {
-  --accent: #A78BFA;          /* BULK purple */
-  --accent-text: #1E1533;
-  --accent-secondary: #4C3A78;
-  --shade-1: #DCCFFF; --shade-2: #BEA5FC; --shade-3: #A78BFA; --shade-4: #7E5CE0; --shade-5: #53389E;
-}
-.page-accent-orange {
-  --accent: #FFB457;          /* BULK amber (site default, explicit for clarity) */
-  --accent-text: #1B1A14;
-  --accent-secondary: #6E3A17;
+:root, html[data-palette="classic"] {
+  --pos: #21C07A; --neg: #E5484D;
+  --pos-rgb: 33 192 122; --neg-rgb: 229 72 77; --accent-rgb: 255 180 87;
+  --pos-secondary: #12402E; --neg-secondary: #4A1518;
+  --accent: #FFB457; --accent-text: #1B1A14; --accent-secondary: #6E3A17;
   --shade-1: #FFD9A8; --shade-2: #FFC57E; --shade-3: #FFB457; --shade-4: #D98A2E; --shade-5: #8C5417;
+  /* cream / parchment neutral series (the BULK mainnet vibe) */
+  --coin-1: #E8DCC4; --coin-2: #D3BE95; --coin-3: #BFA36C; --coin-4: #A6884F; --coin-5: #856A3B; --coin-6: #62502F; --coin-7: #D8CDB6; --coin-8: #9A8A6A;
+  --coin-other: #9C8F76;
 }
-.page-accent-blue {
-  --accent: #60A5FA;          /* BULK blue */
-  --accent-text: #0C1B2E;
-  --accent-secondary: #1E3A5F;
-  --shade-1: #BDDBFE; --shade-2: #8AC0FC; --shade-3: #60A5FA; --shade-4: #3B7BD4; --shade-5: #24549B;
+html[data-palette="grove"] {
+  --pos: #21C07A; --neg: #F97316;
+  --pos-rgb: 33 192 122; --neg-rgb: 249 115 22; --accent-rgb: 33 192 122;
+  --pos-secondary: #12402E; --neg-secondary: #5A2E12;
+  --accent: #21C07A; --accent-text: #06231B; --accent-secondary: #134A3A;
+  --shade-1: #A7ECCF; --shade-2: #4FD199; --shade-3: #21C07A; --shade-4: #159463; --shade-5: #0E5E43;
+  --coin-1: #CFE8DA; --coin-2: #9FD3BC; --coin-3: #6FB89A; --coin-4: #4A9A7C; --coin-5: #327A61; --coin-6: #1F5745; --coin-7: #B7DECB; --coin-8: #7FA894;
+  --coin-other: #7FA894;
 }
+html[data-palette="orchid"] {
+  --pos: #60A5FA; --neg: #A78BFA;
+  --pos-rgb: 96 165 250; --neg-rgb: 167 139 250; --accent-rgb: 96 165 250;
+  --pos-secondary: #1E3A5F; --neg-secondary: #4C3A78;
+  --accent: #60A5FA; --accent-text: #0C1B2E; --accent-secondary: #1E3A5F;
+  --shade-1: #BDDBFE; --shade-2: #8AC0FC; --shade-3: #60A5FA; --shade-4: #7C5CE0; --shade-5: #6D3AE0;
+  --coin-1: #C9DBF5; --coin-2: #A9BEE8; --coin-3: #8FA6DC; --coin-4: #9B8AE0; --coin-5: #7C6FCB; --coin-6: #5B4FA6; --coin-7: #B6C7EE; --coin-8: #8E86C9;
+  --coin-other: #8E86C9;
+}
+/* --bids/--asks are legacy aliases for the semantic pair. */
+:root { --bids: var(--pos); --asks: var(--neg); }
+
