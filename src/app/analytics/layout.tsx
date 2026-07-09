@@ -45,19 +45,9 @@ export default function AnalyticsLayout({
 }) {
   const pathname = usePathname();
 
-  // ASXN-style per-page theming: each analytics page gets its own accent hue.
-  // Applied on the layout wrapper so the sidebar's active pill tints too.
-  // Liquidations intentionally keeps the site default (looks right already).
-  const accentClass =
-    pathname?.startsWith('/analytics/risk') ? 'page-accent-purple'
-    : pathname?.startsWith('/analytics/predeposit') ? 'page-accent-orange'
-    : pathname?.startsWith('/analytics/staking') ? 'page-accent-blue'
-    : pathname?.startsWith('/analytics/liquidations') ? ''
-    : pathname?.startsWith('/analytics/orderbook') ? ''
-    : 'page-accent-green'; // general (and /analytics root)
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row ${accentClass}`}>
+    <div className="min-h-screen flex flex-col md:flex-row">
       {/* Desktop Sidebar */}
       <aside className="hidden md:block w-56 flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)]">
         <div className="sticky top-14 pt-6 pb-4">
@@ -78,7 +68,7 @@ export default function AnalyticsLayout({
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                     ${isActive 
-                      ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-l-2 border-[var(--accent)]' 
+                      ? 'bg-bulk-accent/10 text-[var(--accent)] border-l-2 border-[var(--accent)]' 
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-muted)]'
                     }
                   `}
@@ -117,7 +107,7 @@ export default function AnalyticsLayout({
                   className={`
                     flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0
                     ${isActive 
-                      ? 'bg-[var(--accent)]/10 text-[var(--accent)]' 
+                      ? 'bg-bulk-accent/10 text-[var(--accent)]' 
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-muted)]'
                     }
                   `}
