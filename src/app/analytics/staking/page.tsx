@@ -137,7 +137,7 @@ export default function StakingPage() {
       </div>
 
       {!loading && !native && !bulksol && (
-        <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
+        <div className="rounded-lg border border-bulk-accent/30 bg-bulk-accent/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
           Staking indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
         </div>
       )}
@@ -338,7 +338,7 @@ export default function StakingPage() {
 
       {/* Backfill progress — shows how far back the indexer has walked. */}
       {status && status.configured && !status.backfillComplete && (
-        <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3">
+        <div className="rounded-lg border border-bulk-accent/30 bg-bulk-accent/10 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
               <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
