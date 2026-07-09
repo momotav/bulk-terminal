@@ -422,7 +422,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       if (position.liquidationPrice > 0) {
         series.createPriceLine({
           price: position.liquidationPrice,
-          color: '#F5A623',
+          color: 'var(--accent)',
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
