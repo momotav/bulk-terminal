@@ -251,7 +251,7 @@ export function Header() {
             </div>
 
             {/* Theme Toggle - hidden on mobile */}
-            <div className="hidden sm:block">
+            <div className="hidden sm:flex items-center gap-2">
               <PaletteSwitcher />
               <ThemeToggle />
             </div>
@@ -424,8 +424,10 @@ export function Header() {
             <div className="px-4 py-3 border-t border-[var(--border-color)]">
               <div className="flex items-center justify-between px-4">
                 <span className="text-sm text-[var(--text-secondary)]">Theme</span>
-                <PaletteSwitcher />
-                <ThemeToggle />
+                <div className="flex items-center gap-2">
+                  <PaletteSwitcher />
+                  <ThemeToggle />
+                </div>
               </div>
             </div>
             
