@@ -30,11 +30,11 @@ const PERIODS = [
 const COLORS = {
   long: 'var(--pos)',  // Green (bids)
   short: 'var(--neg)', // Red (asks)
-  BTC: '#F7931A',
-  ETH: '#627EEA',
-  SOL: '#00FFA3',
-  XRP: '#23292F',
-  GOLD: '#FFD700',
+  BTC: 'var(--coin-3)',
+  ETH: 'var(--coin-1)',
+  SOL: 'var(--coin-5)',
+  XRP: 'var(--coin-4)',
+  GOLD: 'var(--coin-2)',
 };
 
 // Interactive Range Slider for liquidations chart
