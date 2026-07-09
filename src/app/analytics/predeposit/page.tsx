@@ -137,7 +137,7 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
                       key={hour}
                       className="flex-1 aspect-square mx-[1px] rounded-sm cursor-pointer"
                       style={{
-                        backgroundColor: intensity > 0 ? `rgba(255, 181, 71, ${0.15 + intensity * 0.85})` : 'var(--border-color)',
+                        backgroundColor: intensity > 0 ? `rgb(var(--accent-rgb) / ${0.15 + intensity * 0.85})` : 'var(--border-color)',
                         opacity: intensity > 0 ? 1 : 0.3,
                         outline: isHover ? '1px solid var(--text-secondary)' : undefined,
                       }}
