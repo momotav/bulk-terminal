@@ -175,7 +175,7 @@ export default function ExplorerPage() {
                     opacity: 1,
                     y: 0,
                     backgroundColor: isFlashing
-                      ? 'rgba(34, 197, 94, 0.12)'
+                      ? 'rgb(var(--pos-rgb) / 0.12)'
                       : 'rgba(0,0,0,0)',
                   }}
                   transition={{
