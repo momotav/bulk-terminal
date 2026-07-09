@@ -103,21 +103,32 @@ function decayedLambda(mmrO: number, mmrE: number, p: number, t: number | null):
 // the variation to invisibility. We use a square-root scale so small lifts
 // above baseline are visually noticeable but extreme values still stand out.
 //
-// Color ramp: BULK blue (low MM%, "loose") → BULK purple (high MM%, "tight") —
-// matches BULK's own blue/purple (Buy/Sell) palette, per-page monochrome.
+// Color ramp: --pos (low MM%, "loose") → --neg (high MM%, "tight"), read from
+// the active palette so the heatmap follows the site theme (green→red classic,
+// green→orange grove, blue→purple orchid).
 // ----------------------------------------------------------------------------
-function cellColor(value: number, baseline: number, maxMmr: number): string {
-  if (maxMmr <= baseline) {
-    // No variation in the surface — everything at baseline. Show as flat blue.
-    return 'rgb(96, 165, 250)';
+function readVarRgb(name: string, fallback: [number, number, number]): [number, number, number] {
+  if (typeof window === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!raw) return fallback;
+  const hex = raw.replace('#', '');
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
   }
-  // Map value into [0, 1] using sqrt scaling so small variations near the
-  // baseline get visual range.
+  const m = raw.match(/(\d+)[, ]+(\d+)[, ]+(\d+)/);
+  return m ? [+m[1], +m[2], +m[3]] : fallback;
+}
+
+function cellColor(value: number, baseline: number, maxMmr: number): string {
+  const pos = readVarRgb('--pos', [33, 192, 122]);
+  const neg = readVarRgb('--neg', [229, 72, 77]);
+  if (maxMmr <= baseline) {
+    return `rgb(${pos[0]}, ${pos[1]}, ${pos[2]})`;
+  }
   const t = Math.sqrt(Math.max(0, Math.min(1, (value - baseline) / (maxMmr - baseline))));
-  // Interpolate BULK blue rgb(96,165,250) → deep purple rgb(124,58,237).
-  const r = Math.round(96 + (124 - 96) * t);
-  const g = Math.round(165 + (58 - 165) * t);
-  const b = Math.round(250 + (237 - 250) * t);
+  const r = Math.round(pos[0] + (neg[0] - pos[0]) * t);
+  const g = Math.round(pos[1] + (neg[1] - pos[1]) * t);
+  const b = Math.round(pos[2] + (neg[2] - pos[2]) * t);
   return `rgb(${r}, ${g}, ${b})`;
 }
 
@@ -577,8 +588,8 @@ function Heatmap({
           style={{
             background:
               maxMmr <= baseline
-                ? 'rgb(96, 165, 250)'
-                : 'linear-gradient(to right, rgb(96, 165, 250), rgb(124, 58, 237))',
+                ? 'var(--pos)'
+                : 'linear-gradient(to right, var(--pos), var(--neg))',
           }}
         />
         <span className="font-mono">{(maxMmr * 100).toFixed(2)}%</span>
