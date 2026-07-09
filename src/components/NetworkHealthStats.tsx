@@ -100,8 +100,8 @@ export function NetworkHealthStats() {
   const statusColor = live ? 'var(--bids)' : data?.status === 'stale' ? 'var(--accent)' : 'var(--asks)';
   const items = [
     { icon: Activity, label: 'TPS', value: formatRate(data?.tps ?? 0), color: 'var(--bids)', sub: `${data?.windowSeconds ?? 60}s avg` },
-    { icon: Zap, label: 'APS', value: formatRate(data?.aps ?? 0), color: '#facc15', sub: 'actions/sec' },
-    { icon: Hash, label: 'Round', value: formatRound(data?.latestRound ?? null), color: '#60a5fa', sub: `${formatBlockTime(data?.blockTimeMs ?? null)} blocks` },
+    { icon: Zap, label: 'APS', value: formatRate(data?.aps ?? 0), color: 'var(--accent)', sub: 'actions/sec' },
+    { icon: Hash, label: 'Round', value: formatRound(data?.latestRound ?? null), color: 'var(--coin-3)', sub: `${formatBlockTime(data?.blockTimeMs ?? null)} blocks` },
   ];
 
   return (
