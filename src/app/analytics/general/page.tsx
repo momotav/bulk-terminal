@@ -1594,7 +1594,7 @@ export default function AnalyticsPage() {
                     </div>
                     <InteractiveRangeSlider 
                       data={liquidationsDataFull} 
-                      color="#EF4A3C"
+                      color="var(--neg)"
                       rangeStart={liquidationsRange.start}
                       rangeEnd={liquidationsRange.end}
                       onRangeChange={(start, end) => setLiquidationsRange({ start, end })}
