@@ -10,9 +10,9 @@ import {
 import { ChartFrame } from '@/components/ChartFrame';
 
 const COLORS = {
-  protocol: '#00B482',
+  protocol: 'var(--pos)',
   maker: '#2271B5',
-  taker: '#EF4A3C',
+  taker: 'var(--neg)',
   cumulative: '#FFB548',
 };
 
@@ -412,7 +412,7 @@ export function ProtocolRevenueChart() {
         <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Protocol Revenue</p>
-            <p className="text-xl font-bold text-[#00B482]">{formatCompact(feeState.totalProtocolSettlement)}</p>
+            <p className="text-xl font-bold text-[var(--pos)]">{formatCompact(feeState.totalProtocolSettlement)}</p>
           </div>
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Maker Rebates</p>
@@ -420,7 +420,7 @@ export function ProtocolRevenueChart() {
           </div>
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Taker Fees</p>
-            <p className="text-xl font-bold text-[#EF4A3C]">{formatCompact(Math.abs(feeState.totalTakerFees))}</p>
+            <p className="text-xl font-bold text-[var(--neg)]">{formatCompact(Math.abs(feeState.totalTakerFees))}</p>
           </div>
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Settled Fills</p>
