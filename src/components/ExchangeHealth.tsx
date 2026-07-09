@@ -137,14 +137,14 @@ export function ExchangeHealthStats() {
       label: 'Open Interest',
       value: formatNumber(stats?.openInterest),
       icon: TrendingUp,
-      color: '#60a5fa',
+      color: 'var(--accent)',
       valueClass: 'text-blue-400',
     },
     {
       label: 'Active Traders',
       value: formatCount(stats?.activeTraders),
       icon: Users,
-      color: '#c084fc',
+      color: 'var(--coin-3)',
       valueClass: 'text-[var(--text-primary)]',
     },
     {
