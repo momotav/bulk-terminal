@@ -388,7 +388,7 @@ function Ladder({
 }) {
   const maxSz = Math.max(1e-9, ...levels.map((l) => l.sz));
   const pxColor = side === 'bid' ? 'text-[var(--pos)]' : 'text-[var(--neg)]';
-  const fillColor = side === 'bid' ? 'rgba(0, 180, 129, 0.15)' : 'rgba(239, 74, 60, 0.15)';
+  const fillColor = side === 'bid' ? 'rgb(var(--pos-rgb) / 0.15)' : 'rgb(var(--neg-rgb) / 0.15)';
 
   return (
     <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
