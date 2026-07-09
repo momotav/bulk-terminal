@@ -60,26 +60,26 @@ export const DEFAULT_ENABLED: readonly string[] = [...DEFAULT_COINS, OTHER_KEY];
  */
 export const COIN_COLORS: Record<string, string> = {
   // Originals — keep exactly as they were on the legacy 3-coin build.
-  BTC: '#00B481',  // green
-  ETH: '#2271B5',  // blue
-  SOL: '#7570B3',  // purple
+  BTC: 'var(--coin-3)',
+  ETH: 'var(--coin-1)',
+  SOL: 'var(--coin-5)',
 
   // Known BULK markets — pick visually distinct colors.
-  GOLD:     '#FFD700', // gold
-  XRP:      '#23292F', // near-black (brand)
-  BNB:      '#F3BA2F', // binance yellow
-  ZEC:      '#ECB244', // zcash orange-yellow
-  SUI:      '#4DA2FF', // sui blue
-  DOGE:     '#C2A633', // doge tan
-  FARTCOIN: '#A855F7', // purple-pink (playful)
-  HYPE:     '#97FBE4', // hyperliquid teal (in case BULK lists it)
+  GOLD: 'var(--coin-2)',
+  XRP: 'var(--coin-4)',
+  BNB: 'var(--coin-6)',
+  ZEC: 'var(--coin-7)',
+  SUI: 'var(--coin-8)',
+  DOGE: 'var(--coin-4)',
+  FARTCOIN: 'var(--coin-6)',
+  HYPE: 'var(--coin-7)',
 
   // Aggregate bucket — neutral so it doesn't compete with named series.
-  [OTHER_KEY]: '#888888',
+  [OTHER_KEY]: 'var(--coin-other)',
 
   // UI-only keys (used in composed charts alongside coin bars).
-  cumulative: '#FFB548',
-  total:      '#FFB548',
+  cumulative: 'var(--accent)',
+  total:      'var(--accent)',
 };
 
 /**
@@ -87,8 +87,8 @@ export const COIN_COLORS: Record<string, string> = {
  * same coin gets the same color across page reloads. Good contrast on dark bg.
  */
 const FALLBACK_PALETTE = [
-  '#EF4A3C', '#06B6D4', '#84CC16', '#F97316', '#14B8A6',
-  '#EC4899', '#8B5CF6', '#22D3EE', '#F59E0B', '#10B981',
+  'var(--coin-1)', 'var(--coin-2)', 'var(--coin-3)', 'var(--coin-4)',
+  'var(--coin-5)', 'var(--coin-6)', 'var(--coin-7)', 'var(--coin-8)',
 ];
 
 /**
