@@ -40,8 +40,8 @@ const COLORS = {
   ETH: 'var(--shade-1)',
   SOL: 'var(--shade-4)',
   [OTHER_KEY]: getCoinColor(OTHER_KEY),
-  cumulative: '#FFB548',
-  total: '#FFB548',
+  cumulative: 'var(--accent)',
+  total: 'var(--accent)',
 };
 
 // `ChartData` is imported from '@/lib/api' — see that file for the canonical
