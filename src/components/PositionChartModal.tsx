@@ -361,12 +361,12 @@ export function PositionChartModal({ position, onClose }: Props) {
     chartRef.current = chart;
 
     const series = chart.addCandlestickSeries({
-      upColor: '#00B481',
-      downColor: '#EF4A3C',
-      borderUpColor: '#00B481',
-      borderDownColor: '#EF4A3C',
-      wickUpColor: '#00B481',
-      wickDownColor: '#EF4A3C',
+      upColor: 'var(--pos)',
+      downColor: 'var(--neg)',
+      borderUpColor: 'var(--pos)',
+      borderDownColor: 'var(--neg)',
+      wickUpColor: 'var(--pos)',
+      wickDownColor: 'var(--neg)',
     });
     seriesRef.current = series;
 
@@ -400,7 +400,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     // Liq (amber dashed), Mark (green dotted) for live; Close for closed.
     series.createPriceLine({
       price: position.entryPrice,
-      color: position.side === 'long' ? '#00B481' : '#EF4A3C',
+      color: position.side === 'long' ? 'var(--pos)' : 'var(--neg)',
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
@@ -412,7 +412,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       // (applyOptions) instead of recreating it.
       markLineRef.current = series.createPriceLine({
         price: position.markPrice,
-        color: '#00B481',
+        color: 'var(--pos)',
         lineWidth: 1,
         lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
@@ -438,7 +438,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         (position.side === 'short' && position.closePrice < position.entryPrice);
       series.createPriceLine({
         price: position.closePrice,
-        color: wasProfitable ? '#00B481' : '#EF4A3C',
+        color: wasProfitable ? 'var(--pos)' : 'var(--neg)',
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
