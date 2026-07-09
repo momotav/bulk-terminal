@@ -11,9 +11,9 @@ import { ChartFrame } from '@/components/ChartFrame';
 
 const COLORS = {
   protocol: 'var(--pos)',
-  maker: '#2271B5',
+  maker: 'var(--coin-1)',
   taker: 'var(--neg)',
-  cumulative: '#FFB548',
+  cumulative: 'var(--accent)',
 };
 
 const timeRanges = [
@@ -416,7 +416,7 @@ export function ProtocolRevenueChart() {
           </div>
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Maker Rebates</p>
-            <p className="text-xl font-bold text-[#2271B5]">{formatCompact(Math.abs(feeState.totalMakerFees))}</p>
+            <p className="text-xl font-bold text-[var(--coin-1)]">{formatCompact(Math.abs(feeState.totalMakerFees))}</p>
           </div>
           <div>
             <p className="text-sm text-[var(--text-tertiary)] mb-1">Taker Fees</p>
