@@ -921,8 +921,8 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
           <AreaChart data={data}>
             <defs>
               <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ef4444" stopOpacity={0} />
-                <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
+                <stop offset="0%" stopColor="var(--neg)" stopOpacity={0} />
+                <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.3} />
               </linearGradient>
             </defs>
             <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
@@ -935,7 +935,7 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
               labelFormatter={(ts) => new Date(ts).toLocaleDateString('en-US')}
               formatter={(v: number) => [Math.abs(v) < 0.005 ? '$0.00' : `-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']}
             />
-            <Area type="monotone" dataKey="dd" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" />
+            <Area type="monotone" dataKey="dd" stroke="var(--neg)" strokeWidth={2} fill="url(#ddGrad)" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartFrame>
@@ -966,7 +966,7 @@ function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPo
             />
             <ReferenceLine y={0} stroke="var(--border-color)" />
             <Bar dataKey="v" radius={[2, 2, 0, 0]}>
-              {data.map((d, i) => <Cell key={i} fill={d.v >= 0 ? '#22c55e' : '#ef4444'} />)}
+              {data.map((d, i) => <Cell key={i} fill={d.v >= 0 ? 'var(--pos)' : 'var(--neg)'} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -1062,7 +1062,7 @@ function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] 
         <ol className="relative space-y-2.5 pl-4">
           {items.map((p, i) => (
             <li key={i} className="relative">
-              <span className="absolute -left-4 top-1.5 h-2 w-2 rounded-full" style={{ background: p.realizedPnl >= 0 ? '#22c55e' : '#ef4444' }} />
+              <span className="absolute -left-4 top-1.5 h-2 w-2 rounded-full" style={{ background: p.realizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }} />
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-primary)]">Closed {p.symbol.replace(/-USD$/, '')} {p.side === 'short' ? 'Short' : 'Long'}</span>
                 <span className={cn('font-mono font-semibold tabular-nums', p.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red')}>
@@ -1918,7 +1918,7 @@ export default function WalletPage() {
                     className={cn(
                       "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-full font-medium transition-all disabled:opacity-50",
                       isFollowing
-                        ? "bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20"
+                        ? "bg-bulk-accent/10 text-[var(--accent)] border border-bulk-accent/30 hover:bg-bulk-accent/20"
                         : "bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 shadow-[0_0_16px_rgba(255,181,71,0.25)]"
                     )}
                   >
@@ -2332,16 +2332,16 @@ export default function WalletPage() {
                       <AreaChart data={chartData} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                         <defs>
                           <linearGradient id="pnlLineGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#22c55e" />
-                            <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" />
-                            <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" />
-                            <stop offset="100%" stopColor="#ef4444" />
+                            <stop offset="0%" stopColor="var(--pos)" />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="var(--pos)" />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="var(--neg)" />
+                            <stop offset="100%" stopColor="var(--neg)" />
                           </linearGradient>
                           <linearGradient id="pnlFillGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
-                            <stop offset={`${zeroPosition * 100}%`} stopColor="#22c55e" stopOpacity={0.1} />
-                            <stop offset={`${zeroPosition * 100}%`} stopColor="#ef4444" stopOpacity={0.1} />
-                            <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
+                            <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.3} />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="var(--pos)" stopOpacity={0.1} />
+                            <stop offset={`${zeroPosition * 100}%`} stopColor="var(--neg)" stopOpacity={0.1} />
+                            <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.3} />
                           </linearGradient>
                         </defs>
                         <XAxis
@@ -2367,7 +2367,7 @@ export default function WalletPage() {
                           labelStyle={{ color: 'var(--text-secondary)' }}
                           labelFormatter={(ts) => new Date(ts).toLocaleString('en-US')}
                           formatter={(value: number) => {
-                            const color = value >= 0 ? '#22c55e' : '#ef4444';
+                            const color = value >= 0 ? 'var(--pos)' : 'var(--neg)';
                             return [<span style={{ color }}>${formatNumber(value, 2)}</span>, 'Total PnL'];
                           }}
                         />
