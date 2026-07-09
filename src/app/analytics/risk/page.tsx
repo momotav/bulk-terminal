@@ -28,20 +28,20 @@ const COLORS = {
   BTC: 'var(--shade-2)',
   ETH: 'var(--shade-1)',
   SOL: 'var(--shade-4)',
-  positive: '#60A5FA',
-  negative: '#A78BFA',
+  positive: 'var(--pos)',
+  negative: 'var(--neg)',
   neutral: 'var(--accent)',
 };
 
 // Regime labels based on value
 const getRegimeLabel = (regime: number): { label: string; color: string } => {
-  if (regime <= -8) return { label: 'Strong Bearish', color: '#7C3AED' };
-  if (regime <= -4) return { label: 'Bearish', color: '#A78BFA' };
-  if (regime <= -1) return { label: 'Slightly Bearish', color: '#C4B5FD' };
+  if (regime <= -8) return { label: 'Strong Bearish', color: 'var(--neg)' };
+  if (regime <= -4) return { label: 'Bearish', color: 'var(--neg)' };
+  if (regime <= -1) return { label: 'Slightly Bearish', color: 'var(--neg)' };
   if (regime === 0) return { label: 'Neutral', color: '#9CA3AF' };
-  if (regime <= 3) return { label: 'Slightly Bullish', color: '#BFDBFE' };
-  if (regime <= 7) return { label: 'Bullish', color: '#8AC0FC' };
-  return { label: 'Strong Bullish', color: '#2563EB' };
+  if (regime <= 3) return { label: 'Slightly Bullish', color: 'var(--pos)' };
+  if (regime <= 7) return { label: 'Bullish', color: 'var(--pos)' };
+  return { label: 'Strong Bullish', color: 'var(--pos)' };
 };
 
 // Market Regime Gauge Component
@@ -57,9 +57,9 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
           <svg viewBox="0 0 100 50" className="w-full h-full">
             <defs>
               <linearGradient id={`gauge-gradient-${symbol}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#7C3AED" />
+                <stop offset="0%" stopColor="var(--neg)" />
                 <stop offset="50%" stopColor="#9CA3AF" />
-                <stop offset="100%" stopColor="#2563EB" />
+                <stop offset="100%" stopColor="var(--pos)" />
               </linearGradient>
             </defs>
             <path
@@ -99,14 +99,14 @@ const HeatmapCell = ({ value, label }: { value: number; label?: string }) => {
   // Value ranges from 0 to 1 for correlation
   // High (close to 1) = green, Low (close to 0) = red
   const getColor = (v: number) => {
-    if (v >= 0.95) return 'bg-[#60A5FA]'; // Perfect correlation (self)
-    if (v >= 0.85) return 'bg-[#60A5FA]/90';
-    if (v >= 0.75) return 'bg-[#60A5FA]/70';
-    if (v >= 0.65) return 'bg-[#8AC0FC]/60';
+    if (v >= 0.95) return 'bg-[var(--pos)]'; // Perfect correlation (self)
+    if (v >= 0.85) return 'bg-bulk-green/90';
+    if (v >= 0.75) return 'bg-bulk-green/70';
+    if (v >= 0.65) return 'bg-bulk-green/60';
     if (v >= 0.55) return 'bg-[#9CA3AF]/50';
-    if (v >= 0.45) return 'bg-[#FB923C]/60';
-    if (v >= 0.35) return 'bg-[#A78BFA]/60';
-    return 'bg-[#A78BFA]/80'; // Low correlation
+    if (v >= 0.45) return 'bg-[var(--accent)]/60';
+    if (v >= 0.35) return 'bg-bulk-red/60';
+    return 'bg-bulk-red/80'; // Low correlation
   };
   
   return (
@@ -147,14 +147,14 @@ function CorrelationMatrix({
   // Returns the tailwind bg class for a correlation value. Kept identical to
   // HeatmapCell so the two panels stay visually consistent.
   const bgFor = (v: number): string => {
-    if (v >= 0.95) return 'bg-[#60A5FA]';
-    if (v >= 0.85) return 'bg-[#60A5FA]/90';
-    if (v >= 0.75) return 'bg-[#60A5FA]/70';
-    if (v >= 0.65) return 'bg-[#8AC0FC]/60';
+    if (v >= 0.95) return 'bg-[var(--pos)]';
+    if (v >= 0.85) return 'bg-bulk-green/90';
+    if (v >= 0.75) return 'bg-bulk-green/70';
+    if (v >= 0.65) return 'bg-bulk-green/60';
     if (v >= 0.55) return 'bg-[#9CA3AF]/50';
-    if (v >= 0.45) return 'bg-[#FB923C]/60';
-    if (v >= 0.35) return 'bg-[#A78BFA]/60';
-    return 'bg-[#A78BFA]/80';
+    if (v >= 0.45) return 'bg-[var(--accent)]/60';
+    if (v >= 0.35) return 'bg-bulk-red/60';
+    return 'bg-bulk-red/80';
   };
 
   return (
@@ -552,7 +552,7 @@ export default function RiskPage() {
                               </td>
                               <td className={cn(
                                 "text-right py-2 px-3 font-mono",
-                                spread >= 0 ? "text-[#60A5FA]" : "text-[#A78BFA]"
+                                spread >= 0 ? "text-[var(--pos)]" : "text-[var(--neg)]"
                               )}>
                                 {spread >= 0 ? '+' : ''}{spread.toFixed(2)} bps
                               </td>
@@ -628,17 +628,17 @@ export default function RiskPage() {
 
                 {fairSpreadData.length > 0 ? (
                   <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
-                    <ChartFrame title="Fair vs Mark Spread" className="h-full" yLabel="Spread (bps)" legend={[{ label: 'Positive', color: '#60A5FA' }, { label: 'Negative', color: '#A78BFA' }]}>
+                    <ChartFrame title="Fair vs Mark Spread" className="h-full" yLabel="Spread (bps)" legend={[{ label: 'Positive', color: 'var(--pos)' }, { label: 'Negative', color: 'var(--neg)' }]}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairSpreadData}>
                         <defs>
                           <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#60A5FA" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#60A5FA" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="var(--pos)" stopOpacity={0}/>
                           </linearGradient>
                           <linearGradient id="spreadGradientNeg" x1="0" y1="1" x2="0" y2="0">
-                            <stop offset="5%" stopColor="#A78BFA" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#A78BFA" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="var(--neg)" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="var(--neg)" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
                         <XAxis
@@ -661,7 +661,7 @@ export default function RiskPage() {
                           type="monotone"
                           dataKey="spreadBps"
                           name="Spread (bps)"
-                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? '#60A5FA' : '#A78BFA'}
+                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'var(--pos)' : 'var(--neg)'}
                           fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
                           strokeWidth={2}
                         />
