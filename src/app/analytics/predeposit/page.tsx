@@ -273,7 +273,7 @@ export default function PreDepositPage() {
         </div>
       )}
       {status && !status.configured && (
-        <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
+        <div className="rounded-lg border border-bulk-accent/30 bg-bulk-accent/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
           Pre-deposit indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
         </div>
       )}
@@ -287,8 +287,8 @@ export default function PreDepositPage() {
       {/* KPI band — Current TVL is the hero. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Current TVL" value={kpis ? fmtUsd(kpis.liveTvl) : '—'} color="var(--accent)" hero loading={loading} />
-        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '—'} color="var(--shade-1)" loading={loading} />
-        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '—'} color="var(--shade-5)" loading={loading} />
+        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '—'} color="var(--pos)" loading={loading} />
+        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '—'} color="var(--neg)" loading={loading} />
         <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '—'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -375,7 +375,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-1">
 <ChartCard title="Daily Deposits / Withdrawals" subtitle="USDC in vs out per day">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full" legend={[{ label: 'Deposits', color: 'var(--shade-1)' }, { label: 'Withdrawals', color: 'var(--shade-5)' }]}>
+            <ChartFrame title="Daily Deposits / Withdrawals" className="h-full" legend={[{ label: 'Deposits', color: 'var(--pos)' }, { label: 'Withdrawals', color: 'var(--neg)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -385,8 +385,8 @@ export default function PreDepositPage() {
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number, n) => [fmtUsd(v), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="deposits" stackId="a" fill="var(--shade-1)" name="Deposits" />
-                <Bar dataKey="withdrawals" stackId="a" fill="var(--shade-5)" name="Withdrawals" />
+                <Bar dataKey="deposits" stackId="a" fill="var(--pos)" name="Deposits" />
+                <Bar dataKey="withdrawals" stackId="a" fill="var(--neg)" name="Withdrawals" />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -450,7 +450,7 @@ export default function PreDepositPage() {
         <ResizableChartRow storageKey="predeposit-row-a-3">
 <ChartCard title="Net Flow per Day" subtitle="Deposits minus withdrawals">
           {tvl.length === 0 ? <Empty loading={loading} /> : (
-            <ChartFrame title="Net Flow per Day" className="h-full" legend={[{ label: 'Inflow', color: 'var(--shade-1)' }, { label: 'Outflow', color: 'var(--shade-5)' }]}>
+            <ChartFrame title="Net Flow per Day" className="h-full" legend={[{ label: 'Inflow', color: 'var(--pos)' }, { label: 'Outflow', color: 'var(--neg)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tvl}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.3} />
@@ -461,7 +461,7 @@ export default function PreDepositPage() {
                   formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmtUsd(v)}`, 'Net flow']} />
                 <Bar dataKey="netFlow" name="Net flow" radius={[2, 2, 0, 0]}>
                   {tvl.map((p, i) => (
-                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--shade-1)' : 'var(--shade-5)'} />
+                    <Cell key={i} fill={p.netFlow >= 0 ? 'var(--pos)' : 'var(--neg)'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -485,7 +485,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} width={40} domain={[0, 100]} />
                 <Tooltip cursor={{ stroke: "var(--text-primary)", strokeOpacity: 0.15 }} contentStyle={tooltipStyle} labelFormatter={fmtDate}
                   formatter={(v: number) => [`${v.toFixed(1)}%`, 'Withdrawal rate']} />
-                <Line type="monotone" dataKey="rate" stroke="var(--shade-5)" strokeWidth={2} dot={false} name="Withdrawal rate" />
+                <Line type="monotone" dataKey="rate" stroke="var(--neg)" strokeWidth={2} dot={false} name="Withdrawal rate" />
               </LineChart>
             </ResponsiveContainer>
             </ChartFrame>
@@ -584,7 +584,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle}
                   formatter={(v: number) => [v, 'Depositors']} />
-                <Bar dataKey="count" fill="var(--shade-1)" name="Depositors" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="count" fill="var(--pos)" name="Depositors" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
