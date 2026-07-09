@@ -13,15 +13,16 @@ const config: Config = {
         // === OFFICIAL BULK COLOR PALETTE ===
         bulk: {
           // Primary accent colors
-          green: '#00B481',
-          red: '#EF4A3C',
+          green: 'rgb(var(--pos-rgb) / <alpha-value>)',
+          red: 'rgb(var(--neg-rgb) / <alpha-value>)',
           orange: '#FFB547',
+          accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
           blue: '#2171B5',
           purple: '#7570B3',
           
           // Bids/Asks (same for both themes)
-          bids: '#00B481',
-          asks: '#EF4A3C',
+          bids: 'rgb(var(--pos-rgb) / <alpha-value>)',
+          asks: 'rgb(var(--neg-rgb) / <alpha-value>)',
           
           // Secondary bids/asks
           'bids-secondary-dark': '#134A55',
