@@ -8,8 +8,7 @@ import { User, LogOut, Menu, X, ChevronDown, Wallet, Users, Mail } from 'lucide-
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
-import { ThemeToggle } from './ThemeToggle';
-import { PaletteSwitcher } from './PaletteSwitcher';
+import { AppearanceMenu } from './AppearanceMenu';
 import { NetworkSwitcher } from './NetworkSwitcher';
 
 const navItems = [
@@ -251,9 +250,8 @@ export function Header() {
             </div>
 
             {/* Theme Toggle - hidden on mobile */}
-            <div className="hidden sm:flex items-center gap-2">
-              <PaletteSwitcher />
-              <ThemeToggle />
+            <div className="hidden sm:block">
+              <AppearanceMenu />
             </div>
             
             {ready && authenticated ? (
@@ -423,11 +421,8 @@ export function Header() {
             {/* Theme toggle in mobile menu */}
             <div className="px-4 py-3 border-t border-[var(--border-color)]">
               <div className="flex items-center justify-between px-4">
-                <span className="text-sm text-[var(--text-secondary)]">Theme</span>
-                <div className="flex items-center gap-2">
-                  <PaletteSwitcher />
-                  <ThemeToggle />
-                </div>
+                <span className="text-sm text-[var(--text-secondary)]">Appearance</span>
+                <AppearanceMenu />
               </div>
             </div>
             
