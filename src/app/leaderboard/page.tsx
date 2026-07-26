@@ -24,7 +24,7 @@ export default function LeaderboardPage() {
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
       
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+      <main className="flex-1 responsive-container py-6">
         {/* Header */}
         <div className="mb-6">
           <h1 className="page-title text-[var(--text-primary)] mb-1">Leaderboard</h1>

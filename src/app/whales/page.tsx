@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Anchor, Eye, Star, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, Eye, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
-import { formatAddress, userApi, formatCompact, type UserSearchResult } from '@/lib/api';
+import { formatAddress, userApi, formatCompact, cn, type UserSearchResult } from '@/lib/api';
 import { useStore } from '@/store';
 import { usePrivy } from '@privy-io/react-auth';
+import { Anchor } from 'lucide-react';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -19,7 +20,7 @@ export default function WhalesPage() {
   const router = useRouter();
   const { following } = useStore();
   const { authenticated } = usePrivy();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -35,27 +36,23 @@ export default function WhalesPage() {
         setShowResults(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Debounced search for Twitter handles
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     const query = searchQuery.trim();
-    
-    // If it looks like a full wallet address, don't search - let them submit
+
+    // If it looks like a full wallet address, don't search — let them submit.
     if (query.length >= 32) {
       setSearchResults([]);
       setShowResults(false);
       return;
     }
 
-    // Search if 2+ characters
     if (query.length >= 2) {
       debounceRef.current = setTimeout(async () => {
         setSearching(true);
@@ -76,20 +73,15 @@ export default function WhalesPage() {
     }
 
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [searchQuery]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-
     setShowResults(false);
     setError('');
-
-    // Navigate to the wallet page
     router.push(`/whales/${searchQuery.trim()}`);
   };
 
@@ -100,158 +92,149 @@ export default function WhalesPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="page-title text-[var(--text-primary)] mb-1 flex items-center gap-2">
-            <Anchor className="w-6 h-6 text-bulk-green" />
-            Whale Tracker
-          </h1>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Track any wallet on BULK Exchange. Search by wallet address or X handle.
-          </p>
-        </div>
+    <main className="responsive-container py-6 space-y-6">
+      {/* Header — calm sentence-case heading, matching the rest of the app. */}
+      <header>
+        <h1 className="page-title text-[var(--role-content)]">Whale tracker</h1>
+        <p className="mt-1 text-[13px] text-[var(--role-content-muted)]">
+          Track any wallet on BULK Exchange — search by address or X handle.
+        </p>
+      </header>
 
-        {/* Search */}
-        <form onSubmit={handleSearch} className="mb-6">
-          <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4">
-            <label className="block text-xs uppercase tracking-wider text-[var(--text-secondary)] mb-2">
-              Search Wallet Address or X Handle
-            </label>
-            <div className="flex gap-2">
-              <div className="relative flex-1" ref={searchRef}>
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => searchResults.length > 0 && setShowResults(true)}
-                  placeholder="Enter wallet address or @username..."
-                  className="w-full pl-10 pr-4 py-2 bg-[var(--bg-secondary-20)] border border-[var(--border-color)] rounded-lg text-sm text-[var(--text-primary)] placeholder-text-tertiary focus:outline-none focus:border-bulk-green"
-                />
-                
-                {/* Search Results Dropdown */}
-                {showResults && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto">
-                    {searchResults.map((result) => (
-                      <button
-                        key={result.wallet_address}
-                        type="button"
-                        onClick={() => handleSelectResult(result.wallet_address)}
-                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-[var(--bg-secondary-20)] transition-colors text-left border-b border-[var(--border-color)] last:border-b-0"
-                      >
-                        {/* Avatar */}
-                        {result.twitter_avatar ? (
-                          <img 
-                            src={result.twitter_avatar} 
-                            alt="" 
-                            className="w-10 h-10 rounded-full border border-[var(--border-color)]"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-sm font-bold">
-                            {result.wallet_address.slice(0, 2)}
-                          </div>
-                        )}
-                        
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            {result.twitter_name && (
-                              <span className="font-medium text-[var(--text-primary)] truncate">
-                                {result.twitter_name}
-                              </span>
-                            )}
-                            {result.twitter_handle && (
-                              <span className="flex items-center gap-1 text-[var(--text-secondary)] text-sm">
-                                <XIcon className="w-3 h-3" />
-                                @{result.twitter_handle}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-[var(--text-tertiary)]">
-                            <span className="font-mono">{formatAddress(result.wallet_address)}</span>
-                            {result.total_pnl !== undefined && result.total_pnl !== null && (
-                              <span className={result.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
-                                PnL: {result.total_pnl >= 0 ? '+' : ''}${formatCompact(result.total_pnl)}
-                              </span>
-                            )}
-                            {result.total_volume !== undefined && result.total_volume !== null && (
-                              <span>Vol: ${formatCompact(result.total_volume)}</span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Loading indicator */}
-                {searching && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <Loader2 className="w-4 h-4 text-[var(--text-secondary)] animate-spin" />
-                  </div>
-                )}
+      {/* Search — a flat field (no heavy box), mirroring the dashboard. */}
+      <form onSubmit={handleSearch}>
+        <div className="flex gap-2">
+          <div className="relative flex-1" ref={searchRef}>
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--role-content-subtle)]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setShowResults(true)}
+              placeholder="Enter a wallet address or @username…"
+              className="w-full rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] py-2.5 pl-11 pr-10 text-sm text-[var(--role-content)] placeholder-[var(--role-content-subtle)] transition-colors duration-200 hover:border-[var(--role-line-subtle)] focus:border-[var(--role-chrome)] focus:outline-none"
+            />
+
+            {searching && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--role-content-subtle)]" />
               </div>
-              <button
-                type="submit"
-                disabled={!searchQuery.trim()}
-                className="px-4 py-2 bg-bulk-green text-dark-primary rounded-lg font-medium flex items-center gap-2 text-sm hover:bg-bulk-green/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Eye className="w-4 h-4" />
-                Track
-              </button>
-            </div>
-            
-            {error && (
-              <div className="flex items-center gap-2 mt-2 text-red-400 text-xs">
-                <AlertCircle className="w-3 h-3" />
-                {error}
+            )}
+
+            {/* Result dropdown — floats above the page, so it earns a shadow. */}
+            {showResults && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-[var(--shadow-lg)]">
+                {searchResults.map((result) => (
+                  <button
+                    key={result.wallet_address}
+                    type="button"
+                    onClick={() => handleSelectResult(result.wallet_address)}
+                    className="flex w-full items-center gap-3 border-b border-[var(--role-line-subtle)] px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--role-surface-raised)]"
+                  >
+                    {result.twitter_avatar ? (
+                      <img
+                        src={result.twitter_avatar}
+                        alt=""
+                        className="h-10 w-10 rounded-full border border-[var(--role-line)]"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--accent-rgb)/0.15)] text-sm font-bold text-[var(--role-chrome)]">
+                        {result.wallet_address.slice(0, 2)}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {result.twitter_name && (
+                          <span className="truncate font-medium text-[var(--role-content)]">
+                            {result.twitter_name}
+                          </span>
+                        )}
+                        {result.twitter_handle && (
+                          <span className="flex items-center gap-1 text-sm text-[var(--role-content-muted)]">
+                            <XIcon className="h-3 w-3" />@{result.twitter_handle}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-[var(--role-content-subtle)]">
+                        <span className="font-mono">{formatAddress(result.wallet_address)}</span>
+                        {result.total_pnl !== undefined && result.total_pnl !== null && (
+                          <span
+                            className="tabular-nums"
+                            style={{ color: result.total_pnl >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)' }}
+                          >
+                            PnL: {result.total_pnl >= 0 ? '+' : ''}${formatCompact(result.total_pnl)}
+                          </span>
+                        )}
+                        {result.total_volume !== undefined && result.total_volume !== null && (
+                          <span>Vol: ${formatCompact(result.total_volume)}</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
           </div>
-        </form>
 
-        {/* Following List */}
-        {authenticated && following.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-400" />
-              Following ({following.length})
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {following.map((wallet) => (
-                <button
-                  key={wallet.wallet_address}
-                  onClick={() => router.push(`/whales/${wallet.wallet_address}`)}
-                  className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 flex items-center gap-3 hover:border-bulk-green transition-colors text-left"
-                >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary text-xs font-bold shrink-0">
-                    {wallet.wallet_address.slice(0, 2)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="font-mono text-xs text-[var(--text-primary)] block truncate">
-                      {wallet.nickname || formatAddress(wallet.wallet_address)}
-                    </span>
-                    {wallet.total_pnl !== undefined && (
-                      <span className={`text-xs ${(wallet.total_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        PnL: ${((wallet.total_pnl || 0) / 1000).toFixed(1)}K
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+          <button
+            type="submit"
+            disabled={!searchQuery.trim()}
+            className="flex shrink-0 items-center gap-2 rounded-[var(--radius-sm)] bg-bulk-accent px-4 py-2.5 text-sm font-medium transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ color: 'var(--accent-text)' }}
+          >
+            <Eye className="h-4 w-4" />
+            Track
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-[var(--role-signal-negative)]">
+            <AlertCircle className="h-3 w-3" />
+            {error}
           </div>
         )}
+      </form>
 
-        {/* Top Whales — sourced from BULK indexer's volume ranking
-            (was previously the DB-tracked leaderboard, which only saw
-            wallets we'd already collected stats for and missed many real
-            top-volume traders). The BULK indexer is authoritative across
-            all addresses on the exchange. Locked to `volume` metric since
-            this panel's whole point is "biggest whales by trade volume". */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Following — calmer card rows for wallets the user tracks. */}
+      {authenticated && following.length > 0 && (
+        <section>
+          <h2 className="t-h2 mb-3 flex items-center gap-2">
+            <Star className="h-4 w-4 text-[var(--role-chrome)]" />
+            Following <span className="text-[var(--role-content-subtle)]">({following.length})</span>
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {following.map((wallet) => (
+              <button
+                key={wallet.wallet_address}
+                onClick={() => router.push(`/whales/${wallet.wallet_address}`)}
+                className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] p-3 text-left transition-colors hover:border-[var(--role-line-subtle)]"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--accent-rgb)/0.15)] text-xs font-bold text-[var(--role-chrome)]">
+                  {wallet.wallet_address.slice(0, 2)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-xs text-[var(--role-content)]">
+                    {wallet.nickname || formatAddress(wallet.wallet_address)}
+                  </span>
+                  {wallet.total_pnl !== undefined && (
+                    <span
+                      className="text-xs tabular-nums"
+                      style={{ color: (wallet.total_pnl || 0) >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)' }}
+                    >
+                      PnL: ${((wallet.total_pnl || 0) / 1000).toFixed(1)}K
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Top whales + top traders — sourced from BULK's indexer volume /
+          PnL rankings (authoritative across all addresses on the exchange). */}
+      <section aria-label="Rankings">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="h-[500px]">
             <BulkLeaderboardTable
               limit={15}
@@ -263,12 +246,6 @@ export default function WhalesPage() {
             />
           </div>
           <div className="h-[500px]">
-            {/* Top Traders by PnL — also sourced from BULK indexer for
-                consistency with the Top Whales panel on the left. The
-                old DB-tracked version only saw wallets we'd collected,
-                missing many real top performers. Locked to realized_pnl
-                metric since this panel is purpose-built for "who's making
-                money on the exchange". Window is user-selectable. */}
             <BulkLeaderboardTable
               limit={15}
               defaultMetric="realized_pnl"
@@ -278,7 +255,7 @@ export default function WhalesPage() {
             />
           </div>
         </div>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

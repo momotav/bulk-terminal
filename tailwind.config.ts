@@ -15,10 +15,12 @@ const config: Config = {
           // Primary accent colors
           green: 'rgb(var(--pos-rgb) / <alpha-value>)',
           red: 'rgb(var(--neg-rgb) / <alpha-value>)',
-          orange: '#FFB547',
+          // orange / blue / purple were fixed hexes that ignored the palette.
+          // They now ride the accent + info roles so every utility re-tints.
+          orange: 'rgb(var(--accent-rgb) / <alpha-value>)',
           accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
-          blue: '#2171B5',
-          purple: '#7570B3',
+          blue: 'rgb(var(--info-rgb) / <alpha-value>)',
+          purple: 'rgb(var(--info-rgb) / <alpha-value>)',
           
           // Bids/Asks (same for both themes)
           bids: 'rgb(var(--pos-rgb) / <alpha-value>)',
@@ -34,15 +36,15 @@ const config: Config = {
           'accent-dark': '#FFB547',
           'accent-light': '#5A2C40',
           
-          // Muted colors (with transparency)
-          'muted-danger': 'rgba(239, 74, 60, 0.2)',
-          'muted-warning': 'rgba(255, 181, 71, 0.2)',
-          'muted-success': 'rgba(0, 180, 129, 0.2)',
-          'muted-success-40': 'rgba(0, 180, 129, 0.4)',
-          
+          // Muted colors (palette-aware via the functional roles)
+          'muted-danger': 'rgb(var(--neg-rgb) / 0.2)',
+          'muted-warning': 'rgb(var(--accent-rgb) / 0.2)',
+          'muted-success': 'rgb(var(--pos-rgb) / 0.2)',
+          'muted-success-40': 'rgb(var(--pos-rgb) / 0.4)',
+
           // Volume colors
-          'volume-bids': 'rgba(0, 180, 129, 0.2)',
-          'volume-asks': 'rgba(239, 74, 60, 0.2)',
+          'volume-bids': 'rgb(var(--pos-rgb) / 0.2)',
+          'volume-asks': 'rgb(var(--neg-rgb) / 0.2)',
         },
         
         // Dark theme colors

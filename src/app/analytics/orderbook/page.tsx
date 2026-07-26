@@ -1,83 +1,55 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { analytics, formatCompact, cn, type OrderbookSnapshot } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Area,
   AreaChart,
-  ReferenceLine,
+  Bar,
+  BarChart,
+  Customized,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import { analytics, formatCompact, cn, type OrderbookSnapshot, type OrderbookLevel } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
-import { ChartFrame } from '@/components/ChartFrame';
+import { StatCard as SharedStatCard } from '@/components/StatCard';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 // ----------------------------------------------------------------------------
 // Constants & helpers
 // ----------------------------------------------------------------------------
 
-// Market identifier is any string from BULK's /exchangeInfo (e.g. "BTC-USD",
-// "DOGE-USD", "FARTCOIN-USD"). The old `MARKETS = ['BTC-USD', 'ETH-USD', 'SOL-USD']`
-// const was removed — the full list is now fetched at runtime via the
-// useAvailableCoins hook, so newly-listed BULK markets show up here
-// automatically with no code changes.
 type Market = string;
 
-const COLORS = {
-  bid: 'var(--pos)',
-  ask: 'var(--neg)',
-  mid: 'var(--text-secondary)',
-};
+// recharts sets stroke/fill as SVG presentation attributes; in this app those
+// resolve var(--…) fine (the other analytics charts rely on it), so the depth
+// chart uses the palette variables directly and follows palette/theme switches.
+const BID = 'var(--pos)';
+const ASK = 'var(--neg)';
 
-// Auto-refresh every 3 seconds. Backend caches for 2s.
 const REFRESH_INTERVAL_MS = 3000;
 
-// Locale-independent number formatting. Using en-US explicitly prevents the
-// ".toLocaleString()" bug where a German/Russian/Ukrainian browser would render
-// "23,2435" instead of "23.2435" because comma is their decimal separator.
 function formatPrice(px: number): string {
-  // Decimal places vary by magnitude — SOL needs 4 dp, BTC wants 2 dp.
   let decimals = 2;
   if (px < 10) decimals = 4;
   else if (px < 1000) decimals = 3;
-  return px.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  return px.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function formatSize(sz: number): string {
-  // Sizes like "4.57" BTC or "108,548.65" SOL — up to 4 decimals, thousands sep.
-  return sz.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  });
+  return sz.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
-function formatBps(bps: number | null): string {
-  if (bps === null || !isFinite(bps)) return '—';
-  return `${bps.toFixed(2)}`;
+function formatBps(bps: number | null | undefined): string {
+  if (bps == null || !isFinite(bps)) return '—';
+  return bps.toFixed(2);
 }
 
-// ----------------------------------------------------------------------------
-// Market selector: thin adapter around the shared <CoinPicker> so the
-// orderbook page uses the exact same picker design as every other page
-// on the site (Liquidations Summary, Risk > Fair Spread, etc.).
-//
-// The orderbook API works in full symbols ("BTC-USD") but CoinPicker's
-// contract is bare coin names ("BTC"), so we adapt at the boundary.
-// ----------------------------------------------------------------------------
-
-function MarketSelector({
-  value,
-  onChange,
-}: {
-  value: Market;
-  onChange: (m: Market) => void;
-}) {
+// Thin adapter around the shared <CoinPicker>: the orderbook API speaks full
+// symbols ("BTC-USD") but CoinPicker's contract is bare coin names ("BTC").
+function MarketSelector({ value, onChange }: { value: Market; onChange: (m: Market) => void }) {
   return (
     <CoinPicker
       value={value.replace('-USD', '')}
@@ -88,24 +60,20 @@ function MarketSelector({
 }
 
 // ----------------------------------------------------------------------------
-// FlashingValue — briefly highlights when the value changes, then fades back.
-//
-// The effect is driven by tracking the previous value in a ref. On every render
-// where the incoming value differs from the ref, we flip a `flash` state on
-// for ~500ms (via setTimeout), which applies a colored background. When it
-// times out we go back to neutral. The underlying text is unchanged — this is
-// just a visual cue that "something updated" so the page doesn't feel dead
-// while still being easy on the eyes.
+// FlashingValue — a subtle background pulse when the value changes, so a live
+// feed reads as alive without being noisy. Tracks the previous value in a ref
+// and flips a flag for ~500ms on a real change.
 // ----------------------------------------------------------------------------
 
 function FlashingValue({
   value,
   className,
+  style,
   accent,
 }: {
   value: string;
   className?: string;
-  /** Determines the flash color. 'auto' flashes neutral (amber); 'bid' green; 'ask' red. */
+  style?: CSSProperties;
   accent?: 'bid' | 'ask' | 'auto';
 }) {
   const prevRef = useRef<string>(value);
@@ -113,7 +81,6 @@ function FlashingValue({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Skip the flash on the very first render — only animate real changes.
     if (prevRef.current !== value) {
       setFlashing(true);
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -125,20 +92,18 @@ function FlashingValue({
     };
   }, [value]);
 
-  const flashBg =
-    accent === 'bid'
-      ? 'bg-bulk-green/20'
-      : accent === 'ask'
-      ? 'bg-bulk-red/20'
-      : 'bg-[var(--text-primary)]/10';
+  const flashBg = !flashing
+    ? 'transparent'
+    : accent === 'bid'
+    ? 'rgb(var(--pos-rgb) / 0.16)'
+    : accent === 'ask'
+    ? 'rgb(var(--neg-rgb) / 0.16)'
+    : 'var(--bg-secondary-20)';
 
   return (
     <span
-      className={cn(
-        'inline-block rounded px-1 -mx-1 transition-colors duration-500 ease-out',
-        flashing ? flashBg : 'bg-transparent',
-        className
-      )}
+      className={cn('-mx-1 inline-block rounded px-1 transition-colors duration-500 ease-out', className)}
+      style={{ ...style, backgroundColor: flashBg }}
     >
       {value}
     </span>
@@ -146,296 +111,224 @@ function FlashingValue({
 }
 
 // ----------------------------------------------------------------------------
-// StatCell — matches the "Total Trades / Total Volume" row on the General page.
-// Cards have no individual border; they sit inside a single rounded container
-// with gap-px producing hairline dividers between them.
+// StatCard — flat KPI card matching the dashboard's stat row.
 // ----------------------------------------------------------------------------
 
-function StatCell({
+function StatCard({
   label,
   value,
   sub,
   unit,
   accent,
-  flashAccent,
 }: {
   label: string;
   value: string;
   sub?: string;
   unit?: string;
-  accent?: 'bid' | 'ask' | 'muted';
-  /** Optional accent color for the flash animation — defaults to card accent. */
-  flashAccent?: 'bid' | 'ask' | 'auto';
+  accent?: 'bid' | 'ask';
 }) {
-  const valueColor =
-    accent === 'bid'
-      ? 'text-[var(--pos)]'
-      : accent === 'ask'
-      ? 'text-[var(--neg)]'
-      : 'text-[var(--text-primary)]';
-  const resolvedFlashAccent =
-    flashAccent ?? (accent === 'bid' ? 'bid' : accent === 'ask' ? 'ask' : 'auto');
-
+  // Delegates to the shared StatCard so the orderbook KPIs match every other
+  // page, while keeping this page's extras: a flash-on-change and a bid/ask
+  // value tint. FlashingValue carries no typography of its own, so it inherits
+  // the shared card's mono-26 treatment.
+  const color = accent === 'bid' ? 'var(--pos)' : accent === 'ask' ? 'var(--neg)' : undefined;
+  const flashAccent = accent === 'bid' ? 'bid' : accent === 'ask' ? 'ask' : 'auto';
   return (
-    <div className="bg-[var(--bg-base)] p-4">
-      <p className="text-xs text-[var(--text-tertiary)] mb-1">{label}</p>
-      <div className="flex items-baseline gap-1.5">
-        <FlashingValue
-          value={value}
-          accent={resolvedFlashAccent}
-          className={cn('text-2xl font-bold tabular-nums tracking-tight', valueColor)}
-        />
-        {unit && (
-          <span className="text-sm text-[var(--text-tertiary)] font-medium">{unit}</span>
-        )}
-      </div>
-      {sub !== undefined && (
-        <p className="text-xs text-[var(--text-tertiary)] mt-1 tabular-nums">{sub}</p>
-      )}
-    </div>
+    <SharedStatCard
+      label={label}
+      valueColor={color}
+      unit={unit}
+      sub={sub ?? ' '}
+      value={<FlashingValue value={value} accent={flashAccent} />}
+    />
   );
 }
 
 // ----------------------------------------------------------------------------
-// Depth chart — staircase visualization of cumulative notional
+// Depth chart — cumulative-notional staircase, recharts, in a clean panel.
 // ----------------------------------------------------------------------------
 
 type DepthPoint = { px: number; bid?: number; ask?: number };
 
 function buildDepthSeries(ob: OrderbookSnapshot): DepthPoint[] {
-  const bidPoints: DepthPoint[] = [];
+  const points: DepthPoint[] = [];
   let bidCum = 0;
   for (const l of ob.bids) {
     bidCum += l.px * l.sz;
-    bidPoints.push({ px: l.px, bid: bidCum });
+    points.push({ px: l.px, bid: bidCum });
   }
-
-  const askPoints: DepthPoint[] = [];
   let askCum = 0;
   for (const l of ob.asks) {
     askCum += l.px * l.sz;
-    askPoints.push({ px: l.px, ask: askCum });
+    points.push({ px: l.px, ask: askCum });
   }
-
-  return [...bidPoints, ...askPoints].sort((a, b) => a.px - b.px);
+  return points.sort((a, b) => a.px - b.px);
 }
 
-/**
- * Custom "mid price" indicator — dashed vertical line with a pill badge at top.
- * Replaces Recharts' default `label` prop which renders unstyled text.
- */
-function MidPriceIndicator(props: any) {
-  const { viewBox, midValue } = props;
-  if (!viewBox || midValue == null) return null;
-  const { x, y, height } = viewBox;
-  const lineX = x;
-  const badgeText = `Mid  $${formatPrice(midValue)}`;
-  const badgeWidth = Math.max(90, 7.2 * badgeText.length + 16);
-  const badgeHeight = 20;
-  const badgeY = y - 2;
-  const badgeX = lineX - badgeWidth / 2;
+type MidGeom = { x: number; top: number; height: number };
 
-  return (
-    <g>
-      <line
-        x1={lineX}
-        y1={y}
-        x2={lineX}
-        y2={y + height}
-        stroke="var(--text-secondary)"
-        strokeDasharray="3 3"
-        strokeWidth={1}
-        opacity={0.5}
-      />
-      <rect
-        x={badgeX}
-        y={badgeY}
-        width={badgeWidth}
-        height={badgeHeight}
-        rx={badgeHeight / 2}
-        ry={badgeHeight / 2}
-        fill="var(--bg-muted)"
-        stroke="var(--border-color)"
-        strokeWidth={1}
-      />
-      <text
-        x={lineX}
-        y={badgeY + badgeHeight / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={11}
-        fill="var(--text-primary)"
-        style={{ fontFamily: 'inherit', fontWeight: 500 }}
-      >
-        {badgeText}
-      </text>
-    </g>
+// Reads the EXACT plot geometry recharts computed (x-scale + plot offset) for
+// the mid price, and hands it up via `onGeom`. recharts strips inline styles
+// off Customized SVG output, so instead of drawing the marker in the chart we
+// use this only to measure, then render the marker as a DOM overlay whose CSS
+// transform transitions smoothly. setState is deferred to a microtask so it
+// never fires during recharts' render, and guarded so identical geometry
+// doesn't loop.
+function MidGeomReader({ xAxisMap, offset, mid, onGeom }: any) {
+  const key = xAxisMap ? Object.keys(xAxisMap)[0] : null;
+  const scale = key ? xAxisMap[key]?.scale : null;
+  if (scale && offset && mid != null) {
+    const x = scale(mid);
+    if (typeof x === 'number' && isFinite(x)) {
+      const g: MidGeom = { x, top: offset.top, height: offset.height };
+      // rAF (not a microtask) so the setState lands between frames, fully
+      // outside React's render phase — no "update while rendering" warning.
+      requestAnimationFrame(() =>
+        onGeom((prev: MidGeom | null) =>
+          prev && prev.x === g.x && prev.top === g.top && prev.height === g.height ? prev : g
+        )
+      );
+    }
+  }
+  return null;
+}
+
+type LevelPoint = { px: number; bid?: number; ask?: number };
+
+function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+  const [view, setView] = useState<'depth' | 'levels'>('depth');
+  const [midGeom, setMidGeom] = useState<MidGeom | null>(null);
+
+  const depthData = useMemo(() => buildDepthSeries(book), [book]);
+  // Per-price-level size (not cumulative), one point per level, split by side.
+  const levelData = useMemo<LevelPoint[]>(
+    () =>
+      [
+        ...book.bids.map((l) => ({ px: l.px, bid: l.sz })),
+        ...book.asks.map((l) => ({ px: l.px, ask: l.sz })),
+      ].sort((a, b) => a.px - b.px),
+    [book]
   );
-}
 
-function DepthChart({ data, mid }: { data: DepthPoint[]; mid: number | null }) {
-  return (
-    <div className="h-[320px] w-full">
-      <ChartFrame title="Depth Chart" className="h-full" legend={[{ label: 'Bids', color: COLORS.bid }, { label: 'Asks', color: COLORS.ask }]}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 28, right: 10, bottom: 5, left: 10 }}>
-          <defs>
-            {/* Soft vertical gradients give a more premium feel than flat fills */}
-            <linearGradient id="bidGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={COLORS.bid} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={COLORS.bid} stopOpacity={0.05} />
-            </linearGradient>
-            <linearGradient id="askGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={COLORS.ask} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={COLORS.ask} stopOpacity={0.05} />
-            </linearGradient>
-          </defs>
-          <XAxis
-            dataKey="px"
-            type="number"
-            domain={['dataMin', 'dataMax']}
-            tickFormatter={(v) => formatCompact(v)}
-            tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
-            axisLine={{ stroke: 'var(--border-color)' }}
-            tickLine={false}
-          />
-          <YAxis
-            tickFormatter={(v) => `$${formatCompact(v)}`}
-            tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
-            axisLine={{ stroke: 'var(--border-color)' }}
-            tickLine={false}
-            width={60}
-          />
-          <Tooltip
-            cursor={{ stroke: 'var(--text-secondary)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
-            content={({ active, payload }) => {
-              if (!active || !payload || !payload.length) return null;
-              const p = payload[0].payload as DepthPoint;
-              return (
-                <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-3 py-2 shadow-xl min-w-[180px]">
-                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1.5 font-medium">
-                    price ${formatPrice(p.px)}
-                  </p>
-                  {typeof p.bid === 'number' && (
-                    <p className="text-sm flex items-center gap-2 tabular-nums">
-                      <span className="inline-block w-2 h-2 rounded-full bg-[var(--pos)]" />
-                      <span className="text-[var(--text-tertiary)]">bids</span>
-                      <span className="text-[var(--text-primary)] font-medium ml-auto">
-                        ${formatCompact(p.bid)}
-                      </span>
-                    </p>
-                  )}
-                  {typeof p.ask === 'number' && (
-                    <p className="text-sm flex items-center gap-2 tabular-nums">
-                      <span className="inline-block w-2 h-2 rounded-full bg-[var(--neg)]" />
-                      <span className="text-[var(--text-tertiary)]">asks</span>
-                      <span className="text-[var(--text-primary)] font-medium ml-auto">
-                        ${formatCompact(p.ask)}
-                      </span>
-                    </p>
-                  )}
-                </div>
-              );
-            }}
-          />
-          {mid !== null && (
-            <ReferenceLine x={mid} shape={(props: any) => <MidPriceIndicator {...props} midValue={mid} />} />
-          )}
-          <Area
-            type="stepAfter"
-            dataKey="bid"
-            stroke={COLORS.bid}
-            fill="url(#bidGradient)"
-            strokeWidth={2}
-            connectNulls={false}
-            // Animate duration tuned to feel smooth but not distracting when
-            // the book updates every 3 seconds. Default is 1500ms which looks
-            // like a re-draw; 600ms is fast-smooth.
-            isAnimationActive={true}
-            animationDuration={600}
-            animationEasing="ease-out"
-          />
-          <Area
-            type="stepBefore"
-            dataKey="ask"
-            stroke={COLORS.ask}
-            fill="url(#askGradient)"
-            strokeWidth={2}
-            connectNulls={false}
-            isAnimationActive={true}
-            animationDuration={600}
-            animationEasing="ease-out"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-      </ChartFrame>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Bid/Ask ladder
-// ----------------------------------------------------------------------------
-
-function Ladder({
-  title,
-  side,
-  levels,
-}: {
-  title: string;
-  side: 'bid' | 'ask';
-  levels: { px: number; sz: number; n: number }[];
-}) {
-  const maxSz = Math.max(1e-9, ...levels.map((l) => l.sz));
-  const pxColor = side === 'bid' ? 'text-[var(--pos)]' : 'text-[var(--neg)]';
-  const fillColor = side === 'bid' ? 'rgb(var(--pos-rgb) / 0.15)' : 'rgb(var(--neg-rgb) / 0.15)';
+  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
   return (
-    <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-medium text-[var(--text-primary)]">{title}</h4>
-        <span className="text-xs text-[var(--text-tertiary)]">{levels.length} levels</span>
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <h2 className="panel-title t-h2">Market depth</h2>
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-3 md:flex">
+            <span className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} /> Bids
+            </span>
+            <span className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} /> Asks
+            </span>
+          </div>
+          {/* Chart type toggle: cumulative depth vs per-level liquidity bars. */}
+          <div className="toggle-group">
+            <button onClick={() => setView('depth')} className={cn('toggle-btn', view === 'depth' && 'active')}>Depth</button>
+            <button onClick={() => setView('levels')} className={cn('toggle-btn', view === 'levels' && 'active')}>Levels</button>
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-3 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1 px-2 font-medium">
-        <span>Price</span>
-        <span className="text-right">Size</span>
-        <span className="text-right">Orders</span>
-      </div>
-      <div className="space-y-[1px]">
-        {levels.map((l, i) => {
-          const pct = (l.sz / maxSz) * 100;
-          // Use a stable key based on price so React reuses DOM nodes across
-          // refreshes. When the same price row just has a new size, the <div>
-          // persists and the fill bar's width animates via CSS transition
-          // instead of snapping from one value to another.
-          const rowKey = `${side}-${l.px}`;
-          return (
-            <div
-              key={rowKey}
-              className="relative grid grid-cols-3 px-2 py-1 text-xs rounded tabular-nums overflow-hidden"
-            >
-              {/* Fill bar — absolutely positioned so its width can animate
-                  without affecting the grid layout. For bids, anchor to the
-                  right (so it grows leftward); for asks, anchor to the left. */}
-              <div
-                className={cn(
-                  'absolute inset-y-0 pointer-events-none transition-all duration-500 ease-out',
-                  side === 'bid' ? 'right-0' : 'left-0'
-                )}
-                style={{ width: `${pct}%`, background: fillColor }}
+
+      <div className="min-h-0 flex-1 px-2 py-3">
+        {view === 'depth' ? (
+          <div className="relative h-full w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={depthData} margin={{ top: 26, right: 8, bottom: 4, left: 4 }}>
+              <defs>
+                <linearGradient id="ob-bid" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={BID} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={BID} stopOpacity={0.04} />
+                </linearGradient>
+                <linearGradient id="ob-ask" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={ASK} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={ASK} stopOpacity={0.04} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="px" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <YAxis tickFormatter={(v) => `$${formatCompact(v)}`} tick={axisTick} axisLine={false} tickLine={false} width={52} />
+              <Tooltip
+                cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const p = payload[0].payload as DepthPoint;
+                  return (
+                    <div className="min-w-[170px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
+                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
+                      {typeof p.bid === 'number' && (
+                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} />
+                          <span className="text-[var(--role-content-muted)]">Bids</span>
+                          <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.bid)}</span>
+                        </p>
+                      )}
+                      {typeof p.ask === 'number' && (
+                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} />
+                          <span className="text-[var(--role-content-muted)]">Asks</span>
+                          <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.ask)}</span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               />
-              <span className={cn('relative font-mono', pxColor)}>{formatPrice(l.px)}</span>
-              <span className="relative text-right font-mono text-[var(--text-primary)]">
-                {formatSize(l.sz)}
-              </span>
-              <span className="relative text-right font-mono text-[var(--text-tertiary)]">
-                {l.n}
-              </span>
+              {mid !== null && <Customized component={(p: any) => <MidGeomReader {...p} mid={mid} onGeom={setMidGeom} />} />}
+              <Area type="stepAfter" dataKey="bid" stroke={BID} fill="url(#ob-bid)" strokeWidth={1.75} connectNulls={false} isAnimationActive animationDuration={500} animationEasing="ease-out" />
+              <Area type="stepBefore" dataKey="ask" stroke={ASK} fill="url(#ob-ask)" strokeWidth={1.75} connectNulls={false} isAnimationActive animationDuration={500} animationEasing="ease-out" />
+            </AreaChart>
+          </ResponsiveContainer>
+          {/* Mid-price marker as a DOM overlay — its transform CSS-transitions,
+              so on each update it glides to the new mid instead of snapping. */}
+          {midGeom && mid !== null && (
+            <div
+              className="pointer-events-none absolute left-0 top-0"
+              style={{ transform: `translateX(${midGeom.x}px)`, transition: 'transform 550ms cubic-bezier(0.22,0.61,0.36,1)' }}
+            >
+              <div
+                className="absolute border-l border-dashed border-[var(--role-content-subtle)] opacity-60"
+                style={{ top: midGeom.top, height: midGeom.height }}
+              />
+              <div
+                className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold text-[var(--role-content-muted)]"
+                style={{ top: midGeom.top - 17 }}
+              >
+                Mid ${formatPrice(mid)}
+              </div>
             </div>
-          );
-        })}
-        {levels.length === 0 && (
-          <div className="text-xs text-[var(--text-tertiary)] text-center py-4">No levels</div>
+          )}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={levelData} margin={{ top: 12, right: 8, bottom: 4, left: 4 }}>
+              <XAxis dataKey="px" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <YAxis tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={false} tickLine={false} width={44} />
+              <Tooltip
+                cursor={{ fill: 'var(--bg-secondary-20)' }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const p = payload[0].payload as LevelPoint;
+                  const side = typeof p.bid === 'number' ? 'bid' : 'ask';
+                  const sz = side === 'bid' ? p.bid! : p.ask!;
+                  return (
+                    <div className="min-w-[150px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
+                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
+                      <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: side === 'bid' ? 'var(--pos)' : 'var(--neg)' }} />
+                        <span className="text-[var(--role-content-muted)]">Size</span>
+                        <span className="ml-auto font-medium text-[var(--role-content)]">{formatSize(sz)}</span>
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="bid" fill={BID} fillOpacity={0.8} isAnimationActive={false} />
+              <Bar dataKey="ask" fill={ASK} fillOpacity={0.8} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </div>
     </div>
@@ -443,13 +336,112 @@ function Ladder({
 }
 
 // ----------------------------------------------------------------------------
-// Main page
+// Order book — one panel, bids | asks coupled, spread strip up top.
+// ----------------------------------------------------------------------------
+
+function withCumulative(levels: OrderbookLevel[]): { px: number; sz: number; n: number; cum: number }[] {
+  let cum = 0;
+  return levels.map((l) => {
+    cum += l.sz;
+    return { ...l, cum };
+  });
+}
+
+function LadderColumn({ side, rows, maxSz }: { side: 'bid' | 'ask'; rows: ReturnType<typeof withCumulative>; maxSz: number }) {
+  const pxColor = side === 'bid' ? 'var(--pos)' : 'var(--neg)';
+  const fill = side === 'bid' ? 'rgb(var(--pos-rgb) / 0.14)' : 'rgb(var(--neg-rgb) / 0.14)';
+  return (
+    <div className="min-w-0">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 pb-1.5 pt-2">
+        <span className="table-header">Price</span>
+        <span className="table-header text-right">Size</span>
+        <span className="table-header w-16 text-right">Total</span>
+      </div>
+      <div>
+        {rows.map((l) => {
+          const pct = (l.sz / maxSz) * 100;
+          return (
+            <div key={`${side}-${l.px}`} className="relative grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-[3px] font-mono text-xs tabular-nums">
+              <div
+                className={cn('pointer-events-none absolute inset-y-px transition-[width] duration-500 ease-out', side === 'bid' ? 'right-0' : 'left-0')}
+                style={{ width: `${pct}%`, background: fill }}
+              />
+              <span className="relative font-medium" style={{ color: pxColor }}>{formatPrice(l.px)}</span>
+              <span className="relative text-right text-[var(--role-content)]">{formatSize(l.sz)}</span>
+              <span className="relative w-16 text-right text-[var(--role-content-subtle)]">{formatSize(l.cum)}</span>
+            </div>
+          );
+        })}
+        {rows.length === 0 && (
+          <div className="py-6 text-center text-[11px] text-[var(--role-content-subtle)]">No levels</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrderBookPanel({
+  book,
+  levels = 14,
+}: {
+  book: OrderbookSnapshot;
+  levels?: number;
+}) {
+  const stats = book.stats;
+  const bids = useMemo(() => withCumulative(book.bids.slice(0, levels)), [book.bids, levels]);
+  const asks = useMemo(() => withCumulative(book.asks.slice(0, levels)), [book.asks, levels]);
+  const maxSz = Math.max(1e-9, ...bids.map((l) => l.sz), ...asks.map((l) => l.sz));
+
+  const imb = stats.imbalance;
+  const imbLabel = imb > 0.05 ? 'Bid-heavy' : imb < -0.05 ? 'Ask-heavy' : 'Balanced';
+  const imbColor = imb > 0.05 ? 'var(--pos)' : imb < -0.05 ? 'var(--neg)' : 'var(--role-content-muted)';
+  // Bid share of the visible top-of-book, for the header ratio bar.
+  const bidShare = 50 + Math.max(-50, Math.min(50, imb * 50));
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2 truncate">Order book</h2>
+          <p className="t-caption truncate">{book.symbol}</p>
+        </div>
+        <span className="text-[11px] font-medium" style={{ color: imbColor }}>
+          {imbLabel} {imb >= 0 ? '+' : ''}{(imb * 100).toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Imbalance ratio bar. */}
+      <div className="flex h-1 w-full overflow-hidden">
+        <div style={{ width: `${bidShare}%`, backgroundColor: 'rgb(var(--pos-rgb) / 0.55)' }} />
+        <div style={{ width: `${100 - bidShare}%`, backgroundColor: 'rgb(var(--neg-rgb) / 0.55)' }} />
+      </div>
+
+      {/* Spread / mid strip. */}
+      <div className="flex items-center justify-center gap-2.5 border-y border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 py-1.5 font-mono text-[11px] tabular-nums">
+        <span className="text-[var(--role-content-subtle)]">Spread</span>
+        <span className="font-semibold text-[var(--role-content)]">{formatBps(stats.spreadBps)} bps</span>
+        <span className="text-[var(--role-line)]">·</span>
+        <span className="text-[var(--role-content-subtle)]">Mid</span>
+        <span className="font-semibold text-[var(--role-content)]">{stats.mid != null ? `$${formatPrice(stats.mid)}` : '—'}</span>
+      </div>
+
+      {/* Coupled ladders. */}
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="grid grid-cols-2 divide-x divide-[var(--role-line-subtle)]">
+          <LadderColumn side="bid" rows={bids} maxSz={maxSz} />
+          <LadderColumn side="ask" rows={asks} maxSz={maxSz} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Page
 // ----------------------------------------------------------------------------
 
 export default function OrderBookPage() {
   const [coin, setCoin] = useState<Market>('BTC-USD');
-  // Refetch the book when the network changes (same coin can exist on both
-  // networks, so a coin change alone won't always trigger a refetch).
   const { network } = useCurrentNetwork();
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -460,9 +452,7 @@ export default function OrderBookPage() {
     if (resetLoading) setInitialLoading(true);
     try {
       const snap = await analytics.getOrderbook(target, 20);
-      if (lastFetchedCoinRef.current !== target && lastFetchedCoinRef.current !== null) {
-        return;
-      }
+      if (lastFetchedCoinRef.current !== target && lastFetchedCoinRef.current !== null) return;
       setBook(snap);
       setError(null);
     } catch (err) {
@@ -480,140 +470,64 @@ export default function OrderBookPage() {
   }, [coin, fetchBook, network]);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      fetchBook(coin, false);
-    }, REFRESH_INTERVAL_MS);
+    const id = setInterval(() => fetchBook(coin, false), REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [coin, fetchBook, network]);
 
-  const depthData = useMemo(() => (book ? buildDepthSeries(book) : []), [book]);
   const stats = book?.stats;
-  const lastUpdated = book ? new Date(book.timestamp).toLocaleTimeString() : '—';
-
-  const imbalanceLabel = stats
-    ? stats.imbalance > 0.05
-      ? 'Bid-heavy'
-      : stats.imbalance < -0.05
-      ? 'Ask-heavy'
-      : 'Balanced'
-    : undefined;
-  const imbalanceAccent: 'bid' | 'ask' | 'muted' | undefined = stats
-    ? stats.imbalance > 0.05
-      ? 'bid'
-      : stats.imbalance < -0.05
-      ? 'ask'
-      : 'muted'
-    : undefined;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="page-title text-[var(--text-primary)]">Order Book</h1>
-          <p className="text-sm text-[var(--text-tertiary)] mt-1 tabular-nums">
-            Live market depth · auto-refreshes every 3s · last update {lastUpdated}
-          </p>
-        </div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
+          Order book
+        </h1>
         <MarketSelector value={coin} onChange={setCoin} />
-      </div>
+      </header>
 
       {error && !initialLoading && (
-        <div className="bg-bulk-red/10 border border-bulk-red/30 text-[var(--neg)] text-sm rounded-lg px-4 py-2">
+        <div className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm" style={{ borderColor: 'rgb(var(--neg-rgb) / 0.3)', backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
           {error}
         </div>
       )}
 
-      {/* Two stat grids stacked — same styling as the General page's stats row
-          (touching cells, 1px hairline dividers, single rounded container).
-          The top row has 4 cells (quote info), the bottom row has 3 cells
-          (depth summary) stretched evenly to fill the full width. Keeping them
-          as two grids lets the bottom cells grow into thirds instead of fourths,
-          so there's no empty trailing cell. */}
-      <div className="space-y-3">
-        {/* Row 1 — price quote (4 cells) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
-          <StatCell
-            label="Best Bid"
-            value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'}
-            sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : '\u00A0'}
-            accent="bid"
-          />
-          <StatCell
-            label="Best Ask"
-            value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'}
-            sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : '\u00A0'}
-            accent="ask"
-          />
-          <StatCell
-            label="Spread"
-            value={formatBps(stats?.spreadBps ?? null)}
-            unit="bps"
-            sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : '\u00A0'}
-          />
-          <StatCell
-            label="Mid Price"
-            value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}
-            sub={'\u00A0'}
-          />
-        </div>
-
-        {/* Row 2 — depth summary (3 cells, stretched evenly) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--border-color)] rounded-lg overflow-hidden">
-          <StatCell
-            label="Bid Depth · ±2% of mid"
-            value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'}
-            sub={'\u00A0'}
-            accent="bid"
-          />
-          <StatCell
-            label="Ask Depth · ±2% of mid"
-            value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'}
-            sub={'\u00A0'}
-            accent="ask"
-          />
-          <StatCell
-            label="Book Imbalance"
-            value={stats ? `${stats.imbalance >= 0 ? '+' : ''}${(stats.imbalance * 100).toFixed(1)}%` : '—'}
-            sub={imbalanceLabel ?? '\u00A0'}
-            accent={imbalanceAccent}
-          />
-        </div>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'} sub="Book midpoint" />
+        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
+        <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
+        <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
+        <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'} sub="±2% of mid" accent="bid" />
+        <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'} sub="±2% of mid" accent="ask" />
       </div>
 
-      {/* Depth chart */}
-      <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
-        <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Depth Chart</h3>
-        {initialLoading ? (
-          <div className="h-[320px] flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]" />
-          </div>
-        ) : book && depthData.length > 0 ? (
-          <DepthChart data={depthData} mid={stats?.mid ?? null} />
-        ) : (
-          <div className="h-[320px] flex items-center justify-center text-sm text-[var(--text-tertiary)]">
-            No depth data available.
-          </div>
-        )}
-      </div>
-
-      {/* Ladder */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {initialLoading ? (
-          <>
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-[420px] animate-pulse" />
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-[420px] animate-pulse" />
-          </>
-        ) : book ? (
-          <>
-            <Ladder title="Bids" side="bid" levels={book.bids} />
-            <Ladder title="Asks" side="ask" levels={book.asks} />
-          </>
-        ) : (
-          <div className="col-span-full text-sm text-[var(--text-tertiary)] text-center py-8">
-            No order book data.
-          </div>
-        )}
+      {/* Depth chart + order book */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="h-[300px] lg:col-span-7 lg:h-[560px]">
+          {initialLoading || !book ? (
+            <div className="glass-card flex h-full items-center justify-center">
+              {initialLoading ? (
+                <div className="h-7 w-7 animate-spin rounded-full border-b-2 border-[var(--role-chrome)]" />
+              ) : (
+                <span className="text-sm text-[var(--role-content-subtle)]">No depth data.</span>
+              )}
+            </div>
+          ) : (
+            <DepthChartPanel book={book} mid={stats?.mid ?? null} />
+          )}
+        </div>
+        <div className="h-[560px] lg:col-span-5">
+          {initialLoading ? (
+            <div className="glass-card h-full animate-pulse" />
+          ) : book ? (
+            <OrderBookPanel book={book} levels={20} />
+          ) : (
+            <div className="glass-card flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">
+              No order book data.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ import {
 } from '@/lib/coins';
 import { withNetwork } from '@/lib/network';
 import { ChartFrame } from '@/components/ChartFrame';
+import { StatCard } from '@/components/StatCard';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -209,9 +210,10 @@ const InteractiveRangeSlider = ({
       return (
         <g key={key}>
           {chartType === 'area' && (
-            <path 
-              d={areaPath} 
-              fill={`${lineColor}30`}
+            <path
+              d={areaPath}
+              fill={lineColor}
+              fillOpacity={0.19}
               stroke="none"
             />
           )}
@@ -247,13 +249,14 @@ const InteractiveRangeSlider = ({
             const pct = (i / bars.length) * 100;
             const inRange = pct >= displayStart && pct <= displayEnd;
             return (
-              <div 
-                key={i} 
-                className="flex-1 rounded-t" 
-                style={{ 
-                  height: `${Math.max(8, h)}%`, 
-                  backgroundColor: inRange ? `${color}50` : `${color}20` 
-                }} 
+              <div
+                key={i}
+                className="flex-1 rounded-t"
+                style={{
+                  height: `${Math.max(8, h)}%`,
+                  backgroundColor: color,
+                  opacity: inRange ? 0.5 : 0.2,
+                }}
               />
             );
           })}
@@ -271,14 +274,15 @@ const InteractiveRangeSlider = ({
 
       {!isDisabled && (
         <>
-          {/* Dimmed areas */}
-          <div 
-            className="absolute top-0 bottom-0 left-0 bg-black/50 pointer-events-none" 
-            style={{ width: `${displayStart}%` }} 
+          {/* Dimmed areas — scrim tinted with the theme base so it fades the
+              out-of-range preview correctly in both light and dark. */}
+          <div
+            className="absolute top-0 bottom-0 left-0 pointer-events-none"
+            style={{ width: `${displayStart}%`, background: 'rgb(var(--p-bg) / 0.62)' }}
           />
-          <div 
-            className="absolute top-0 bottom-0 right-0 bg-black/50 pointer-events-none" 
-            style={{ width: `${100 - displayEnd}%` }} 
+          <div
+            className="absolute top-0 bottom-0 right-0 pointer-events-none"
+            style={{ width: `${100 - displayEnd}%`, background: 'rgb(var(--p-bg) / 0.62)' }}
           />
           
           {/* Middle drag area */}
@@ -1243,36 +1247,22 @@ export default function AnalyticsPage() {
       <main className="flex-1 w-full px-6 lg:px-10 py-6">
         <h1 className="page-title text-[var(--text-primary)] mb-6">General</h1>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] mb-6 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           {[
             { label: 'Total Trades', value: stats?.trades.count || 0, format: 'number' },
             { label: 'Total Volume', value: totalCumulativeVolume, format: 'currency' },
             { label: 'Open Interest', value: liveOI, format: 'currency' },
             { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
           ].map((stat, i) => {
-            // Show a placeholder dash while the value is still loading (null).
-            // This prevents Total Volume from briefly flashing a wrong (window-only)
+            // Show a skeleton while the value is still loading (null). This
+            // prevents Total Volume from briefly flashing a wrong (window-only)
             // number before the all-time dataset finishes loading.
             const isLoading = stat.value === null || stat.value === undefined;
-            let display: string;
-            if (isLoading) {
-              display = '—';
-            } else if (stat.format === 'currency') {
-              display = `$${formatCompact(stat.value as number)}`;
-            } else {
-              display = (stat.value as number).toLocaleString();
-            }
-            return (
-              <div key={i} className="bg-[var(--bg-base)] p-4">
-                <p className="text-xs text-[var(--text-tertiary)] mb-1">{stat.label}</p>
-                <p className={cn(
-                  "text-2xl font-bold text-[var(--text-primary)]",
-                  isLoading && "text-[var(--text-tertiary)]"
-                )}>
-                  {display}
-                </p>
-              </div>
-            );
+            const display =
+              stat.format === 'currency'
+                ? `$${formatCompact(stat.value as number)}`
+                : (stat.value as number).toLocaleString();
+            return <StatCard key={i} label={stat.label} value={display} loading={isLoading} />;
           })}
         </div>
 

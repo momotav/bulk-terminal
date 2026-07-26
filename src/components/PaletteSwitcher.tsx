@@ -8,9 +8,10 @@
 
 import { useEffect, useState } from 'react';
 
-type Palette = 'classic' | 'grove' | 'orchid';
+type Palette = 'original' | 'classic' | 'grove' | 'orchid';
 
 const PALETTES: { id: Palette; label: string; pos: string; neg: string }[] = [
+  { id: 'original', label: 'Original · amber', pos: '#FFD9A8', neg: '#D98A2E' },
   { id: 'classic', label: 'Classic · green / red', pos: '#21C07A', neg: '#E5484D' },
   { id: 'grove', label: 'Grove · green / orange', pos: '#21C07A', neg: '#F97316' },
   { id: 'orchid', label: 'Orchid · blue / purple', pos: '#60A5FA', neg: '#A78BFA' },

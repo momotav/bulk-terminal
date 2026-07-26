@@ -204,3 +204,135 @@ export function formatDuration(ms: number): string {
   const remHr = hr % 24;
   return remHr > 0 ? `${day}d ${remHr}h` : `${day}d`;
 }
+
+/** Signed position size + average entry AFTER a given fill. */
+export interface PositionStatePoint {
+  t: number;
+  /** Signed net size after this fill (+ long, − short). */
+  size: number;
+  /** Size-weighted average entry price of the open position. */
+  avgEntry: number;
+}
+
+/**
+ * Per-symbol timeline of position state (signed size + average entry) after
+ * each fill. Lets callers reconstruct the open position — and thus unrealized
+ * PnL against a mark price — at any point in time (Step 2 equity curve). Same
+ * average-entry walk as realizedPnlSeries, exposed as state snapshots.
+ */
+export function symbolPositionTimeline(fills: WalletFill[]): Record<string, PositionStatePoint[]> {
+  const bySym: Record<string, WalletFill[]> = {};
+  for (const f of fills) (bySym[f.symbol] ??= []).push(f);
+
+  const out: Record<string, PositionStatePoint[]> = {};
+  for (const sym of Object.keys(bySym)) {
+    const sorted = [...bySym[sym]].sort((a, b) => a.timestamp - b.timestamp);
+    let size = 0;
+    let avgEntry = 0;
+    const tl: PositionStatePoint[] = [];
+    for (const f of sorted) {
+      const delta = f.isBuy ? f.size : -f.size;
+      const before = size;
+      const after = before + delta;
+      const sameDir = Math.abs(before) < ZERO_EPS || Math.sign(before) === Math.sign(delta);
+      if (sameDir) {
+        const absAfter = Math.abs(after);
+        if (absAfter > ZERO_EPS) {
+          avgEntry = (Math.abs(before) * avgEntry + Math.abs(delta) * f.price) / absAfter;
+        }
+        size = after;
+      } else if (Math.abs(after) < ZERO_EPS) {
+        size = 0;
+        avgEntry = 0;
+      } else if (Math.sign(after) !== Math.sign(before)) {
+        size = after;
+        avgEntry = f.price;
+      } else {
+        size = after;
+      }
+      tl.push({ t: f.timestamp, size, avgEntry });
+    }
+    out[sym] = tl;
+  }
+  return out;
+}
+
+/** A single point on the cumulative realized-PnL curve. */
+export interface RealizedPnlPoint {
+  /** Unix ms of the fill that realized this PnL. */
+  t: number;
+  /** Cumulative realized PnL (GROSS — before fees/funding) up to this fill. */
+  realized: number;
+  /** This fill's realized delta (GROSS), i.e. the step size at this point. */
+  delta: number;
+  /** Why the fill happened — 'trade' | 'adl' | 'liq' | … (undefined = trade). */
+  reasonCode?: string;
+  /** Notional closed by this fill (|closedSize| × fillPrice) — the weight used
+   *  to attribute the liquidation/ADL calibration residual. */
+  closedNotional: number;
+}
+
+/**
+ * Reconstruct the cumulative realized-PnL curve from raw fills, at fill
+ * resolution — the same net-size walk as annotateFills, but tracking a
+ * size-weighted average entry PER SYMBOL so we can book realized PnL on the
+ * closed portion of each reducing/closing/flipping fill:
+ *
+ *   long : realized += closedSize * (fillPrice - avgEntry)
+ *   short: realized += closedSize * (avgEntry - fillPrice)
+ *
+ * Adds in the same direction update the average entry; a flip closes the old
+ * position and reopens the leftover at the fill price. Output is GROSS
+ * (fees/funding are layered on by the caller). Only realizing fills emit a
+ * point, so the curve steps at genuine close events.
+ */
+export function realizedPnlSeries(fills: WalletFill[]): RealizedPnlPoint[] {
+  if (!fills || fills.length === 0) return [];
+  const sorted = [...fills].sort((a, b) => a.timestamp - b.timestamp);
+  const state = new Map<string, { size: number; avgEntry: number }>();
+  let cum = 0;
+  const points: RealizedPnlPoint[] = [];
+
+  for (const f of sorted) {
+    const st = state.get(f.symbol) ?? { size: 0, avgEntry: 0 };
+    const delta = f.isBuy ? f.size : -f.size;
+    const before = st.size;
+    const after = before + delta;
+    const sameDir = Math.abs(before) < ZERO_EPS || Math.sign(before) === Math.sign(delta);
+
+    if (sameDir) {
+      // Open or add: size-weighted average entry.
+      const absAfter = Math.abs(after);
+      if (absAfter > ZERO_EPS) {
+        st.avgEntry = (Math.abs(before) * st.avgEntry + Math.abs(delta) * f.price) / absAfter;
+      }
+      st.size = after;
+    } else {
+      // Reduce / close / flip: realize on the closed portion.
+      const closed = Math.min(Math.abs(before), Math.abs(delta));
+      const dir = Math.sign(before); // +1 long, −1 short
+      const stepDelta = closed * (f.price - st.avgEntry) * dir;
+      cum += stepDelta;
+      if (Math.abs(after) < ZERO_EPS) {
+        st.size = 0;
+        st.avgEntry = 0;
+      } else if (Math.sign(after) !== Math.sign(before)) {
+        // Flipped: leftover opens fresh at this fill's price.
+        st.size = after;
+        st.avgEntry = f.price;
+      } else {
+        st.size = after; // partial reduce — average entry unchanged
+      }
+      points.push({
+        t: f.timestamp,
+        realized: cum,
+        delta: stepDelta,
+        reasonCode: f.reasonCode,
+        closedNotional: closed * f.price,
+      });
+    }
+    state.set(f.symbol, st);
+  }
+
+  return points;
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { StatCard } from '@/components/StatCard';
 import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber, cn } from '@/lib/api';
 import { 
   ComposedChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -788,49 +789,28 @@ export default function LiquidationsPage() {
             </div>
           ) : summaryData ? (
             <div className="space-y-3">
-              {/* Total Liquidations */}
-              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">TOTAL LIQUIDATIONS</div>
-                <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
-                  {formatNumber(summaryData.totalCount, 0)} trades
-                </div>
-                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
-                  {formatCurrency(summaryData.totalValue)}
-                </div>
-              </div>
-
-              {/* Long Liquidations */}
-              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LONG LIQUIDATIONS</div>
-                <div className="text-xl md:text-2xl font-bold" style={{ color: COLORS.long }}>
-                  {formatCurrency(summaryData.longValue)}
-                </div>
-                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
-                  {summaryData.longPercent.toFixed(2)}%
-                </div>
-              </div>
-
-              {/* Short Liquidations */}
-              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">SHORT LIQUIDATIONS</div>
-                <div className="text-xl md:text-2xl font-bold" style={{ color: COLORS.short }}>
-                  {formatCurrency(summaryData.shortValue)}
-                </div>
-                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
-                  {summaryData.shortPercent.toFixed(2)}%
-                </div>
-              </div>
-
-              {/* Largest Liquidation */}
-              <div className="p-3 md:p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)]">
-                <div className="text-xs md:text-sm text-[var(--text-secondary)] mb-1">LARGEST LIQUIDATION</div>
-                <div className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
-                  {formatNumber(summaryData.largestSize, 2)} {selectedCoin}
-                </div>
-                <div className="text-xs md:text-sm text-[var(--text-secondary)]">
-                  {formatCurrency(summaryData.largestValue)}
-                </div>
-              </div>
+              <StatCard
+                label="Total liquidations"
+                value={`${formatNumber(summaryData.totalCount, 0)} trades`}
+                sub={formatCurrency(summaryData.totalValue)}
+              />
+              <StatCard
+                label="Long liquidations"
+                value={formatCurrency(summaryData.longValue)}
+                valueColor={COLORS.long}
+                sub={`${summaryData.longPercent.toFixed(2)}%`}
+              />
+              <StatCard
+                label="Short liquidations"
+                value={formatCurrency(summaryData.shortValue)}
+                valueColor={COLORS.short}
+                sub={`${summaryData.shortPercent.toFixed(2)}%`}
+              />
+              <StatCard
+                label="Largest liquidation"
+                value={`${formatNumber(summaryData.largestSize, 2)} ${selectedCoin}`}
+                sub={formatCurrency(summaryData.largestValue)}
+              />
             </div>
           ) : null}
         </div>

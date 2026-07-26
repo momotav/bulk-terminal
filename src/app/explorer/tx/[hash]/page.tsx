@@ -54,7 +54,7 @@ function CopyButton({ text }: { text: string }) {
       className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
       title={copied ? 'Copied!' : 'Copy'}
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-bulk-green" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <Check className="w-3.5 h-3.5 text-bulk-accent" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -89,7 +89,7 @@ export default function TxDetailPage() {
 
   if (loading) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+      <main className="responsive-container py-12 text-center">
         <Loader2 className="w-8 h-8 animate-spin mx-auto text-[var(--text-tertiary)] mb-3" />
         <p className="text-sm text-[var(--text-tertiary)]">Loading transaction…</p>
       </main>
@@ -98,14 +98,14 @@ export default function TxDetailPage() {
 
   if (error || !tx) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="responsive-container py-6">
         <Link
           href="/explorer"
           className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Explorer
         </Link>
-        <div className="border border-red-500/30 bg-red-500/10 text-red-400 rounded-lg p-6 flex items-start gap-3">
+        <div className="border border-bulk-red/30 bg-bulk-red/10 text-bulk-red rounded-lg p-6 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">Transaction not found</p>
@@ -120,7 +120,7 @@ export default function TxDetailPage() {
   const isBulkAccount = isBulkPrefixedAccount(tx.account);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="responsive-container py-6 space-y-6">
         <Link
           href="/explorer"
           className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -139,12 +139,12 @@ export default function TxDetailPage() {
         </div>
 
         {/* Tx metadata grid */}
-        <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 space-y-3">
+        <div className="glass-card p-5 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
             <span className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Block</span>
             <Link
               href={`/explorer/block/${tx.blockhash}`}
-              className="text-sm text-blue-400 hover:underline flex items-center gap-1.5"
+              className="text-sm text-bulk-accent hover:underline flex items-center gap-1.5"
             >
               <span className="tabular-nums">#{tx.round.toLocaleString()}</span>
               <span className="text-[var(--text-tertiary)]">·</span>
@@ -174,14 +174,14 @@ export default function TxDetailPage() {
             <div className="flex items-center gap-2 text-sm flex-wrap">
               <Link
                 href={`/whales/${tx.account}`}
-                className="font-mono text-blue-400 hover:underline break-all"
+                className="font-mono text-bulk-accent hover:underline break-all"
               >
                 {tx.account}
               </Link>
               <CopyButton text={tx.account} />
               {isBulkAccount && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-bulk-blue/10 text-bulk-blue border border-bulk-blue/20"
                   title="BULK protocol-owned account"
                 >
                   <Shield className="w-3 h-3" /> BULK System
@@ -214,16 +214,16 @@ export default function TxDetailPage() {
         {/* Actions list */}
         <div>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-bulk-green" />
+            <Zap className="w-5 h-5 text-bulk-accent" />
             Actions ({tx.actions.length})
           </h2>
 
           {tx.actions.length === 0 ? (
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-8 text-center text-sm text-[var(--text-tertiary)]">
+            <div className="glass-card p-8 text-center text-sm text-[var(--text-tertiary)]">
               No actions in this transaction.
             </div>
           ) : (
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg overflow-hidden">
+            <div className="glass-card">
               {tx.actions.map((code, i) => (
                 <div
                   key={i}
@@ -236,7 +236,7 @@ export default function TxDetailPage() {
                     <span
                       className={
                         isKnownAction(code)
-                          ? 'inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-bulk-green/10 text-bulk-green border border-bulk-green/20'
+                          ? 'inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-bulk-accent/10 text-bulk-accent border border-bulk-accent/20'
                           : 'inline-flex items-center px-2 py-1 rounded text-xs font-mono bg-[var(--bg-secondary-20)] text-[var(--text-tertiary)] border border-[var(--border-color)]'
                       }
                     >

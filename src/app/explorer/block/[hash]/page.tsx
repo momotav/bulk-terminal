@@ -63,7 +63,7 @@ function CopyButton({ text }: { text: string }) {
       className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
       title={copied ? 'Copied!' : 'Copy'}
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-bulk-green" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <Check className="w-3.5 h-3.5 text-bulk-accent" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -98,7 +98,7 @@ export default function BlockDetailPage() {
 
   if (loading) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+      <main className="responsive-container py-12 text-center">
         <Loader2 className="w-8 h-8 animate-spin mx-auto text-[var(--text-tertiary)] mb-3" />
         <p className="text-sm text-[var(--text-tertiary)]">Loading block…</p>
       </main>
@@ -107,14 +107,14 @@ export default function BlockDetailPage() {
 
   if (error || !block) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="responsive-container py-6">
         <Link
           href="/explorer"
           className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Explorer
         </Link>
-        <div className="border border-red-500/30 bg-red-500/10 text-red-400 rounded-lg p-6 flex items-start gap-3">
+        <div className="border border-bulk-red/30 bg-bulk-red/10 text-bulk-red rounded-lg p-6 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">Block not found</p>
@@ -128,7 +128,7 @@ export default function BlockDetailPage() {
   const ts = formatTimestamp(block.timestampNs);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="responsive-container py-6 space-y-6">
         <Link
           href="/explorer"
           className="inline-flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -140,13 +140,13 @@ export default function BlockDetailPage() {
           <p className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] mb-1">
             Block
           </p>
-          <h1 className="text-2xl font-semibold text-blue-400 tabular-nums">
+          <h1 className="text-2xl font-semibold text-bulk-accent tabular-nums">
             #{block.round.toLocaleString()}
           </h1>
         </div>
 
         {/* Block metadata grid */}
-        <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-5 space-y-3">
+        <div className="glass-card p-5 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
             <span className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Block Hash</span>
             <div className="flex items-center gap-2 font-mono text-sm text-[var(--text-primary)] break-all">
@@ -175,8 +175,8 @@ export default function BlockDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
             <span className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Actions</span>
             <div className="flex items-center gap-2 text-sm">
-              <Zap className="w-3.5 h-3.5 text-bulk-green" />
-              <span className="text-bulk-green tabular-nums">{block.actionCount}</span>
+              <Zap className="w-3.5 h-3.5 text-bulk-accent" />
+              <span className="text-bulk-accent tabular-nums">{block.actionCount}</span>
             </div>
           </div>
 
@@ -185,7 +185,7 @@ export default function BlockDetailPage() {
               <span className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Previous</span>
               <Link
                 href={`/explorer/block/${block.previousRoundHash}`}
-                className="font-mono text-sm text-blue-400 hover:underline truncate flex items-center gap-1"
+                className="font-mono text-sm text-bulk-accent hover:underline truncate flex items-center gap-1"
               >
                 <Hash className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{shortHash(block.previousRoundHash)}</span>
@@ -201,11 +201,11 @@ export default function BlockDetailPage() {
           </h2>
 
           {block.transactions.length === 0 ? (
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-8 text-center text-sm text-[var(--text-tertiary)]">
+            <div className="glass-card p-8 text-center text-sm text-[var(--text-tertiary)]">
               This block has no transactions.
             </div>
           ) : (
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg overflow-hidden">
+            <div className="glass-card">
               <div className="grid grid-cols-[1fr_2fr_100px] gap-3 px-4 py-2.5 border-b border-[var(--border-color)] text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
                 <div>Tx Hash</div>
                 <div>Account · Actions</div>
@@ -216,7 +216,7 @@ export default function BlockDetailPage() {
                   key={tx.hash}
                   href={`/explorer/tx/${tx.hash}`}
                   prefetch={false}
-                  className="grid grid-cols-[1fr_2fr_100px] gap-3 px-4 py-3 items-center hover:bg-[var(--bg-secondary-20)] transition-colors group border-b border-[var(--border-color)] last:border-b-0"
+                  className="grid grid-cols-[1fr_2fr_100px] gap-3 px-4 py-3 items-center hover:bg-[var(--role-surface-raised)] transition-colors group border-b border-[var(--border-color)] last:border-b-0"
                 >
                   <div className="font-mono text-sm text-[var(--text-secondary)] truncate flex items-center gap-1.5 group-hover:text-[var(--text-primary)]">
                     <Hash className="w-3.5 h-3.5 text-[var(--text-tertiary)] shrink-0" />
@@ -229,7 +229,7 @@ export default function BlockDetailPage() {
                       </span>
                       {isBulkPrefixedAccount(tx.account) && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-bulk-blue/10 text-bulk-blue border border-bulk-blue/20 shrink-0"
                           title="BULK protocol-owned account"
                         >
                           <Shield className="w-2.5 h-2.5" /> BULK
@@ -242,7 +242,7 @@ export default function BlockDetailPage() {
                           key={i}
                           className={
                             isKnownAction(code)
-                              ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-bulk-green/10 text-bulk-green border border-bulk-green/20'
+                              ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-bulk-accent/10 text-bulk-accent border border-bulk-accent/20'
                               : 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--bg-secondary-20)] text-[var(--text-tertiary)] border border-[var(--border-color)]'
                           }
                           title={isKnownAction(code) ? getActionLabel(code) : `unknown action: ${code}`}

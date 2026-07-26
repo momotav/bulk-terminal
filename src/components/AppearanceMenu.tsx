@@ -10,9 +10,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Palette, Sun, Moon, Check } from 'lucide-react';
 
 type Theme = 'dark' | 'light';
-type PaletteId = 'classic' | 'grove' | 'orchid';
+type PaletteId = 'original' | 'classic' | 'grove' | 'orchid';
 
 const PALETTES: { id: PaletteId; label: string; pos: string; neg: string }[] = [
+  { id: 'original', label: 'Original', pos: '#FFD9A8', neg: '#D98A2E' },
   { id: 'classic', label: 'Classic', pos: '#21C07A', neg: '#E5484D' },
   { id: 'grove', label: 'Grove', pos: '#21C07A', neg: '#F97316' },
   { id: 'orchid', label: 'Orchid', pos: '#60A5FA', neg: '#A78BFA' },

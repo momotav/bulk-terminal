@@ -81,22 +81,6 @@ export default function RootLayout({
             <main className="flex-1">
               {children}
             </main>
-            <footer className="border-t border-[var(--border-color)] py-6 transition-colors">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-sm text-[var(--text-tertiary)]">
-                <p>BULK Stats - Community Analytics Dashboard</p>
-                <p className="mt-1">
-                  Built for{' '}
-                  <a 
-                    href="https://bulk.trade" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-bulk-green hover:underline"
-                  >
-                    BULK Exchange
-                  </a>
-                </p>
-              </div>
-            </footer>
           </div>
         </PrivyProvider>
       </body>

@@ -20,7 +20,7 @@ export function DevnetBanner() {
 
   return (
     <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-3 text-xs">
+      <div className="responsive-container py-2 flex items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 min-w-0">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">

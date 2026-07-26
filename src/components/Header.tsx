@@ -186,7 +186,10 @@ export function Header() {
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-base)]">
-        <div className="flex items-center justify-between h-14 px-4">
+        {/* Shares the app container so the wordmark and profile menu line
+            up with the page content beneath them rather than sitting at a
+            different inset. */}
+        <div className="responsive-container flex items-center justify-between h-14">
           {/* Left: Menu button (mobile) + Logo */}
           <div className="flex items-center gap-3">
             <button
@@ -210,31 +213,37 @@ export function Header() {
 
           {/* Desktop Nav - centered */}
           <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                  pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
-                    ? "text-bulk-green"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`nav-link px-3 py-1.5 rounded text-sm font-medium transition-colors duration-200 ${
+                    isActive
+                      ? "nav-link-active text-bulk-accent"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
             {authenticated && (
               <Link
                 href="/following"
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                aria-current={pathname === '/following' ? 'page' : undefined}
+                className={`nav-link px-3 py-1.5 rounded text-sm font-medium transition-colors duration-200 ${
                   pathname === '/following'
-                    ? "text-bulk-green"
+                    ? "nav-link-active text-bulk-accent"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 Following
                 {following.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-bulk-accent/20 text-bulk-accent rounded">
                     {following.length}
                   </span>
                 )}
@@ -263,9 +272,9 @@ export function Header() {
                   {twitterAvatar ? (
                     <img src={twitterAvatar} alt="" className="w-5 h-5 rounded-full" />
                   ) : isEmailUser ? (
-                    <Mail className="w-4 h-4 text-bulk-green" />
+                    <Mail className="w-4 h-4 text-bulk-accent" />
                   ) : (
-                    <Wallet className="w-4 h-4 text-bulk-green" />
+                    <Wallet className="w-4 h-4 text-bulk-accent" />
                   )}
                   
                   <span className="text-sm text-[var(--text-primary)] hidden sm:block max-w-[100px] truncate">
@@ -314,7 +323,7 @@ export function Header() {
                         <Users className="w-4 h-4 text-[var(--text-secondary)]" />
                         Following
                         {following.length > 0 && (
-                          <span className="ml-auto px-1.5 py-0.5 text-xs bg-bulk-green/20 text-bulk-green rounded">{following.length}</span>
+                          <span className="ml-auto px-1.5 py-0.5 text-xs bg-bulk-accent/20 text-bulk-accent rounded">{following.length}</span>
                         )}
                       </Link>
                     </div>
@@ -329,9 +338,9 @@ export function Header() {
                 )}
               </div>
             ) : ready ? (
-              <button onClick={login} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bulk-green hover:bg-bulk-green/90 transition-colors">
-                <Wallet className="w-4 h-4 text-dark-primary" />
-                <span className="text-sm font-medium text-dark-primary">Login</span>
+              <button onClick={login} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bulk-accent hover:brightness-110 transition-all" style={{ color: 'var(--accent-text)' }}>
+                <Wallet className="w-4 h-4" style={{ color: 'var(--accent-text)' }} />
+                <span className="text-sm font-medium">Login</span>
               </button>
             ) : (
               <div className="w-20 h-8 bg-[var(--bg-muted)] rounded animate-pulse" />
@@ -381,7 +390,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                       isActive
-                        ? "text-bulk-green bg-bulk-green/10"
+                        ? "text-bulk-accent bg-bulk-accent/10"
                         : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
                     }`}
                   >
@@ -397,7 +406,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                       pathname === '/following'
-                        ? "text-bulk-green bg-bulk-green/10"
+                        ? "text-bulk-accent bg-bulk-accent/10"
                         : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
                     }`}
                   >
@@ -408,7 +417,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                       pathname === '/profile'
-                        ? "text-bulk-green bg-bulk-green/10"
+                        ? "text-bulk-accent bg-bulk-accent/10"
                         : "text-[var(--text-primary)] hover:bg-[var(--bg-muted)]"
                     }`}
                   >

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { StatCard } from '@/components/StatCard';
 import Link from 'next/link';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, Legend, Cell,
@@ -703,30 +704,20 @@ export default function PreDepositPage() {
   );
 }
 
-function KpiCard({
-  label, value, color, hero, small, loading, icon: Icon,
-}: {
-  label: string; value: string; color: string;
+function KpiCard({ label, value, color, loading }: {
+  label: string; value: string; color?: string;
   hero?: boolean; small?: boolean; loading?: boolean;
   icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 }) {
+  // Delegates to the shared StatCard so this strip matches every other KPI
+  // strip in the app. A page-set value colour is preserved (the old neutral
+  // sentinel maps to the card's own default).
   return (
-    <div className="relative overflow-hidden bg-transparent border border-[var(--border-color)] rounded-lg pl-4 pr-3 py-3.5 hover:border-[var(--border-secondary)] transition-colors">
-      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: color, opacity: hero ? 1 : 0.55 }} />
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {Icon && <Icon className="w-3.5 h-3.5" style={{ color }} />}
-        <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-[0.12em] font-medium">{label}</span>
-      </div>
-      {loading ? (
-        <div className="h-7 w-24 bg-[var(--bg-secondary-20)] rounded animate-pulse" />
-      ) : (
-        <p
-          className={`${hero ? 'text-[26px]' : small ? 'text-xl' : 'text-2xl'} font-bold tabular-nums tracking-tight leading-none`}
-          style={{ color: color === 'var(--text-secondary)' ? 'var(--text-primary)' : color }}
-        >
-          {value}
-        </p>
-      )}
-    </div>
+    <StatCard
+      label={label}
+      value={value}
+      valueColor={color && color !== 'var(--text-secondary)' ? color : undefined}
+      loading={loading}
+    />
   );
 }

@@ -40,125 +40,225 @@
    ============================================ */
 
 :root {
-  /* === DARK THEME (DEFAULT) === */
-  --color-base: #141310;
-  --color-muted: #1B1A14;
-  --color-muted-80: rgba(27, 26, 20, 0.8);
-  --color-muted-20: rgba(27, 26, 20, 0.2);
-  
-  --bg-base: #141310;
-  --bg-muted: #1B1A14;
-  --bg-secondary: #544A4C;
-  --bg-secondary-muted: #544A4C;
-  --bg-secondary-20: rgba(84, 74, 76, 0.2);
-  --bg-secondary-80: rgba(84, 74, 76, 0.8);
-  --bg-overlay: rgba(27, 26, 20, 0.8);
-  --bg-dropdown: rgba(27, 26, 20, 0.8);
-  --bg-backdrop: rgba(27, 26, 20, 0.8);
-  
-  --text-primary: #FFFEEF;
-  --text-secondary: #C6B6BA;
-  --text-tertiary: #807678;
-  
-  --border-color: #544A4C;
-  --border-secondary: rgba(198, 182, 186, 0.2);
-  --divider: #544A4C;
-  
-  --accent: #FFB457;
-  --accent-text: #1B1A14;
-  --accent-secondary: #6E3A17;
-  
-  /* Bids/Asks - Same for both themes */
-  --bids: #00B481;
-  --asks: #EF4A3C;
-  --bids-secondary: #134A55;
-  --asks-secondary: #6E1742;
-  /* Monochrome shade scale (defaults to the site amber; overridden per page) */
-  --shade-1: #FFD9A8;
-  --shade-2: #FFC57E;
-  --shade-3: #FFB457;
-  --shade-4: #D98A2E;
-  --shade-5: #8C5417;
-  
-  /* Muted colors */
-  --muted-danger: rgba(239, 74, 60, 0.2);
-  --muted-warning: rgba(255, 181, 71, 0.2);
-  --muted-success: rgba(0, 180, 129, 0.2);
-  --muted-success-40: rgba(0, 180, 129, 0.4);
-  
-  /* Volume colors */
-  --volume-bids: rgba(0, 180, 129, 0.2);
-  --volume-asks: rgba(239, 74, 60, 0.2);
-  
-  /* Scrollbar colors for dark theme */
-  --scrollbar-track: #141310;
-  --scrollbar-thumb: #544A4C;
-  --scrollbar-thumb-hover: #807678;
-  
-  /* Button styles */
-  --button-stroke: rgba(198, 182, 186, 0.2);
-  
-  /* Mobile navigation */
-  --mobile-nav-backdrop: rgba(20, 19, 16, 0.6);
-  --mobile-tab-bg: rgba(20, 19, 16, 0.2);
-  --mobile-tab-border: rgba(84, 74, 76, 0.8);
-  
-  /* Theme selector */
-  --theme-selector-border: rgba(198, 182, 186, 0.2);
-  --theme-selector-bg: rgba(20, 19, 16, 0.2);
-  --theme-selector-button-border: rgba(84, 74, 76, 0.8);
+  /* ══════════════════════════════════════════════════════════════════════
+     COLOR SYSTEM — two axes compose:
+       data-palette : original | classic | grove | orchid
+       mode         : .dark (default) | .light
+     LAYER 1 (primitives, --p-*) — the raw hues for one palette×mode. Set
+       further down, one small block per combination. Every primitive is a
+       space-separated RGB TRIPLE so any token can take an alpha via
+       rgb(var(--p-x) / <a>).
+     LAYER 2 (this block) — maps those primitives onto the role + legacy
+       names components read. Components NEVER hardcode a hue; they read a
+       role, so swapping palette or mode re-tints the whole UI for free.
+
+     This :root also carries the DEFAULT primitives = CLASSIC · DARK, so the
+     app renders correctly before the palette script runs.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* ─── LAYER 1 · SHARED neutral shell (dark) ───
+     Backgrounds, panels, text and borders are the SAME warm-cream shell for
+     EVERY palette. A palette only recolours content (functional, accent,
+     shades, coins, info) — it never touches the shell. */
+  --p-bg: 20 19 16;          /* #141310 page */
+  --p-surface: 27 26 20;     /* #1B1A14 panels */
+  --p-raise: 84 74 76;       /* #544A4C hover / secondary */
+  --p-text: 255 254 239;     /* #FFFEEF primary text */
+  --p-text2: 198 182 186;    /* secondary text */
+  --p-text3: 128 118 120;    /* tertiary text */
+  --p-line: 84 74 76;        /* borders */
+  --p-shadow: 10 9 7;        /* elevation tint */
+
+  /* ─── LAYER 1 · default CONTENT = CLASSIC (green/red, neutral charts) ─── */
+  --p-pos: 33 192 122;       /* #21C07A */
+  --p-neg: 229 72 77;        /* #E5484D */
+  --p-info: 198 182 186;     /* neutral indicator — no stray blue */
+  --p-chrome: 232 228 228;   /* light-gray active chrome on the dark shell */
+  --p-chrome-text: 27 26 20; /* text on chrome */
+  /* medal / KPI-bar ramp (grayscale) */
+  --p-shade-1: 229 226 225; --p-shade-2: 183 177 177; --p-shade-3: 138 130 131; --p-shade-4: 107 97 98; --p-shade-5: 85 75 76;
+  /* chart series (grayscale) */
+  --p-coin-1: 232 229 228; --p-coin-2: 207 201 201; --p-coin-3: 176 169 170; --p-coin-4: 148 140 142; --p-coin-5: 122 113 115; --p-coin-6: 99 90 91; --p-coin-7: 216 211 210; --p-coin-8: 167 159 160; --p-coin-other: 148 140 142;
+
+  /* ─── LAYER 2 · ROLES (palette-agnostic API — prefer these) ─── */
+  --role-background: rgb(var(--p-bg));
+  --role-surface: rgb(var(--p-surface));
+  --role-surface-raised: rgb(var(--p-raise) / 0.2);
+  --role-content: rgb(var(--p-text));
+  --role-content-muted: rgb(var(--p-text2));
+  --role-content-subtle: rgb(var(--p-text3));
+  --role-line: rgb(var(--p-line));
+  --role-line-subtle: rgb(var(--p-text2) / 0.22);
+  --role-chrome: rgb(var(--p-chrome));
+  --role-chrome-text: rgb(var(--p-chrome-text));
+  --role-signal-positive: rgb(var(--p-pos));
+  --role-signal-negative: rgb(var(--p-neg));
+  --role-signal-info: rgb(var(--p-info));
+
+  /* ─── LAYER 2 · legacy aliases (older components still read these) ─── */
+  --bg-base: rgb(var(--p-bg));
+  --bg-muted: rgb(var(--p-surface));
+  --bg-secondary: rgb(var(--p-raise));
+  --bg-secondary-muted: rgb(var(--p-raise));
+  --bg-secondary-20: rgb(var(--p-raise) / 0.2);
+  --bg-secondary-80: rgb(var(--p-raise) / 0.8);
+  --bg-overlay: rgb(var(--p-surface) / 0.85);
+  --bg-dropdown: rgb(var(--p-surface) / 0.85);
+  --bg-backdrop: rgb(var(--p-bg) / 0.8);
+  --color-base: rgb(var(--p-bg));
+  --color-muted: rgb(var(--p-surface));
+  --color-muted-80: rgb(var(--p-surface) / 0.8);
+  --color-muted-20: rgb(var(--p-surface) / 0.2);
+
+  --text-primary: rgb(var(--p-text));
+  --text-secondary: rgb(var(--p-text2));
+  --text-tertiary: rgb(var(--p-text3));
+
+  --border-color: rgb(var(--p-line));
+  --border-secondary: rgb(var(--p-text2) / 0.22);
+  --divider: rgb(var(--p-line));
+
+  --accent: rgb(var(--p-chrome));
+  --accent-text: rgb(var(--p-chrome-text));
+  --accent-secondary: rgb(var(--p-chrome) / 0.35);
+  --accent-rgb: var(--p-chrome);
+
+  --pos: rgb(var(--p-pos));
+  --neg: rgb(var(--p-neg));
+  --pos-rgb: var(--p-pos);
+  --neg-rgb: var(--p-neg);
+  --info-rgb: var(--p-info);
+  --bids: rgb(var(--p-pos));
+  --asks: rgb(var(--p-neg));
+  --pos-secondary: rgb(var(--p-pos) / 0.16);
+  --neg-secondary: rgb(var(--p-neg) / 0.16);
+  --bids-secondary: rgb(var(--p-pos) / 0.3);
+  --asks-secondary: rgb(var(--p-neg) / 0.3);
+
+  --shade-1: rgb(var(--p-shade-1));
+  --shade-2: rgb(var(--p-shade-2));
+  --shade-3: rgb(var(--p-shade-3));
+  --shade-4: rgb(var(--p-shade-4));
+  --shade-5: rgb(var(--p-shade-5));
+
+  --coin-1: rgb(var(--p-coin-1));
+  --coin-2: rgb(var(--p-coin-2));
+  --coin-3: rgb(var(--p-coin-3));
+  --coin-4: rgb(var(--p-coin-4));
+  --coin-5: rgb(var(--p-coin-5));
+  --coin-6: rgb(var(--p-coin-6));
+  --coin-7: rgb(var(--p-coin-7));
+  --coin-8: rgb(var(--p-coin-8));
+  --coin-other: rgb(var(--p-coin-other));
+
+  --muted-danger: rgb(var(--p-neg) / 0.2);
+  --muted-warning: rgb(var(--p-chrome) / 0.2);
+  --muted-success: rgb(var(--p-pos) / 0.2);
+  --muted-success-40: rgb(var(--p-pos) / 0.4);
+  --volume-bids: rgb(var(--p-pos) / 0.2);
+  --volume-asks: rgb(var(--p-neg) / 0.2);
+
+  --scrollbar-track: rgb(var(--p-bg));
+  --scrollbar-thumb: rgb(var(--p-raise));
+  --scrollbar-thumb-hover: rgb(var(--p-text3));
+  --button-stroke: rgb(var(--p-text2) / 0.2);
+  --mobile-nav-backdrop: rgb(var(--p-bg) / 0.6);
+  --mobile-tab-bg: rgb(var(--p-bg) / 0.2);
+  --mobile-tab-border: rgb(var(--p-raise) / 0.8);
+  --theme-selector-border: rgb(var(--p-text2) / 0.2);
+  --theme-selector-bg: rgb(var(--p-bg) / 0.2);
+  --theme-selector-button-border: rgb(var(--p-raise) / 0.8);
+
+  /* === SPACING SCALE ===
+     One 4px-based ramp for every gap, pad and inset. Dashboard density
+     (tight end of the ramp) — panels use 3/4, page sections use 5/6. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* === RADIUS SCALE ===
+     Close to BULK Exchange, which draws its panels dead square, but
+     softened by a few pixels. The values stay small on purpose: enough
+     to take the hard edge off, not enough to read as rounded cards.
+     Past roughly 8px a terminal starts looking like a generic
+     dashboard again. */
+  --radius-xs: 2px;   /* pills, badges */
+  --radius-sm: 4px;   /* buttons, inputs, toggles */
+  --radius-md: 4px;   /* cards, strips */
+  --radius-lg: 6px;   /* panels, page-level containers */
+
+  /* === ELEVATION ===
+     BULK Exchange uses no elevation whatsoever — every surface sits on
+     the same plane and separation is done purely with 1px hairlines.
+     Shadows survive only for things that genuinely float above the
+     page (dropdowns, modals), tinted with the near-black base rather
+     than pure black. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 8px 28px rgb(var(--p-shadow) / 0.6), 0 2px 6px rgb(var(--p-shadow) / 0.45);
+
+  /* === MOTION ===
+     One decelerating curve for entrances/hovers, one snappier curve for
+     state flips. Durations sit in the 150-260ms band — long enough to
+     read as motion, short enough to never gate an interaction. */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --dur-reveal: 520ms;
+
+  /* === TYPE SCALE ===
+     Six steps plus two metric sizes. Tracking tightens as size grows
+     and opens up as it shrinks — the single adjustment that most makes
+     small labels read as deliberate rather than merely small. */
+  --text-h1: 1.875rem;    /* 30px — page titles, Fraunces display     */
+  --text-h2: 0.875rem;    /* 14px — panel titles                      */
+  --text-h3: 0.75rem;     /* 12px — sub-headings, reserved            */
+  --text-body: 0.8125rem; /* 13px — prose, list content               */
+  --text-caption: 0.6875rem; /* 11px — secondary row detail           */
+  --text-label: 0.625rem; /* 10px — uppercase column and field labels */
+  --text-metric: 1.625rem;    /* 26px — standard KPI value            */
+  --text-metric-lg: 1.875rem; /* 30px — headline KPI value            */
+
+  --tracking-h1: -0.02em;
+  --tracking-h2: 0.01em;
+  --tracking-body: 0;
+  --tracking-label: 0.14em;
+  --tracking-metric: -0.02em;
 }
 
-/* === LIGHT THEME === */
+/* ══════════════════════════════════════════════════════════════════════
+   LAYER 1 · PRIMITIVE BLOCKS (one per palette × mode)
+   Only --p-* are set here. The mapping in :root turns them into the role +
+   legacy names components read. A mode class (.dark / .light) is always
+   present on <html>, and data-palette defaults to "classic".
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ─── SHARED neutral shell (light) · all palettes ───
+   The parchment shell, identical for every palette. Content colours carry
+   over from each palette block; only Classic/Grove need a light-mode chrome
+   flip (their chrome is neutral, so it must go dark on a light shell). */
 .light, [data-theme="light"] {
-  --color-base: #EDECE3;
-  --color-muted: #F9F8ED;
-  --color-muted-80: rgba(249, 248, 237, 0.8);
-  --color-muted-20: rgba(249, 248, 237, 0.2);
-  
-  --bg-base: #EDECE3;
-  --bg-muted: #F9F8ED;
-  --bg-secondary: #C6B6BA;
-  --bg-secondary-muted: #C6B6BA;
-  --bg-secondary-20: rgba(198, 182, 186, 0.2);
-  --bg-secondary-80: rgba(198, 182, 186, 0.8);
-  --bg-overlay: rgba(249, 248, 237, 0.8);
-  --bg-dropdown: rgba(249, 248, 237, 0.8);
-  --bg-backdrop: rgba(249, 248, 237, 0.8);
-  
-  --text-primary: #1B1A14;
-  --text-secondary: #736A6C;
-  --text-tertiary: #9C9092;
-  
-  /* Fixed: Visible borders for light theme */
-  --border-color: #C6B6BA;
-  --border-secondary: rgba(115, 106, 108, 0.3);
-  --divider: #D5D4CB;
-  
-  /* Scrollbar colors for light theme */
-  --scrollbar-track: #E5E4DB;
-  --scrollbar-thumb: #C6B6BA;
-  --scrollbar-thumb-hover: #9C9092;
-  
-  --accent: #5A2C40;
-  --accent-text: #FFFEEF;
-  --accent-secondary: #C6B6BA;
-  
-  /* Bids/Asks - Same for light theme */
-  --bids: #00B481;
-  --asks: #EF4A3C;
-  --bids-secondary: #86CEDD;
-  --asks-secondary: #F16AAB;
-  
-  /* Mobile navigation */
-  --mobile-nav-backdrop: rgba(20, 19, 16, 0.3);
-  --mobile-tab-bg: rgba(249, 248, 237, 0.2);
-  --mobile-tab-border: rgba(198, 182, 186, 0.8);
-  
-  /* Theme selector */
-  --theme-selector-border: rgba(128, 118, 120, 0.2);
-  --theme-selector-bg: rgba(249, 248, 237, 0.2);
-  --theme-selector-button-border: rgba(115, 106, 108, 0.2);
+  --p-bg: 237 236 227;       /* #EDECE3 page */
+  --p-surface: 249 248 237;  /* #F9F8ED panels */
+  --p-raise: 198 182 186;    /* #C6B6BA hover / secondary */
+  --p-text: 27 26 20;        /* #1B1A14 primary text */
+  --p-text2: 115 106 108;
+  --p-text3: 156 144 146;
+  --p-line: 198 182 186;
+  --p-shadow: 84 74 76;
+}
+
+/* Classic + Grove use a NEUTRAL chrome, so in light mode it flips dark. */
+.light[data-palette="classic"], .light[data-palette="grove"] {
+  --p-chrome: 85 75 76;
+  --p-chrome-text: 249 248 237;
+  --p-info: 115 106 108;
 }
 
 @layer base {
@@ -195,9 +295,9 @@
     @apply antialiased min-h-screen;
   }
 
-  /* Custom selection colors — gold to match accent chrome */
+  /* Custom selection colors — tinted with the active accent chrome */
   ::selection {
-    background-color: rgba(255, 181, 71, 0.3);
+    background-color: rgb(var(--p-chrome) / 0.3);
     color: var(--text-primary);
   }
 }
@@ -206,30 +306,35 @@
   /* Editorial serif page title — mirrors BULK mainnet's display
      typography. Use for page-level h1s ONLY; section headers, table
      headers, and all data stay on the sans/mono stack. */
+  /* The h1 step of the type scale. Already the page-title convention
+     across 12 routes, so it consumes the h1 tokens directly rather than
+     living alongside a duplicate `.t-h1` that would compete with it. */
   .page-title {
     font-family: var(--font-fraunces), Georgia, serif;
+    font-size: var(--text-h1);
+    letter-spacing: var(--tracking-h1);
+    color: var(--role-content);
     font-weight: 500;
-    letter-spacing: -0.01em;
-    @apply text-3xl sm:text-4xl text-[var(--text-primary)];
+    line-height: 1.1;
+    @apply sm:text-4xl;
   }
 
+  /* Panel container. Square, flat, hairline-bounded — the BULK Exchange
+     panel treatment. No radius, no shadow, no inset highlight: a panel
+     is defined entirely by the 1px line around it. */
   .glass-card {
     background-color: var(--bg-muted);
     border: 1px solid var(--border-color);
-    @apply rounded-xl overflow-hidden;
-    transition: background-color 0.3s ease, border-color 0.3s ease;
+    border-radius: var(--radius-lg);
+    @apply overflow-hidden;
+    transition: background-color var(--dur-slow) ease, border-color var(--dur-slow) ease;
   }
 
-  .glow-green {
-    box-shadow: 0 0 20px rgba(0, 180, 129, 0.2), 0 0 40px rgba(0, 180, 129, 0.1);
-  }
-
-  .glow-red {
-    box-shadow: 0 0 20px rgba(239, 74, 60, 0.2), 0 0 40px rgba(239, 74, 60, 0.1);
-  }
-
-  .gradient-text {
-    @apply bg-gradient-to-r from-bulk-green to-bulk-blue bg-clip-text text-transparent;
+  /* Collapses a panel's own border so it can sit inside a bordered grid
+     and share hairlines with its neighbours instead of stacking a second
+     line against theirs. */
+  .panel-flush {
+    border: 0;
   }
 
   .btn-primary {
@@ -237,7 +342,7 @@
        reserved strictly for market semantics (buy/long/positive). */
     background-color: var(--accent);
     color: var(--accent-text);
-    box-shadow: 0 0 16px rgba(255, 181, 71, 0.25);
+    box-shadow: 0 0 16px rgb(var(--p-chrome) / 0.25);
     @apply px-4 py-2 font-semibold rounded-full
            hover:brightness-110 transition-all duration-200 active:scale-95 disabled:opacity-50;
   }
@@ -280,14 +385,28 @@
            transition-colors duration-200;
   }
 
+  /* Every panel header is the same height so panels sitting side by side
+     share a baseline — the single biggest readability win on a
+     multi-panel dashboard. 44px matches the exchange's header density. */
   .panel-header {
     border-bottom: 1px solid var(--border-color);
-    @apply flex items-center justify-between px-5 py-4;
+    min-height: 2.75rem;
+    @apply flex items-center justify-between gap-3 px-4 py-1.5;
   }
 
   .panel-title {
     color: var(--text-primary);
-    @apply text-sm font-semibold uppercase tracking-wider flex items-center gap-3;
+    @apply text-sm font-semibold tracking-[0.01em] flex items-center gap-2;
+  }
+
+  /* Bare icon slot before a panel title. BULK Exchange puts no chip,
+     tile or tinted square behind its glyphs — the icon simply sits in
+     the accent color at the same optical weight as the label next to
+     it. Colored via `color` on the element. */
+  .panel-icon {
+    @apply inline-flex items-center justify-center shrink-0;
+    width: 1rem;
+    height: 1rem;
   }
 
   .tab-btn {
@@ -311,17 +430,181 @@
   }
 
   .table-header {
-    color: var(--text-secondary);
-    @apply text-[10px] uppercase tracking-widest font-medium;
+    color: var(--text-tertiary);
+    @apply text-[10px] uppercase tracking-[0.14em] font-medium;
   }
 
   .table-row {
     border-bottom: 1px solid var(--border-secondary);
     transition: background-color 0.2s ease;
   }
-  
+
   .table-row:hover {
     background-color: var(--bg-secondary-20);
+  }
+
+  /* === DATA ROW ===
+     Shared row language for Hall of Shame / Live Activity / any future
+     ranked list. A left accent bar scales in from the top edge on hover
+     (transform only — never animate width), paired with a background
+     lift. `--row-accent` is set per-row by the component so one class
+     serves green, red and amber rows alike. */
+  .data-row {
+    position: relative;
+    isolation: isolate;
+    --row-accent: var(--accent);
+    transition: background-color var(--dur-base) var(--ease-out);
+  }
+
+  .data-row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--row-accent);
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+
+  .data-row:hover {
+    background-color: var(--bg-secondary-20);
+  }
+
+  .data-row:hover::before,
+  .data-row:focus-visible::before {
+    transform: scaleY(1);
+  }
+
+  .data-row:focus-visible {
+    outline: none;
+    background-color: var(--bg-secondary-20);
+    box-shadow: inset 0 0 0 1px var(--row-accent);
+  }
+
+  /* === RANK BADGE ===
+     Podium ranks get a filled medallion off the amber ramp; everything
+     below gets a hairline outline. Tabular mono keeps the numerals from
+     shifting the column as ranks change. */
+  .rank-badge {
+    @apply inline-flex items-center justify-center shrink-0 font-mono tabular-nums;
+    width: 1.25rem;
+    height: 1.25rem;
+    /* Square, matching the exchange's rectangular vocabulary — a pill
+       here would be the only round thing on the page. */
+    border-radius: var(--radius-xs);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+
+  .rank-badge-1 { background-color: var(--shade-2); color: var(--accent-text); }
+  .rank-badge-2 { background-color: var(--shade-3); color: var(--accent-text); }
+  .rank-badge-3 { background-color: var(--shade-4); color: var(--accent-text); }
+
+  .rank-badge-rest {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-tertiary);
+  }
+
+  .data-row:hover .rank-badge { transform: scale(1.08); }
+
+  /* === SIDE PILL ===
+     BUY / SELL / REKT. Tinted fill + 1px border at ~30% is the same
+     recipe as .badge-green/red, promoted to a reusable primitive so
+     the feed and the tables can't drift apart. */
+  .side-pill {
+    @apply inline-flex items-center font-bold uppercase;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: var(--radius-xs);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    line-height: 1.4;
+    border: 1px solid transparent;
+  }
+
+  .side-pill-buy {
+    background-color: rgb(var(--pos-rgb) / 0.14);
+    border-color: rgb(var(--pos-rgb) / 0.3);
+    color: var(--bids);
+  }
+
+  .side-pill-sell {
+    background-color: rgb(var(--neg-rgb) / 0.14);
+    border-color: rgb(var(--neg-rgb) / 0.3);
+    color: var(--asks);
+  }
+
+  .side-pill-rekt {
+    background-color: rgb(var(--neg-rgb) / 0.2);
+    border-color: rgb(var(--neg-rgb) / 0.45);
+    color: var(--asks);
+  }
+
+  /* Section heading above a panel group. */
+  .section-heading {
+    color: var(--text-secondary);
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em];
+  }
+
+  /* === TYPE SCALE CLASSES ===
+     One class per step. Components use these instead of hand-picking a
+     Tailwind size, so the scale is adjustable from the token block above
+     rather than by grepping for `text-[10px]` across 28 files. */
+  /* h1 lives on `.page-title` above — it predates this scale and is
+     already applied across every route. The --text-h1 token drives it. */
+  .t-h2 {
+    font-size: var(--text-h2);
+    letter-spacing: var(--tracking-h2);
+    color: var(--role-content);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .t-body {
+    font-size: var(--text-body);
+    letter-spacing: var(--tracking-body);
+    color: var(--role-content);
+    line-height: 1.5;
+  }
+
+  .t-caption {
+    font-size: var(--text-caption);
+    color: var(--role-content-subtle);
+    line-height: 1.4;
+  }
+
+  /* Uppercase micro-label. The wide tracking is what separates a label
+     from merely-small body text. */
+  .t-label {
+    font-size: var(--text-label);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--role-content-subtle);
+    line-height: 1.4;
+  }
+
+  /* Numeric display. Tabular figures are non-negotiable on live values —
+     without them every tick reflows the column. */
+  .t-metric {
+    font-size: var(--text-metric);
+    letter-spacing: var(--tracking-metric);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .t-metric-lg {
+    font-size: var(--text-metric-lg);
+    letter-spacing: var(--tracking-metric);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Stats card styles like BULK testnet */
@@ -342,29 +625,47 @@
     @apply text-lg font-bold;
   }
 
-  /* Toggle/Switch styles */
+  /* Toggle/Switch styles — BULK Exchange's tab treatment.
+     The exchange marks the active tab ("Order Book", "Market",
+     "Positions") with a 2px gold rule underneath and a brightening of
+     the label, never with a filled pill. No track, no container, no
+     background: just labels and one underline. */
   .toggle-group {
-    background-color: var(--bg-muted);
-    border: 1px solid var(--border-color);
-    @apply flex rounded-lg p-1;
+    background-color: transparent;
+    border: 0;
+    border-radius: 0;
+    @apply flex items-stretch gap-0 p-0;
   }
 
   .toggle-btn {
-    @apply px-3 py-1.5 text-xs font-medium rounded-full transition-all;
+    @apply px-2.5 py-1 text-[11px] font-medium;
+    border-radius: 0;
+    letter-spacing: 0.02em;
+    background-color: transparent;
+    border-bottom: 2px solid transparent;
+    transition: color var(--dur-fast) var(--ease-snap),
+                border-color var(--dur-fast) var(--ease-snap);
   }
 
   .toggle-btn.active {
-    /* Gold active state — same chrome rule as .tab-btn.active. */
-    background-color: var(--accent);
-    color: var(--accent-text);
+    background-color: transparent;
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
   }
 
   .toggle-btn:not(.active) {
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
   }
-  
+
   .toggle-btn:not(.active):hover {
     color: var(--text-primary);
+    background-color: transparent;
+    border-bottom-color: var(--border-color);
+  }
+
+  .toggle-btn:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
   }
 
   /* Chart card styles */
@@ -444,19 +745,19 @@
   .badge-green {
     background-color: var(--muted-success);
     color: var(--bids);
-    border: 1px solid rgba(0, 180, 129, 0.3);
+    border: 1px solid rgb(var(--p-pos) / 0.3);
   }
 
   .badge-red {
     background-color: var(--muted-danger);
     color: var(--asks);
-    border: 1px solid rgba(239, 74, 60, 0.3);
+    border: 1px solid rgb(var(--p-neg) / 0.3);
   }
 
   .badge-orange {
     background-color: var(--muted-warning);
     color: var(--accent);
-    border: 1px solid rgba(255, 181, 71, 0.3);
+    border: 1px solid rgb(var(--p-chrome) / 0.3);
   }
 
   .badge-blue {
@@ -494,13 +795,6 @@
   .bg-muted-negative { background-color: var(--muted-danger); }
   .bg-muted-warning { background-color: var(--muted-warning); }
 
-  .grid-bg {
-    background-image: 
-      linear-gradient(rgba(0, 180, 129, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 180, 129, 0.02) 1px, transparent 1px);
-    background-size: 50px 50px;
-  }
-  
   /* Theme-aware utilities */
   .theme-bg-base { background-color: var(--bg-base); }
   .theme-bg-muted { background-color: var(--bg-muted); }
@@ -514,61 +808,188 @@
   .theme-border { border-color: var(--border-color); }
   .theme-divider { border-color: var(--divider); }
   
-  /* Responsive container that scales with screen size */
+  /* === APP CONTAINER ===
+     The single shell every route measures itself against.
+
+     max-width is expressed in rem, not px, so it rides the root
+     font-size step-ups already defined at 2560px and 3840px — 120rem
+     resolves to 1920px on a normal display, 2400px on 2K, 2880px on 4K,
+     with no extra media queries to keep in sync.
+
+     Gutters are a clamp rather than fixed breakpoint jumps: 16px on a
+     phone, growing with the viewport, capped at 40px. The result is that
+     on any display up to 1920px the layout genuinely fills the width
+     instead of stranding dead margin on both edges. */
   .responsive-container {
-    @apply max-w-7xl mx-auto w-full px-4 sm:px-6;
-  }
-  
-  /* On 2K+ screens, increase max-width */
-  @media (min-width: 2560px) {
-    .responsive-container {
-      max-width: 1600px;
-    }
-  }
-  
-  @media (min-width: 3840px) {
-    .responsive-container {
-      max-width: 2200px;
-    }
+    width: 100%;
+    margin-inline: auto;
+    max-width: 120rem;
+    padding-inline: clamp(1rem, 2.5vw, 2.5rem);
   }
 }
 
-/* ----------------------------------------------------------------------------
-   Site-wide color palettes. Set via data-palette on <html> (persisted to
-   localStorage by the PaletteSwitcher). Each palette defines:
-     --pos / --neg      semantic up/down pair
-     --accent + shades  brand accent scale (KPI bars, chart fills, buttons)
-     --coin-1..8        neutral series palette for coins / multi-series charts
-   Combined with .dark / .light. Default (no attribute) = classic.
----------------------------------------------------------------------------- */
-:root, html[data-palette="classic"] {
-  --pos: #21C07A; --neg: #E5484D;
-  --pos-rgb: 33 192 122; --neg-rgb: 229 72 77; --accent-rgb: 255 180 87;
-  --pos-secondary: #12402E; --neg-secondary: #4A1518;
-  --accent: #FFB457; --accent-text: #1B1A14; --accent-secondary: #6E3A17;
-  --shade-1: #FFD9A8; --shade-2: #FFC57E; --shade-3: #FFB457; --shade-4: #D98A2E; --shade-5: #8C5417;
-  /* cream / parchment neutral series (the BULK mainnet vibe) */
-  --coin-1: #E8DCC4; --coin-2: #D3BE95; --coin-3: #BFA36C; --coin-4: #A6884F; --coin-5: #856A3B; --coin-6: #62502F; --coin-7: #D8CDB6; --coin-8: #9A8A6A;
-  --coin-other: #9C8F76;
-}
+/* ══════════════════════════════════════════════════════════════════════
+   LAYER 1 · PALETTE PRIMITIVE BLOCKS (continued)
+
+   Every palette shares the SAME cream/parchment shell (defined in :root and
+   .light above). These blocks recolour ONLY content — functional pos/neg,
+   accent/chrome, the shade & coin ramps, and the info indicator. Backgrounds,
+   panels, text and borders are never touched here.
+
+   CLASSIC is the default content (in :root), so it needs no block:
+     · GROVE   — Classic content, but the negative signal is orange not red
+     · ORIGINAL— all-amber content (functional reads by brightness, no green/red)
+     · ORCHID  — blue/purple content
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ─── GROVE · green / ORANGE (Classic content otherwise) ─── */
 html[data-palette="grove"] {
-  --pos: #21C07A; --neg: #F97316;
-  --pos-rgb: 33 192 122; --neg-rgb: 249 115 22; --accent-rgb: 33 192 122;
-  --pos-secondary: #12402E; --neg-secondary: #5A2E12;
-  --accent: #21C07A; --accent-text: #06231B; --accent-secondary: #134A3A;
-  --shade-1: #A7ECCF; --shade-2: #4FD199; --shade-3: #21C07A; --shade-4: #159463; --shade-5: #0E5E43;
-  --coin-1: #CFE8DA; --coin-2: #9FD3BC; --coin-3: #6FB89A; --coin-4: #4A9A7C; --coin-5: #327A61; --coin-6: #1F5745; --coin-7: #B7DECB; --coin-8: #7FA894;
-  --coin-other: #7FA894;
+  --p-neg: 249 115 22;   /* #F97316 orange */
 }
+
+/* ─── ORIGINAL · all-amber content ─── */
+/* Functional reads by BRIGHTNESS: positive = light amber, negative = deeper. */
+html[data-palette="original"] {
+  --p-pos: 255 217 168;      /* #FFD9A8 lightest — "up" reads brighter */
+  --p-neg: 217 122 46;       /* deeper amber — "down" reads darker */
+  --p-info: 211 169 110;     /* muted amber, not blue */
+  --p-chrome: 255 180 87;    /* #FFB457 amber accent */
+  --p-chrome-text: 36 26 13;
+  --p-shade-1: 255 217 168; --p-shade-2: 255 197 126; --p-shade-3: 255 180 87; --p-shade-4: 217 138 46; --p-shade-5: 140 84 23;
+  --p-coin-1: 255 217 168; --p-coin-2: 240 192 136; --p-coin-3: 217 168 104; --p-coin-4: 192 142 78; --p-coin-5: 165 118 58; --p-coin-6: 140 84 23; --p-coin-7: 235 203 153; --p-coin-8: 181 138 90; --p-coin-other: 165 118 58;
+}
+/* Light shell needs deeper amber for functional + accent to stay legible. */
+.light[data-palette="original"] {
+  --p-pos: 181 115 42;       /* mid amber — legible on parchment */
+  --p-neg: 140 84 23;        /* #8C5417 deepest amber */
+  --p-chrome: 217 138 46;    /* #D98A2E, darker for contrast on light */
+  --p-chrome-text: 249 248 237;
+}
+
+/* ─── ORCHID · blue / purple content ─── */
 html[data-palette="orchid"] {
-  --pos: #60A5FA; --neg: #A78BFA;
-  --pos-rgb: 96 165 250; --neg-rgb: 167 139 250; --accent-rgb: 96 165 250;
-  --pos-secondary: #1E3A5F; --neg-secondary: #4C3A78;
-  --accent: #60A5FA; --accent-text: #0C1B2E; --accent-secondary: #1E3A5F;
-  --shade-1: #BDDBFE; --shade-2: #8AC0FC; --shade-3: #60A5FA; --shade-4: #7C5CE0; --shade-5: #6D3AE0;
-  --coin-1: #C9DBF5; --coin-2: #A9BEE8; --coin-3: #8FA6DC; --coin-4: #9B8AE0; --coin-5: #7C6FCB; --coin-6: #5B4FA6; --coin-7: #B6C7EE; --coin-8: #8E86C9;
-  --coin-other: #8E86C9;
+  --p-pos: 96 165 250;       /* #60A5FA blue */
+  --p-neg: 167 139 250;      /* #A78BFA purple */
+  --p-info: 33 113 181;      /* #2171B5 */
+  --p-chrome: 96 165 250;    /* blue accent */
+  --p-chrome-text: 12 27 46;
+  --p-shade-1: 189 219 254; --p-shade-2: 138 192 252; --p-shade-3: 96 165 250; --p-shade-4: 124 92 224; --p-shade-5: 109 58 224;
+  --p-coin-1: 201 219 245; --p-coin-2: 169 190 232; --p-coin-3: 143 166 220; --p-coin-4: 155 138 224; --p-coin-5: 124 111 203; --p-coin-6: 91 79 166; --p-coin-7: 182 199 238; --p-coin-8: 142 134 201; --p-coin-other: 142 134 201;
 }
-/* --bids/--asks are legacy aliases for the semantic pair. */
-:root { --bids: var(--pos); --asks: var(--neg); }
+
+/* ----------------------------------------------------------------------------
+   MOTION PRIMITIVES
+   Kept outside @layer so they're never purged and can't be overridden by
+   utility ordering. All motion here is transform/opacity only — nothing
+   animates layout properties.
+---------------------------------------------------------------------------- */
+
+/* Live-status dot. Two stages: an expanding halo ring that fades out,
+   plus the core itself breathing slightly. A single ping reads as a
+   loading spinner; the pair reads as a heartbeat. */
+@keyframes live-halo {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes live-core {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(0.82); }
+}
+
+.live-halo { animation: live-halo 2.4s var(--ease-out) infinite; }
+.live-core { animation: live-core 2.4s var(--ease-out) infinite; }
+
+/* Row / card entrance. Deliberately no overshoot — springy easing on
+   dense informational rows reads as sloppy rather than lively. Stagger
+   is applied per-item with an inline --row-index. */
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.animate-row-enter {
+  animation: row-enter var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 24ms);
+}
+
+/* Scroll-triggered reveal. Driven by the useReveal hook (Intersection
+   Observer), not by a scroll listener — the observer fires off the main
+   thread and disconnects after the first intersection, so there is no
+   per-frame cost once a section has appeared.
+
+   Deliberately applied only to below-the-fold sections. Above-the-fold
+   market data must never wait on a scroll position to become readable;
+   that content uses the load-time `row-enter` stagger instead. */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--dur-reveal) var(--ease-out),
+              transform var(--dur-reveal) var(--ease-out);
+  will-change: opacity, transform;
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* Animated underline for nav links. Scales from the left on hover and
+   sits persistently under the active route. Transform-driven so it
+   never triggers layout. */
+.nav-link {
+  position: relative;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.125rem;
+  height: 1px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.nav-link:hover::after,
+.nav-link:focus-visible::after,
+.nav-link-active::after {
+  transform: scaleX(1);
+}
+
+/* ----------------------------------------------------------------------------
+   REDUCED MOTION
+   Honors the OS setting: ambient/decorative motion stops entirely, and
+   functional transitions collapse to near-instant rather than being
+   removed (so state changes still register as changes).
+---------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .live-halo,
+  .live-core,
+  .animate-row-enter,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
+
+  /* Reveal sections resolve to their final state immediately. The hook
+     also short-circuits, so this is belt-and-braces for the case where
+     the class is applied before hydration. */
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 

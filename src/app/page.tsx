@@ -4,10 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2 } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
-import { NetworkHealthStats } from '@/components/NetworkHealthStats';
-import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { TelemetryPanel } from '@/components/TelemetryPanel';
 import { RecentActivity } from '@/components/RecentActivity';
-import { userApi, formatAddress, formatCompact, type UserSearchResult } from '@/lib/api';
+import { MarketTicker } from '@/components/MarketTicker';
+import { MarketsTable } from '@/components/MarketsTable';
+import { LiquidationBreakdown } from '@/components/LiquidationBreakdown';
+import { userApi, formatAddress, formatCompact, cn, type UserSearchResult } from '@/lib/api';
+import { useTickers } from '@/hooks/useTickers';
 
 // X (Twitter) icon component
 const XIcon = ({ className }: { className?: string }) => (
@@ -24,6 +27,9 @@ export default function HomePage() {
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
+
+  // One ticker poll feeds both the strip and the markets table.
+  const { tickers, loading: tickersLoading } = useTickers();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -96,18 +102,53 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
-      {/* Search Bar */}
-      <form onSubmit={handleSearch}>
+    /* LAYOUT
+       Three zones, each with its own rhythm rather than one uniform
+       stack:
+
+         1. Command bar   search + network telemetry, side by side
+         2. Overview      the KPI band
+         3. Market        the two data panels
+
+       Zones 1 and 2 are coupled (both are "state of the exchange right
+       now") and sit 12px apart. Zone 3 opens a new idea and gets 32px
+       plus a labelled masthead. Everything measures against
+       .responsive-container, which runs to 120rem with fluid gutters —
+       on any display up to 1920px the grid fills the viewport instead
+       of stranding margin at the edges. */
+    <main className="responsive-container flex-1 py-3 lg:py-4">
+      {/* Market tape — every active perp, last price and 24h change,
+          running full width across the very top, under the nav. */}
+      <MarketTicker tickers={tickers} loading={tickersLoading} />
+
+      {/* My own top-to-bottom layout, dressed in the BULK portfolio's
+          feel — not its structure: a calm sentence-case heading, the wallet
+          search as a clean field, the KPI card row, the Markets panel, then
+          the activity panels. Flat bordered cards on a base a shade darker,
+          low-noise colour, tabular numbers. Their vibe, my structure. */}
+      <header className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+        <div className="shrink-0">
+          <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
+            Overview
+          </h1>
+          <p className="mt-1.5 text-[13px] text-[var(--role-content-muted)]">
+            Real-time analytics for BULK Exchange
+          </p>
+        </div>
+        <form onSubmit={handleSearch} className="w-full sm:flex-1">
         <div className="relative" ref={searchRef}>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-secondary)] pointer-events-none" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--role-content-subtle)] pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => searchResults.length > 0 && setShowResults(true)}
             placeholder="Search wallet address or @username..."
-            className="w-full pl-12 pr-4 py-3 text-base bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-text-secondary focus:outline-none focus:border-bulk-green transition-colors"
+            className="w-full pl-11 pr-4 py-2.5 text-sm bg-[var(--role-surface)] border border-[var(--role-line)]
+                       rounded-[var(--radius-sm)] text-[var(--role-content)] placeholder-[var(--role-content-subtle)]
+                       focus:outline-none focus:border-[var(--role-chrome)]
+                       hover:border-[var(--role-line-subtle)]
+                       transition-colors duration-200 ease-[var(--ease-out)]"
           />
           
           {/* Loading indicator */}
@@ -117,9 +158,11 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Search Results Dropdown */}
+          {/* Search Results Dropdown. The one place a shadow survives —
+              this genuinely floats above the page, so it gets
+              --shadow-lg. Square corners keep it in the family. */}
           {showResults && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl shadow-xl z-50 max-h-80 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--role-surface)] border border-[var(--role-line)] rounded-[var(--radius-sm)] shadow-[var(--shadow-lg)] z-50 max-h-80 overflow-y-auto">
               {searchResults.map((result) => (
                 <button
                   key={result.wallet_address}
@@ -158,7 +201,7 @@ export default function HomePage() {
                     <div className="flex items-center gap-3 text-xs text-[var(--text-tertiary)]">
                       <span className="font-mono">{formatAddress(result.wallet_address)}</span>
                       {result.total_pnl !== undefined && result.total_pnl !== null && (
-                        <span className={Number(result.total_pnl) >= 0 ? 'text-green-400' : 'text-red-400'}>
+                        <span className={cn('tabular-nums', Number(result.total_pnl) >= 0 ? 'text-positive' : 'text-negative')}>
                           PnL: {Number(result.total_pnl) >= 0 ? '+' : ''}${formatCompact(result.total_pnl)}
                         </span>
                       )}
@@ -173,43 +216,46 @@ export default function HomePage() {
           )}
         </div>
       </form>
+      </header>
 
-      {/* Exchange Health Stats — trading economics: 24h volume, OI,
-          active traders, liquidations. Sourced from BULK trading API. */}
-      <ExchangeHealthStats />
+      {/* KPI card row — the four exchange stats, one calm flat row. Network
+          throughput now lives in its own live-chart panel below, beside the
+          Markets table. */}
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ExchangeHealthStats />
+      </div>
 
-      {/* Network Health Stats — chain throughput status bar: TPS, APS,
-          latest round + block time, live-status dot. Sourced from BULK's
-          explorer node via a persistent WS on our backend (~3s updates). */}
-      <NetworkHealthStats />
-
-      {/* Activity grid. The Top Traders + Whale Watch panels are hidden
-          until mainnet — they ran on BULK's official indexer leaderboard
-          (indexer.bulk.trade/v1/leaderboard), which was disabled when the
-          trading competition ended ("classic leaderboard routes are
-          disabled"). Rather than show two empty "indexer unavailable"
-          wells, we surface the two panels that run on our OWN collected
-          data and work today: the liquidations leaderboard and the live
-          trade/liquidation feed. When mainnet ships (or BULK exposes a new
-          rankings endpoint) the hidden panels come back. */}
-      <div>
-        <div className="flex items-center justify-between mb-3 px-0.5">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-            Market Activity
-          </h2>
-          <span className="text-[11px] text-[var(--text-tertiary)]">
-            Trader rankings return at mainnet
-          </span>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className="h-[460px]">
-            <LeaderboardTable type="liquidated" limit={10} />
+      {/* Markets + telemetry — the markets table narrowed to 8/12 with the
+          network telemetry graphed in the freed 4/12: a tabbed live chart
+          of TPS / APS instead of plain KPI text. Stacks below lg. */}
+      <section aria-label="Markets" className="mt-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="h-[480px] lg:col-span-8">
+            <MarketsTable tickers={tickers} loading={tickersLoading} />
           </div>
-          <div className="h-[460px]">
+          <div className="h-[480px] lg:col-span-4">
+            <TelemetryPanel />
+          </div>
+        </div>
+      </section>
+
+      {/* Market activity — the live trade/liquidation feed beside the 24h
+          liquidation split per market, 8/4 from lg.
+
+          (The former Top Traders / Whale Watch / Hall of Shame ranking
+          panels ran on BULK's official indexer leaderboard, disabled when
+          the trading competition ended. These two run on our OWN collected
+          data and work today.) */}
+      <section aria-label="Market activity" className="mt-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="h-[420px] sm:h-[480px] lg:col-span-8">
             <RecentActivity />
           </div>
+          <div className="h-[420px] sm:h-[480px] lg:col-span-4">
+            <LiquidationBreakdown />
+          </div>
         </div>
-      </div>
+      </section>
     </main>
   );
 }

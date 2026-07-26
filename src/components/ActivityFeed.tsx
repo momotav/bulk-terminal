@@ -62,27 +62,27 @@ function describeEvent(activityType: string, isOutgoing: boolean): VerbAndIcon {
     case 'deposit':
       return { verb: 'Deposited', Icon: ArrowDownToLine, color: 'text-bulk-green' };
     case 'withdrawal':
-      return { verb: 'Withdrew', Icon: ArrowUpFromLine, color: 'text-orange-400' };
+      return { verb: 'Withdrew', Icon: ArrowUpFromLine, color: 'text-bulk-red' };
     case 'transfer':
       return {
         verb: isOutgoing ? 'Transferred out' : 'Received',
         Icon: ArrowLeftRight,
-        color: isOutgoing ? 'text-orange-400' : 'text-bulk-green',
+        color: isOutgoing ? 'text-bulk-red' : 'text-bulk-green',
       };
     case 'createSubAccount':
       return { verb: 'Created sub-account', Icon: FolderPlus, color: 'text-bulk-green' };
     case 'removeSubAccount':
-      return { verb: 'Removed sub-account', Icon: FolderMinus, color: 'text-red-400' };
+      return { verb: 'Removed sub-account', Icon: FolderMinus, color: 'text-bulk-red' };
     case 'renameSubAccount':
       return { verb: 'Renamed sub-account', Icon: Pencil, color: 'text-[var(--text-secondary)]' };
     case 'multisigCreated':
-      return { verb: 'Created multisig', Icon: ShieldCheck, color: 'text-blue-400' };
+      return { verb: 'Created multisig', Icon: ShieldCheck, color: 'text-bulk-blue' };
     case 'proposalCreated':
-      return { verb: 'Proposed multisig action', Icon: FileSignature, color: 'text-blue-400' };
+      return { verb: 'Proposed multisig action', Icon: FileSignature, color: 'text-bulk-blue' };
     case 'proposalExecuted':
       return { verb: 'Executed multisig proposal', Icon: ShieldCheck, color: 'text-bulk-green' };
     case 'proposalFailed':
-      return { verb: 'Multisig proposal failed', Icon: AlertCircle, color: 'text-red-400' };
+      return { verb: 'Multisig proposal failed', Icon: AlertCircle, color: 'text-bulk-red' };
     case 'proposalCancelled':
       return { verb: 'Cancelled multisig proposal', Icon: FileSignature, color: 'text-[var(--text-secondary)]' };
     default:
@@ -246,12 +246,12 @@ function ActivityRow({ event, viewerAddress }: { event: ActivityEvent; viewerAdd
         <div className="text-xs text-[var(--text-tertiary)] mt-0.5 flex items-center gap-2">
           <span>{relativeTime(event.timestamp)}</span>
           {event.status && event.status !== 'completed' && (
-            <span className="px-1.5 py-0.5 rounded bg-red-400/10 text-red-400 text-[10px] uppercase tracking-wider">
+            <span className="px-1.5 py-0.5 rounded bg-bulk-red/10 text-bulk-red text-[10px] uppercase tracking-wider">
               {event.status}
             </span>
           )}
           {event.iso && (
-            <span className="px-1.5 py-0.5 rounded bg-blue-400/10 text-blue-400 text-[10px] uppercase tracking-wider">
+            <span className="px-1.5 py-0.5 rounded bg-bulk-blue/10 text-bulk-blue text-[10px] uppercase tracking-wider">
               isolated
             </span>
           )}

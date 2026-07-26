@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
 import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills } from '@/lib/positionWalk';
+import { clampWicks } from '@/lib/candles';
 
 // ---------------------------------------------------------------------------
 // PositionChartModal
@@ -84,11 +85,15 @@ const INTERVALS: { id: string; label: string }[] = [
 const DEFAULT_INTERVAL = '1h';
 const CANDLE_LIMIT = 200;
 
-// Metadata stashed alongside each marker at render time, keyed by the
-// marker's bucketed time (in seconds). Read by the crosshair-move handler
-// to populate the hover tooltip. Kept outside React state because it
-// doesn't drive rendering — only the ref's current value matters at
-// callback time.
+// One custom trade marker (the position's open, and the close for closed
+// trades). Rendered as an HTML overlay and positioned each frame from its
+// (time, price) via the chart's coordinate conversion.
+interface MarkerDatum {
+  key: 'open' | 'close';
+  timeSec: number;
+  price: number;
+  isBuy: boolean;
+}
 
 export function PositionChartModal({ position, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -100,6 +105,13 @@ export function PositionChartModal({ position, onClose }: Props) {
   // zoom/pan gesture, and a setState per event would re-render the modal
   // mid-gesture and stutter the chart's canvas redraw.
   const badgeRef = useRef<HTMLDivElement | null>(null);
+  // Custom B/S trade markers are HTML overlays (filled circle + white glyph +
+  // hover tooltip), not native lightweight-charts markers — the native ones
+  // can't put the letter inside the circle or carry a rich tooltip. markerEls
+  // maps each marker's key to its DOM node; markerDataRef mirrors the memo so
+  // the rAF positioning loop can read the current markers without re-closing.
+  const markerElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const markerDataRef = useRef<MarkerDatum[]>([]);
   // Live-update plumbing (live positions only). markLineRef is the mark
   // price line we mutate on each tick; liveBarRef is the in-progress last
   // candle we extend via series.update(); latestMarkRef holds the newest
@@ -153,14 +165,18 @@ export function PositionChartModal({ position, onClose }: Props) {
   // plots those as empty index slots, which shows up as a blank "gap" in the
   // middle of the chart. Drop them so only real candles are plotted and they
   // sit adjacent (a genuinely flat candle keeps a valid >0 price, so it stays).
+  // Then clamp obvious bad-print wicks (see clampWicks) so a stray 77k high or
+  // 49k low on a ~64k market can't blow out the whole price scale.
   const plottedCandles = useMemo(
     () =>
-      (candles ?? []).filter(
-        (c) =>
-          Number.isFinite(c.o) && c.o > 0 &&
-          Number.isFinite(c.h) && c.h > 0 &&
-          Number.isFinite(c.l) && c.l > 0 &&
-          Number.isFinite(c.c) && c.c > 0,
+      clampWicks(
+        (candles ?? []).filter(
+          (c) =>
+            Number.isFinite(c.o) && c.o > 0 &&
+            Number.isFinite(c.h) && c.h > 0 &&
+            Number.isFinite(c.l) && c.l > 0 &&
+            Number.isFinite(c.c) && c.c > 0,
+        ),
       ),
     [candles],
   );
@@ -292,6 +308,27 @@ export function PositionChartModal({ position, onClose }: Props) {
     return annotated;
   }, [fills, position]);
 
+  // The trade's endpoint markers. B/S direction comes from the position's own
+  // side (the LONG/SHORT badge), never from a fills walk — BULK's fill history
+  // can lag the live position, and a marker that contradicts the badge is worse
+  // than none. Anchored at the entry price (open) / close price (close).
+  const markerData = useMemo<MarkerDatum[]>(() => {
+    if (!position) return [];
+    const isLong = position.side === 'long';
+    if (position.kind === 'closed') {
+      // A long opens with a buy and closes with a sell; a short is the mirror.
+      return [
+        { key: 'open', timeSec: Math.floor(position.openedAt / 1000), price: position.entryPrice, isBuy: isLong },
+        { key: 'close', timeSec: Math.floor(position.closedAt / 1000), price: position.closePrice, isBuy: !isLong },
+      ];
+    }
+    // Live: only the open marker, at the start of the current position segment.
+    const openMs = currentPositionFills[0]?.timestamp;
+    if (openMs == null) return [];
+    return [{ key: 'open', timeSec: Math.floor(openMs / 1000), price: position.entryPrice, isBuy: isLong }];
+  }, [position, currentPositionFills]);
+  markerDataRef.current = markerData;
+
   // Build / rebuild the chart whenever candles arrive. We tear down and
   // recreate on every change rather than mutating in place — the data
   // doesn't change often (open modal, switch interval) and re-creation is
@@ -327,6 +364,24 @@ export function PositionChartModal({ position, onClose }: Props) {
     const borderColor = isLight ? 'rgba(115, 106, 108, 0.4)' : 'rgba(84, 74, 76, 0.4)';
     const textColor = isLight ? '#736A6C' : '#807678';
 
+    // lightweight-charts renders to canvas and CANNOT parse CSS variables
+    // (`var(--pos)` throws "Cannot parse color"). Resolve the active palette
+    // colours to a concrete rgb() once, via a throwaway element so the browser
+    // normalises to the canonical form the library understands.
+    const resolveColor = (expr: string, fallback: string): string => {
+      if (typeof document === 'undefined') return fallback;
+      const probe = document.createElement('span');
+      probe.style.color = expr;
+      probe.style.display = 'none';
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      return resolved || fallback;
+    };
+    const posColor = resolveColor('var(--pos)', '#21C07A');
+    const negColor = resolveColor('var(--neg)', '#E5484D');
+    const accentColor = resolveColor('var(--accent)', '#FFB457');
+
     // Seed with non-zero dimensions even if the container hasn't been
     // measured yet — chart will be resized to actual dimensions on the next
     // paint via the ResizeObserver below.
@@ -360,26 +415,81 @@ export function PositionChartModal({ position, onClose }: Props) {
     });
     chartRef.current = chart;
 
+    // Reference prices that must always stay in view (the drawn price lines).
+    const priceRefs = (position.kind === 'live'
+      ? [position.entryPrice, position.markPrice, position.liquidationPrice]
+      : [position.entryPrice, position.closePrice]
+    ).filter((p) => Number.isFinite(p) && p > 0);
+
     const series = chart.addCandlestickSeries({
-      upColor: 'var(--pos)',
-      downColor: 'var(--neg)',
-      borderUpColor: 'var(--pos)',
-      borderDownColor: 'var(--neg)',
-      wickUpColor: 'var(--pos)',
-      wickDownColor: 'var(--neg)',
+      upColor: posColor,
+      downColor: negColor,
+      borderUpColor: posColor,
+      borderDownColor: negColor,
+      wickUpColor: posColor,
+      wickDownColor: negColor,
+      // Robust price scale: fit the VISIBLE bars' 0.5–99.5th percentile of
+      // OHLC rather than absolute min/max, so a stray wick that slips the
+      // clamp still can't dominate the axis. Computed over the visible slice
+      // so vertical scale still tightens as you zoom/pan; unioned with the
+      // Entry/Mark/Liq lines so they never fall off-screen. Falls back to the
+      // library's default when we don't have enough bars.
+      autoscaleInfoProvider: (baseImpl: () => AutoscaleInfo | null): AutoscaleInfo | null => {
+        const base = baseImpl();
+        if (plottedCandles.length < 5) return base;
+        let lo = 0;
+        let hi = plottedCandles.length - 1;
+        const range = chart.timeScale().getVisibleLogicalRange();
+        if (range) {
+          lo = Math.max(0, Math.floor(range.from));
+          hi = Math.min(plottedCandles.length - 1, Math.ceil(range.to));
+        }
+        const slice = plottedCandles.slice(lo, hi + 1);
+        if (slice.length < 3) return base;
+        const highs = slice.map((c) => c.h).sort((a, b) => a - b);
+        const lows = slice.map((c) => c.l).sort((a, b) => a - b);
+        const q = (arr: number[], p: number) =>
+          arr[Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * p)))];
+        let maxValue = q(highs, 0.995);
+        let minValue = q(lows, 0.005);
+        for (const p of priceRefs) {
+          if (p > maxValue) maxValue = p;
+          if (p < minValue) minValue = p;
+        }
+        if (!(minValue < maxValue)) return base;
+        const pad = (maxValue - minValue) * 0.08;
+        return { priceRange: { minValue: minValue - pad, maxValue: maxValue + pad } };
+      },
     });
     seriesRef.current = series;
 
     // Convert BULK kline shape to lightweight-charts CandlestickData.
     // BULK uses ms timestamps; lightweight-charts expects seconds (Unix).
     // plottedCandles has already dropped the empty no-trade filler candles.
-    const data: CandlestickData[] = plottedCandles.map((c) => ({
+    const data: (CandlestickData | WhitespaceData)[] = plottedCandles.map((c) => ({
       time: Math.floor(c.t / 1000) as UTCTimestamp,
       open: c.o,
       high: c.h,
       low: c.l,
       close: c.c,
     }));
+    // For closed trades, pad the right with a few empty (whitespace) bars so a
+    // trade that closed at the last available candle isn't jammed against the
+    // price scale — its close marker gets breathing room. Whitespace reserves
+    // time-scale space without drawing anything and is honored by fitContent,
+    // unlike a manual visible-range tweak (which fights the auto-fit).
+    if (position.kind === 'closed' && data.length > 0) {
+      const barSec =
+        interval === '5m' ? 300 :
+        interval === '15m' ? 900 :
+        interval === '1h' ? 3600 :
+        interval === '4h' ? 14400 :
+        interval === '1d' ? 86400 : 3600;
+      const lastSec = data[data.length - 1].time as number;
+      for (let i = 1; i <= 3; i++) {
+        data.push({ time: (lastSec + i * barSec) as UTCTimestamp });
+      }
+    }
     series.setData(data);
 
     // Seed the in-progress bar with the most recent candle so live ticks
@@ -400,7 +510,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     // Liq (amber dashed), Mark (green dotted) for live; Close for closed.
     series.createPriceLine({
       price: position.entryPrice,
-      color: position.side === 'long' ? 'var(--pos)' : 'var(--neg)',
+      color: position.side === 'long' ? posColor : negColor,
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
@@ -412,7 +522,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       // (applyOptions) instead of recreating it.
       markLineRef.current = series.createPriceLine({
         price: position.markPrice,
-        color: 'var(--pos)',
+        color: posColor,
         lineWidth: 1,
         lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
@@ -422,7 +532,7 @@ export function PositionChartModal({ position, onClose }: Props) {
       if (position.liquidationPrice > 0) {
         series.createPriceLine({
           price: position.liquidationPrice,
-          color: 'var(--accent)',
+          color: accentColor,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -438,7 +548,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         (position.side === 'short' && position.closePrice < position.entryPrice);
       series.createPriceLine({
         price: position.closePrice,
-        color: wasProfitable ? 'var(--pos)' : 'var(--neg)',
+        color: wasProfitable ? posColor : negColor,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -446,10 +556,9 @@ export function PositionChartModal({ position, onClose }: Props) {
       });
     }
 
-    // Fill markers removed — the chart now mirrors BULK's clean reference
-    // view: Entry / Mark / Liq lines plus a floating PNL/Size badge on the
-    // entry line. Per-fill detail lives in the trades table, not the chart.
-    series.setMarkers([]);
+    // Trade markers (open + close) are HTML overlays, not native markers —
+    // see markerData / the marker overlay JSX. They're positioned by the same
+    // rAF loop that glues the PNL badge to the entry line, below.
 
     // Fit time range immediately and again after the first paint, in case
     // the container was 0px when we created the chart and it's now real.
@@ -463,6 +572,22 @@ export function PositionChartModal({ position, onClose }: Props) {
     // (translateY) and toggle it with `opacity` — both compositor-only — so
     // there's no per-frame layout reflow fighting the chart's canvas redraw
     // during a drag. No React re-render either.
+    // Candle bar times (seconds), ascending — used to snap marker times onto a
+    // real bar. lightweight-charts' timeToCoordinate returns null for a time
+    // outside the loaded bars' range, and BULK's trade open/close timestamps
+    // routinely land a hair outside the fetched window (or between bars). We
+    // snap to the nearest bar so a marker always resolves to a coordinate.
+    const candleSecs = plottedCandles.map((c) => Math.floor(c.t / 1000));
+    const snapToBar = (sec: number): number => {
+      if (candleSecs.length === 0) return sec;
+      let best = candleSecs[0];
+      let bestD = Math.abs(best - sec);
+      for (let i = 1; i < candleSecs.length; i++) {
+        const d = Math.abs(candleSecs[i] - sec);
+        if (d < bestD) { bestD = d; best = candleSecs[i]; }
+      }
+      return best;
+    };
     let lastBadgeY = Number.NaN;
     let badgeShown = false;
     const recomputeBadge = () => {
@@ -484,6 +609,32 @@ export function PositionChartModal({ position, onClose }: Props) {
       } else if (badgeShown) {
         el.style.opacity = '0';
         badgeShown = false;
+      }
+
+      // Position the B/S marker overlays on the same frame — each is glued to
+      // its (time, price) point. Same compositor-only transform + opacity so
+      // they track pan / zoom / axis-drag without layout thrash or re-renders.
+      const chartApi = chartRef.current;
+      if (chartApi) {
+        const ts = chartApi.timeScale();
+        const w = containerRef.current?.clientWidth ?? 0;
+        for (const m of markerDataRef.current) {
+          const node = markerElsRef.current.get(m.key);
+          if (!node) continue;
+          const x = ts.timeToCoordinate(snapToBar(m.timeSec) as UTCTimestamp);
+          const my = s.priceToCoordinate(m.price);
+          const visible =
+            x != null && my != null &&
+            (x as number) >= 0 && (w === 0 || (x as number) <= w) &&
+            (my as number) >= 0 && (h === 0 || (my as number) <= h);
+          if (visible) {
+            node.style.transform =
+              `translate(${Math.round((x as number) + 8)}px, ${Math.round((my as number) + 8)}px) translate(-50%, -50%)`;
+            node.style.opacity = '1';
+          } else {
+            node.style.opacity = '0';
+          }
+        }
       }
     };
     let badgeRaf = requestAnimationFrame(function loop() {
@@ -891,6 +1042,41 @@ export function PositionChartModal({ position, onClose }: Props) {
               </div>
             );
           })()}
+
+          {/* B/S trade markers — filled circle with a white glyph inside, plus
+              a hover tooltip ("Buy/Sell at $…"). Always mounted; positioned and
+              shown/hidden via the rAF loop (markerElsRef), no re-render. The
+              outer node is pointer-transparent so only the circle is hoverable. */}
+          {markerData.map((m) => (
+            <div
+              key={m.key}
+              ref={(el) => {
+                if (el) markerElsRef.current.set(m.key, el);
+                else markerElsRef.current.delete(m.key);
+              }}
+              className="absolute left-0 top-0 z-20"
+              style={{ opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity' }}
+            >
+              <div className="group relative flex items-center justify-center" style={{ pointerEvents: 'auto' }}>
+                <div
+                  className="flex h-[22px] w-[22px] cursor-default select-none items-center justify-center rounded-full text-[11px] font-bold leading-none text-white shadow"
+                  style={{
+                    backgroundColor: m.isBuy ? 'var(--pos)' : 'var(--neg)',
+                    border: '2px solid var(--bg-muted)',
+                  }}
+                >
+                  {m.isBuy ? 'B' : 'S'}
+                </div>
+                {/* Tooltip, to the left of the marker with a small caret. */}
+                <div className="pointer-events-none absolute right-full top-1/2 mr-2 hidden -translate-y-1/2 group-hover:block">
+                  <div className="relative whitespace-nowrap rounded-lg bg-white px-3 py-2 text-[13px] font-medium tabular-nums text-gray-900 shadow-xl">
+                    {m.isBuy ? 'Buy' : 'Sell'} at ${formatNumber(m.price, 2)}
+                    <span className="absolute left-full top-1/2 -ml-1 h-2 w-2 -translate-y-1/2 rotate-45 bg-white" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
