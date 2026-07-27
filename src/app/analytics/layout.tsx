@@ -3,13 +3,18 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins } from 'lucide-react';
+import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network } from 'lucide-react';
 
 const menuItems = [
   {
     name: 'General',
     href: '/analytics/general',
     icon: BarChart3,
+  },
+  {
+    name: 'Network',
+    href: '/analytics/network',
+    icon: Network,
   },
   {
     name: 'Liquidations',

@@ -13,7 +13,7 @@ import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Drople
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 type Range = '7d' | '30d' | 'all';
 
 interface NativeSummary {

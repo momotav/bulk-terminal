@@ -7,7 +7,7 @@ import { formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 interface ActivityItem {
   type: 'liquidation' | 'trade';

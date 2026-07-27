@@ -324,9 +324,19 @@ function LiquidationTreemap({
     // the container area. Each item's rect area will be proportional to its
     // share of the total.
     const totalArea = containerSize.w * containerSize.h;
-    const scaled = treemapItems.map(it => ({
+    // Perceptual area compression. A strictly area-∝-value treemap collapses
+    // into one giant tile plus unreadable slivers the moment a single coin
+    // dominates (e.g. BTC at 15× the next asset). We size each tile by
+    // value^AREA_EXP so the long tail stays legible while the ordering and
+    // rough proportions are preserved. Nothing is hidden — the exact $ value
+    // is printed on every readable tile and in the tooltip. AREA_EXP = 1 would
+    // be strictly proportional.
+    const AREA_EXP = 0.6;
+    const weights = treemapItems.map(it => Math.pow(it.value, AREA_EXP));
+    const weightTotal = weights.reduce((a, b) => a + b, 0) || 1;
+    const scaled = treemapItems.map((it, i) => ({
       item: it,
-      area: (it.value / total) * totalArea,
+      area: (weights[i] / weightTotal) * totalArea,
     }));
 
     // `squarify` — classic algorithm: process items in descending order,
@@ -495,19 +505,28 @@ function LiquidationTreemap({
             showValue = false;
           }
 
+          // Hover spotlight: the hovered tile gets a crisp inset ring and full
+          // opacity while the rest gently recede, so the eye lands cleanly on
+          // one asset instead of the whole grid flashing brighter.
+          const GAP = 2; // px of container background showing between tiles
+          const isHovered = hoveredItem?.symbol === rect.item.symbol;
+          const isDimmed = hoveredItem != null && !isHovered;
+
           return (
             <div
               key={rect.item.symbol}
-              className="absolute flex flex-col items-center justify-center text-white transition-[filter,transform] duration-150 hover:brightness-110 cursor-default overflow-hidden select-none"
+              className="absolute flex flex-col items-center justify-center text-white cursor-default overflow-hidden select-none"
               style={{
-                left: `${rect.x}px`,
-                top: `${rect.y}px`,
-                width: `${rect.width}px`,
-                height: `${rect.height}px`,
+                left: `${rect.x + GAP / 2}px`,
+                top: `${rect.y + GAP / 2}px`,
+                width: `${Math.max(0, rect.width - GAP)}px`,
+                height: `${Math.max(0, rect.height - GAP)}px`,
                 backgroundColor: rect.item.color,
-                // Thin dark rule between cells so borders are visible over
-                // same-color neighbors.
-                boxShadow: 'inset -1px -1px 0 rgba(20,19,16,0.9), inset 0 0 0 0.5px rgba(20,19,16,0.2)',
+                borderRadius: 3,
+                opacity: isDimmed ? 0.72 : 1,
+                boxShadow: isHovered ? 'inset 0 0 0 2px rgba(255,255,255,0.65)' : 'none',
+                transition:
+                  'opacity 160ms var(--ease-out), box-shadow 160ms var(--ease-out), filter 160ms var(--ease-out)',
               }}
               onMouseEnter={() => {
                 setHoveredItem({
@@ -545,11 +564,14 @@ function LiquidationTreemap({
             which was the "info goes kinda off" bug from the old version. */}
         {hoveredItem && tooltipPos && (
           <div
-            className="absolute z-20 pointer-events-none bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2 shadow-xl text-xs"
+            className="treemap-tip absolute z-20 pointer-events-none bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2.5 shadow-xl text-xs"
             style={{
               left: `${tooltipPos.left}px`,
               top: `${tooltipPos.top}px`,
               width: `${TOOLTIP_W}px`,
+              // Glide between tiles instead of teleporting; the fade/slide-in
+              // on first appear is the `treemap-tip` keyframe.
+              transition: 'left 130ms var(--ease-out), top 130ms var(--ease-out)',
             }}
           >
             <div className="font-bold text-[var(--text-primary)] mb-1">{hoveredItem.symbol}</div>

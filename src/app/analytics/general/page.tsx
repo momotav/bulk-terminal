@@ -702,7 +702,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     const fetchLiveOI = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
         const res = await fetch(`${API_URL}${withNetwork("/api/analytics/tickers-bulk")}`);
         if (!res.ok) return;
         const body = await res.json();

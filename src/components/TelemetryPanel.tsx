@@ -30,7 +30,7 @@ interface ThroughputData {
 }
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+  process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 const POLL_INTERVAL_MS = 3_000;
 // ~3 minutes of history at a 3s cadence — enough to show shape, short

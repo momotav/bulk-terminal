@@ -14,7 +14,7 @@ interface ExchangeStats {
   timestamp: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 // Formatters live at module scope so their identity is stable across
 // renders — AnimatedNumber keys a subscription off the `format` prop,

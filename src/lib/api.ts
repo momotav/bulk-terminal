@@ -2,7 +2,7 @@
 
 import { withNetwork } from './network';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 // Live market price stream (SSE). Used by PositionChartModal to update the
 // last candle + mark line in real time. One stream per open modal.
@@ -1113,6 +1113,47 @@ export interface ExplorerTxDetail {
   actions: string[];
 }
 
+// Live throughput snapshot (rolling 60s window).
+export interface ExplorerThroughput {
+  tps: number;
+  aps: number;
+  blockTimeMs: number | null;
+  latestRound: number | null;
+  latestBlockhash: string | null;
+  latestTimestampNs: number | null;
+  sampleCount: number;
+  windowSeconds: number;
+  status: string;
+}
+
+// One aggregated point of historical network metrics (block time / throughput).
+export interface NetworkHistoryPoint {
+  bucket: string;
+  tps: number | null;
+  aps: number | null;
+  block_time_ms: number | null;
+  blocks_produced: number | null;
+  samples: number;
+}
+
+// Live composition of recent operations/transactions by raw action code.
+export interface ActionBreakdown {
+  opsByCode: Record<string, number>;
+  txByCode: Record<string, number>;
+  blocksSampled: number;
+  txSampled: number;
+  opsSampled: number;
+  sampledAt: number;
+}
+
+// One aggregated point of historical by-type counts (per action code).
+export interface ActionHistoryPoint {
+  bucket: string;
+  code: string;
+  ops: number;
+  txs: number;
+}
+
 export const explorer = {
   async getRecentBlocks(limit: number = 50): Promise<{ blocks: ExplorerBlock[]; limit: number }> {
     return request(`/api/explorer/blocks?limit=${limit}`);
@@ -1122,6 +1163,18 @@ export const explorer = {
   },
   async getTransaction(txhash: string): Promise<ExplorerTxDetail> {
     return request(`/api/explorer/tx/${txhash}`);
+  },
+  async getThroughput(): Promise<ExplorerThroughput> {
+    return request(`/api/explorer/throughput`);
+  },
+  async getNetworkHistory(range: '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: NetworkHistoryPoint[] }> {
+    return request(`/api/explorer/network-history?range=${range}`);
+  },
+  async getActionBreakdown(): Promise<ActionBreakdown> {
+    return request(`/api/explorer/action-breakdown`);
+  },
+  async getActionHistory(range: '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: ActionHistoryPoint[] }> {
+    return request(`/api/explorer/action-history?range=${range}`);
   },
 };
 

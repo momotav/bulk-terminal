@@ -17,7 +17,7 @@ import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+  process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 interface TreemapRow {
   symbol: string;

@@ -12,7 +12,7 @@ import { formatCompact, formatAddress } from '@/lib/api';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { ChartFrame } from '@/components/ChartFrame';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bulk-terminal-backend-production.up.railway.app';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 interface Kpis {
   liveTvl: number; totalDeposited: number; totalWithdrawn: number;
