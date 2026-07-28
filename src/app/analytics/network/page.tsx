@@ -18,8 +18,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, Line, LineChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, Line, LineChart, Scatter, ScatterChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis, ZAxis,
 } from 'recharts';
 import { Radio, Timer } from 'lucide-react';
 import { StatCard } from '@/components/StatCard';
@@ -27,6 +27,7 @@ import { ChartFrame } from '@/components/ChartFrame';
 import {
   explorer, formatCompact, formatNumber,
   type ExplorerThroughput, type NetworkHistoryPoint, type ActionHistoryPoint, type ExplorerBlock,
+  type NetworkStats, type HeatmapCell, type BlockMetricPoint,
 } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
@@ -81,6 +82,13 @@ export default function NetworkPage() {
   const [byTypeRange, setByTypeRange] = useState<Range>('7d');
   const [actionHist, setActionHist] = useState<ActionHistoryPoint[] | null>(null);
   const [blocks, setBlocks] = useState<ExplorerBlock[] | null>(null);
+
+  // Summary stats (peaks/percentiles), activity heatmap, per-block detail.
+  const [stats, setStats] = useState<NetworkStats | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapCell[] | null>(null);
+  const [blockRange, setBlockRange] = useState<Range>('7d');
+  const [blockMetrics, setBlockMetrics] = useState<BlockMetricPoint[] | null>(null);
+  const [largestTx, setLargestTx] = useState<number | null>(null);
 
   // KPI tiles — poll live throughput every 3s.
   useEffect(() => {
@@ -137,6 +145,28 @@ export default function NetworkPage() {
     return () => { alive = false; };
   }, [byTypeRange, network]);
 
+  // Summary stats (today) + activity heatmap (14d), refreshed periodically.
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try { const s = await explorer.getNetworkStats('1d'); if (alive) setStats(s); } catch { /* keep last */ }
+      try { const h = await explorer.getNetworkHeatmap(14); if (alive) setHeatmap(h.cells || []); } catch { /* keep last */ }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(id); };
+  }, [network]);
+
+  // Per-block detail on its own range.
+  useEffect(() => {
+    let alive = true;
+    setBlockMetrics(null);
+    explorer.getBlockMetrics(blockRange)
+      .then((r) => { if (alive) { setBlockMetrics(r.points || []); setLargestTx(r.largest_tx ?? null); } })
+      .catch(() => { if (alive) setBlockMetrics([]); });
+    return () => { alive = false; };
+  }, [blockRange, network]);
+
   // Derived values.
   const actionsPerTx = tp && tp.tps > 0 ? tp.aps / tp.tps : null;
   const statusOk = (tp?.status || '').toLowerCase().includes('oper') || (tp?.status || '').toLowerCase() === 'live';
@@ -161,6 +191,18 @@ export default function NetworkPage() {
       ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
       : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  // Latest per-block sample (for the avg-tx KPI) + empty-block % series.
+  const latestBlockMetric = blockMetrics && blockMetrics.length ? blockMetrics[blockMetrics.length - 1] : null;
+  const emptyPct = useMemo(() => (blockMetrics ?? []).map((p) => {
+    const total = p.total_blocks ?? 0;
+    const empty = total > 0 ? ((p.empty_blocks ?? 0) / total) * 100 : 0;
+    return { bucket: p.bucket, empty, filled: 100 - empty };
+  }), [blockMetrics]);
+  // TPS vs Block Time scatter, from the last-hour minute series.
+  const scatter = useMemo(() => (liveHist ?? [])
+    .filter((p) => p.tps != null && p.block_time_ms != null)
+    .map((p) => ({ tps: p.tps as number, bt: p.block_time_ms as number })), [liveHist]);
 
   const hasHistory = (history?.length ?? 0) > 0;
   const hasLive = (liveHist?.length ?? 0) > 0;
@@ -195,6 +237,20 @@ export default function NetworkPage() {
         <StatCard size="compact" label="Blocks / window" loading={!tp}
           value={tp ? tp.sampleCount.toLocaleString() : '—'}
           sub={tp ? `over ${tp.windowSeconds}s` : undefined} />
+      </div>
+
+      {/* Peaks + percentiles + block detail (today) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-4">
+        <StatCard size="compact" label="Peak TPS" sub="today" loading={!stats}
+          value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '—'} valueColor="var(--pos)" />
+        <StatCard size="compact" label="Peak Ops/sec" sub="today" loading={!stats}
+          value={stats?.peak_aps != null ? formatCompact(stats.peak_aps) : '—'} />
+        <StatCard size="compact" label="P99 TPS" sub="today" loading={!stats}
+          value={stats?.tps_p99 != null ? formatNumber(stats.tps_p99, 0) : '—'} />
+        <StatCard size="compact" label="Largest block" unit="tx" loading={blockMetrics === null}
+          value={largestTx != null ? largestTx.toLocaleString() : '—'} />
+        <StatCard size="compact" label="Avg tx / block" loading={blockMetrics === null}
+          value={latestBlockMetric?.avg_tx != null ? formatNumber(latestBlockMetric.avg_tx, 1) : '—'} />
       </div>
 
       {/* Live throughput — accumulates while the page is open */}
@@ -238,6 +294,21 @@ export default function NetworkPage() {
               </AreaChart>
             </ResponsiveContainer>
           </ChartFrame>
+        )}
+      </div>
+
+      {/* Activity heatmap — avg TPS by weekday × hour */}
+      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">TPS Heatmap</h2>
+          <span className="text-[11px] text-[var(--text-tertiary)]">avg TPS · weekday × hour · last 14 days</span>
+        </div>
+        {heatmap === null ? (
+          <ChartSkeleton />
+        ) : heatmap.length === 0 ? (
+          <CollectingState />
+        ) : (
+          <TpsHeatmap cells={heatmap} />
         )}
       </div>
 
@@ -308,12 +379,91 @@ export default function NetworkPage() {
         </div>
       </div>
 
+      {/* Block-time percentiles + empty-block share */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Block Time Percentiles</h2>
+            <RangeToggle value={blockRange} onChange={setBlockRange} />
+          </div>
+          {blockMetrics === null ? <ChartSkeleton /> : blockMetrics.length === 0 ? <CollectingState /> : (
+            <ChartFrame className="h-64 md:h-72" yLabel="Block time (ms)"
+              legend={[{ label: 'P50', color: 'var(--coin-1)' }, { label: 'P95', color: 'var(--coin-3)' }, { label: 'P99', color: 'var(--coin-5)' }]}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={blockMetrics} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
+                  <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b as string, blockRange)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                    axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
+                  <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44} domain={['auto', 'auto']} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
+                    formatter={(v: number, name) => [`${formatNumber(v, 2)} ms`, String(name).toUpperCase()]} />
+                  <Line type="monotone" dataKey="bt_p50" stroke="var(--coin-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="bt_p95" stroke="var(--coin-3)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="bt_p99" stroke="var(--coin-5)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          )}
+        </div>
+
+        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Empty vs Non-empty Blocks</h2>
+            <RangeToggle value={blockRange} onChange={setBlockRange} />
+          </div>
+          {blockMetrics === null ? <ChartSkeleton /> : emptyPct.length === 0 ? <CollectingState /> : (
+            <ChartFrame className="h-64 md:h-72" yLabel="% of blocks"
+              legend={[{ label: 'Non-empty', color: 'var(--pos)' }, { label: 'Empty', color: 'var(--shade-3)' }]}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={emptyPct} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
+                  <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b as string, blockRange)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                    axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
+                  <YAxis tickFormatter={(v) => `${Math.round(v)}%`} domain={[0, 100]} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                    axisLine={{ stroke: 'var(--border-color)' }} width={40} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
+                    formatter={(v: number, name) => [`${formatNumber(v, 1)}%`, name === 'empty' ? 'Empty' : 'Non-empty']} />
+                  <Area type="monotone" dataKey="filled" stackId="b" stroke="var(--pos)" strokeWidth={1.5} fill="var(--pos)" fillOpacity={0.25} isAnimationActive={false} />
+                  <Area type="monotone" dataKey="empty" stackId="b" stroke="var(--shade-3)" strokeWidth={1.5} fill="var(--shade-3)" fillOpacity={0.35} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          )}
+        </div>
+      </div>
+
       {/* By-type composition — stacked bars over time (from sampled history) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <ByTypePanel title="Operations by Type" data={opsByType} range={byTypeRange}
           onRange={setByTypeRange} fmt={fmtBucket} unit="operations" />
         <ByTypePanel title="Transactions by Type" data={txByType} range={byTypeRange}
           onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
+      </div>
+
+      {/* TPS vs Block Time correlation — last hour, minute resolution */}
+      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">TPS vs Block Time</h2>
+          <span className="text-[11px] text-[var(--text-tertiary)]">last hour · per minute</span>
+        </div>
+        {liveHist === null ? <ChartSkeleton /> : scatter.length === 0 ? <CollectingState /> : (
+          <ChartFrame className="h-56 md:h-64" yLabel="Block time (ms)">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 8, right: 16, bottom: 16, left: 4 }}>
+                <XAxis type="number" dataKey="tps" name="TPS" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} domain={['auto', 'auto']}
+                  label={{ value: 'Transactions / sec', position: 'insideBottom', offset: -8, fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                <YAxis type="number" dataKey="bt" name="Block time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} width={44} domain={['auto', 'auto']} />
+                <ZAxis range={[36, 36]} />
+                <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-color)' }}
+                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                  formatter={(v: number, name) => [name === 'Block time' ? `${formatNumber(v, 2)} ms` : formatNumber(v, 0), name]} />
+                <Scatter data={scatter} fill="var(--accent)" fillOpacity={0.55} isAnimationActive={false} />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
       </div>
 
       {/* Recent block activity */}
@@ -451,6 +601,62 @@ function ByTypePanel({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
+  const map = new Map<string, number>();
+  let max = 0;
+  for (const c of cells) {
+    map.set(`${c.dow}-${c.hour}`, c.tps);
+    if (c.tps > max) max = c.tps;
+  }
+  // Blend the accent over the base surface by intensity (0 = empty cell).
+  const cellColor = (v: number | undefined) => {
+    if (v == null) return 'var(--bg-base)';
+    const t = max > 0 ? Math.min(1, v / max) : 0;
+    return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--bg-base))`;
+  };
+  const hh = (h: number) => String(h).padStart(2, '0');
+
+  return (
+    <div className="overflow-x-auto custom-scrollbar">
+      <div className="min-w-[680px]">
+        <div className="flex items-center gap-1 mb-1 pl-8">
+          {Array.from({ length: 24 }).map((_, h) => (
+            <div key={h} className="flex-1 text-center text-[9px] text-[var(--text-tertiary)] tabular-nums">
+              {h % 3 === 0 ? hh(h) : ''}
+            </div>
+          ))}
+        </div>
+        {DOW_LABELS.map((label, dow) => (
+          <div key={dow} className="flex items-center gap-1 mb-1">
+            <div className="w-7 shrink-0 text-[10px] text-[var(--text-tertiary)]">{label}</div>
+            {Array.from({ length: 24 }).map((_, h) => {
+              const v = map.get(`${dow}-${h}`);
+              return (
+                <div
+                  key={h}
+                  className="flex-1 aspect-square rounded-[2px] border border-[var(--border-color)]/40"
+                  style={{ backgroundColor: cellColor(v) }}
+                  title={v != null
+                    ? `${label} ${hh(h)}:00 — ${formatNumber(v, 0)} TPS`
+                    : `${label} ${hh(h)}:00 — no data`}
+                />
+              );
+            })}
+          </div>
+        ))}
+        <div className="flex items-center gap-2 mt-3 pl-8 text-[10px] text-[var(--text-tertiary)]">
+          <span>low</span>
+          <div className="h-2 w-24 rounded" style={{ background: 'linear-gradient(to right, var(--bg-base), var(--accent))' }} />
+          <span>high</span>
+          <span className="ml-auto tabular-nums">peak {formatNumber(max, 0)} TPS</span>
+        </div>
+      </div>
     </div>
   );
 }

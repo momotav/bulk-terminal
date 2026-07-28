@@ -1154,6 +1154,42 @@ export interface ActionHistoryPoint {
   txs: number;
 }
 
+// Scalar summary stats over a window (peaks + TPS/APS percentiles).
+export interface NetworkStats {
+  range: string;
+  network: string;
+  peak_tps: number | null;
+  peak_aps: number | null;
+  tps_p50: number | null;
+  tps_p90: number | null;
+  tps_p99: number | null;
+  aps_p50: number | null;
+  aps_p90: number | null;
+  aps_p99: number | null;
+  samples: number;
+}
+
+// One cell of the activity heatmap (avg TPS at a day-of-week × hour slot).
+export interface HeatmapCell {
+  dow: number;   // 0=Sun .. 6=Sat
+  hour: number;  // 0..23
+  tps: number;
+  samples: number;
+}
+
+// One aggregated point of per-block detail (block-time distribution + sizes).
+export interface BlockMetricPoint {
+  bucket: string;
+  bt_p50: number | null;
+  bt_p95: number | null;
+  bt_p99: number | null;
+  avg_tx: number | null;
+  avg_actions: number | null;
+  max_tx: number | null;
+  empty_blocks: number | null;
+  total_blocks: number | null;
+}
+
 export const explorer = {
   async getRecentBlocks(limit: number = 50): Promise<{ blocks: ExplorerBlock[]; limit: number }> {
     return request(`/api/explorer/blocks?limit=${limit}`);
@@ -1175,6 +1211,15 @@ export const explorer = {
   },
   async getActionHistory(range: '1h' | '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: ActionHistoryPoint[] }> {
     return request(`/api/explorer/action-history?range=${range}`);
+  },
+  async getNetworkStats(range: '1d' | '7d' | '30d' = '1d'): Promise<NetworkStats> {
+    return request(`/api/explorer/network-stats?range=${range}`);
+  },
+  async getNetworkHeatmap(days: number = 14): Promise<{ days: number; network: string; cells: HeatmapCell[] }> {
+    return request(`/api/explorer/network-heatmap?days=${days}`);
+  },
+  async getBlockMetrics(range: '1h' | '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; network: string; points: BlockMetricPoint[]; largest_tx: number | null; largest_actions: number | null }> {
+    return request(`/api/explorer/block-metrics?range=${range}`);
   },
 };
 
