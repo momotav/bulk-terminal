@@ -73,8 +73,48 @@ function pivotByType(points: ActionHistoryPoint[], metric: 'ops' | 'txs'): TypeR
 const TT_STYLE = {
   background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)',
 };
-const TT_LABEL = { color: 'var(--text-secondary)' };
 const BAR_CURSOR = { fill: 'var(--text-primary)', opacity: 0.06 };
+
+// Value formatters + dataKey→label maps for the shared tooltip below.
+const fmtPerSec = (v: number) => formatCompact(v);
+const fmtMs = (v: number) => `${formatNumber(v, 2)} ms`;
+const fmtPct = (v: number) => `${formatNumber(v, 1)}%`;
+const fmtCount = (v: number) => formatCompact(v);
+const NM_THROUGHPUT: Record<string, string> = { tps: 'Transactions/s', aps: 'Operations/s' };
+const NM_BLOCKTIME: Record<string, string> = { block_time_ms: 'Block time' };
+const NM_PCTL: Record<string, string> = { bt_p50: 'P50', bt_p95: 'P95', bt_p99: 'P99' };
+const NM_EMPTY: Record<string, string> = { filled: 'Non-empty', empty: 'Empty' };
+const NM_BYTYPE: Record<string, string> = { order: 'Orders', cancel: 'Cancels', price: 'Price Updates', other: 'Other' };
+const NM_BLOCKS: Record<string, string> = { tx: 'Transactions', actions: 'Operations' };
+
+// Chart tooltip matching the other analytics pages: dated header + separator,
+// then a colour swatch + name on the left and a right-aligned value.
+function NetTooltip({ active, payload, label, nameMap, fmt, labelText }: {
+  active?: boolean;
+  payload?: any[];
+  label?: any;
+  nameMap?: Record<string, string>;
+  fmt: (v: number) => string;
+  labelText?: (label: any) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[168px]">
+      {labelText && label != null && (
+        <p className="text-xs text-[var(--text-secondary)] mb-2 border-b border-[var(--border-color)] pb-2">{labelText(label)}</p>
+      )}
+      {payload.map((entry: any, i: number) => (
+        <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: entry.color || entry.fill }} />
+            <span className="text-[var(--text-secondary)]">{nameMap?.[entry.dataKey] ?? entry.name ?? entry.dataKey}</span>
+          </div>
+          <span className="text-[var(--text-primary)] font-medium tabular-nums">{fmt(entry.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function NetworkPage() {
   const { network } = useCurrentNetwork();
@@ -277,11 +317,8 @@ export default function NetworkPage() {
                   axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={44} />
-                <Tooltip
-                  contentStyle={TT_STYLE}
-                  labelStyle={TT_LABEL}
-                  labelFormatter={(b) => new Date(b as string).toLocaleTimeString('en-US')}
-                  formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
+                <Tooltip content={<NetTooltip nameMap={NM_THROUGHPUT} fmt={fmtPerSec}
+                  labelText={(b) => new Date(b as string).toLocaleTimeString('en-US')} />} />
                 <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fill="url(#netOps)" isAnimationActive={false} />
                 <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netTps)" isAnimationActive={false} />
               </AreaChart>
@@ -326,10 +363,8 @@ export default function NetworkPage() {
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44}
                     domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={TT_STYLE}
-                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, range)}
-                    formatter={(v: number) => [`${formatNumber(v, 1)} ms`, 'Block time']} />
+                  <Tooltip content={<NetTooltip nameMap={NM_BLOCKTIME} fmt={fmtMs}
+                    labelText={(b) => fmtBucket(b as string, range)} />} />
                   <Line type="monotone" dataKey="block_time_ms" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -361,10 +396,8 @@ export default function NetworkPage() {
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} width={44} />
-                  <Tooltip
-                    contentStyle={TT_STYLE}
-                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, range)}
-                    formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
+                  <Tooltip content={<NetTooltip nameMap={NM_THROUGHPUT} fmt={fmtPerSec}
+                    labelText={(b) => fmtBucket(b as string, range)} />} />
                   <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fillOpacity={0} isAnimationActive={false} />
                   <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netHistTps)" isAnimationActive={false} />
                 </AreaChart>
@@ -389,9 +422,8 @@ export default function NetworkPage() {
                   <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b as string, blockRange)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44} domain={['auto', 'auto']} />
-                  <Tooltip contentStyle={TT_STYLE}
-                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
-                    formatter={(v: number, name) => [`${formatNumber(v, 2)} ms`, String(name).toUpperCase()]} />
+                  <Tooltip content={<NetTooltip nameMap={NM_PCTL} fmt={fmtMs}
+                    labelText={(b) => fmtBucket(b as string, blockRange)} />} />
                   <Line type="monotone" dataKey="bt_p50" stroke="var(--coin-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="monotone" dataKey="bt_p95" stroke="var(--coin-3)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="monotone" dataKey="bt_p99" stroke="var(--coin-5)" strokeWidth={2} dot={false} isAnimationActive={false} />
@@ -415,9 +447,8 @@ export default function NetworkPage() {
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tickFormatter={(v) => `${Math.round(v)}%`} domain={[0, 100]} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} width={40} />
-                  <Tooltip contentStyle={TT_STYLE}
-                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
-                    formatter={(v: number, name) => [`${formatNumber(v, 1)}%`, name === 'empty' ? 'Empty' : 'Non-empty']} />
+                  <Tooltip content={<NetTooltip nameMap={NM_EMPTY} fmt={fmtPct}
+                    labelText={(b) => fmtBucket(b as string, blockRange)} />} />
                   <Area type="monotone" dataKey="filled" stackId="b" stroke="var(--pos)" strokeWidth={1.5} fill="var(--pos)" fillOpacity={0.25} isAnimationActive={false} />
                   <Area type="monotone" dataKey="empty" stackId="b" stroke="var(--shade-3)" strokeWidth={1.5} fill="var(--shade-3)" fillOpacity={0.35} isAnimationActive={false} />
                 </AreaChart>
@@ -486,10 +517,8 @@ export default function NetworkPage() {
                   tickFormatter={(r) => `#${(r as number).toLocaleString()}`} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={40} />
-                <Tooltip cursor={BAR_CURSOR}
-                  contentStyle={TT_STYLE}
-                  labelStyle={TT_LABEL} labelFormatter={(r) => `Round #${(r as number).toLocaleString()}`}
-                  formatter={(v: number, name) => [formatNumber(v, 0), name === 'actions' ? 'Operations' : 'Transactions']} />
+                <Tooltip cursor={BAR_CURSOR} content={<NetTooltip nameMap={NM_BLOCKS} fmt={fmtCount}
+                  labelText={(r) => `Round #${(r as number).toLocaleString()}`} />} />
                 <Bar dataKey="actions" fill="var(--shade-3)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
                 <Bar dataKey="tx" fill="var(--pos)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
               </BarChart>
@@ -577,10 +606,8 @@ function ByTypePanel({
                   axisLine={{ stroke: 'var(--border-color)' }} minTickGap={24} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={44} />
-                <Tooltip cursor={BAR_CURSOR}
-                  contentStyle={TT_STYLE}
-                  labelStyle={TT_LABEL} labelFormatter={(b) => fmt(b as string, range)}
-                  formatter={(v: number, name) => [formatCompact(v), labelFor(name as string)]} />
+                <Tooltip cursor={BAR_CURSOR} content={<NetTooltip nameMap={NM_BYTYPE} fmt={fmtCount}
+                  labelText={(b) => fmt(b as string, range)} />} />
                 <Bar dataKey="order" stackId="s" fill={CATEGORIES[0].color} isAnimationActive={false} />
                 <Bar dataKey="cancel" stackId="s" fill={CATEGORIES[1].color} isAnimationActive={false} />
                 <Bar dataKey="price" stackId="s" fill={CATEGORIES[2].color} isAnimationActive={false} />
