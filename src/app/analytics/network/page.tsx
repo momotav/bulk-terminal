@@ -16,9 +16,9 @@
 // Styled to match the other analytics pages (StatCard KPIs, ChartFrame panels,
 // recharts, the palette + four themes).
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, Line, LineChart, Scatter, ScatterChart,
+  Area, AreaChart, Bar, BarChart, Line, LineChart, ReferenceLine, Scatter, ScatterChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis, ZAxis,
 } from 'recharts';
 import { Radio, Timer } from 'lucide-react';
@@ -67,6 +67,15 @@ function pivotByType(points: ActionHistoryPoint[], metric: 'ops' | 'txs'): TypeR
   return [...map.values()].sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
 }
 
+// Shared chart-tooltip + hover-cursor styling, matching the other analytics
+// pages (bar cursor is a faint text-primary wash, not the recharts default
+// light-gray box that reads as "white" on the dark theme).
+const TT_STYLE = {
+  background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)',
+};
+const TT_LABEL = { color: 'var(--text-secondary)' };
+const BAR_CURSOR = { fill: 'var(--text-primary)', opacity: 0.06 };
+
 export default function NetworkPage() {
   const { network } = useCurrentNetwork();
 
@@ -88,7 +97,6 @@ export default function NetworkPage() {
   const [heatmap, setHeatmap] = useState<HeatmapCell[] | null>(null);
   const [blockRange, setBlockRange] = useState<Range>('7d');
   const [blockMetrics, setBlockMetrics] = useState<BlockMetricPoint[] | null>(null);
-  const [largestTx, setLargestTx] = useState<number | null>(null);
 
   // KPI tiles — poll live throughput every 3s.
   useEffect(() => {
@@ -162,7 +170,7 @@ export default function NetworkPage() {
     let alive = true;
     setBlockMetrics(null);
     explorer.getBlockMetrics(blockRange)
-      .then((r) => { if (alive) { setBlockMetrics(r.points || []); setLargestTx(r.largest_tx ?? null); } })
+      .then((r) => { if (alive) setBlockMetrics(r.points || []); })
       .catch(() => { if (alive) setBlockMetrics([]); });
     return () => { alive = false; };
   }, [blockRange, network]);
@@ -192,8 +200,7 @@ export default function NetworkPage() {
       : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Latest per-block sample (for the avg-tx KPI) + empty-block % series.
-  const latestBlockMetric = blockMetrics && blockMetrics.length ? blockMetrics[blockMetrics.length - 1] : null;
+  // Empty-block % series (non-empty vs empty share per bucket).
   const emptyPct = useMemo(() => (blockMetrics ?? []).map((p) => {
     const total = p.total_blocks ?? 0;
     const empty = total > 0 ? ((p.empty_blocks ?? 0) / total) * 100 : 0;
@@ -203,26 +210,27 @@ export default function NetworkPage() {
   const scatter = useMemo(() => (liveHist ?? [])
     .filter((p) => p.tps != null && p.block_time_ms != null)
     .map((p) => ({ tps: p.tps as number, bt: p.block_time_ms as number })), [liveHist]);
+  const medianBt = useMemo(() => {
+    if (scatter.length === 0) return null;
+    const s = scatter.map((p) => p.bt).sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  }, [scatter]);
 
   const hasHistory = (history?.length ?? 0) > 0;
   const hasLive = (liveHist?.length ?? 0) > 0;
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3">
         <h1 className="page-title text-[var(--text-primary)]">Network</h1>
-        <span className="inline-flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: statusOk ? 'var(--pos)' : 'var(--neg)' }}
-          />
-          {tp ? (statusOk ? 'Operational' : (tp.status || 'Degraded')) : 'Connecting…'}
-          <span className="opacity-50">·</span>
-          BULK chain
-        </span>
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          title={tp ? (statusOk ? 'Operational' : (tp.status || 'Degraded')) : 'Connecting…'}
+          style={{ backgroundColor: tp ? (statusOk ? 'var(--pos)' : 'var(--neg)') : 'var(--text-tertiary)' }}
+        />
       </div>
 
-      {/* KPI strip — all live from /throughput */}
+      {/* KPI strip — live throughput + today's peak, one row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
         <StatCard size="compact" label="Transactions / sec" loading={!tp}
           value={tp ? formatNumber(tp.tps, tp.tps < 100 ? 1 : 0) : '—'} valueColor="var(--pos)" />
@@ -232,25 +240,10 @@ export default function NetworkPage() {
           value={tp?.blockTimeMs != null ? formatNumber(tp.blockTimeMs, 1) : '—'} />
         <StatCard size="compact" label="Actions / tx" loading={!tp}
           value={actionsPerTx != null ? formatNumber(actionsPerTx, 1) : '—'} />
+        <StatCard size="compact" label="Peak TPS today" loading={!stats}
+          value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '—'} />
         <StatCard size="compact" label="Latest round" loading={!tp}
           value={tp?.latestRound != null ? tp.latestRound.toLocaleString() : '—'} />
-        <StatCard size="compact" label="Blocks / window" loading={!tp}
-          value={tp ? tp.sampleCount.toLocaleString() : '—'}
-          sub={tp ? `over ${tp.windowSeconds}s` : undefined} />
-      </div>
-
-      {/* Peaks + percentiles + block detail (today) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-4">
-        <StatCard size="compact" label="Peak TPS" sub="today" loading={!stats}
-          value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '—'} valueColor="var(--pos)" />
-        <StatCard size="compact" label="Peak Ops/sec" sub="today" loading={!stats}
-          value={stats?.peak_aps != null ? formatCompact(stats.peak_aps) : '—'} />
-        <StatCard size="compact" label="P99 TPS" sub="today" loading={!stats}
-          value={stats?.tps_p99 != null ? formatNumber(stats.tps_p99, 0) : '—'} />
-        <StatCard size="compact" label="Largest block" unit="tx" loading={blockMetrics === null}
-          value={largestTx != null ? largestTx.toLocaleString() : '—'} />
-        <StatCard size="compact" label="Avg tx / block" loading={blockMetrics === null}
-          value={latestBlockMetric?.avg_tx != null ? formatNumber(latestBlockMetric.avg_tx, 1) : '—'} />
       </div>
 
       {/* Live throughput — accumulates while the page is open */}
@@ -258,7 +251,7 @@ export default function NetworkPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Live Throughput</h2>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
-            <Radio className="w-3.5 h-3.5" /> live · last hour
+            <Radio className="w-3.5 h-3.5 text-[var(--pos)]" /> Last hour
           </span>
         </div>
         {liveHist === null ? (
@@ -285,8 +278,8 @@ export default function NetworkPage() {
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={44} />
                 <Tooltip
-                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  labelStyle={{ color: 'var(--text-secondary)' }}
+                  contentStyle={TT_STYLE}
+                  labelStyle={TT_LABEL}
                   labelFormatter={(b) => new Date(b as string).toLocaleTimeString('en-US')}
                   formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
                 <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fill="url(#netOps)" isAnimationActive={false} />
@@ -300,8 +293,10 @@ export default function NetworkPage() {
       {/* Activity heatmap — avg TPS by weekday × hour */}
       <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">TPS Heatmap</h2>
-          <span className="text-[11px] text-[var(--text-tertiary)]">avg TPS · weekday × hour · last 14 days</span>
+          <div>
+            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Activity Heatmap</h2>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Average transactions per second by weekday and hour — brighter is busier.</p>
+          </div>
         </div>
         {heatmap === null ? (
           <ChartSkeleton />
@@ -332,8 +327,8 @@ export default function NetworkPage() {
                   <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44}
                     domain={['auto', 'auto']} />
                   <Tooltip
-                    contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, range)}
+                    contentStyle={TT_STYLE}
+                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, range)}
                     formatter={(v: number) => [`${formatNumber(v, 1)} ms`, 'Block time']} />
                   <Line type="monotone" dataKey="block_time_ms" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
@@ -367,8 +362,8 @@ export default function NetworkPage() {
                   <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} width={44} />
                   <Tooltip
-                    contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, range)}
+                    contentStyle={TT_STYLE}
+                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, range)}
                     formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
                   <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fillOpacity={0} isAnimationActive={false} />
                   <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netHistTps)" isAnimationActive={false} />
@@ -394,8 +389,8 @@ export default function NetworkPage() {
                   <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b as string, blockRange)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44} domain={['auto', 'auto']} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
+                  <Tooltip contentStyle={TT_STYLE}
+                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
                     formatter={(v: number, name) => [`${formatNumber(v, 2)} ms`, String(name).toUpperCase()]} />
                   <Line type="monotone" dataKey="bt_p50" stroke="var(--coin-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="monotone" dataKey="bt_p95" stroke="var(--coin-3)" strokeWidth={2} dot={false} isAnimationActive={false} />
@@ -420,8 +415,8 @@ export default function NetworkPage() {
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tickFormatter={(v) => `${Math.round(v)}%`} domain={[0, 100]} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} width={40} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
+                  <Tooltip contentStyle={TT_STYLE}
+                    labelStyle={TT_LABEL} labelFormatter={(b) => fmtBucket(b as string, blockRange)}
                     formatter={(v: number, name) => [`${formatNumber(v, 1)}%`, name === 'empty' ? 'Empty' : 'Non-empty']} />
                   <Area type="monotone" dataKey="filled" stackId="b" stroke="var(--pos)" strokeWidth={1.5} fill="var(--pos)" fillOpacity={0.25} isAnimationActive={false} />
                   <Area type="monotone" dataKey="empty" stackId="b" stroke="var(--shade-3)" strokeWidth={1.5} fill="var(--shade-3)" fillOpacity={0.35} isAnimationActive={false} />
@@ -440,26 +435,33 @@ export default function NetworkPage() {
           onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
       </div>
 
-      {/* TPS vs Block Time correlation — last hour, minute resolution */}
+      {/* TPS vs Block Time — does the chain slow down under load? */}
       <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">TPS vs Block Time</h2>
-          <span className="text-[11px] text-[var(--text-tertiary)]">last hour · per minute</span>
+        <div className="mb-4">
+          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Does load slow the chain?</h2>
+          <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+            Each dot is one minute of the last hour — its throughput (across) vs. its block time (up).
+            A flat cloud on the dashed baseline means block time holds steady as load rises: the network isn&apos;t congesting.
+          </p>
         </div>
         {liveHist === null ? <ChartSkeleton /> : scatter.length === 0 ? <CollectingState /> : (
           <ChartFrame className="h-56 md:h-64" yLabel="Block time (ms)">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 8, right: 16, bottom: 16, left: 4 }}>
-                <XAxis type="number" dataKey="tps" name="TPS" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
-                  axisLine={{ stroke: 'var(--border-color)' }} domain={['auto', 'auto']}
-                  label={{ value: 'Transactions / sec', position: 'insideBottom', offset: -8, fill: 'var(--text-tertiary)', fontSize: 10 }} />
-                <YAxis type="number" dataKey="bt" name="Block time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
-                  axisLine={{ stroke: 'var(--border-color)' }} width={44} domain={['auto', 'auto']} />
-                <ZAxis range={[36, 36]} />
+              <ScatterChart margin={{ top: 8, right: 16, bottom: 18, left: 4 }}>
+                <XAxis type="number" dataKey="tps" name="Throughput" unit=" TPS" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} domain={['dataMin - 5', 'dataMax + 5']}
+                  label={{ value: 'Transactions / sec →', position: 'insideBottom', offset: -10, fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                <YAxis type="number" dataKey="bt" name="Block time" unit=" ms" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} width={48} domain={['auto', 'auto']} />
+                <ZAxis range={[44, 44]} />
+                {medianBt != null && (
+                  <ReferenceLine y={medianBt} stroke="var(--accent)" strokeDasharray="4 4" strokeOpacity={0.7}
+                    label={{ value: `median ${formatNumber(medianBt, 2)} ms`, position: 'insideTopRight', fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                )}
                 <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-color)' }}
-                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  formatter={(v: number, name) => [name === 'Block time' ? `${formatNumber(v, 2)} ms` : formatNumber(v, 0), name]} />
-                <Scatter data={scatter} fill="var(--accent)" fillOpacity={0.55} isAnimationActive={false} />
+                  contentStyle={TT_STYLE}
+                  formatter={(v: number, name) => [name === 'Block time' ? `${formatNumber(v, 2)} ms` : `${formatNumber(v, 0)} TPS`, name]} />
+                <Scatter data={scatter} fill="var(--accent)" fillOpacity={0.6} isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
           </ChartFrame>
@@ -484,9 +486,9 @@ export default function NetworkPage() {
                   tickFormatter={(r) => `#${(r as number).toLocaleString()}`} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={40} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(r) => `Round #${(r as number).toLocaleString()}`}
+                <Tooltip cursor={BAR_CURSOR}
+                  contentStyle={TT_STYLE}
+                  labelStyle={TT_LABEL} labelFormatter={(r) => `Round #${(r as number).toLocaleString()}`}
                   formatter={(v: number, name) => [formatNumber(v, 0), name === 'actions' ? 'Operations' : 'Transactions']} />
                 <Bar dataKey="actions" fill="var(--shade-3)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
                 <Bar dataKey="tx" fill="var(--pos)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
@@ -503,10 +505,10 @@ export default function NetworkPage() {
 
 function RangeToggle({ value, onChange }: { value: Range; onChange: (v: Range) => void }) {
   return (
-    <div className="flex items-center gap-0.5 md:gap-1 bg-[var(--bg-muted)] rounded-lg p-0.5 md:p-1 shrink-0 border border-[var(--border-color)]">
+    <div className="flex items-center gap-0.5 md:gap-1 bg-[var(--bg-muted)] rounded-lg p-0.5 md:p-1 shrink-0">
       {RANGES.map((r) => (
         <button key={r.value} onClick={() => onChange(r.value)}
-          className={`px-2.5 md:px-3 py-1 text-xs md:text-sm font-medium rounded transition-colors ${
+          className={`px-2 md:px-3 py-1 text-xs md:text-sm font-medium rounded transition-colors ${
             value === r.value
               ? 'bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -575,9 +577,9 @@ function ByTypePanel({
                   axisLine={{ stroke: 'var(--border-color)' }} minTickGap={24} />
                 <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                   axisLine={{ stroke: 'var(--border-color)' }} width={44} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmt(b as string, range)}
+                <Tooltip cursor={BAR_CURSOR}
+                  contentStyle={TT_STYLE}
+                  labelStyle={TT_LABEL} labelFormatter={(b) => fmt(b as string, range)}
                   formatter={(v: number, name) => [formatCompact(v), labelFor(name as string)]} />
                 <Bar dataKey="order" stackId="s" fill={CATEGORIES[0].color} isAnimationActive={false} />
                 <Bar dataKey="cancel" stackId="s" fill={CATEGORIES[1].color} isAnimationActive={false} />
@@ -622,8 +624,11 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
   };
   const hh = (h: number) => String(h).padStart(2, '0');
 
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [hover, setHover] = useState<{ text: string; sub: string; left: number; top: number } | null>(null);
+
   return (
-    <div className="overflow-x-auto custom-scrollbar">
+    <div ref={wrapRef} className="relative overflow-x-auto custom-scrollbar" onMouseLeave={() => setHover(null)}>
       <div className="min-w-[680px]">
         <div className="flex items-center gap-1 mb-1 pl-8">
           {Array.from({ length: 24 }).map((_, h) => (
@@ -640,11 +645,20 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
               return (
                 <div
                   key={h}
-                  className="flex-1 aspect-square rounded-[2px] border border-[var(--border-color)]/40"
+                  className="flex-1 aspect-square rounded-[2px] border border-[var(--border-color)]/40 transition-[filter] duration-100 hover:brightness-125"
                   style={{ backgroundColor: cellColor(v) }}
-                  title={v != null
-                    ? `${label} ${hh(h)}:00 — ${formatNumber(v, 0)} TPS`
-                    : `${label} ${hh(h)}:00 — no data`}
+                  onMouseEnter={(e) => {
+                    const wrap = wrapRef.current;
+                    if (!wrap) return;
+                    const cr = e.currentTarget.getBoundingClientRect();
+                    const wr = wrap.getBoundingClientRect();
+                    setHover({
+                      text: v != null ? `${formatNumber(v, 0)} TPS` : 'No data yet',
+                      sub: `${label} · ${hh(h)}:00`,
+                      left: cr.left - wr.left + cr.width / 2,
+                      top: cr.top - wr.top,
+                    });
+                  }}
                 />
               );
             })}
@@ -657,6 +671,16 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
           <span className="ml-auto tabular-nums">peak {formatNumber(max, 0)} TPS</span>
         </div>
       </div>
+
+      {hover && (
+        <div className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full"
+          style={{ left: hover.left, top: hover.top - 6 }}>
+          <div className="whitespace-nowrap rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-xl">
+            <div className="text-[11px] text-[var(--text-secondary)]">{hover.sub}</div>
+            <div className="text-xs font-semibold tabular-nums text-[var(--text-primary)]">{hover.text}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
