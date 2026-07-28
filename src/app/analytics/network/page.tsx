@@ -4,19 +4,21 @@
 //
 // Live + historical view of the BULK chain itself (as opposed to the exchange
 // data on the other analytics pages). All figures are real BULK data:
-//   - Live KPIs + live throughput come from /explorer/throughput (rolling 60s).
+//   - Live KPIs come from /explorer/throughput (rolling 60s).
+//   - Live Throughput chart is seeded from the last hour of /network-history at
+//     minute resolution, refreshed every 15s (full on arrival, no per-tick
+//     client accumulation).
 //   - Historical Block-Time / Throughput come from /explorer/network-history,
-//     aggregated from the 60s snapshots the backend records — so they build
+//     and Operations/Transactions by Type from /explorer/action-history — both
+//     aggregated from the 60s snapshots the backend records, so they build
 //     forward from first deploy (empty at first, by design; no backfill).
-//   - Operations/Transactions by Type come from /explorer/action-breakdown,
-//     a live sample of recent block detail classified by action code.
 //
 // Styled to match the other analytics pages (StatCard KPIs, ChartFrame panels,
 // recharts, the palette + four themes).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, Cell, Line, LineChart, Pie, PieChart,
+  Area, AreaChart, Bar, BarChart, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Radio, Timer } from 'lucide-react';
@@ -24,7 +26,7 @@ import { StatCard } from '@/components/StatCard';
 import { ChartFrame } from '@/components/ChartFrame';
 import {
   explorer, formatCompact, formatNumber,
-  type ExplorerThroughput, type NetworkHistoryPoint, type ActionBreakdown, type ExplorerBlock,
+  type ExplorerThroughput, type NetworkHistoryPoint, type ActionHistoryPoint, type ExplorerBlock,
 } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
@@ -37,8 +39,8 @@ const RANGES: { value: Range; label: string }[] = [
 
 // Action-code → category. Codes are BULK's raw action strings; meanings come
 // from the shared explorer dictionary (L/l = limit order, M = market order,
-// Cx/cx = cancel, px = price/oracle update). Anything else buckets to Other so
-// the split is always honest rather than guessing at unknown codes.
+// Cx/cx/CxA = cancel, px = price/oracle update). Anything else buckets to Other
+// so the split is always honest rather than guessing at unknown codes.
 type CatKey = 'order' | 'cancel' | 'price' | 'other';
 const CATEGORIES: { key: CatKey; label: string; color: string }[] = [
   { key: 'order', label: 'Orders', color: 'var(--coin-1)' },
@@ -46,60 +48,65 @@ const CATEGORIES: { key: CatKey; label: string; color: string }[] = [
   { key: 'price', label: 'Price Updates', color: 'var(--coin-2)' },
   { key: 'other', label: 'Other', color: 'var(--coin-5)' },
 ];
-const CAT_COLOR: Record<CatKey, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.key, c.color]),
-) as Record<CatKey, string>;
 function categoryOf(code: string): CatKey {
   if (code === 'l' || code === 'L' || code === 'M') return 'order';
-  if (code === 'cx' || code === 'Cx') return 'cancel';
+  if (code === 'cx' || code === 'Cx' || code === 'cxa' || code === 'CxA') return 'cancel';
   if (code === 'px') return 'price';
   return 'other';
 }
-function bucketByCategory(counts: Record<string, number>): { key: CatKey; label: string; value: number; color: string }[] {
-  const totals: Record<CatKey, number> = { order: 0, cancel: 0, price: 0, other: 0 };
-  for (const [code, n] of Object.entries(counts || {})) totals[categoryOf(code)] += n;
-  return CATEGORIES
-    .map((c) => ({ key: c.key, label: c.label, value: totals[c.key], color: c.color }))
-    .filter((c) => c.value > 0);
+// Pivot per-code history rows into one stacked-bar row per time bucket.
+type TypeRow = { bucket: string; order: number; cancel: number; price: number; other: number };
+function pivotByType(points: ActionHistoryPoint[], metric: 'ops' | 'txs'): TypeRow[] {
+  const map = new Map<string, TypeRow>();
+  for (const p of points) {
+    let row = map.get(p.bucket);
+    if (!row) { row = { bucket: p.bucket, order: 0, cancel: 0, price: 0, other: 0 }; map.set(p.bucket, row); }
+    row[categoryOf(p.code)] += metric === 'ops' ? p.ops : p.txs;
+  }
+  return [...map.values()].sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
 }
-
-const MAX_LIVE_POINTS = 60; // ~2.5 min of live throughput at a 2.5s cadence
 
 export default function NetworkPage() {
   const { network } = useCurrentNetwork();
 
-  // Live throughput snapshot + a client-accumulated session series.
+  // Live KPI snapshot + a seeded last-hour throughput series.
   const [tp, setTp] = useState<ExplorerThroughput | null>(null);
-  const [live, setLive] = useState<{ t: number; tps: number; ops: number }[]>([]);
-  const liveRef = useRef<{ t: number; tps: number; ops: number }[]>([]);
+  const [liveHist, setLiveHist] = useState<NetworkHistoryPoint[] | null>(null);
 
-  // Historical metrics + live composition + recent blocks.
+  // Historical block-time / throughput.
   const [range, setRange] = useState<Range>('7d');
   const [history, setHistory] = useState<NetworkHistoryPoint[] | null>(null);
-  const [breakdown, setBreakdown] = useState<ActionBreakdown | null>(null);
+
+  // By-type stacked bars (own range) + recent blocks.
+  const [byTypeRange, setByTypeRange] = useState<Range>('7d');
+  const [actionHist, setActionHist] = useState<ActionHistoryPoint[] | null>(null);
   const [blocks, setBlocks] = useState<ExplorerBlock[] | null>(null);
 
-  // Poll live throughput (2.5s) and accumulate a rolling session series.
+  // KPI tiles — poll live throughput every 3s.
   useEffect(() => {
     let alive = true;
     const tick = async () => {
-      try {
-        const t = await explorer.getThroughput();
-        if (!alive) return;
-        setTp(t);
-        if (t.sampleCount >= 2) {
-          const next = [...liveRef.current, { t: Date.now(), tps: t.tps, ops: t.aps }].slice(-MAX_LIVE_POINTS);
-          liveRef.current = next;
-          setLive(next);
-        }
-      } catch { /* transient — keep last good value */ }
+      try { const t = await explorer.getThroughput(); if (alive) setTp(t); } catch { /* keep last good */ }
     };
     tick();
-    const id = setInterval(tick, 2500);
+    const id = setInterval(tick, 3000);
     return () => { alive = false; clearInterval(id); };
   }, [network]);
 
-  // Recent blocks (6s) and live by-type composition (20s).
+  // Live Throughput chart — seed with the last hour at minute resolution so it
+  // renders full immediately, then refresh every 15s. One small request per
+  // refresh, no per-tick client accumulation, so it doesn't tax the page.
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try { const r = await explorer.getNetworkHistory('1h'); if (alive) setLiveHist(r.points || []); } catch { /* keep last */ }
+    };
+    load();
+    const id = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, [network]);
+
+  // Recent blocks (6s).
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -110,17 +117,7 @@ export default function NetworkPage() {
     return () => { alive = false; clearInterval(id); };
   }, [network]);
 
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try { const b = await explorer.getActionBreakdown(); if (alive) setBreakdown(b); } catch { /* ignore */ }
-    };
-    load();
-    const id = setInterval(load, 20000);
-    return () => { alive = false; clearInterval(id); };
-  }, [network]);
-
-  // Historical series on range / network change.
+  // Historical block-time / throughput on range change.
   useEffect(() => {
     let alive = true;
     setHistory(null);
@@ -130,12 +127,22 @@ export default function NetworkPage() {
     return () => { alive = false; };
   }, [range, network]);
 
+  // By-type action/transaction history on its own range.
+  useEffect(() => {
+    let alive = true;
+    setActionHist(null);
+    explorer.getActionHistory(byTypeRange)
+      .then((r) => { if (alive) setActionHist(r.points || []); })
+      .catch(() => { if (alive) setActionHist([]); });
+    return () => { alive = false; };
+  }, [byTypeRange, network]);
+
   // Derived values.
   const actionsPerTx = tp && tp.tps > 0 ? tp.aps / tp.tps : null;
   const statusOk = (tp?.status || '').toLowerCase().includes('oper') || (tp?.status || '').toLowerCase() === 'live';
 
-  const opsDonut = useMemo(() => bucketByCategory(breakdown?.opsByCode || {}), [breakdown]);
-  const txDonut = useMemo(() => bucketByCategory(breakdown?.txByCode || {}), [breakdown]);
+  const opsByType = useMemo(() => (actionHist ? pivotByType(actionHist, 'ops') : null), [actionHist]);
+  const txByType = useMemo(() => (actionHist ? pivotByType(actionHist, 'txs') : null), [actionHist]);
 
   const blockBars = useMemo(() => {
     if (!blocks) return [];
@@ -147,16 +154,16 @@ export default function NetworkPage() {
     }));
   }, [blocks]);
 
-  const xTickFmt = (ts: number) =>
-    new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const bucketFmt = (b: string) => {
+  // Bucket label formatter — intra-day ranges show HH:MM, multi-day show Mon D.
+  const fmtBucket = (b: string, r: Range | '1h') => {
     const d = new Date(b);
-    return range === '1d'
+    return (r === '1h' || r === '1d')
       ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
       : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const hasHistory = (history?.length ?? 0) > 0;
+  const hasLive = (liveHist?.length ?? 0) > 0;
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
@@ -195,37 +202,43 @@ export default function NetworkPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Live Throughput</h2>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
-            <Radio className="w-3.5 h-3.5" /> live · this session
+            <Radio className="w-3.5 h-3.5" /> live · last hour
           </span>
         </div>
-        <ChartFrame className="h-64 md:h-72" yLabel="per second"
-          legend={[{ label: 'Transactions/s', color: 'var(--pos)' }, { label: 'Operations/s', color: 'var(--shade-3)' }]}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={live} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
-              <defs>
-                <linearGradient id="netTps" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="netOps" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--shade-3)" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="var(--shade-3)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="t" tickFormatter={xTickFmt} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
-                axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
-              <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
-                axisLine={{ stroke: 'var(--border-color)' }} width={44} />
-              <Tooltip
-                contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                labelStyle={{ color: 'var(--text-secondary)' }}
-                labelFormatter={(ts) => new Date(ts as number).toLocaleTimeString('en-US')}
-                formatter={(v: number, name) => [formatNumber(v, 1), name === 'ops' ? 'Operations/s' : 'Transactions/s']} />
-              <Area type="monotone" dataKey="ops" stroke="var(--shade-3)" strokeWidth={2} fill="url(#netOps)" isAnimationActive={false} />
-              <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netTps)" isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartFrame>
+        {liveHist === null ? (
+          <ChartSkeleton />
+        ) : !hasLive ? (
+          <CollectingState />
+        ) : (
+          <ChartFrame className="h-64 md:h-72" yLabel="per second"
+            legend={[{ label: 'Transactions/s', color: 'var(--pos)' }, { label: 'Operations/s', color: 'var(--shade-3)' }]}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={liveHist} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
+                <defs>
+                  <linearGradient id="netTps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="netOps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--shade-3)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--shade-3)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b, '1h')} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
+                <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} width={44} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                  labelStyle={{ color: 'var(--text-secondary)' }}
+                  labelFormatter={(b) => new Date(b as string).toLocaleTimeString('en-US')}
+                  formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
+                <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fill="url(#netOps)" isAnimationActive={false} />
+                <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netTps)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
       </div>
 
       {/* Historical block time + throughput */}
@@ -243,13 +256,13 @@ export default function NetworkPage() {
             <ChartFrame className="h-64 md:h-72" yLabel="Block time (ms)">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
-                  <XAxis dataKey="bucket" tickFormatter={bucketFmt} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b, range)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} width={44}
                     domain={['auto', 'auto']} />
                   <Tooltip
                     contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={bucketFmt}
+                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, range)}
                     formatter={(v: number) => [`${formatNumber(v, 1)} ms`, 'Block time']} />
                   <Line type="monotone" dataKey="block_time_ms" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
@@ -278,13 +291,13 @@ export default function NetworkPage() {
                       <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="bucket" tickFormatter={bucketFmt} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b, range)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} minTickGap={30} />
                   <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                     axisLine={{ stroke: 'var(--border-color)' }} width={44} />
                   <Tooltip
                     contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={bucketFmt}
+                    labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmtBucket(b as string, range)}
                     formatter={(v: number, name) => [formatNumber(v, 1), name === 'aps' ? 'Operations/s' : 'Transactions/s']} />
                   <Area type="monotone" dataKey="aps" stroke="var(--shade-3)" strokeWidth={2} fillOpacity={0} isAnimationActive={false} />
                   <Area type="monotone" dataKey="tps" stroke="var(--pos)" strokeWidth={2} fill="url(#netHistTps)" isAnimationActive={false} />
@@ -295,12 +308,12 @@ export default function NetworkPage() {
         </div>
       </div>
 
-      {/* By-type composition — live sample of recent blocks */}
+      {/* By-type composition — stacked bars over time (from sampled history) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <DonutPanel title="Operations by Type" data={opsDonut} total={breakdown?.opsSampled ?? 0}
-          loading={!breakdown} sampledBlocks={breakdown?.blocksSampled ?? 0} unit="operations" />
-        <DonutPanel title="Transactions by Type" data={txDonut} total={breakdown?.txSampled ?? 0}
-          loading={!breakdown} sampledBlocks={breakdown?.blocksSampled ?? 0} unit="transactions" />
+        <ByTypePanel title="Operations by Type" data={opsByType} range={byTypeRange}
+          onRange={setByTypeRange} fmt={fmtBucket} unit="operations" />
+        <ByTypePanel title="Transactions by Type" data={txByType} range={byTypeRange}
+          onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
       </div>
 
       {/* Recent block activity */}
@@ -375,59 +388,68 @@ function CollectingState() {
   );
 }
 
-function DonutPanel({
-  title, data, total, loading, sampledBlocks, unit,
+function ByTypePanel({
+  title, data, range, onRange, fmt, unit,
 }: {
   title: string;
-  data: { key: CatKey; label: string; value: number; color: string }[];
-  total: number;
-  loading: boolean;
-  sampledBlocks: number;
+  data: TypeRow[] | null;
+  range: Range;
+  onRange: (r: Range) => void;
+  fmt: (b: string, r: Range | '1h') => string;
   unit: string;
 }) {
-  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
+  const totals = useMemo(() => {
+    const t: Record<CatKey, number> = { order: 0, cancel: 0, price: 0, other: 0 };
+    for (const row of data ?? []) { t.order += row.order; t.cancel += row.cancel; t.price += row.price; t.other += row.other; }
+    return t;
+  }, [data]);
+  const grand = totals.order + totals.cancel + totals.price + totals.other;
+  const labelFor = (k: string) => CATEGORIES.find((c) => c.key === k)?.label ?? k;
+
   return (
     <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
-        <span className="text-[11px] text-[var(--text-tertiary)]">sample · {sampledBlocks} blocks</span>
+        <RangeToggle value={range} onChange={onRange} />
       </div>
-      {loading ? (
+      {data === null ? (
         <ChartSkeleton />
       ) : data.length === 0 ? (
-        <div className="h-64 md:h-72 flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-          No recent activity to sample
-        </div>
+        <CollectingState />
       ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div className="w-full sm:w-1/2 h-56">
+        <>
+          <ChartFrame className="h-56 md:h-64" legend={CATEGORIES.map((c) => ({ label: c.label, color: c.color }))}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%"
-                  innerRadius="58%" outerRadius="85%" paddingAngle={1.5} stroke="var(--bg-muted)" strokeWidth={2}
-                  isAnimationActive={false}>
-                  {data.map((d) => <Cell key={d.key} fill={d.color} />)}
-                </Pie>
+              <BarChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 4 }} barCategoryGap="18%">
+                <XAxis dataKey="bucket" tickFormatter={(b) => fmt(b as string, range)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} minTickGap={24} />
+                <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+                  axisLine={{ stroke: 'var(--border-color)' }} width={44} />
                 <Tooltip
                   contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  formatter={(v: number, _n, p: any) => [`${formatCompact(v)} (${formatNumber(pct(v), 1)}%)`, p?.payload?.label]} />
-              </PieChart>
+                  labelStyle={{ color: 'var(--text-secondary)' }} labelFormatter={(b) => fmt(b as string, range)}
+                  formatter={(v: number, name) => [formatCompact(v), labelFor(name as string)]} />
+                <Bar dataKey="order" stackId="s" fill={CATEGORIES[0].color} isAnimationActive={false} />
+                <Bar dataKey="cancel" stackId="s" fill={CATEGORIES[1].color} isAnimationActive={false} />
+                <Bar dataKey="price" stackId="s" fill={CATEGORIES[2].color} isAnimationActive={false} />
+                <Bar dataKey="other" stackId="s" fill={CATEGORIES[3].color} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div className="w-full sm:w-1/2 space-y-2">
-            {data.map((d) => (
-              <div key={d.key} className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: d.color }} />
-                <span className="text-sm text-[var(--text-secondary)] flex-1 truncate">{d.label}</span>
-                <span className="text-sm font-mono tabular-nums text-[var(--text-primary)]">{formatNumber(pct(d.value), 1)}%</span>
-                <span className="text-xs font-mono tabular-nums text-[var(--text-tertiary)] w-16 text-right">{formatCompact(d.value)}</span>
+          </ChartFrame>
+          {/* Legend + share of total over the selected range. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3">
+            {CATEGORIES.map((c) => (
+              <div key={c.key} className="flex items-center gap-1.5 text-[11px]">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.color }} />
+                <span className="text-[var(--text-secondary)]">{c.label}</span>
+                <span className="font-mono tabular-nums text-[var(--text-tertiary)]">
+                  {grand > 0 ? `${formatNumber((totals[c.key] / grand) * 100, 0)}%` : '—'}
+                </span>
               </div>
             ))}
-            <p className="text-[11px] text-[var(--text-tertiary)] pt-1">
-              {formatCompact(total)} {unit} sampled
-            </p>
+            <span className="text-[11px] text-[var(--text-tertiary)] ml-auto">{formatCompact(grand)} {unit}</span>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

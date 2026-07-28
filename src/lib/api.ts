@@ -1167,13 +1167,13 @@ export const explorer = {
   async getThroughput(): Promise<ExplorerThroughput> {
     return request(`/api/explorer/throughput`);
   },
-  async getNetworkHistory(range: '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: NetworkHistoryPoint[] }> {
+  async getNetworkHistory(range: '1h' | '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: NetworkHistoryPoint[] }> {
     return request(`/api/explorer/network-history?range=${range}`);
   },
   async getActionBreakdown(): Promise<ActionBreakdown> {
     return request(`/api/explorer/action-breakdown`);
   },
-  async getActionHistory(range: '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: ActionHistoryPoint[] }> {
+  async getActionHistory(range: '1h' | '1d' | '7d' | '30d' = '7d'): Promise<{ range: string; bucket: string; points: ActionHistoryPoint[] }> {
     return request(`/api/explorer/action-history?range=${range}`);
   },
 };
