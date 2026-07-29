@@ -41,10 +41,10 @@ const RANGES: { value: Range; label: string }[] = [
   { value: '30d', label: 'M' },
 ];
 
-// Action-code → category. Codes are BULK's raw action strings; meanings come
-// from the shared explorer dictionary (L/l = limit order, M = market order,
-// Cx/cx/CxA = cancel, px = price/oracle update). Anything else buckets to Other
-// so the split is always honest rather than guessing at unknown codes.
+// Action-code → category for the coarse Operations/Transactions-by-Type charts.
+// Wire tags are lowercase (per BULK's API docs): `l` = limit order, `m` = market
+// order, `cx`/`cxa` = cancel, `px` = oracle price update. Anything else buckets
+// to Other so the split is always honest rather than guessing at unknown codes.
 type CatKey = 'order' | 'cancel' | 'price' | 'other';
 const CATEGORIES: { key: CatKey; label: string; color: string }[] = [
   { key: 'order', label: 'Orders', color: 'var(--coin-1)' },
@@ -53,8 +53,8 @@ const CATEGORIES: { key: CatKey; label: string; color: string }[] = [
   { key: 'other', label: 'Other', color: 'var(--coin-5)' },
 ];
 function categoryOf(code: string): CatKey {
-  if (code === 'l' || code === 'L' || code === 'M') return 'order';
-  if (code === 'cx' || code === 'Cx' || code === 'cxa' || code === 'CxA') return 'cancel';
+  if (code === 'l' || code === 'm') return 'order';      // limit + market
+  if (code === 'cx' || code === 'cxa') return 'cancel';  // cancel + cancel-all
   if (code === 'px') return 'price';
   return 'other';
 }
