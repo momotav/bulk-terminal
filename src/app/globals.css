@@ -929,6 +929,23 @@ html[data-palette="orchid"] {
 }
 .treemap-tip { animation: treemap-tip-in 140ms var(--ease-out) both; }
 
+/* ── Frosted-glass chart tooltips, site-wide ──────────────────────────────
+   recharts wraps every tooltip's content box in .recharts-tooltip-wrapper, so
+   this one rule covers ALL chart tooltips across every page — both the
+   custom-content tooltips and the pages that pass a plain contentStyle.
+   `!important` overrides the opaque inline background recharts / contentStyle
+   set. `.glass-tooltip` applies the same look to the non-recharts floating
+   tooltips (treemap, heatmap). */
+.recharts-tooltip-wrapper > *,
+.glass-tooltip {
+  background: color-mix(in srgb, var(--bg-muted) 72%, transparent) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--border-color) 85%, transparent) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28) !important;
+}
+
 /* Scroll-triggered reveal. Driven by the useReveal hook (Intersection
    Observer), not by a scroll listener — the observer fires off the main
    thread and disconnects after the first intersection, so there is no

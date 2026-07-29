@@ -564,7 +564,7 @@ function LiquidationTreemap({
             which was the "info goes kinda off" bug from the old version. */}
         {hoveredItem && tooltipPos && (
           <div
-            className="treemap-tip absolute z-20 pointer-events-none bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-2.5 shadow-xl text-xs"
+            className="treemap-tip glass-tooltip absolute z-20 pointer-events-none rounded-lg p-2.5 text-xs"
             style={{
               left: `${tooltipPos.left}px`,
               top: `${tooltipPos.top}px`,

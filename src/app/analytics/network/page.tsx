@@ -722,7 +722,7 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
       {hover && (
         <div className="pointer-events-none absolute z-20"
           style={{ left: hover.left, top: hover.top, transform: hover.below ? 'translateX(-50%)' : 'translate(-50%, -100%)' }}>
-          <div className="whitespace-nowrap rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-xl">
+          <div className="glass-tooltip whitespace-nowrap rounded-lg px-2.5 py-1.5">
             <div className="text-[11px] text-[var(--text-secondary)]">{hover.sub}</div>
             <div className="text-xs font-semibold tabular-nums text-[var(--text-primary)]">{hover.text}</div>
           </div>
