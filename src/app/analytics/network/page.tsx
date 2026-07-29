@@ -667,7 +667,7 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
   const hh = (h: number) => String(h).padStart(2, '0');
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [hover, setHover] = useState<{ text: string; sub: string; left: number; top: number } | null>(null);
+  const [hover, setHover] = useState<{ text: string; sub: string; left: number; top: number; below: boolean } | null>(null);
 
   return (
     <div ref={wrapRef} className="relative overflow-x-auto custom-scrollbar" onMouseLeave={() => setHover(null)}>
@@ -694,11 +694,16 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
                     if (!wrap) return;
                     const cr = e.currentTarget.getBoundingClientRect();
                     const wr = wrap.getBoundingClientRect();
+                    const cellTop = cr.top - wr.top;
+                    // Not enough room above (top rows) → drop the tooltip below
+                    // the cell so the scroll container doesn't clip it.
+                    const below = cellTop < 64;
                     setHover({
                       text: v != null ? `${formatNumber(v, 0)} TPS` : 'No data yet',
                       sub: `${label} · ${hh(h)}:00`,
                       left: cr.left - wr.left + cr.width / 2,
-                      top: cr.top - wr.top,
+                      top: below ? cellTop + cr.height + 6 : cellTop - 6,
+                      below,
                     });
                   }}
                 />
@@ -715,8 +720,8 @@ function TpsHeatmap({ cells }: { cells: HeatmapCell[] }) {
       </div>
 
       {hover && (
-        <div className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full"
-          style={{ left: hover.left, top: hover.top - 6 }}>
+        <div className="pointer-events-none absolute z-20"
+          style={{ left: hover.left, top: hover.top, transform: hover.below ? 'translateX(-50%)' : 'translate(-50%, -100%)' }}>
           <div className="whitespace-nowrap rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-xl">
             <div className="text-[11px] text-[var(--text-secondary)]">{hover.sub}</div>
             <div className="text-xs font-semibold tabular-nums text-[var(--text-primary)]">{hover.text}</div>
