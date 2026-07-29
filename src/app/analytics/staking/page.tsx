@@ -12,6 +12,7 @@ import { Area, AreaChart, Bar, BarChart, ReferenceLine, XAxis, YAxis, Tooltip, R
 import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Droplet, Layers, Repeat, Loader2 } from 'lucide-react';
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
+import { ResizableChart } from '@/components/ResizableChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 type Range = '7d' | '30d' | 'all';
@@ -171,11 +172,12 @@ export default function StakingPage() {
       )}
 
       {/* Combined TVL over time */}
+      <ResizableChart storageKey="staking:tvl-over-time" defaultHeight={320}>
       <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">TVL Over Time · Native vs Liquid</h2>
         </div>
-        <div className="h-[320px]">
+        <div className="h-[var(--chart-h,320px)]">
           {combinedTvl.length > 1 ? (
             <ChartFrame title="TVL Over Time" className="h-full" yLabel="SOL"
               legend={[{ label: 'Native', color: 'var(--accent)' }, { label: 'Liquid', color: 'var(--shade-1)' }]}>
@@ -208,6 +210,7 @@ export default function StakingPage() {
           BulkSOL supply × exchange rate interpolated from 1.00 at launch to the current live rate (est., &lt;1% error).
         </p>
       </div>
+      </ResizableChart>
 
       {/* ============================ NATIVE ============================ */}
       <div className="flex items-center gap-2">
@@ -378,11 +381,12 @@ function FlowChart({ title, yLabel, data, dataKey, unit, bar, loading }: {
   title: string; yLabel: string; data: { t: number; [k: string]: number }[]; dataKey: string; unit: string; bar?: boolean; loading?: boolean;
 }) {
   return (
+    <ResizableChart storageKey={`staking:${title}`} defaultHeight={300}>
     <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
       </div>
-      <div className="h-[300px]">
+      <div className="h-[var(--chart-h,300px)]">
         {data.length > 1 ? (
           <ChartFrame title={title} className="h-full" yLabel={yLabel}>
             <ResponsiveContainer width="100%" height="100%">
@@ -408,6 +412,7 @@ function FlowChart({ title, yLabel, data, dataKey, unit, bar, loading }: {
         )}
       </div>
     </div>
+    </ResizableChart>
   );
 }
 
@@ -429,6 +434,7 @@ function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loadin
   }, [data, range]);
 
   return (
+    <ResizableChart storageKey={`staking:${title}`} defaultHeight={320}>
     <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
@@ -446,7 +452,7 @@ function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loadin
           ))}
         </div>
       </div>
-      <div className="h-[320px]">
+      <div className="h-[var(--chart-h,320px)]">
         {sliced.length > 1 ? (
           <ChartFrame title={title} className="h-full" yLabel={yLabel}>
             <ResponsiveContainer width="100%" height="100%">
@@ -480,6 +486,7 @@ function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loadin
         )}
       </div>
     </div>
+    </ResizableChart>
   );
 }
 
@@ -490,11 +497,12 @@ function MintBurnChart({ flows, loading }: {
 }) {
   const data = useMemo(() => flows.map((f) => ({ t: f.t, mint: f.mint, burnNeg: -f.burn })), [flows]);
   return (
+    <ResizableChart storageKey="staking:mint-burn" defaultHeight={300}>
     <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">Stakes vs Unstakes per Day</h2>
       </div>
-      <div className="h-[300px]">
+      <div className="h-[var(--chart-h,300px)]">
         {data.length > 1 ? (
           <ChartFrame title="Stakes vs Unstakes per Day" className="h-full" yLabel="BulkSOL"
             legend={[{ label: 'Staked (mint)', color: 'var(--accent)' }, { label: 'Unstaked (burn)', color: 'var(--shade-5)' }]}>
@@ -524,6 +532,7 @@ function MintBurnChart({ flows, loading }: {
         )}
       </div>
     </div>
+    </ResizableChart>
   );
 }
 
