@@ -32,6 +32,7 @@ import {
   type NetworkStats, type HeatmapCell, type BlockMetricPoint,
 } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { getActionLabel } from '@/lib/explorerActions';
 
 type Range = '1d' | '7d' | '30d';
 const RANGES: { value: Range; label: string }[] = [
@@ -58,18 +59,6 @@ function categoryOf(code: string): CatKey {
   return 'other';
 }
 
-// Finer action-type labels for the Average Action Mix panel — this is where the
-// "Orders" bucket splits into Limit vs Market. Same dictionary as above, one
-// level more granular. Unknown codes keep their raw code as the label so the
-// mix is always honest rather than hidden in a catch-all.
-const CODE_LABEL: Record<string, string> = {
-  l: 'Limit order', L: 'Limit order',
-  M: 'Market order',
-  cx: 'Cancel', Cx: 'Cancel', cxa: 'Cancel', CxA: 'Cancel',
-  px: 'Price update',
-  m: 'Match',
-  rng: 'Range',
-};
 // Colours assigned by rank (largest share first), from the palette's coin ramp.
 const MIX_COLORS = [
   'var(--coin-1)', 'var(--coin-2)', 'var(--coin-3)', 'var(--coin-4)',
@@ -80,7 +69,7 @@ type MixRow = { label: string; ops: number; share: number; rate: number | null; 
 // The trading actions we always surface (even at 0%) so the Limit-vs-Market
 // split the panel exists for is always visible, not hidden when a testnet
 // happens to run only limit orders.
-const CORE_ACTIONS = ['Limit order', 'Market order', 'Cancel', 'Price update'];
+const CORE_ACTIONS = ['Limit Order', 'Market Order', 'Cancel'];
 const MIN_SHARE = 0.001; // non-core types below this fold into "Other"
 // Aggregate per-code sampled ops into one row per friendly action type. Sample
 // proportions are trustworthy even though the raw counts are sampled, so `share`
@@ -90,7 +79,7 @@ function buildActionMix(points: ActionHistoryPoint[], aps: number | null): MixRo
   for (const a of CORE_ACTIONS) agg.set(a, 0); // always present, ordered first
   let total = 0;
   for (const p of points) {
-    const label = CODE_LABEL[p.code] ?? p.code;
+    const label = getActionLabel(p.code); // shared dictionary (@/lib/explorerActions)
     agg.set(label, (agg.get(label) ?? 0) + p.ops);
     total += p.ops;
   }
