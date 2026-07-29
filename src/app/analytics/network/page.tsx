@@ -57,6 +57,63 @@ function categoryOf(code: string): CatKey {
   if (code === 'px') return 'price';
   return 'other';
 }
+
+// Finer action-type labels for the Average Action Mix panel — this is where the
+// "Orders" bucket splits into Limit vs Market. Same dictionary as above, one
+// level more granular. Unknown codes keep their raw code as the label so the
+// mix is always honest rather than hidden in a catch-all.
+const CODE_LABEL: Record<string, string> = {
+  l: 'Limit order', L: 'Limit order',
+  M: 'Market order',
+  cx: 'Cancel', Cx: 'Cancel', cxa: 'Cancel', CxA: 'Cancel',
+  px: 'Price update',
+  m: 'Match',
+  rng: 'Range',
+};
+// Colours assigned by rank (largest share first), from the palette's coin ramp.
+const MIX_COLORS = [
+  'var(--coin-1)', 'var(--coin-2)', 'var(--coin-3)', 'var(--coin-4)',
+  'var(--coin-5)', 'var(--coin-6)', 'var(--coin-7)', 'var(--coin-8)',
+];
+
+type MixRow = { label: string; ops: number; share: number; rate: number | null; color: string };
+// The trading actions we always surface (even at 0%) so the Limit-vs-Market
+// split the panel exists for is always visible, not hidden when a testnet
+// happens to run only limit orders.
+const CORE_ACTIONS = ['Limit order', 'Market order', 'Cancel', 'Price update'];
+const MIN_SHARE = 0.001; // non-core types below this fold into "Other"
+// Aggregate per-code sampled ops into one row per friendly action type. Sample
+// proportions are trustworthy even though the raw counts are sampled, so `share`
+// is exact; the per-second `rate` scales that share by the live ops/sec (`aps`).
+function buildActionMix(points: ActionHistoryPoint[], aps: number | null): MixRow[] {
+  const agg = new Map<string, number>();
+  for (const a of CORE_ACTIONS) agg.set(a, 0); // always present, ordered first
+  let total = 0;
+  for (const p of points) {
+    const label = CODE_LABEL[p.code] ?? p.code;
+    agg.set(label, (agg.get(label) ?? 0) + p.ops);
+    total += p.ops;
+  }
+  if (total === 0) return [];
+
+  // Keep core actions + any notable others; fold the long tail into "Other".
+  let otherOps = 0;
+  const kept: { label: string; ops: number }[] = [];
+  for (const [label, ops] of agg) {
+    if (CORE_ACTIONS.includes(label) || ops / total >= MIN_SHARE) kept.push({ label, ops });
+    else otherOps += ops;
+  }
+  kept.sort((a, b) => b.ops - a.ops);
+  if (otherOps > 0) kept.push({ label: 'Other', ops: otherOps });
+
+  return kept.map((r, i) => ({
+    label: r.label,
+    ops: r.ops,
+    share: r.ops / total,
+    rate: aps != null ? (r.ops / total) * aps : null,
+    color: MIX_COLORS[i % MIX_COLORS.length],
+  }));
+}
 // Pivot per-code history rows into one stacked-bar row per time bucket.
 type TypeRow = { bucket: string; order: number; cancel: number; price: number; other: number };
 function pivotByType(points: ActionHistoryPoint[], metric: 'ops' | 'txs'): TypeRow[] {
@@ -469,6 +526,11 @@ export default function NetworkPage() {
           onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
       </ResizableChartRow>
 
+      {/* Average action mix — which actions the chain runs, split finer than the
+          by-type charts (Limit vs Market etc.), with each type's average share
+          and its live per-second rate. */}
+      <ActionMixPanel data={actionHist} aps={tp?.aps ?? null} range={byTypeRange} onRange={setByTypeRange} />
+
       {/* TPS vs Block Time — does the chain slow down under load? */}
       <ResizableChart storageKey="network:load-scatter" defaultHeight={256}>
       <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
@@ -660,6 +722,62 @@ function ByTypePanel({
             <span className="text-[11px] text-[var(--text-tertiary)] ml-auto">{formatCompact(grand)} {unit}</span>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// Average action mix — a compact ranked list of what actions the chain runs,
+// split finer than the by-type charts (Limit vs Market etc.). `share` is the
+// average composition over the range (sampled proportions are exact); `rate` is
+// that share applied to the live ops/sec, so it reads as a current per-second
+// pace per action type.
+function ActionMixPanel({
+  data, aps, range, onRange,
+}: {
+  data: ActionHistoryPoint[] | null;
+  aps: number | null;
+  range: Range;
+  onRange: (r: Range) => void;
+}) {
+  const rows = useMemo(() => (data ? buildActionMix(data, aps) : []), [data, aps]);
+
+  const fmtPctVal = (share: number) => {
+    const pct = share * 100;
+    return `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}%`;
+  };
+  const fmtRate = (r: number) =>
+    r >= 1000 ? formatCompact(r) : r >= 10 ? String(Math.round(r)) : r.toFixed(1);
+
+  return (
+    <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Average Action Mix</h2>
+        <RangeToggle value={range} onChange={onRange} />
+      </div>
+      <p className="text-[11px] text-[var(--text-tertiary)] mb-4">
+        Share of all operations by action type, averaged over the range - rate is that share at the live throughput.
+      </p>
+      {data === null ? (
+        <ChartSkeleton />
+      ) : rows.length === 0 ? (
+        <CollectingState />
+      ) : (
+        <div className="space-y-2.5">
+          {rows.map((r) => (
+            <div key={r.label} className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: r.color }} />
+              <span className="w-28 shrink-0 text-[13px] text-[var(--text-secondary)] truncate">{r.label}</span>
+              <div className="flex-1 h-2.5 rounded-full bg-[var(--bg-secondary-20)] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.max(r.share * 100, 1.5)}%`, background: r.color, opacity: 0.85 }} />
+              </div>
+              <span className="w-12 text-right font-mono tabular-nums text-[13px] text-[var(--text-primary)]">{fmtPctVal(r.share)}</span>
+              <span className="w-16 text-right font-mono tabular-nums text-[13px] text-[var(--text-tertiary)]">
+                {r.rate != null ? `${fmtRate(r.rate)}/s` : '-'}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
