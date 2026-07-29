@@ -402,7 +402,9 @@ export function PositionChartModal({ position, onClose }: Props) {
         horzLines: { color: gridColor },
       },
       crosshair: {
-        mode: 1, // normal crosshair
+        // 0 = Normal (free crosshair that follows the cursor). Was 1 (Magnet),
+        // which snapped the crosshair onto the nearest candle's OHLC.
+        mode: 0,
       },
       rightPriceScale: {
         borderColor,
