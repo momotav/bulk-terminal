@@ -25,6 +25,7 @@ import { Radio, Timer } from 'lucide-react';
 import { StatCard } from '@/components/StatCard';
 import { ChartFrame } from '@/components/ChartFrame';
 import { ResizableChart } from '@/components/ResizableChart';
+import { ResizableChartRow } from '@/components/ResizableChartRow';
 import {
   explorer, formatCompact, formatNumber,
   type ExplorerThroughput, type NetworkHistoryPoint, type ActionHistoryPoint, type ExplorerBlock,
@@ -364,13 +365,8 @@ export default function NetworkPage() {
       </div>
 
       {/* Historical block time + throughput */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-        <ResizableChart storageKey="network:block-times" defaultHeight={288}>
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Block Times</h2>
-            <RangeToggle value={range} onChange={setRange} />
-          </div>
+      <ResizableChartRow storageKey="network-blocktime-throughput" defaultHeight={288}>
+        <Panel title="Block Times" right={<RangeToggle value={range} onChange={setRange} />}>
           {history === null ? (
             <ChartSkeleton />
           ) : !hasHistory ? (
@@ -390,15 +386,8 @@ export default function NetworkPage() {
               </ResponsiveContainer>
             </ChartFrame>
           )}
-        </div>
-        </ResizableChart>
-
-        <ResizableChart storageKey="network:throughput" defaultHeight={288}>
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Network Throughput</h2>
-            <RangeToggle value={range} onChange={setRange} />
-          </div>
+        </Panel>
+        <Panel title="Network Throughput" right={<RangeToggle value={range} onChange={setRange} />}>
           {history === null ? (
             <ChartSkeleton />
           ) : !hasHistory ? (
@@ -426,18 +415,12 @@ export default function NetworkPage() {
               </ResponsiveContainer>
             </ChartFrame>
           )}
-        </div>
-        </ResizableChart>
-      </div>
+        </Panel>
+      </ResizableChartRow>
 
       {/* Block-time percentiles + empty-block share */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-        <ResizableChart storageKey="network:block-percentiles" defaultHeight={288}>
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Block Time Percentiles</h2>
-            <RangeToggle value={blockRange} onChange={setBlockRange} />
-          </div>
+      <ResizableChartRow storageKey="network-percentiles-empty" defaultHeight={288}>
+        <Panel title="Block Time Percentiles" right={<RangeToggle value={blockRange} onChange={setBlockRange} />}>
           {blockMetrics === null ? <ChartSkeleton /> : blockMetrics.length === 0 ? <CollectingState /> : (
             <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="Block time (ms)"
               legend={[{ label: 'P50', color: 'var(--coin-1)' }, { label: 'P95', color: 'var(--coin-3)' }, { label: 'P99', color: 'var(--coin-5)' }]}>
@@ -455,15 +438,8 @@ export default function NetworkPage() {
               </ResponsiveContainer>
             </ChartFrame>
           )}
-        </div>
-        </ResizableChart>
-
-        <ResizableChart storageKey="network:empty-blocks" defaultHeight={288}>
-        <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Empty vs Non-empty Blocks</h2>
-            <RangeToggle value={blockRange} onChange={setBlockRange} />
-          </div>
+        </Panel>
+        <Panel title="Empty vs Non-empty Blocks" right={<RangeToggle value={blockRange} onChange={setBlockRange} />}>
           {blockMetrics === null ? <ChartSkeleton /> : emptyPct.length === 0 ? <CollectingState /> : (
             <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="% of blocks"
               legend={[{ label: 'Non-empty', color: 'var(--pos)' }, { label: 'Empty', color: 'var(--shade-3)' }]}>
@@ -481,21 +457,16 @@ export default function NetworkPage() {
               </ResponsiveContainer>
             </ChartFrame>
           )}
-        </div>
-        </ResizableChart>
-      </div>
+        </Panel>
+      </ResizableChartRow>
 
       {/* By-type composition — stacked bars over time (from sampled history) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
-        <ResizableChart storageKey="network:ops-by-type" defaultHeight={256}>
-          <ByTypePanel title="Operations by Type" data={opsByType} range={byTypeRange}
-            onRange={setByTypeRange} fmt={fmtBucket} unit="operations" />
-        </ResizableChart>
-        <ResizableChart storageKey="network:tx-by-type" defaultHeight={256}>
-          <ByTypePanel title="Transactions by Type" data={txByType} range={byTypeRange}
-            onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
-        </ResizableChart>
-      </div>
+      <ResizableChartRow storageKey="network-bytype" defaultHeight={256}>
+        <ByTypePanel title="Operations by Type" data={opsByType} range={byTypeRange}
+          onRange={setByTypeRange} fmt={fmtBucket} unit="operations" />
+        <ByTypePanel title="Transactions by Type" data={txByType} range={byTypeRange}
+          onRange={setByTypeRange} fmt={fmtBucket} unit="transactions" />
+      </ResizableChartRow>
 
       {/* TPS vs Block Time — does the chain slow down under load? */}
       <ResizableChart storageKey="network:load-scatter" defaultHeight={256}>
@@ -566,6 +537,28 @@ export default function NetworkPage() {
 
 // ── small building blocks ────────────────────────────────────────────────────
 
+// Card shell used as a ResizableChartRow child: `isDragging` is injected by the
+// row (subtle blur while a grip is held), and h-full/flex-col stretches the
+// card to the row height so both charts in a pair line up.
+function Panel({
+  title, right, isDragging = false, children,
+}: {
+  title: string;
+  right?: React.ReactNode;
+  isDragging?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+        {right}
+      </div>
+      <div className="mt-auto">{children}</div>
+    </div>
+  );
+}
+
 function RangeToggle({ value, onChange }: { value: Range; onChange: (v: Range) => void }) {
   return (
     <div className="flex items-center gap-0.5 md:gap-1 bg-[var(--bg-muted)] rounded-lg p-0.5 md:p-1 shrink-0">
@@ -604,7 +597,7 @@ function CollectingState() {
 }
 
 function ByTypePanel({
-  title, data, range, onRange, fmt, unit,
+  title, data, range, onRange, fmt, unit, isDragging = false,
 }: {
   title: string;
   data: TypeRow[] | null;
@@ -612,6 +605,8 @@ function ByTypePanel({
   onRange: (r: Range) => void;
   fmt: (b: string, r: Range | '1h') => string;
   unit: string;
+  /** Injected by ResizableChartRow while its grip is held. */
+  isDragging?: boolean;
 }) {
   const totals = useMemo(() => {
     const t: Record<CatKey, number> = { order: 0, cancel: 0, price: 0, other: 0 };
@@ -622,7 +617,7 @@ function ByTypePanel({
   const labelFor = (k: string) => CATEGORIES.find((c) => c.key === k)?.label ?? k;
 
   return (
-    <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+    <div className={`bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
         <RangeToggle value={range} onChange={onRange} />

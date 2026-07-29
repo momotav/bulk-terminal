@@ -4,41 +4,50 @@
 // ResizableChart
 //
 // Wraps a single chart card and gives it a bottom-right corner grip (revealed
-// on hover) that resizes the chart's HEIGHT by dragging — double-click resets.
-// The chosen height is exposed to the card as the `--chart-h` CSS variable and
-// persisted per `storageKey` in localStorage, so it survives reloads.
-//
-// This is the single-chart companion to ResizableChartRow: that component
-// redistributes WIDTH between two side-by-side charts (used on pages laid out
-// in 2-up rows), which can't apply to single-column pages like Staking. Height
-// resize works uniformly on every layout, so every chart gets the same
-// "change the size" affordance regardless of how the page is arranged.
-//
-// The card reads the height with `h-[var(--chart-h,<default>px)]`; when this
-// wrapper isn't present the fallback keeps the original fixed height.
+// on hover) that resizes the card on BOTH axes at once by dragging — width and
+// height together — with a double-click to reset. Same corner-grip affordance
+// as ResizableChartRow, for pages laid out as a single column of full-width
+// charts (e.g. Staking) where there's no neighbor to trade width with:
+//   - height: the chart body's height, exposed as the `--chart-h` CSS variable
+//     (the card reads it via h-[var(--chart-h,<default>px)])
+//   - width:  the card's share of its container, from a minimum up to 100%
+//     (dragging narrower just leaves space on the right — it can't push into a
+//     neighbor the way a 2-up ResizableChartRow does)
+// Both values are persisted per `storageKey` in localStorage, so a chart keeps
+// its size across reloads. When this wrapper isn't present the `--chart-h`
+// fallback keeps the card's original fixed height and it stays full-width.
 // ----------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MIN_H = 180;
 const MAX_H = 720;
+const MIN_W = 40; // percent of the container — a wide time-series below this reads cramped
+const MAX_W = 100;
 
-function loadHeight(key: string, fallback: number): number {
+type Size = { w: number; h: number };
+
+function loadSize(key: string, fallback: Size): Size {
   try {
-    const raw = localStorage.getItem(`chart-h:${key}`);
+    const raw = localStorage.getItem(`chart-size:${key}`);
     if (raw) {
-      const v = parseInt(raw, 10);
-      if (!Number.isNaN(v)) return Math.min(MAX_H, Math.max(MIN_H, v));
+      const p = JSON.parse(raw);
+      if (typeof p?.w === 'number' && typeof p?.h === 'number') {
+        return {
+          w: Math.min(MAX_W, Math.max(MIN_W, p.w)),
+          h: Math.min(MAX_H, Math.max(MIN_H, p.h)),
+        };
+      }
     }
   } catch {
-    /* storage unavailable — use the default */
+    /* storage unavailable / corrupted — use the default */
   }
   return fallback;
 }
 
-function saveHeight(key: string, h: number): void {
+function saveSize(key: string, s: Size): void {
   try {
-    localStorage.setItem(`chart-h:${key}`, String(h));
+    localStorage.setItem(`chart-size:${key}`, JSON.stringify(s));
   } catch {
     /* storage blocked — resizing still works for the session */
   }
@@ -53,14 +62,15 @@ export function ResizableChart({
   defaultHeight?: number;
   children: React.ReactNode;
 }) {
-  const [h, setH] = useState(defaultHeight);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<Size>({ w: MAX_W, h: defaultHeight });
   const [dragging, setDragging] = useState(false);
   // Captured at pointer-down so each move applies a delta from the start point
   // (the grip's offset from the card edge would otherwise jump on first move).
-  const start = useRef<{ y: number; h: number } | null>(null);
+  const start = useRef<{ x: number; y: number; size: Size; containerW: number } | null>(null);
 
   useEffect(() => {
-    setH(loadHeight(storageKey, defaultHeight));
+    setSize(loadSize(storageKey, { w: MAX_W, h: defaultHeight }));
   }, [storageKey, defaultHeight]);
 
   const onPointerDown = useCallback(
@@ -68,18 +78,24 @@ export function ResizableChart({
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      start.current = { y: e.clientY, h };
+      const containerW = containerRef.current?.parentElement?.getBoundingClientRect().width ?? 1;
+      start.current = { x: e.clientX, y: e.clientY, size, containerW };
       setDragging(true);
       document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'ns-resize';
+      document.body.style.cursor = 'nwse-resize';
     },
-    [h],
+    [size],
   );
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!start.current) return;
-    const next = start.current.h + (e.clientY - start.current.y);
-    setH(Math.min(MAX_H, Math.max(MIN_H, next)));
+    const s = start.current;
+    const wPct = s.size.w + ((e.clientX - s.x) / s.containerW) * 100;
+    const h = s.size.h + (e.clientY - s.y);
+    setSize({
+      w: Math.min(MAX_W, Math.max(MIN_W, wPct)),
+      h: Math.min(MAX_H, Math.max(MIN_H, h)),
+    });
   }, []);
 
   const endDrag = useCallback(() => {
@@ -88,21 +104,23 @@ export function ResizableChart({
     setDragging(false);
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
-    setH((cur) => {
-      saveHeight(storageKey, cur);
+    setSize((cur) => {
+      saveSize(storageKey, cur);
       return cur;
     });
   }, [storageKey]);
 
   const reset = useCallback(() => {
-    setH(defaultHeight);
-    saveHeight(storageKey, defaultHeight);
+    const next = { w: MAX_W, h: defaultHeight };
+    setSize(next);
+    saveSize(storageKey, next);
   }, [defaultHeight, storageKey]);
 
   return (
     <div
+      ref={containerRef}
       className="group/rh relative"
-      style={{ ['--chart-h' as string]: `${h}px` }}
+      style={{ width: `${size.w}%`, maxWidth: '100%', ['--chart-h' as string]: `${size.h}px` }}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
@@ -110,12 +128,12 @@ export function ResizableChart({
       {children}
       <div
         role="button"
-        aria-label="Resize chart height"
+        aria-label="Resize chart"
         title="Drag to resize · double-click to reset"
         onPointerDown={onPointerDown}
         onDoubleClick={reset}
         className={
-          'absolute bottom-1 right-1 z-20 w-5 h-5 cursor-ns-resize ' +
+          'absolute bottom-1 right-1 z-20 w-5 h-5 cursor-nwse-resize ' +
           'flex items-end justify-end transition-opacity duration-200 ' +
           (dragging ? 'opacity-100' : 'opacity-0 group-hover/rh:opacity-60 hover:!opacity-100')
         }
