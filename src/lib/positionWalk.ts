@@ -321,7 +321,7 @@ export function realizedPnlSeries(fills: WalletFill[]): RealizedPnlPoint[] {
         st.size = after;
         st.avgEntry = f.price;
       } else {
-        st.size = after; // partial reduce — average entry unchanged
+        st.size = after; // partial reduce - average entry unchanged
       }
       points.push({
         t: f.timestamp,

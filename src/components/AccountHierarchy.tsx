@@ -254,7 +254,7 @@ export function AccountHierarchy({ address }: { address: string }) {
                     <p className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">
                       {r.summary
                         ? `$${formatNumber(r.summary.totalBalance, 0)}`
-                        : '—'}
+                        : '-'}
                     </p>
                     <p
                       className={cn(

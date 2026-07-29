@@ -489,7 +489,7 @@ const ChartCard = ({
     loading && "opacity-60"
   )}>
     {/* Header layout (matches Hyperliquid):
-        Row 1: title on the left, timeframe selector on the far right — full width each side
+        Row 1: title on the left, timeframe selector on the far right - full width each side
                 so the title never wraps into a second line.
         Row 2: toggles (coin pills + dropdown trigger + any extra pills) span full width below.
         This means even with many pills the title stays on a single line at a readable size. */}

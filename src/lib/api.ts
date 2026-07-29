@@ -163,7 +163,7 @@ export interface ActivityEvent {
   amount?: number;
   iso?: boolean;
   slot?: number;
-  timestamp: number;              // nanoseconds (BULK convention) — divide by 1e6 for JS Date
+  timestamp: number;              // nanoseconds (BULK convention) - divide by 1e6 for JS Date
   sequence?: number;
 }
 
@@ -1538,9 +1538,9 @@ export function formatCurrency(num: number | string | null | undefined): string 
 
 // Utility functions
 export function formatNumber(num: number | string | null | undefined, decimals = 2): string {
-  if (num === null || num === undefined || num === '') return '—';
+  if (num === null || num === undefined || num === '') return '-';
   const n = typeof num === 'string' ? parseFloat(num) : num;
-  if (isNaN(n)) return '—';
+  if (isNaN(n)) return '-';
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -1548,9 +1548,9 @@ export function formatNumber(num: number | string | null | undefined, decimals =
 }
 
 export function formatCompact(num: number | string | null | undefined): string {
-  if (num === null || num === undefined || num === '') return '—';
+  if (num === null || num === undefined || num === '') return '-';
   const n = typeof num === 'string' ? parseFloat(num) : num;
-  if (isNaN(n)) return '—';
+  if (isNaN(n)) return '-';
   const abs = Math.abs(n);
   if (abs >= 1e9) return (n / 1e9).toFixed(2) + 'B';
   if (abs >= 1e6) return (n / 1e6).toFixed(2) + 'M';
@@ -1564,9 +1564,9 @@ export function formatAddress(addr: string): string {
 }
 
 export function formatPercent(num: number | string | null | undefined, decimals = 2): string {
-  if (num === null || num === undefined || num === '') return '—';
+  if (num === null || num === undefined || num === '') return '-';
   const n = typeof num === 'string' ? parseFloat(num) : num;
-  if (isNaN(n)) return '—';
+  if (isNaN(n)) return '-';
   const sign = n >= 0 ? '+' : '';
   return sign + n.toFixed(decimals) + '%';
 }

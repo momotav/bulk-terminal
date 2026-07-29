@@ -49,7 +49,7 @@ export function MarketTicker({ tickers, loading }: MarketTickerProps) {
                 {t.symbol}
               </span>
               {/* Price tweens to its new value on each poll instead of
-                  hard-snapping — the difference between a live feed and a
+                  hard-snapping - the difference between a live feed and a
                   flicker. */}
               <span className="font-mono text-[11px] tabular-nums text-[var(--role-content-muted)]">
                 <AnimatedNumber value={t.lastPrice} format={formatPrice} />

@@ -419,14 +419,14 @@ function ChartShareModal({
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard image unsupported — ignore */ }
+    } catch { /* clipboard image unsupported - ignore */ }
   });
 
   const doShareX = () => withBlob(async (blob) => {
     // X can't accept an image via URL, so copy it for the user to paste, then
     // open the composer with prefilled text.
     try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch { /* ignore */ }
-    const text = `${title || 'My BULK stats'} — via bulkstats.com`;
+    const text = `${title || 'My BULK stats'} - via bulkstats.com`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   });
 

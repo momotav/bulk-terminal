@@ -139,15 +139,15 @@ export default function StakingPage() {
 
       {!loading && !native && !bulksol && (
         <div className="rounded-lg border border-bulk-accent/30 bg-bulk-accent/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
-          Staking indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
+          Staking indexing isn&apos;t live yet - the Solana RPC connection is being set up. Numbers appear here once indexing begins.
         </div>
       )}
 
       {/* ======================= TOTAL / OVERVIEW ======================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
-        <KpiCard label="Total SOL Secured" value={totalTvl > 0 ? `${formatCompact(totalTvl)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="Native" value={nativeTvl > 0 ? `${formatCompact(nativeTvl)} SOL` : '—'} color="var(--accent)" loading={loading} icon={Coins} />
-        <KpiCard label="Liquid (BulkSOL)" value={liquidTvl > 0 ? `${formatCompact(liquidTvl)} SOL` : '—'} color="var(--shade-1)" loading={loading} icon={Droplet} />
+        <KpiCard label="Total SOL Secured" value={totalTvl > 0 ? `${formatCompact(totalTvl)} SOL` : '-'} color="var(--accent)" hero loading={loading} icon={Coins} />
+        <KpiCard label="Native" value={nativeTvl > 0 ? `${formatCompact(nativeTvl)} SOL` : '-'} color="var(--accent)" loading={loading} icon={Coins} />
+        <KpiCard label="Liquid (BulkSOL)" value={liquidTvl > 0 ? `${formatCompact(liquidTvl)} SOL` : '-'} color="var(--shade-1)" loading={loading} icon={Droplet} />
       </div>
 
       {/* Native vs Liquid share */}
@@ -199,7 +199,7 @@ export default function StakingPage() {
             </ChartFrame>
           ) : (
             <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-              {loading ? 'Loading…' : 'Collecting data — fills in as snapshots are recorded.'}
+              {loading ? 'Loading…' : 'Collecting data - fills in as snapshots are recorded.'}
             </div>
           )}
         </div>
@@ -219,16 +219,16 @@ export default function StakingPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Total Staked" value={native ? `${formatCompact(native.activeStake)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="APY" value={native?.apy != null ? `≈ ${native.apy.toFixed(2)}%` : '—'} color="var(--shade-1)" loading={loading} icon={TrendingUp} />
-        <KpiCard label="Delegators" value={native ? native.delegatorCount.toLocaleString() : '—'} color="var(--accent)" loading={loading} icon={Users} />
-        <KpiCard label="Commission" value={native ? `${native.commission}%` : '—'} color="var(--shade-2)" loading={loading} icon={Percent} />
+        <KpiCard label="Total Staked" value={native ? `${formatCompact(native.activeStake)} SOL` : '-'} color="var(--accent)" hero loading={loading} icon={Coins} />
+        <KpiCard label="APY" value={native?.apy != null ? `≈ ${native.apy.toFixed(2)}%` : '-'} color="var(--shade-1)" loading={loading} icon={TrendingUp} />
+        <KpiCard label="Delegators" value={native ? native.delegatorCount.toLocaleString() : '-'} color="var(--accent)" loading={loading} icon={Users} />
+        <KpiCard label="Commission" value={native ? `${native.commission}%` : '-'} color="var(--shade-2)" loading={loading} icon={Percent} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Activating" value={native ? `${formatCompact(native.activating)} SOL` : '—'} color="var(--shade-1)" small loading={loading} icon={ArrowUpRight} />
-        <KpiCard label="Deactivating" value={native ? `${formatCompact(native.deactivating)} SOL` : '—'} color="var(--shade-5)" small loading={loading} icon={ArrowDownRight} />
-        <KpiCard label="Net Epoch Flow" value={native ? `${net >= 0 ? '+' : '−'}${formatCompact(Math.abs(net))} SOL` : '—'} color={net >= 0 ? 'var(--shade-1)' : 'var(--shade-5)'} small loading={loading} />
-        <KpiCard label="Epoch" value={native?.epoch != null ? `#${native.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
+        <KpiCard label="Activating" value={native ? `${formatCompact(native.activating)} SOL` : '-'} color="var(--shade-1)" small loading={loading} icon={ArrowUpRight} />
+        <KpiCard label="Deactivating" value={native ? `${formatCompact(native.deactivating)} SOL` : '-'} color="var(--shade-5)" small loading={loading} icon={ArrowDownRight} />
+        <KpiCard label="Net Epoch Flow" value={native ? `${net >= 0 ? '+' : '−'}${formatCompact(Math.abs(net))} SOL` : '-'} color={net >= 0 ? 'var(--shade-1)' : 'var(--shade-5)'} small loading={loading} />
+        <KpiCard label="Epoch" value={native?.epoch != null ? `#${native.epoch}` : '-'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
       <TimeChart title="Staked SOL" yLabel="Active Stake (SOL)" data={mergedNative} dataKey="activeStake" unit="SOL" range={range} setRange={setRange} loading={loading} />
@@ -243,16 +243,16 @@ export default function StakingPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="SOL Backing" value={bulksol ? `${formatCompact(bulksol.tvlSol)} SOL` : '—'} color="var(--accent)" hero loading={loading} icon={Coins} />
-        <KpiCard label="BulkSOL Supply" value={bulksol ? formatCompact(bulksol.supply) : '—'} color="var(--accent)" loading={loading} icon={Droplet} />
-        <KpiCard label="Exchange Rate" value={bulksol && bulksol.exchangeRate > 0 ? `${bulksol.exchangeRate.toFixed(4)} SOL` : '—'} color="var(--shade-1)" loading={loading} icon={Repeat} />
-        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '—'} color="var(--shade-2)" loading={loading} icon={Users} />
+        <KpiCard label="SOL Backing" value={bulksol ? `${formatCompact(bulksol.tvlSol)} SOL` : '-'} color="var(--accent)" hero loading={loading} icon={Coins} />
+        <KpiCard label="BulkSOL Supply" value={bulksol ? formatCompact(bulksol.supply) : '-'} color="var(--accent)" loading={loading} icon={Droplet} />
+        <KpiCard label="Exchange Rate" value={bulksol && bulksol.exchangeRate > 0 ? `${bulksol.exchangeRate.toFixed(4)} SOL` : '-'} color="var(--shade-1)" loading={loading} icon={Repeat} />
+        <KpiCard label="Holders" value={bulksol?.holders != null ? bulksol.holders.toLocaleString() : '-'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Validators" value={bulksol?.validators != null ? String(bulksol.validators) : '—'} color="var(--text-secondary)" small loading={loading} icon={Layers} />
-        <KpiCard label="APY" value={bulksol?.apy != null ? `≈ ${bulksol.apy.toFixed(2)}%` : '—'} color="var(--shade-1)" small loading={loading} icon={TrendingUp} />
-        <KpiCard label="TVL (USD)" value={bulksol?.solPriceUsd && bulksol.tvlSol > 0 ? `$${formatCompact(bulksol.tvlSol * bulksol.solPriceUsd)}` : '—'} color="var(--shade-1)" small loading={loading} />
-        <KpiCard label="Epoch" value={bulksol?.epoch != null ? `#${bulksol.epoch}` : '—'} color="var(--text-secondary)" small loading={loading} />
+        <KpiCard label="Validators" value={bulksol?.validators != null ? String(bulksol.validators) : '-'} color="var(--text-secondary)" small loading={loading} icon={Layers} />
+        <KpiCard label="APY" value={bulksol?.apy != null ? `≈ ${bulksol.apy.toFixed(2)}%` : '-'} color="var(--shade-1)" small loading={loading} icon={TrendingUp} />
+        <KpiCard label="TVL (USD)" value={bulksol?.solPriceUsd && bulksol.tvlSol > 0 ? `$${formatCompact(bulksol.tvlSol * bulksol.solPriceUsd)}` : '-'} color="var(--shade-1)" small loading={loading} />
+        <KpiCard label="Epoch" value={bulksol?.epoch != null ? `#${bulksol.epoch}` : '-'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
       <TimeChart title="SOL Backing" yLabel="SOL Backing" data={mergedLiquid} dataKey="tvlSol" unit="SOL" range={range} setRange={setRange} loading={loading} />
@@ -360,7 +360,7 @@ export default function StakingPage() {
       {status && status.backfillComplete && status.earliestDay && (
         <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-bulk-green inline-block" />
-          BulkSOL history complete — {status.totalIndexed.toLocaleString()} txns since {new Date(status.earliestDay).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+          BulkSOL history complete - {status.totalIndexed.toLocaleString()} txns since {new Date(status.earliestDay).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
         </div>
       )}
 
@@ -403,7 +403,7 @@ function FlowChart({ title, yLabel, data, dataKey, unit, bar, loading }: {
           </ChartFrame>
         ) : (
           <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-            {loading ? 'Loading…' : 'Backfilling history from chain — fills in as the indexer walks BulkSOL transfers.'}
+            {loading ? 'Loading…' : 'Backfilling history from chain - fills in as the indexer walks BulkSOL transfers.'}
           </div>
         )}
       </div>
@@ -475,7 +475,7 @@ function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loadin
           </ChartFrame>
         ) : (
           <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-            {loading ? 'Loading…' : 'Collecting data — the chart fills in as snapshots are recorded.'}
+            {loading ? 'Loading…' : 'Collecting data - the chart fills in as snapshots are recorded.'}
           </div>
         )}
       </div>
@@ -519,7 +519,7 @@ function MintBurnChart({ flows, loading }: {
           </ChartFrame>
         ) : (
           <div className="h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-            {loading ? 'Loading…' : 'Backfilling history from chain — fills in as the indexer walks BulkSOL transfers.'}
+            {loading ? 'Loading…' : 'Backfilling history from chain - fills in as the indexer walks BulkSOL transfers.'}
           </div>
         )}
       </div>

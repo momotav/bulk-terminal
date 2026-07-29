@@ -37,7 +37,7 @@ const REGIMES: { id: number; label: string }[] = [
   { id: 10, label: 'Bull / Low' }, { id: 11, label: 'Bull / Med' }, { id: 12, label: 'Bull / High' },
 ];
 
-const FALLBACK_LAMBDA = 0.02; // 2% — BULK's surface floor, if a cell is missing.
+const FALLBACK_LAMBDA = 0.02; // 2% - BULK's surface floor, if a cell is missing.
 const norm = (s: string) => s.replace(/-USD$/i, '').trim().toUpperCase();
 
 /** λ(t) = mmrE + (mmrO − mmrE)·p^t — BULK's regime time-decay. t=0 ⇒ strict (mmrO). */
@@ -208,7 +208,7 @@ export function PortfolioMarginCard() {
           <div>
             <h3 className="font-semibold text-[var(--text-primary)]">Portfolio Margining</h3>
             <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              BULK nets correlated positions — build a book and watch the requirement drop.
+              BULK nets correlated positions - build a book and watch the requirement drop.
             </p>
           </div>
         </div>
@@ -304,9 +304,9 @@ export function PortfolioMarginCard() {
 
           {/* Headline metrics */}
           <div className="grid grid-cols-3 gap-2.5 mb-3">
-            <Metric label="Hedge discount" value={loading ? '—' : `${calc.hedgeDiscount.toFixed(1)}%`} tone="green" />
-            <Metric label="Capital efficiency" value={loading ? '—' : `${calc.efficiency.toFixed(1)}x`} tone="green" />
-            <Metric label="Margin usage" value={loading ? '—' : `${(calc.marginUsage * 100).toFixed(1)}%`} tone="neutral" />
+            <Metric label="Hedge discount" value={loading ? '-' : `${calc.hedgeDiscount.toFixed(1)}%`} tone="green" />
+            <Metric label="Capital efficiency" value={loading ? '-' : `${calc.efficiency.toFixed(1)}x`} tone="green" />
+            <Metric label="Margin usage" value={loading ? '-' : `${(calc.marginUsage * 100).toFixed(1)}%`} tone="neutral" />
           </div>
 
           {/* Secondary readouts */}

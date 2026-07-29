@@ -113,7 +113,7 @@ export default function HomePage() {
        Zones 1 and 2 are coupled (both are "state of the exchange right
        now") and sit 12px apart. Zone 3 opens a new idea and gets 32px
        plus a labelled masthead. Everything measures against
-       .responsive-container, which runs to 120rem with fluid gutters —
+       .responsive-container, which runs to 120rem with fluid gutters -
        on any display up to 1920px the grid fills the viewport instead
        of stranding margin at the edges. */
     <main className="responsive-container flex-1 py-3 lg:py-4">
@@ -122,7 +122,7 @@ export default function HomePage() {
       <MarketTicker tickers={tickers} loading={tickersLoading} />
 
       {/* My own top-to-bottom layout, dressed in the BULK portfolio's
-          feel — not its structure: a calm sentence-case heading, the wallet
+          feel - not its structure: a calm sentence-case heading, the wallet
           search as a clean field, the KPI card row, the Markets panel, then
           the activity panels. Flat bordered cards on a base a shade darker,
           low-noise colour, tabular numbers. Their vibe, my structure. */}

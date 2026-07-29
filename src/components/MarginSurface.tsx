@@ -315,7 +315,7 @@ export function MarginSurface() {
           {/* Live / Strict toggle.
               "Live" applies time decay using the regime's elapsed seconds,
               matching what BULK actually charges right now. "Strict" shows
-              the start-of-regime values — useful for understanding the
+              the start-of-regime values - useful for understanding the
               worst-case requirement when a regime kicks in. */}
           <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5"
             title="Live applies the regime's time-decay; Strict shows start-of-regime values."
@@ -457,7 +457,7 @@ export function MarginSurface() {
           tells them the surface is live-decayed. If they're on Live but
           looking at a non-live regime, we explain that no decay is being
           applied (and thus their view matches Strict). If they're on Strict,
-          stay quiet — nothing to clarify. */}
+          stay quiet - nothing to clarify. */}
       {mode === 'live' && (
         <div className="mt-1 text-[10px] text-[var(--text-tertiary)]">
           {liveDecayActive ? (

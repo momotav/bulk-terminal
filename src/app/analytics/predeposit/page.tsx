@@ -112,7 +112,7 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
   return (
     <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 relative">
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Deposit Heatmap</h3>
-      <p className="text-[11px] text-[var(--text-tertiary)] mb-4">When deposits happen — day of week × hour (UTC)</p>
+      <p className="text-[11px] text-[var(--text-tertiary)] mb-4">When deposits happen - day of week × hour (UTC)</p>
       {data.length === 0 ? (
         <div className="h-[180px]"><Empty loading={loading} /></div>
       ) : (
@@ -270,12 +270,12 @@ export default function PreDepositPage() {
       {/* Indexer status banner while backfilling or if RPC not yet wired. */}
       {!loading && !status && (
         <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-4 py-3 text-sm text-[var(--text-secondary)]">
-          Pre-deposit analytics aren&apos;t available yet — the backend service for this section hasn&apos;t been deployed. Data appears here once it&apos;s live.
+          Pre-deposit analytics aren&apos;t available yet - the backend service for this section hasn&apos;t been deployed. Data appears here once it&apos;s live.
         </div>
       )}
       {status && !status.configured && (
         <div className="rounded-lg border border-bulk-accent/30 bg-bulk-accent/10 px-4 py-3 text-sm text-[var(--text-secondary)]">
-          Pre-deposit indexing isn&apos;t live yet — the Solana RPC connection is being set up. Numbers appear here once indexing begins.
+          Pre-deposit indexing isn&apos;t live yet - the Solana RPC connection is being set up. Numbers appear here once indexing begins.
         </div>
       )}
       {status && status.configured && !status.backfillComplete && (
@@ -287,16 +287,16 @@ export default function PreDepositPage() {
 
       {/* KPI band — Current TVL is the hero. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Current TVL" value={kpis ? fmtUsd(kpis.liveTvl) : '—'} color="var(--accent)" hero loading={loading} />
-        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '—'} color="var(--pos)" loading={loading} />
-        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '—'} color="var(--neg)" loading={loading} />
-        <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '—'} color="var(--shade-2)" loading={loading} icon={Users} />
+        <KpiCard label="Current TVL" value={kpis ? fmtUsd(kpis.liveTvl) : '-'} color="var(--accent)" hero loading={loading} />
+        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '-'} color="var(--pos)" loading={loading} />
+        <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '-'} color="var(--neg)" loading={loading} />
+        <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '-'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <KpiCard label="Program Txns" value={kpis ? kpis.programTxns.toLocaleString() : '—'} color="var(--shade-4)" small loading={loading} />
-        <KpiCard label="Avg Deposit" value={kpis ? fmtUsdC(kpis.avgDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
-        <KpiCard label="Median Deposit" value={kpis ? fmtUsdC(kpis.medianDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
-        <KpiCard label="Largest Deposit" value={kpis ? fmtUsdC(kpis.largestDeposit) : '—'} color="var(--text-secondary)" small loading={loading} />
+        <KpiCard label="Program Txns" value={kpis ? kpis.programTxns.toLocaleString() : '-'} color="var(--shade-4)" small loading={loading} />
+        <KpiCard label="Avg Deposit" value={kpis ? fmtUsdC(kpis.avgDeposit) : '-'} color="var(--text-secondary)" small loading={loading} />
+        <KpiCard label="Median Deposit" value={kpis ? fmtUsdC(kpis.medianDeposit) : '-'} color="var(--text-secondary)" small loading={loading} />
+        <KpiCard label="Largest Deposit" value={kpis ? fmtUsdC(kpis.largestDeposit) : '-'} color="var(--text-secondary)" small loading={loading} />
       </div>
 
       {/* TVL history chart */}

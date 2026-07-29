@@ -57,7 +57,7 @@ export default function LeaderboardPage() {
 
         {/* Leaderboard.
             'pnl' and 'whales' are now sourced from BULK's official indexer
-            so the ranks match bulk.trade exactly — critical for tournament
+            so the ranks match bulk.trade exactly - critical for tournament
             viewing where streamers will flick between the two sites. The
             other two tabs (liquidations, activity) stay on our DB-backed
             views since BULK's indexer doesn't expose those concepts. */}

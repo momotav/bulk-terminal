@@ -25,7 +25,7 @@ export function DevnetBanner() {
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
             <span className="font-semibold">{NETWORK_LABELS[network]} mode.</span>{' '}
-            Live data only — historical charts and leaderboards may be empty.
+            Live data only - historical charts and leaderboards may be empty.
           </span>
         </div>
         <button

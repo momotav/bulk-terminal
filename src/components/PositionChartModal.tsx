@@ -56,8 +56,8 @@ export interface ClosedPositionForChart {
   realizedPnl: number;
   fees: number;
   funding: number;
-  openedAt: number;       // ms epoch — start of trade
-  closedAt: number;       // ms epoch — end of trade
+  openedAt: number;       // ms epoch - start of trade
+  closedAt: number;       // ms epoch - end of trade
   liquidated: boolean;
 }
 
@@ -862,7 +862,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         {/* Stat strip — different stats per kind:
             - live:   Entry, Mark, Liquidation, Notional, Unrealized PnL, PnL %
             - closed: Entry, Close, Held, Notional, Realized PnL, ROI %
-            Six stats fit comfortably in the wider modal — gives the
+            Six stats fit comfortably in the wider modal - gives the
             trader a complete read on position economics without leaving
             the chart view. */}
         {position.kind === 'live' ? (
@@ -874,7 +874,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               value={
                 position.liquidationPrice > 0
                   ? `$${formatNumber(position.liquidationPrice, 2)}`
-                  : '—'
+                  : '-'
               }
               valueClass="text-bulk-red"
               sublabel={
@@ -906,7 +906,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               label="PnL %"
               value={(() => {
                 const notional = Math.abs(position.size * position.entryPrice);
-                if (notional === 0) return '—';
+                if (notional === 0) return '-';
                 // Prefer return-on-margin (the leveraged ROI) since it
                 // matches what traders mean when they say "this trade is
                 // up X%". Falls back to return-on-notional if we don't
@@ -956,7 +956,7 @@ export function PositionChartModal({ position, onClose }: Props) {
               label="ROI %"
               value={(() => {
                 const notional = Math.abs(position.size * position.entryPrice);
-                if (notional === 0) return '—';
+                if (notional === 0) return '-';
                 const pct = (position.realizedPnl / notional) * 100;
                 return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
               })()}

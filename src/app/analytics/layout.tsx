@@ -93,7 +93,7 @@ export default function AnalyticsLayout({
           got cut off the right edge). `whitespace-nowrap` + `flex-shrink-0`
           on items prevents compression; `overflow-x-auto` adds the scroll.
           The scrollbar is hidden via Tailwind's `scrollbar-hide` utility
-          where available — falls back to a slim default scrollbar on
+          where available - falls back to a slim default scrollbar on
           browsers that don't have it. */}
       <div className="md:hidden border-b border-[var(--border-color)] bg-[var(--bg-base)]">
         <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto whitespace-nowrap scrollbar-hide">

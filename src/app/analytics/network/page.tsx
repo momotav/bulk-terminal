@@ -70,9 +70,6 @@ function pivotByType(points: ActionHistoryPoint[], metric: 'ops' | 'txs'): TypeR
 // Shared chart-tooltip + hover-cursor styling, matching the other analytics
 // pages (bar cursor is a faint text-primary wash, not the recharts default
 // light-gray box that reads as "white" on the dark theme).
-const TT_STYLE = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)',
-};
 const BAR_CURSOR = { fill: 'var(--text-primary)', opacity: 0.06 };
 
 // Value formatters + dataKey→label maps for the shared tooltip below.
@@ -112,6 +109,25 @@ function NetTooltip({ active, payload, label, nameMap, fmt, labelText }: {
           <span className="text-[var(--text-primary)] font-medium tabular-nums">{fmt(entry.value)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Tooltip for the TPS-vs-block-time scatter (a single x/y point, two units).
+// Explicit theme colours so the text is never black on the dark theme.
+function ScatterTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  const p = active && payload?.length ? payload[0]?.payload : null;
+  if (!p) return null;
+  return (
+    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl">
+      <div className="flex items-center justify-between gap-4 text-xs py-0.5">
+        <span className="text-[var(--text-secondary)]">Throughput</span>
+        <span className="text-[var(--text-primary)] font-medium tabular-nums">{formatNumber(p.tps, 0)} TPS</span>
+      </div>
+      <div className="flex items-center justify-between gap-4 text-xs py-0.5">
+        <span className="text-[var(--text-secondary)]">Block time</span>
+        <span className="text-[var(--text-primary)] font-medium tabular-nums">{formatNumber(p.bt, 2)} ms</span>
+      </div>
     </div>
   );
 }
@@ -273,17 +289,17 @@ export default function NetworkPage() {
       {/* KPI strip — live throughput + today's peak, one row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
         <StatCard size="compact" label="Transactions / sec" loading={!tp}
-          value={tp ? formatNumber(tp.tps, tp.tps < 100 ? 1 : 0) : '—'} valueColor="var(--pos)" />
+          value={tp ? formatNumber(tp.tps, tp.tps < 100 ? 1 : 0) : '-'} valueColor="var(--pos)" />
         <StatCard size="compact" label="Operations / sec" loading={!tp}
-          value={tp ? formatCompact(tp.aps) : '—'} />
+          value={tp ? formatCompact(tp.aps) : '-'} />
         <StatCard size="compact" label="Block time" unit="ms" loading={!tp}
-          value={tp?.blockTimeMs != null ? formatNumber(tp.blockTimeMs, 1) : '—'} />
+          value={tp?.blockTimeMs != null ? formatNumber(tp.blockTimeMs, 1) : '-'} />
         <StatCard size="compact" label="Actions / tx" loading={!tp}
-          value={actionsPerTx != null ? formatNumber(actionsPerTx, 1) : '—'} />
+          value={actionsPerTx != null ? formatNumber(actionsPerTx, 1) : '-'} />
         <StatCard size="compact" label="Peak TPS today" loading={!stats}
-          value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '—'} />
+          value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '-'} />
         <StatCard size="compact" label="Latest round" loading={!tp}
-          value={tp?.latestRound != null ? tp.latestRound.toLocaleString() : '—'} />
+          value={tp?.latestRound != null ? tp.latestRound.toLocaleString() : '-'} />
       </div>
 
       {/* Live throughput — accumulates while the page is open */}
@@ -332,7 +348,7 @@ export default function NetworkPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Activity Heatmap</h2>
-            <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Average transactions per second by weekday and hour — brighter is busier.</p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Average transactions per second by weekday and hour - brighter is busier.</p>
           </div>
         </div>
         {heatmap === null ? (
@@ -471,7 +487,7 @@ export default function NetworkPage() {
         <div className="mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Does load slow the chain?</h2>
           <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-            Each dot is one minute of the last hour — its throughput (across) vs. its block time (up).
+            Each dot is one minute of the last hour - its throughput (across) vs. its block time (up).
             A flat cloud on the dashed baseline means block time holds steady as load rises: the network isn&apos;t congesting.
           </p>
         </div>
@@ -490,8 +506,7 @@ export default function NetworkPage() {
                     label={{ value: `median ${formatNumber(medianBt, 2)} ms`, position: 'insideTopRight', fill: 'var(--text-tertiary)', fontSize: 10 }} />
                 )}
                 <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-color)' }}
-                  contentStyle={TT_STYLE}
-                  formatter={(v: number, name) => [name === 'Block time' ? `${formatNumber(v, 2)} ms` : `${formatNumber(v, 0)} TPS`, name]} />
+                  content={<ScatterTooltip />} />
                 <Scatter data={scatter} fill="var(--accent)" fillOpacity={0.6} isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
@@ -563,7 +578,7 @@ function CollectingState() {
       <Timer className="w-9 h-9 mb-3 text-[var(--accent)] opacity-40" />
       <p className="text-[var(--text-secondary)]">Collecting network history…</p>
       <p className="text-xs mt-1 text-[var(--text-tertiary)] max-w-[36ch]">
-        This chart fills in as snapshots accumulate. History builds forward from when recording started — there is no backfill.
+        This chart fills in as snapshots accumulate. History builds forward from when recording started - there is no backfill.
       </p>
     </div>
   );
@@ -622,7 +637,7 @@ function ByTypePanel({
                 <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.color }} />
                 <span className="text-[var(--text-secondary)]">{c.label}</span>
                 <span className="font-mono tabular-nums text-[var(--text-tertiary)]">
-                  {grand > 0 ? `${formatNumber((totals[c.key] / grand) * 100, 0)}%` : '—'}
+                  {grand > 0 ? `${formatNumber((totals[c.key] / grand) * 100, 0)}%` : '-'}
                 </span>
               </div>
             ))}

@@ -210,7 +210,7 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
       </div>
 
       {/* Row 2: the "N coins selected ▾" dropdown trigger. Its own row so it
-          reads as a separate control from the pills — this matches Hyperliquid's
+          reads as a separate control from the pills - this matches Hyperliquid's
           layout exactly and makes it clearer what the dropdown does (add more
           coins) vs what the pills do (toggle selected). */}
       <div className="relative inline-block" ref={dropdownRef}>

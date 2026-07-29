@@ -120,7 +120,7 @@ export function RecentActivity({ flush = false }: RecentActivityProps) {
           <span className="table-header flex-1">Market</span>
           {/* Wallet, time and price each earn a real column once the panel
               is wide enough. Below those breakpoints they fold back under
-              the market name — no data is dropped, only re-stacked. */}
+              the market name - no data is dropped, only re-stacked. */}
           <span className="table-header hidden w-28 lg:block">Wallet</span>
           <span className="table-header hidden w-16 text-right xl:block">Time</span>
           <span className="table-header hidden w-24 text-right lg:block">Price</span>

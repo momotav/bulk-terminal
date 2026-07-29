@@ -222,7 +222,7 @@ export function LeaderboardTable({
 
                 {/* Trades */}
                 <p className="t-caption hidden w-20 shrink-0 text-right font-mono tabular-nums lg:block">
-                  {entry.trades ? entry.trades.toLocaleString() : '—'}
+                  {entry.trades ? entry.trades.toLocaleString() : '-'}
                 </p>
 
                 {/* Value */}

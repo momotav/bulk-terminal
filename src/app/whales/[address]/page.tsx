@@ -301,7 +301,7 @@ function PlaceholderCard({
         {label}
       </div>
       <div className="text-xl font-bold tabular-nums tracking-tight text-[var(--text-tertiary)] mb-1.5">
-        —
+        -
       </div>
       <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5" />
       <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
@@ -347,8 +347,8 @@ function OverviewRow({
       onMouseLeave={tooltip ? () => setHovered(false) : undefined}
     >
       {/* Label: secondary text (not tertiary) for stronger contrast
-          against the value. The whole row uses text-sm — bumped from
-          text-xs — to give the rail more presence on the page. */}
+          against the value. The whole row uses text-sm - bumped from
+          text-xs - to give the rail more presence on the page. */}
       <span className="text-[var(--text-secondary)]">{label}</span>
       <span className={cn('font-mono tabular-nums font-medium', valueColor)}>{value}</span>
       {tooltip && hovered && (
@@ -373,7 +373,7 @@ function OverviewRow({
 // between the left-rail Analysis section and any other place that needs
 // the same short-form duration format.
 function formatDurationShort(ms: number | null): string {
-  if (ms === null || ms <= 0) return '—';
+  if (ms === null || ms <= 0) return '-';
   const minutes = Math.floor(ms / 60_000);
   const hours = Math.floor(ms / 3_600_000);
   const days = Math.floor(ms / 86_400_000);
@@ -495,7 +495,7 @@ function BarMetricCard({
         {value}
       </div>
       {/* Bar track. We use a single 8px-tall rounded track with two
-          potential fills overlaid — the secondary fill renders from the
+          potential fills overlaid - the secondary fill renders from the
           RIGHT (justify-end via absolute right-0) so long/short splits
           read intuitively. */}
       <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5">
@@ -545,7 +545,7 @@ function AnalysisCard({
   // Format ms duration as "Xd Yh" / "Xh Ym" / "Xm" — depending on scale.
   // Matches Hyperdash's "19d 19h" style. Returns "—" for null/zero.
   const formatDuration = (ms: number | null): string => {
-    if (ms === null || ms <= 0) return '—';
+    if (ms === null || ms <= 0) return '-';
     const minutes = Math.floor(ms / 60_000);
     const hours = Math.floor(ms / 3_600_000);
     const days = Math.floor(ms / 86_400_000);
@@ -568,7 +568,7 @@ function AnalysisCard({
   // Each row is a label/value pair. Two-column flex layout — left
   // justified label, right justified value — gives a clean read.
   const rows: { label: string; value: string; valueClass?: string }[] = [
-    { label: 'Longest Win Streak', value: longestStreak > 0 ? `${longestStreak} Trade${longestStreak === 1 ? '' : 's'}` : '—' },
+    { label: 'Longest Win Streak', value: longestStreak > 0 ? `${longestStreak} Trade${longestStreak === 1 ? '' : 's'}` : '-' },
     { label: 'Avg Trade Duration', value: formatDuration(avgDuration) },
     { label: 'Median Trade Duration', value: formatDuration(medianDuration) },
     { label: 'PnL Cohort', value: pnlCohort.label, valueClass: cohortToneClass + ' font-semibold' },
@@ -827,7 +827,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
 
       {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
           GitHub-contributions model: fixed-size cells (14px) with fixed
-          gaps, left-aligned. Cells do NOT stretch to fill the panel — a
+          gaps, left-aligned. Cells do NOT stretch to fill the panel - a
           wallet with one week of data shows a few small squares in the
           corner, not giant blocks. The panel scrolls horizontally if a
           very long history overflows. */}
@@ -1955,7 +1955,7 @@ export default function WalletPage() {
             displays where the chart stretches to ~3000px and reads as
             empty whitespace. The 1600px cap matches the dashboard
             sidebar convention used by peer trading dashboards (e.g.
-            Hyperdash) — wide enough that left rail + main both breathe,
+            Hyperdash) - wide enough that left rail + main both breathe,
             narrow enough that lines of stat rows aren't visually broken
             by their own length. */}
         <div className="max-w-[1600px] mx-auto">
@@ -1980,7 +1980,7 @@ export default function WalletPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3">
             {/* ──────────────────────────────────────────────────────
-                LEFT RAIL — identity + headline value + Overview list +
+                LEFT RAIL - identity + headline value + Overview list +
                 Analysis list. Mirrors Hyperdash's wallet view sidebar:
                 thin vertical strip of identity and stats that frames
                 the main content area without competing with it for
@@ -1993,7 +1993,7 @@ export default function WalletPage() {
             <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 flex flex-col lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
               {/* Card-style left rail matching Hyperdash's sidebar
                   treatment. Sticky on lg+ so the identity + stats stay in
-                  view while the main column scrolls — this is what keeps
+                  view while the main column scrolls - this is what keeps
                   the rail visually "ending with" the content instead of
                   leaving a tall empty gap beside a long activity feed. */}
               {/* Identity block — avatar + names + address. Compact
@@ -2117,7 +2117,7 @@ export default function WalletPage() {
               </div>
 
               {/* Account Value — the huge headline number. Mimics
-                  Hyperdash's left-rail anchor. Falls back to "—" when
+                  Hyperdash's left-rail anchor. Falls back to "-" when
                   live balance hasn't loaded; the small skeleton-y
                   treatment is intentional rather than a spinner so the
                   rail layout stays stable. */}
@@ -2126,7 +2126,7 @@ export default function WalletPage() {
                   Account Value
                 </div>
                 <div className="text-[26px] font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
-                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
+                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '-'}
                 </div>
               </div>
 
@@ -2141,19 +2141,19 @@ export default function WalletPage() {
                 <div className="flex flex-col gap-2">
                   <OverviewRow
                     label="Unrealized PnL"
-                    value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'}
+                    value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '-'}
                     tone={margin ? (margin.unrealizedPnl >= 0 ? 'green' : 'red') : 'neutral'}
                   />
                   <OverviewRow
                     label="Account Leverage"
-                    value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}x` : '—'}
+                    value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}x` : '-'}
                   />
                   <OverviewRow
                     label="Margin Usage"
                     value={
                       margin && margin.totalBalance > 0
                         ? `${((margin.marginUsed / margin.totalBalance) * 100).toFixed(2)}%`
-                        : '—'
+                        : '-'
                     }
                   />
                   <OverviewRow
@@ -2168,7 +2168,7 @@ export default function WalletPage() {
                   />
                   <OverviewRow
                     label="Fees Paid"
-                    value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
+                    value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '-'}
                   />
                   <OverviewRow
                     label="Liquidations"
@@ -2185,10 +2185,10 @@ export default function WalletPage() {
                   Volume
                 </div>
                 <div className="flex flex-col gap-2">
-                  <OverviewRow label="7D" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '—'} />
-                  <OverviewRow label="14D" value={volByWindow ? `$${formatCompact(volByWindow.d14)}` : '—'} />
-                  <OverviewRow label="30D" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '—'} />
-                  <OverviewRow label="90D" value={volByWindow ? `$${formatCompact(volByWindow.d90)}` : '—'} />
+                  <OverviewRow label="7D" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '-'} />
+                  <OverviewRow label="14D" value={volByWindow ? `$${formatCompact(volByWindow.d14)}` : '-'} />
+                  <OverviewRow label="30D" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '-'} />
+                  <OverviewRow label="90D" value={volByWindow ? `$${formatCompact(volByWindow.d90)}` : '-'} />
                 </div>
               </div>
 
@@ -2203,7 +2203,7 @@ export default function WalletPage() {
                   <div className="flex flex-col gap-2">
                     <OverviewRow
                       label="Longest Win Streak"
-                      value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '—'}
+                      value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '-'}
                     />
                     {/* Trading Style — only shown when we have valid hold
                         durations (BULK's openTime bug zeroes them; falls
@@ -2212,10 +2212,10 @@ export default function WalletPage() {
                       <OverviewRow label="Trading Style" value={analysisStats.tradingStyle} />
                     )}
                     {/* "Avg Trade Duration" + "Median Trade Duration"
-                        rows hidden — BULK currently reports
+                        rows hidden - BULK currently reports
                         openTime === closeTime on closed positions, so
                         every duration computes to 0 and both rows would
-                        always show "—". Re-enable when BULK ships the
+                        always show "-". Re-enable when BULK ships the
                         timestamp fix post-competition. */}
                     <OverviewRow
                       label="PnL Cohort"
@@ -2243,7 +2243,7 @@ export default function WalletPage() {
                   <div className="flex flex-col gap-2">
                     <OverviewRow
                       label="Max Drawdown"
-                      value={analysisStats.drawdown !== null ? `${analysisStats.drawdown.toFixed(1)}%` : '—'}
+                      value={analysisStats.drawdown !== null ? `${analysisStats.drawdown.toFixed(1)}%` : '-'}
                       tone={
                         analysisStats.drawdown === null ? 'neutral'
                           : analysisStats.drawdown >= 50 ? 'red'
@@ -2252,7 +2252,7 @@ export default function WalletPage() {
                     />
                     <OverviewRow
                       label="Win Rate"
-                      value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '—'}
+                      value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '-'}
                       tone={
                         analysisStats.closedWinRate === null ? 'neutral'
                           : analysisStats.closedWinRate >= 0.5 ? 'green'
@@ -2264,7 +2264,7 @@ export default function WalletPage() {
                       value={(() => {
                         const gp = closedPositions.filter((p) => p.realizedPnl > 0).reduce((s, p) => s + p.realizedPnl, 0);
                         const gl = Math.abs(closedPositions.filter((p) => p.realizedPnl < 0).reduce((s, p) => s + p.realizedPnl, 0));
-                        if (gp === 0 && gl === 0) return '—';
+                        if (gp === 0 && gl === 0) return '-';
                         return gl > 0 ? (gp / gl).toFixed(2) : '∞';
                       })()}
                       tone="neutral"
@@ -2275,7 +2275,7 @@ export default function WalletPage() {
             </aside>
 
             {/* ──────────────────────────────────────────────────────
-                MAIN COLUMN — top strip, chart, positions, risk events,
+                MAIN COLUMN - top strip, chart, positions, risk events,
                 activity. The bulk of the page content lives here in a
                 vertical stack so each block gets the full main-column
                 width.
@@ -2291,7 +2291,7 @@ export default function WalletPage() {
                 
                 Cards with no data (e.g. closed wallet with no open
                 positions → Distance to Liq has nothing to compute)
-                render as a placeholder "—" rather than collapsing.
+                render as a placeholder "-" rather than collapsing.
                 Keeps the 4-card strip shape stable across wallets. */}
             {/* KPI strip — the headline numbers, in the shared StatCard so
                 they match every other page. The richer bar visuals (win/loss,
@@ -2301,12 +2301,12 @@ export default function WalletPage() {
               <SharedStatCard
                 size="compact"
                 label="Account value"
-                value={margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
+                value={margin ? `$${formatNumber(margin.totalBalance, 2)}` : '-'}
               />
               <SharedStatCard
                 size="compact"
                 label="Unrealized PnL"
-                value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'}
+                value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '-'}
                 valueColor={margin ? (margin.unrealizedPnl >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)') : undefined}
               />
               <SharedStatCard
@@ -2318,7 +2318,7 @@ export default function WalletPage() {
               <SharedStatCard
                 size="compact"
                 label="Win rate"
-                value={analysisStats?.closedWinRate != null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '—'}
+                value={analysisStats?.closedWinRate != null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '-'}
                 sub={analysisStats?.longestStreak ? `${analysisStats.longestStreak}-trade streak` : undefined}
               />
             </div>
@@ -2682,7 +2682,7 @@ export default function WalletPage() {
                         />
                         {/* Buy (bids) / sell (asks) markers, aggregated per hour
                             and sitting on the curve. A bg-tinted ring lifts them
-                            off the line. They are NOT animated — they snap to
+                            off the line. They are NOT animated - they snap to
                             their spots instantly while the curve reveals under
                             them. */}
                         {markers.map((m) => (
@@ -2957,7 +2957,7 @@ export default function WalletPage() {
                                 ${formatNumber(pos.liquidationPrice, 4)}
                               </td>
                               <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap hidden lg:table-cell">
-                                {ago !== null ? `${formatDuration(ago)} ago` : '—'}
+                                {ago !== null ? `${formatDuration(ago)} ago` : '-'}
                               </td>
                               {/* Per-row share — copies a deep link to this
                                   wallet + asset. stopPropagation so it

@@ -204,7 +204,7 @@ function RiskEventsBody({
       </div>
 
       {/* Expand / collapse toggle. Only mounted when the list actually has
-          rows beyond the collapsed threshold — otherwise it'd be misleading
+          rows beyond the collapsed threshold - otherwise it'd be misleading
           ("Show 0 more"). Lives outside the table so it gets full width
           regardless of horizontal scroll on narrow viewports. */}
       {hasOverflow && (
@@ -262,7 +262,7 @@ function RiskEventRow({ e }: { e: RiskEvent }) {
           {e.iso && (
             <span
               className="px-1 py-0.5 rounded bg-[var(--bg-secondary-20)] text-[var(--text-tertiary)] text-[9px] font-mono uppercase tracking-wider"
-              title="Isolated-margin event — affected only this market’s isolated collateral"
+              title="Isolated-margin event - affected only this market’s isolated collateral"
             >
               iso
             </span>
@@ -330,7 +330,7 @@ function RiskEventRow({ e }: { e: RiskEvent }) {
         className="px-4 py-3 text-xs text-[var(--text-tertiary)] hidden md:table-cell max-w-[280px] truncate"
         title={e.reason}
       >
-        {e.reason || '—'}
+        {e.reason || '-'}
       </td>
 
       <td

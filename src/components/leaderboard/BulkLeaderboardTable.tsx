@@ -43,7 +43,7 @@ const METRICS: { id: BulkLeaderboardMetric; label: string; description: string }
   {
     id: 'cashflow_adjusted_roi',
     label: 'Cashflow ROI',
-    description: "BULK's primary skill metric — adjusts for capital deployed",
+    description: "BULK's primary skill metric - adjusts for capital deployed",
   },
   {
     id: 'realized_pnl',
@@ -87,7 +87,7 @@ function getMetricValue(row: BulkLeaderboardRow, metric: BulkLeaderboardMetric):
 // Format the metric value appropriately. ROI metrics are fractions (0.0203
 // = 2.03%); pnl/volume are dollars; win rate is a 0-1 fraction shown as %.
 function formatMetricValue(value: number | null, metric: BulkLeaderboardMetric): string {
-  if (value === null || value === undefined) return '—';
+  if (value === null || value === undefined) return '-';
   switch (metric) {
     case 'cashflow_adjusted_roi':
     case 'roi':

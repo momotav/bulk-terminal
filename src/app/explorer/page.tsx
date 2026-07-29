@@ -38,7 +38,7 @@ function shortHash(hash: string): string {
 // local clock — there can be skew but for a "X seconds ago" label that's
 // fine. Sub-second precision matters here because blocks are ~7ms apart.
 function relativeTime(timestampNs: number): string {
-  if (!timestampNs) return '—';
+  if (!timestampNs) return '-';
   const ageMs = Date.now() - timestampNs / 1_000_000;
   if (ageMs < 1000) return 'just now';
   if (ageMs < 60_000) return `${Math.floor(ageMs / 1000)}s ago`;
@@ -190,7 +190,7 @@ export default function ExplorerPage() {
         <div>
           <h1 className="page-title text-[var(--role-content)]">Block Explorer</h1>
           <p className="mt-1 text-[13px] text-[var(--role-content-muted)]">
-            Live block stream from BULK&apos;s network — last {BLOCK_LIMIT} blocks.
+            Live block stream from BULK&apos;s network - last {BLOCK_LIMIT} blocks.
           </p>
         </div>
         {liveBadge}
@@ -357,19 +357,19 @@ export default function ExplorerPage() {
         <div className="flex items-start gap-2">
           <Hash className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <span className="font-medium text-[var(--role-content-muted)]">Round</span> — block height. BULK produces a block every ~7ms.
+            <span className="font-medium text-[var(--role-content-muted)]">Round</span> - block height. BULK produces a block every ~7ms.
           </span>
         </div>
         <div className="flex items-start gap-2">
           <Activity className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <span className="font-medium text-[var(--role-content-muted)]">Txs</span> — transactions in this block.
+            <span className="font-medium text-[var(--role-content-muted)]">Txs</span> - transactions in this block.
           </span>
         </div>
         <div className="flex items-start gap-2">
           <Zap className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <span className="font-medium text-[var(--role-content-muted)]">Actions</span> — sub-tx units (price updates, matches, range computations).
+            <span className="font-medium text-[var(--role-content-muted)]">Actions</span> - sub-tx units (price updates, matches, range computations).
           </span>
         </div>
       </div>

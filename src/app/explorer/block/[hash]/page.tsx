@@ -20,7 +20,7 @@ function shortHash(hash: string): string {
 // Nanosecond precision is overkill for a UI label, but we keep ms
 // for "X seconds ago" style if needed.
 function formatTimestamp(timestampNs: number): { date: string; relative: string } {
-  if (!timestampNs) return { date: '—', relative: '—' };
+  if (!timestampNs) return { date: '-', relative: '-' };
   const ms = timestampNs / 1_000_000;
   const date = new Date(ms);
   const ageMs = Date.now() - ms;

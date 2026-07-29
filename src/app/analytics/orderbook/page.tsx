@@ -43,7 +43,7 @@ function formatSize(sz: number): string {
 }
 
 function formatBps(bps: number | null | undefined): string {
-  if (bps == null || !isFinite(bps)) return '—';
+  if (bps == null || !isFinite(bps)) return '-';
   return bps.toFixed(2);
 }
 
@@ -422,7 +422,7 @@ function OrderBookPanel({
         <span className="font-semibold text-[var(--role-content)]">{formatBps(stats.spreadBps)} bps</span>
         <span className="text-[var(--role-line)]">·</span>
         <span className="text-[var(--role-content-subtle)]">Mid</span>
-        <span className="font-semibold text-[var(--role-content)]">{stats.mid != null ? `$${formatPrice(stats.mid)}` : '—'}</span>
+        <span className="font-semibold text-[var(--role-content)]">{stats.mid != null ? `$${formatPrice(stats.mid)}` : '-'}</span>
       </div>
 
       {/* Coupled ladders. */}
@@ -494,12 +494,12 @@ export default function OrderBookPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'} sub="Book midpoint" />
+        <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '-'} sub="Book midpoint" />
         <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
-        <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '—'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
-        <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '—'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
-        <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '—'} sub="±2% of mid" accent="bid" />
-        <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '—'} sub="±2% of mid" accent="ask" />
+        <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '-'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
+        <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '-'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
+        <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="bid" />
+        <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="ask" />
       </div>
 
       {/* Depth chart + order book */}

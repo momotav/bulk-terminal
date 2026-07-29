@@ -430,7 +430,7 @@ function LiquidationTreemap({
   // would clip the top of the container we flip below; if the horizontal
   // center would clip left/right, we clamp to the card edges. This is what
   // fixes the "info goes kinda off" bug when you hover a corner cell.
-  const TOOLTIP_W = 180; // approximate — enough for clamping math
+  const TOOLTIP_W = 180; // approximate - enough for clamping math
   const TOOLTIP_H = 110;
   const tooltipPos = (() => {
     if (!hoveredItem || containerSize.w === 0) return null;
@@ -901,7 +901,7 @@ export default function LiquidationsPage() {
                     {/* stackOffset="sign" on the chart tells Recharts to split stacks by sign:
                         positive values stack up from 0, negative values stack down from 0.
                         Combined with matching stackId, each bar in its own column emanates
-                        from the 0 baseline — Long goes UP, Short goes DOWN, same x-slot. */}
+                        from the 0 baseline - Long goes UP, Short goes DOWN, same x-slot. */}
                     <Bar dataKey="longValue"          name="Long"  stackId="ls" fill={COLORS.long}  maxBarSize={30} />
                     <Bar dataKey="shortValueNegative" name="Short" stackId="ls" fill={COLORS.short} maxBarSize={30} />
                   </BarChart>

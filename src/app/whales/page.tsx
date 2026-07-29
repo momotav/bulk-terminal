@@ -97,7 +97,7 @@ export default function WhalesPage() {
       <header>
         <h1 className="page-title text-[var(--role-content)]">Whale tracker</h1>
         <p className="mt-1 text-[13px] text-[var(--role-content-muted)]">
-          Track any wallet on BULK Exchange — search by address or X handle.
+          Track any wallet on BULK Exchange - search by address or X handle.
         </p>
       </header>
 
