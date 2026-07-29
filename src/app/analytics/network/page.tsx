@@ -306,7 +306,7 @@ export default function NetworkPage() {
 
       {/* Live throughput — accumulates while the page is open */}
       <ResizableChart storageKey="network:live-throughput" defaultHeight={288}>
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Live Throughput</h2>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
@@ -318,7 +318,7 @@ export default function NetworkPage() {
         ) : !hasLive ? (
           <CollectingState />
         ) : (
-          <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="per second"
+          <ChartFrame title="Live Throughput" className="h-[var(--chart-h,288px)]" yLabel="per second"
             legend={[{ label: 'Transactions/s', color: 'var(--pos)' }, { label: 'Operations/s', color: 'var(--shade-3)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={liveHist} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
@@ -348,7 +348,7 @@ export default function NetworkPage() {
       </ResizableChart>
 
       {/* Activity heatmap — avg TPS by weekday × hour */}
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Activity Heatmap</h2>
@@ -372,7 +372,8 @@ export default function NetworkPage() {
           ) : !hasHistory ? (
             <CollectingState />
           ) : (
-            <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="Block time (ms)">
+            <ChartFrame title="Block Times" className="h-[var(--chart-h,288px)]" yLabel="Block time (ms)"
+              legend={[{ label: 'Block time', color: 'var(--accent)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
                   <XAxis dataKey="bucket" tickFormatter={(b) => fmtBucket(b, range)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
@@ -393,7 +394,7 @@ export default function NetworkPage() {
           ) : !hasHistory ? (
             <CollectingState />
           ) : (
-            <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="Avg per second"
+            <ChartFrame title="Network Throughput" className="h-[var(--chart-h,288px)]" yLabel="Avg per second"
               legend={[{ label: 'Transactions/s', color: 'var(--pos)' }, { label: 'Operations/s', color: 'var(--shade-3)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={history} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
@@ -422,7 +423,7 @@ export default function NetworkPage() {
       <ResizableChartRow storageKey="network-percentiles-empty" defaultHeight={288}>
         <Panel title="Block Time Percentiles" right={<RangeToggle value={blockRange} onChange={setBlockRange} />}>
           {blockMetrics === null ? <ChartSkeleton /> : blockMetrics.length === 0 ? <CollectingState /> : (
-            <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="Block time (ms)"
+            <ChartFrame title="Block Time Percentiles" className="h-[var(--chart-h,288px)]" yLabel="Block time (ms)"
               legend={[{ label: 'P50', color: 'var(--coin-1)' }, { label: 'P95', color: 'var(--coin-3)' }, { label: 'P99', color: 'var(--coin-5)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={blockMetrics} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
@@ -441,7 +442,7 @@ export default function NetworkPage() {
         </Panel>
         <Panel title="Empty vs Non-empty Blocks" right={<RangeToggle value={blockRange} onChange={setBlockRange} />}>
           {blockMetrics === null ? <ChartSkeleton /> : emptyPct.length === 0 ? <CollectingState /> : (
-            <ChartFrame className="h-[var(--chart-h,288px)]" yLabel="% of blocks"
+            <ChartFrame title="Empty vs Non-empty Blocks" className="h-[var(--chart-h,288px)]" yLabel="% of blocks"
               legend={[{ label: 'Non-empty', color: 'var(--pos)' }, { label: 'Empty', color: 'var(--shade-3)' }]}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={emptyPct} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
@@ -470,7 +471,7 @@ export default function NetworkPage() {
 
       {/* TPS vs Block Time — does the chain slow down under load? */}
       <ResizableChart storageKey="network:load-scatter" defaultHeight={256}>
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Does load slow the chain?</h2>
           <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
@@ -479,7 +480,8 @@ export default function NetworkPage() {
           </p>
         </div>
         {liveHist === null ? <ChartSkeleton /> : scatter.length === 0 ? <CollectingState /> : (
-          <ChartFrame className="h-[var(--chart-h,256px)]" yLabel="Block time (ms)">
+          <ChartFrame title="Does load slow the chain?" className="h-[var(--chart-h,256px)]" yLabel="Block time (ms)"
+            legend={[{ label: 'Per-minute sample', color: 'var(--accent)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 8, right: 16, bottom: 18, left: 4 }}>
                 <XAxis type="number" dataKey="tps" name="Throughput" unit=" TPS" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
@@ -504,7 +506,7 @@ export default function NetworkPage() {
 
       {/* Recent block activity */}
       <ResizableChart storageKey="network:recent-blocks" defaultHeight={256}>
-      <div className="bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Recent Block Activity</h2>
           <span className="text-[11px] text-[var(--text-tertiary)]">last {blockBars.length} blocks</span>
@@ -512,7 +514,7 @@ export default function NetworkPage() {
         {!blocks ? (
           <ChartSkeleton />
         ) : (
-          <ChartFrame className="h-[var(--chart-h,256px)]" yLabel="Per block"
+          <ChartFrame title="Recent Block Activity" className="h-[var(--chart-h,256px)]" yLabel="Per block"
             legend={[{ label: 'Transactions', color: 'var(--pos)' }, { label: 'Operations', color: 'var(--shade-3)' }]}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={blockBars} margin={{ top: 8, right: 16, bottom: 4, left: 4 }} barCategoryGap="18%">
@@ -549,7 +551,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
+    <div className={`bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
         {right}
@@ -617,7 +619,7 @@ function ByTypePanel({
   const labelFor = (k: string) => CATEGORIES.find((c) => c.key === k)?.label ?? k;
 
   return (
-    <div className={`bg-[var(--bg-muted)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
+    <div className={`bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
         <RangeToggle value={range} onChange={onRange} />
@@ -628,7 +630,7 @@ function ByTypePanel({
         <CollectingState />
       ) : (
         <>
-          <ChartFrame className="h-[var(--chart-h,256px)]" legend={CATEGORIES.map((c) => ({ label: c.label, color: c.color }))}>
+          <ChartFrame title={title} className="h-[var(--chart-h,256px)]" legend={CATEGORIES.map((c) => ({ label: c.label, color: c.color }))}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 4 }} barCategoryGap="18%">
                 <XAxis dataKey="bucket" tickFormatter={(b) => fmt(b as string, range)} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}

@@ -13,10 +13,10 @@ type Theme = 'dark' | 'light';
 type PaletteId = 'original' | 'classic' | 'grove' | 'orchid';
 
 const PALETTES: { id: PaletteId; label: string; pos: string; neg: string }[] = [
-  { id: 'original', label: 'Original', pos: '#FFD9A8', neg: '#D98A2E' },
-  { id: 'classic', label: 'Classic', pos: '#21C07A', neg: '#E5484D' },
-  { id: 'grove', label: 'Grove', pos: '#21C07A', neg: '#F97316' },
-  { id: 'orchid', label: 'Orchid', pos: '#60A5FA', neg: '#A78BFA' },
+  { id: 'original', label: 'BULKSTATS Standard Color', pos: '#FFD9A8', neg: '#D98A2E' },
+  { id: 'classic', label: 'BULK Standard Color', pos: '#21C07A', neg: '#E5484D' },
+  { id: 'grove', label: 'Colour Vision Deficiency-Friendly A', pos: '#21C07A', neg: '#F97316' },
+  { id: 'orchid', label: 'Colour Vision Deficiency-Friendly B', pos: '#60A5FA', neg: '#A78BFA' },
 ];
 
 export function AppearanceMenu({ className = '' }: { className?: string }) {
@@ -71,7 +71,7 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-56 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-50">
+        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-50">
           {/* Theme */}
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)] font-medium mb-1.5">Theme</div>
           <div className="flex gap-1.5 mb-3">
