@@ -47,6 +47,86 @@ function formatBps(bps: number | null | undefined): string {
   return bps.toFixed(2);
 }
 
+function formatUsd(n: number): string {
+  return `$${formatCompact(n)}`;
+}
+
+// BULK taker fee, in bps, used for the "all-in" execution cost (slippage + fee).
+// A market order is a taker fill. Per BULK's published fee schedule the taker
+// fee is tiered by 14-day volume: 3.5 bps (tier 1) down to 2.2 bps (tier 8).
+// We use the tier-1 rate — what most accounts pay — as the default; slippage
+// itself is exact regardless of tier.
+const BULK_TAKER_BPS = 3.5;
+
+// ----------------------------------------------------------------------------
+// Execution math — walk one side of the book to price a market order.
+// asks are ascending (a BUY lifts them); bids are descending (a SELL hits them).
+// slippage is measured as the average fill vs the mid, in bps; all-in folds in
+// the taker fee. Both auto-scale to whatever depth the book actually has, so a
+// shallow testnet book and a deep mainnet book both render sensibly.
+// ----------------------------------------------------------------------------
+
+type Side = 'buy' | 'sell';
+
+type ImpactPoint = { notional: number; avgFill: number; slipBps: number; allInBps: number };
+
+function buildImpactCurve(levels: OrderbookLevel[], mid: number, side: Side, takerBps: number): ImpactPoint[] {
+  if (!mid || levels.length === 0) return [];
+  const out: ImpactPoint[] = [{ notional: 0, avgFill: mid, slipBps: 0, allInBps: takerBps }];
+  let cumSize = 0;
+  let cumCost = 0;
+  for (const l of levels) {
+    cumSize += l.sz;
+    cumCost += l.px * l.sz;
+    const avgFill = cumCost / cumSize;
+    const slip = side === 'buy' ? ((avgFill - mid) / mid) * 1e4 : ((mid - avgFill) / mid) * 1e4;
+    const slipBps = Math.max(0, slip);
+    out.push({ notional: cumCost, avgFill, slipBps, allInBps: slipBps + takerBps });
+  }
+  return out;
+}
+
+type SimResult = {
+  filledSize: number;
+  filledNotional: number;
+  avgFill: number | null;
+  slipBps: number | null;
+  allInBps: number | null;
+  bookExhausted: boolean;   // target larger than the whole book on that side
+  bookNotional: number;     // total notional available on that side
+};
+
+function simulateOrder(levels: OrderbookLevel[], mid: number, side: Side, targetNotional: number, takerBps: number): SimResult {
+  const bookNotional = levels.reduce((s, l) => s + l.px * l.sz, 0);
+  let cumSize = 0;
+  let cumCost = 0;
+  for (const l of levels) {
+    const levelNotional = l.px * l.sz;
+    if (cumCost + levelNotional >= targetNotional) {
+      const remaining = targetNotional - cumCost;
+      cumSize += remaining / l.px;
+      cumCost += remaining;
+      const avgFill = cumCost / cumSize;
+      const slip = Math.max(0, side === 'buy' ? ((avgFill - mid) / mid) * 1e4 : ((mid - avgFill) / mid) * 1e4);
+      return { filledSize: cumSize, filledNotional: cumCost, avgFill, slipBps: slip, allInBps: slip + takerBps, bookExhausted: false, bookNotional };
+    }
+    cumSize += l.sz;
+    cumCost += levelNotional;
+  }
+  // Ran out of book before filling the target.
+  const avgFill = cumSize > 0 ? cumCost / cumSize : null;
+  const slip = avgFill != null ? Math.max(0, side === 'buy' ? ((avgFill - mid) / mid) * 1e4 : ((mid - avgFill) / mid) * 1e4) : null;
+  return {
+    filledSize: cumSize,
+    filledNotional: cumCost,
+    avgFill,
+    slipBps: slip,
+    allInBps: slip != null ? slip + takerBps : null,
+    bookExhausted: targetNotional > bookNotional,
+    bookNotional,
+  };
+}
+
 // Thin adapter around the shared <CoinPicker>: the orderbook API speaks full
 // symbols ("BTC-USD") but CoinPicker's contract is bare coin names ("BTC").
 function MarketSelector({ value, onChange }: { value: Market; onChange: (m: Market) => void }) {
@@ -437,11 +517,220 @@ function OrderBookPanel({
 }
 
 // ----------------------------------------------------------------------------
+// Price-impact curve — how far a market order walks the book, per side.
+// ----------------------------------------------------------------------------
+
+function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+  const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
+
+  const data = useMemo(() => {
+    if (mid == null) return [];
+    const key = metric === 'allin' ? 'allInBps' : 'slipBps';
+    const buy = buildImpactCurve(book.asks, mid, 'buy', BULK_TAKER_BPS);
+    const sell = buildImpactCurve(book.bids, mid, 'sell', BULK_TAKER_BPS);
+    return [
+      ...buy.map((p) => ({ notional: p.notional, buy: p[key] })),
+      ...sell.map((p) => ({ notional: p.notional, sell: p[key] })),
+    ].sort((a, b) => a.notional - b.notional);
+  }, [book, mid, metric]);
+
+  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2">Price impact</h2>
+          <p className="t-caption truncate">slippage as a market order walks the book</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-3 md:flex">
+            <span className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} /> Buy
+            </span>
+            <span className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} /> Sell
+            </span>
+          </div>
+          <div className="toggle-group">
+            <button onClick={() => setMetric('slip')} className={cn('toggle-btn', metric === 'slip' && 'active')}>Slippage</button>
+            <button onClick={() => setMetric('allin')} className={cn('toggle-btn', metric === 'allin' && 'active')}>All-in</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 px-2 py-3">
+        {data.length <= 2 ? (
+          <div className="flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">Not enough depth.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 12, right: 8, bottom: 4, left: 4 }}>
+              <defs>
+                <linearGradient id="imp-buy" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={ASK} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={ASK} stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="imp-sell" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={BID} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={BID} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
+              <Tooltip
+                cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const row = payload[0].payload as { notional: number; buy?: number; sell?: number };
+                  return (
+                    <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
+                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(row.notional)}</p>
+                      {typeof row.buy === 'number' && (
+                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} />
+                          <span className="text-[var(--role-content-muted)]">Buy</span>
+                          <span className="ml-auto font-medium text-[var(--role-content)]">{row.buy.toFixed(2)} bps</span>
+                        </p>
+                      )}
+                      {typeof row.sell === 'number' && (
+                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} />
+                          <span className="text-[var(--role-content-muted)]">Sell</span>
+                          <span className="ml-auto font-medium text-[var(--role-content)]">{row.sell.toFixed(2)} bps</span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              <Area type="monotone" dataKey="buy" stroke={ASK} fill="url(#imp-buy)" strokeWidth={1.75} connectNulls isAnimationActive={false} dot={false} />
+              <Area type="monotone" dataKey="sell" stroke={BID} fill="url(#imp-sell)" strokeWidth={1.75} connectNulls isAnimationActive={false} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Size simulator — enter a clip, get the fill, slippage and all-in cost.
+// ----------------------------------------------------------------------------
+
+const SIM_PRESETS = [100_000, 1_000_000, 10_000_000];
+
+function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+  const [side, setSide] = useState<Side>('buy');
+  const [notional, setNotional] = useState<number>(1_000_000);
+
+  const levels = side === 'buy' ? book.asks : book.bids;
+  const result = useMemo(
+    () => (mid != null ? simulateOrder(levels, mid, side, notional, BULK_TAKER_BPS) : null),
+    [levels, mid, side, notional]
+  );
+  const fullNotional = useMemo(() => levels.reduce((s, l) => s + l.px * l.sz, 0), [levels]);
+
+  const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
+    <div className="flex items-baseline justify-between border-b border-[var(--role-line-subtle)] py-2 last:border-0">
+      <span className="text-xs text-[var(--role-content-muted)]">{label}</span>
+      <span className="font-mono text-sm font-medium tabular-nums" style={{ color: accent ?? 'var(--role-content)' }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2">Cost to trade</h2>
+          <p className="t-caption truncate">simulate a market order</p>
+        </div>
+        <div className="toggle-group">
+          <button onClick={() => setSide('buy')} className={cn('toggle-btn', side === 'buy' && 'active')}>Buy</button>
+          <button onClick={() => setSide('sell')} className={cn('toggle-btn', side === 'sell' && 'active')}>Sell</button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-4">
+        {/* Size input + presets */}
+        <div>
+          <label className="mb-1.5 block text-[11px] text-[var(--role-content-subtle)]">Order size (USD)</label>
+          <div className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-background)]/40 px-3 py-2">
+            <span className="text-[var(--role-content-subtle)]">$</span>
+            <input
+              type="number"
+              min={0}
+              value={notional}
+              onChange={(e) => setNotional(Math.max(0, Number(e.target.value) || 0))}
+              className="w-full bg-transparent font-mono text-sm tabular-nums text-[var(--role-content)] outline-none"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {SIM_PRESETS.map((p) => (
+              <button key={p} onClick={() => setNotional(p)} className={cn('toggle-btn', notional === p && 'active')}>{formatUsd(p)}</button>
+            ))}
+            <button onClick={() => setNotional(Math.round(fullNotional))} className="toggle-btn">Full</button>
+          </div>
+        </div>
+
+        {/* Result */}
+        {result && result.avgFill != null ? (
+          <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] bg-[var(--role-background)]/30 px-3">
+            <Row label="Avg fill price" value={`$${formatPrice(result.avgFill)}`} />
+            <Row label="Slippage" value={`${formatBps(result.slipBps)} bps`} accent={result.slipBps && result.slipBps > 0 ? (side === 'buy' ? 'var(--neg)' : 'var(--pos)') : undefined} />
+            <Row label={`All-in (incl. ${BULK_TAKER_BPS} bps taker)`} value={`${formatBps(result.allInBps)} bps`} />
+            <Row label="Est. cost vs mid" value={result.slipBps != null ? formatUsd((result.allInBps! / 1e4) * result.filledNotional) : '-'} />
+            <Row label="Filled" value={`${formatUsd(result.filledNotional)} of ${formatUsd(fullNotional)}`} />
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">Enter a size.</div>
+        )}
+
+        {result?.bookExhausted && (
+          <div className="rounded-[var(--radius-sm)] px-3 py-2 text-[11px]" style={{ backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
+            Order exceeds the visible book — only {formatUsd(result.filledNotional)} fills before {side === 'buy' ? 'asks' : 'bids'} run out.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Compare-mode banner — cross-exchange overlay is wired venue-by-venue on the
+// backend; until a venue's feed lands, this states plainly what's coming.
+// ----------------------------------------------------------------------------
+
+const COMPARE_VENUES = ['Hyperliquid', 'Lighter', 'Binance', 'Bybit'];
+
+function CompareBanner() {
+  return (
+    <div className="glass-card flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <h2 className="panel-title t-h2">Cross-exchange comparison</h2>
+        <p className="t-caption mt-0.5">
+          Depth, price impact and execution cost for {' '}
+          <span className="text-[var(--role-content-muted)]">BULK measured against other venues, side by side.</span>
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Integrating</span>
+        {COMPARE_VENUES.map((v) => (
+          <span key={v} className="rounded-full border border-[var(--role-line)] px-2.5 py-1 text-[11px] text-[var(--role-content-muted)]">
+            {v}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Page
 // ----------------------------------------------------------------------------
 
 export default function OrderBookPage() {
   const [coin, setCoin] = useState<Market>('BTC-USD');
+  const [mode, setMode] = useState<'bulk' | 'compare'>('bulk');
   const { network } = useCurrentNetwork();
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -451,7 +740,9 @@ export default function OrderBookPage() {
   const fetchBook = useCallback(async (target: Market, resetLoading: boolean) => {
     if (resetLoading) setInitialLoading(true);
     try {
-      const snap = await analytics.getOrderbook(target, 20);
+      // 50 levels: the ladder still shows the top 20, but the impact curve and
+      // size simulator get a deeper book to walk for larger clips.
+      const snap = await analytics.getOrderbook(target, 50);
       if (lastFetchedCoinRef.current !== target && lastFetchedCoinRef.current !== null) return;
       setBook(snap);
       setError(null);
@@ -483,8 +774,17 @@ export default function OrderBookPage() {
         <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
           Order book
         </h1>
-        <MarketSelector value={coin} onChange={setCoin} />
+        <div className="flex items-center gap-3">
+          {/* BULK (default) vs cross-exchange compare. */}
+          <div className="toggle-group">
+            <button onClick={() => setMode('bulk')} className={cn('toggle-btn', mode === 'bulk' && 'active')}>BULK</button>
+            <button onClick={() => setMode('compare')} className={cn('toggle-btn', mode === 'compare' && 'active')}>Compare</button>
+          </div>
+          <MarketSelector value={coin} onChange={setCoin} />
+        </div>
       </header>
+
+      {mode === 'compare' && <CompareBanner />}
 
       {error && !initialLoading && (
         <div className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm" style={{ borderColor: 'rgb(var(--neg-rgb) / 0.3)', backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
@@ -526,6 +826,24 @@ export default function OrderBookPage() {
             <div className="glass-card flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">
               No order book data.
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Execution tools: price-impact curve + size simulator */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="h-[340px] lg:col-span-7">
+          {initialLoading || !book ? (
+            <div className="glass-card h-full animate-pulse" />
+          ) : (
+            <ImpactCurvePanel book={book} mid={stats?.mid ?? null} />
+          )}
+        </div>
+        <div className="h-[340px] lg:col-span-5">
+          {initialLoading || !book ? (
+            <div className="glass-card h-full animate-pulse" />
+          ) : (
+            <SizeSimPanel book={book} mid={stats?.mid ?? null} />
           )}
         </div>
       </div>
