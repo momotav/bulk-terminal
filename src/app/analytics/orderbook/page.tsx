@@ -724,8 +724,9 @@ type ActiveVenue = {
   bids: OrderbookLevel[]; asks: OrderbookLevel[]; mid: number; takerBps: number;
 };
 
-// ± distance presets (fraction of mid) for the multi-venue depth chart.
-const DEPTH_DISTANCES = [0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1];
+// ± distance presets (fraction of mid) for the multi-venue depth chart. Capped
+// at ±2% — perp books cluster near mid, so wider zooms are just empty space.
+const DEPTH_DISTANCES = [0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02];
 function distLabel(d: number): string {
   const pct = d * 100;
   return `±${pct >= 1 ? pct : pct.toFixed(2)}%`;
@@ -762,13 +763,10 @@ function CompareMenu({ enabled, onToggle }: { enabled: Record<string, boolean>; 
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
-          activeCount > 0 ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-[var(--role-line)] text-[var(--role-content-muted)] hover:text-[var(--role-content)]',
-        )}
+        className="flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)]"
       >
-        Compare{activeCount > 0 ? ` · ${activeCount}` : ''}
-        <svg className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} viewBox="0 0 16 16" fill="none">
+        <span>Compare{activeCount > 0 ? ` · ${activeCount}` : ''}</span>
+        <svg className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} viewBox="0 0 16 16" fill="none">
           <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -944,10 +942,7 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
   return (
     <div className="glass-card flex h-full flex-col">
       <div className="panel-header">
-        <div className="min-w-0">
-          <h2 className="panel-title t-h2">Market depth</h2>
-          <p className="t-caption truncate">cumulative resting liquidity by % from mid, across venues</p>
-        </div>
+        <h2 className="panel-title t-h2">Market depth</h2>
       </div>
 
       {/* Toolbar: venue legend (left) + ±distance filter (right), one row. */}
@@ -1009,7 +1004,7 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
               }}
             />
             {drawOrder.map((v) => (
-              <Area key={v.id} type="monotone" dataKey={v.id} stroke={v.color} fill={`url(#dep-${v.id})`} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <Area key={v.id} type="stepAfter" dataKey={v.id} stroke={v.color} fill={`url(#dep-${v.id})`} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
             ))}
           </AreaChart>
         </ResponsiveContainer>
