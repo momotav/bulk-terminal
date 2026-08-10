@@ -742,6 +742,76 @@ function venueDepthPoints(v: ActiveVenue): Record<string, number>[] {
   return pts;
 }
 
+// One "Compare" button that opens a checklist of venues to overlay. BULK is
+// always on; the rest toggle. Closes on outside-click / Escape.
+function CompareMenu({ enabled, onToggle }: { enabled: Record<string, boolean>; onToggle: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const activeCount = OVERLAY_VENUES.filter((v) => v.available && enabled[v.id]).length;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+          activeCount > 0 ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-[var(--role-line)] text-[var(--role-content-muted)] hover:text-[var(--role-content)]',
+        )}
+      >
+        Compare{activeCount > 0 ? ` · ${activeCount}` : ''}
+        <svg className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} viewBox="0 0 16 16" fill="none">
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-60 rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-1.5 shadow-[var(--shadow-lg)]">
+          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Overlay venues</div>
+          <div className="flex items-center justify-between rounded-lg px-2 py-1.5">
+            <span className="flex items-center gap-2 text-sm text-[var(--role-content)]">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: VENUE_COLOR.bulk }} /> BULK
+            </span>
+            <span className="text-[11px] text-[var(--role-content-subtle)]">always</span>
+          </div>
+          {OVERLAY_VENUES.map((v) => (
+            <button
+              key={v.id}
+              disabled={!v.available}
+              onClick={() => v.available && onToggle(v.id)}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors',
+                v.available ? 'hover:bg-[var(--bg-secondary-20)]' : 'cursor-not-allowed opacity-50',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: enabled[v.id] && v.available ? VENUE_COLOR[v.id] : 'var(--role-content-subtle)' }} />
+                <span className={enabled[v.id] ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)]'}>{v.label}</span>
+                {!v.available && <span className="text-[10px] text-[var(--role-content-subtle)]">soon</span>}
+              </span>
+              {v.available && (
+                <span className={cn('flex h-4 w-4 items-center justify-center rounded border', enabled[v.id] ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--role-line)]')}>
+                  {enabled[v.id] && (
+                    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="var(--accent-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  )}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ----------------------------------------------------------------------------
 // Cross-exchange liquidity table — the flagship Compare view. Rows are venues
 // (BULK pinned + highlighted on top), columns are clip sizes; each cell is the
@@ -857,7 +927,7 @@ function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapsho
 // ----------------------------------------------------------------------------
 
 function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
-  const [dist, setDist] = useState(0.01); // ±1% default
+  const [dist, setDist] = useState(0.005); // ±0.5% default — close enough that BULK reads clearly
 
   const data = useMemo(() => {
     const lim = dist * 100 + 1e-9;
@@ -868,6 +938,8 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
   const dpct = dist * 100;
+  // Draw BULK last so its (often shallower) line sits on top and stays visible.
+  const drawOrder = [...venues.filter((v) => v.id !== 'bulk'), ...venues.filter((v) => v.id === 'bulk')];
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -876,24 +948,44 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
           <h2 className="panel-title t-h2">Market depth</h2>
           <p className="t-caption truncate">cumulative resting liquidity by % from mid, across venues</p>
         </div>
-        <div className="flex max-w-[60%] flex-wrap items-center justify-end gap-1">
+      </div>
+
+      {/* Toolbar: venue legend (left) + ±distance filter (right), one row. */}
+      <div className="flex items-center justify-between gap-3 px-4 pt-1">
+        <div className="flex flex-wrap items-center gap-3">
+          {venues.map((v) => (
+            <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-0.5">
           {DEPTH_DISTANCES.map((d) => (
-            <button key={d} onClick={() => setDist(d)} className={cn('toggle-btn', dist === d && 'active')}>{distLabel(d)}</button>
+            <button
+              key={d}
+              onClick={() => setDist(d)}
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums whitespace-nowrap transition-colors',
+                dist === d ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+              )}
+            >
+              {distLabel(d)}
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 px-4 pt-1">
-        {venues.map((v) => (
-          <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
-          </span>
-        ))}
-      </div>
-
       <div className="min-h-0 flex-1 px-2 py-2">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+            <defs>
+              {venues.map((v) => (
+                <linearGradient key={v.id} id={`dep-${v.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={v.color} stopOpacity={0.16} />
+                  <stop offset="100%" stopColor={v.color} stopOpacity={0.02} />
+                </linearGradient>
+              ))}
+            </defs>
             <XAxis dataKey="pct" type="number" domain={[-dpct, dpct]} allowDataOverflow
               tickFormatter={(v) => `${v}%`} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
             <YAxis tickFormatter={(v) => `$${formatCompact(v)}`} tick={axisTick} axisLine={false} tickLine={false} width={52} />
@@ -905,7 +997,7 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
                 return (
                   <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
                     <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">{Number(label).toFixed(3)}% from mid</p>
-                    {payload.map((p: any) => (
+                    {[...payload].reverse().map((p: any) => (
                       <p key={p.dataKey} className="flex items-center gap-2 font-mono text-xs tabular-nums">
                         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.stroke }} />
                         <span className="text-[var(--role-content-muted)]">{venues.find((v) => v.id === p.dataKey)?.label ?? p.dataKey}</span>
@@ -916,10 +1008,10 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
                 );
               }}
             />
-            {venues.map((v) => (
-              <Line key={v.id} type="monotone" dataKey={v.id} stroke={v.color} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
+            {drawOrder.map((v) => (
+              <Area key={v.id} type="monotone" dataKey={v.id} stroke={v.color} fill={`url(#dep-${v.id})`} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
             ))}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -1096,29 +1188,8 @@ export default function OrderBookPage() {
         <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
           Order book
         </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Overlay switcher: BULK is always drawn; toggle venues onto the charts. */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="flex items-center gap-1.5 rounded-full border border-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-[var(--role-content)]" style={{ backgroundColor: 'rgb(var(--accent-rgb, 0 0 0) / 0.08)' }}>
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: VENUE_COLOR.bulk }} /> BULK
-            </span>
-            {OVERLAY_VENUES.map((v) => v.available ? (
-              <button
-                key={v.id}
-                onClick={() => toggleVenue(v.id)}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
-                  enabled[v.id] ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-[var(--role-line)] text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                )}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: enabled[v.id] ? VENUE_COLOR[v.id] : 'var(--role-content-subtle)' }} /> {v.label}
-              </button>
-            ) : (
-              <span key={v.id} className="flex items-center gap-1.5 rounded-full border border-[var(--role-line-subtle)] px-2.5 py-1 text-[11px] text-[var(--role-content-subtle)]">
-                {v.label} <span className="opacity-60">soon</span>
-              </span>
-            ))}
-          </div>
+        <div className="flex items-center gap-2">
+          <CompareMenu enabled={enabled} onToggle={toggleVenue} />
           <MarketSelector value={coin} onChange={setCoin} />
         </div>
       </header>
