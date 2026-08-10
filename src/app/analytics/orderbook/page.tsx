@@ -7,6 +7,9 @@ import {
   Bar,
   BarChart,
   Customized,
+  Line,
+  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -696,32 +699,47 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
 }
 
 // ----------------------------------------------------------------------------
-// Compare-mode banner — cross-exchange overlay is wired venue-by-venue on the
-// backend; until a venue's feed lands, this states plainly what's coming.
+// Venue overlays — BULK is always drawn; these can be toggled on from the header
+// switcher to overlay their book on the depth + impact charts (and add a row to
+// the liquidity table). Colours come from the palette coin ramp so they follow
+// the active theme; BULK is the accent.
 // ----------------------------------------------------------------------------
 
-const COMPARE_VENUES = ['Hyperliquid', 'Lighter', 'Binance', 'Bybit'];
+const OVERLAY_VENUES: { id: string; label: string; available: boolean }[] = [
+  { id: 'hyperliquid', label: 'Hyperliquid', available: true },
+  { id: 'lighter', label: 'Lighter', available: false },
+  { id: 'binance', label: 'Binance', available: false },
+  { id: 'bybit', label: 'Bybit', available: false },
+];
+const VENUE_COLOR: Record<string, string> = {
+  bulk: 'var(--accent)',
+  hyperliquid: 'var(--coin-3)',
+  lighter: 'var(--coin-5)',
+  binance: 'var(--coin-1)',
+  bybit: 'var(--coin-6)',
+};
 
-function CompareBanner() {
-  return (
-    <div className="glass-card flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0">
-        <h2 className="panel-title t-h2">Cross-exchange comparison</h2>
-        <p className="t-caption mt-0.5">
-          Depth, price impact and execution cost for {' '}
-          <span className="text-[var(--role-content-muted)]">BULK measured against other venues, side by side.</span>
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Integrating</span>
-        {COMPARE_VENUES.map((v) => (
-          <span key={v} className="rounded-full border border-[var(--role-line)] px-2.5 py-1 text-[11px] text-[var(--role-content-muted)]">
-            {v}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+type ActiveVenue = {
+  id: string; label: string; color: string;
+  bids: OrderbookLevel[]; asks: OrderbookLevel[]; mid: number; takerBps: number;
+};
+
+// ± distance presets (fraction of mid) for the multi-venue depth chart.
+const DEPTH_DISTANCES = [0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1];
+function distLabel(d: number): string {
+  const pct = d * 100;
+  return `±${pct >= 1 ? pct : pct.toFixed(2)}%`;
+}
+
+// Cumulative resting $ vs % from mid for one venue (a V around mid), keyed by
+// the venue id so several venues merge into one recharts dataset.
+function venueDepthPoints(v: ActiveVenue): Record<string, number>[] {
+  const pts: Record<string, number>[] = [{ pct: 0, [v.id]: 0 }];
+  let cum = 0;
+  for (const l of v.bids) { cum += l.px * l.sz; pts.push({ pct: ((l.px - v.mid) / v.mid) * 100, [v.id]: cum }); }
+  cum = 0;
+  for (const l of v.asks) { cum += l.px * l.sz; pts.push({ pct: ((l.px - v.mid) / v.mid) * 100, [v.id]: cum }); }
+  return pts;
 }
 
 // ----------------------------------------------------------------------------
@@ -833,12 +851,171 @@ function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapsho
 }
 
 // ----------------------------------------------------------------------------
+// Multi-venue market depth — cumulative resting $ by % from mid, one line per
+// venue, with a ± distance filter. Renders in place of the BULK depth chart
+// whenever a venue overlay is toggled on.
+// ----------------------------------------------------------------------------
+
+function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
+  const [dist, setDist] = useState(0.01); // ±1% default
+
+  const data = useMemo(() => {
+    const lim = dist * 100 + 1e-9;
+    const all: Record<string, number>[] = [];
+    for (const v of venues) all.push(...venueDepthPoints(v).filter((p) => Math.abs(p.pct) <= lim));
+    return all.sort((a, b) => (a.pct as number) - (b.pct as number));
+  }, [venues, dist]);
+
+  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  const dpct = dist * 100;
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2">Market depth</h2>
+          <p className="t-caption truncate">cumulative resting liquidity by % from mid, across venues</p>
+        </div>
+        <div className="flex max-w-[60%] flex-wrap items-center justify-end gap-1">
+          {DEPTH_DISTANCES.map((d) => (
+            <button key={d} onClick={() => setDist(d)} className={cn('toggle-btn', dist === d && 'active')}>{distLabel(d)}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 px-4 pt-1">
+        {venues.map((v) => (
+          <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1 px-2 py-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+            <XAxis dataKey="pct" type="number" domain={[-dpct, dpct]} allowDataOverflow
+              tickFormatter={(v) => `${v}%`} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+            <YAxis tickFormatter={(v) => `$${formatCompact(v)}`} tick={axisTick} axisLine={false} tickLine={false} width={52} />
+            <ReferenceLine x={0} stroke="var(--role-content-subtle)" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: 'mid', position: 'top', fill: 'var(--role-content-subtle)', fontSize: 10 }} />
+            <Tooltip
+              cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                return (
+                  <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
+                    <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">{Number(label).toFixed(3)}% from mid</p>
+                    {payload.map((p: any) => (
+                      <p key={p.dataKey} className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.stroke }} />
+                        <span className="text-[var(--role-content-muted)]">{venues.find((v) => v.id === p.dataKey)?.label ?? p.dataKey}</span>
+                        <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.value)}</span>
+                      </p>
+                    ))}
+                  </div>
+                );
+              }}
+            />
+            {venues.map((v) => (
+              <Line key={v.id} type="monotone" dataKey={v.id} stroke={v.color} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Multi-venue price impact — slippage vs order size, one line per venue, for a
+// chosen side. Renders in place of the BULK impact curve when comparing.
+// ----------------------------------------------------------------------------
+
+function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
+  const [side, setSide] = useState<Side>('buy');
+  const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
+
+  const data = useMemo(() => {
+    const key = metric === 'allin' ? 'allInBps' : 'slipBps';
+    const all: Record<string, number>[] = [];
+    for (const v of venues) {
+      const levels = side === 'buy' ? v.asks : v.bids;
+      for (const p of buildImpactCurve(levels, v.mid, side, v.takerBps)) {
+        all.push({ notional: p.notional, [v.id]: p[key] });
+      }
+    }
+    return all.sort((a, b) => (a.notional as number) - (b.notional as number));
+  }, [venues, side, metric]);
+
+  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2">Price impact</h2>
+          <p className="t-caption truncate">{side === 'buy' ? 'buy' : 'sell'} slippage vs order size, across venues</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="toggle-group">
+            <button onClick={() => setSide('buy')} className={cn('toggle-btn', side === 'buy' && 'active')}>Buy</button>
+            <button onClick={() => setSide('sell')} className={cn('toggle-btn', side === 'sell' && 'active')}>Sell</button>
+          </div>
+          <div className="toggle-group">
+            <button onClick={() => setMetric('slip')} className={cn('toggle-btn', metric === 'slip' && 'active')}>Slippage</button>
+            <button onClick={() => setMetric('allin')} className={cn('toggle-btn', metric === 'allin' && 'active')}>All-in</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 px-4 pt-1">
+        {venues.map((v) => (
+          <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1 px-2 py-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+            <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+            <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
+            <Tooltip
+              cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                return (
+                  <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
+                    <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(Number(label))}</p>
+                    {payload.map((p: any) => (
+                      <p key={p.dataKey} className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.stroke }} />
+                        <span className="text-[var(--role-content-muted)]">{venues.find((v) => v.id === p.dataKey)?.label ?? p.dataKey}</span>
+                        <span className="ml-auto font-medium text-[var(--role-content)]">{Number(p.value).toFixed(2)} bps</span>
+                      </p>
+                    ))}
+                  </div>
+                );
+              }}
+            />
+            {venues.map((v) => (
+              <Line key={v.id} type="monotone" dataKey={v.id} stroke={v.color} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Page
 // ----------------------------------------------------------------------------
 
 export default function OrderBookPage() {
   const [coin, setCoin] = useState<Market>('BTC-USD');
-  const [mode, setMode] = useState<'bulk' | 'compare'>('bulk');
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const { network } = useCurrentNetwork();
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [compare, setCompare] = useState<OrderbookCompare | null>(null);
@@ -874,19 +1051,43 @@ export default function OrderBookPage() {
     return () => clearInterval(id);
   }, [coin, fetchBook, network]);
 
-  // Cross-exchange feed — only polled while Compare mode is open.
+  const enabledIds = OVERLAY_VENUES.filter((v) => v.available && enabled[v.id]).map((v) => v.id);
+  const comparing = enabledIds.length > 0;
+  const enabledKey = enabledIds.join(',');
+  const toggleVenue = (id: string) => setEnabled((e) => ({ ...e, [id]: !e[id] }));
+
+  // Cross-exchange feed — only polled while a venue overlay is toggled on.
   useEffect(() => {
-    if (mode !== 'compare') return;
+    if (!enabledKey) { setCompare(null); return; }
     let alive = true;
     const load = async () => {
-      try { const c = await analytics.getOrderbookCompare(coin); if (alive) setCompare(c); } catch { /* keep last */ }
+      try { const c = await analytics.getOrderbookCompare(coin, enabledKey.split(',')); if (alive) setCompare(c); } catch { /* keep last */ }
     };
     load();
     const id = setInterval(load, REFRESH_INTERVAL_MS);
     return () => { alive = false; clearInterval(id); };
-  }, [mode, coin, network]);
+  }, [enabledKey, coin, network]);
 
   const stats = book?.stats;
+
+  // BULK is always drawn first; enabled + live venues overlay on top.
+  const activeVenues = useMemo<ActiveVenue[]>(() => {
+    if (!book) return [];
+    const list: ActiveVenue[] = [{
+      id: 'bulk', label: 'BULK', color: VENUE_COLOR.bulk,
+      bids: book.bids, asks: book.asks, mid: book.stats.mid ?? 0, takerBps: BULK_TAKER_BPS,
+    }];
+    for (const v of compare?.venues ?? []) {
+      if (v.ok && v.bids && v.asks && v.stats?.mid) {
+        list.push({
+          id: v.id, label: v.label, color: VENUE_COLOR[v.id] ?? 'var(--coin-7)',
+          bids: v.bids, asks: v.asks, mid: v.stats.mid, takerBps: v.takerBps ?? 0,
+        });
+      }
+    }
+    return list;
+  }, [book, compare]);
+  const multi = comparing && activeVenues.length > 1;
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
@@ -895,17 +1096,32 @@ export default function OrderBookPage() {
         <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
           Order book
         </h1>
-        <div className="flex items-center gap-3">
-          {/* BULK (default) vs cross-exchange compare. */}
-          <div className="toggle-group">
-            <button onClick={() => setMode('bulk')} className={cn('toggle-btn', mode === 'bulk' && 'active')}>BULK</button>
-            <button onClick={() => setMode('compare')} className={cn('toggle-btn', mode === 'compare' && 'active')}>Compare</button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Overlay switcher: BULK is always drawn; toggle venues onto the charts. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="flex items-center gap-1.5 rounded-full border border-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-[var(--role-content)]" style={{ backgroundColor: 'rgb(var(--accent-rgb, 0 0 0) / 0.08)' }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: VENUE_COLOR.bulk }} /> BULK
+            </span>
+            {OVERLAY_VENUES.map((v) => v.available ? (
+              <button
+                key={v.id}
+                onClick={() => toggleVenue(v.id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                  enabled[v.id] ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-[var(--role-line)] text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: enabled[v.id] ? VENUE_COLOR[v.id] : 'var(--role-content-subtle)' }} /> {v.label}
+              </button>
+            ) : (
+              <span key={v.id} className="flex items-center gap-1.5 rounded-full border border-[var(--role-line-subtle)] px-2.5 py-1 text-[11px] text-[var(--role-content-subtle)]">
+                {v.label} <span className="opacity-60">soon</span>
+              </span>
+            ))}
           </div>
           <MarketSelector value={coin} onChange={setCoin} />
         </div>
       </header>
-
-      {mode === 'compare' && <CompareBanner />}
 
       {error && !initialLoading && (
         <div className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm" style={{ borderColor: 'rgb(var(--neg-rgb) / 0.3)', backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
@@ -923,14 +1139,6 @@ export default function OrderBookPage() {
         <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="ask" />
       </div>
 
-      {mode === 'compare' ? (
-        book ? (
-          <CompareLiquidityTable book={book} compare={compare} base={coin.replace('-USD', '')} />
-        ) : (
-          <div className="glass-card flex h-40 items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading comparison…</div>
-        )
-      ) : (
-      <>
       {/* Depth chart + order book */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="h-[300px] lg:col-span-7 lg:h-[560px]">
@@ -942,6 +1150,8 @@ export default function OrderBookPage() {
                 <span className="text-sm text-[var(--role-content-subtle)]">No depth data.</span>
               )}
             </div>
+          ) : multi ? (
+            <MultiVenueDepthPanel venues={activeVenues} />
           ) : (
             <DepthChartPanel book={book} mid={stats?.mid ?? null} />
           )}
@@ -964,6 +1174,8 @@ export default function OrderBookPage() {
         <div className="h-[340px] lg:col-span-7">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
+          ) : multi ? (
+            <MultiVenueImpactPanel venues={activeVenues} />
           ) : (
             <ImpactCurvePanel book={book} mid={stats?.mid ?? null} />
           )}
@@ -976,8 +1188,9 @@ export default function OrderBookPage() {
           )}
         </div>
       </div>
-      </>
-      )}
+
+      {/* Cross-exchange liquidity table — shown below the charts while comparing. */}
+      {multi && book && <CompareLiquidityTable book={book} compare={compare} base={coin.replace('-USD', '')} />}
     </div>
   );
 }
