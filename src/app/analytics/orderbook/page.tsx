@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { analytics, formatCompact, cn, type OrderbookSnapshot, type OrderbookLevel } from '@/lib/api';
+import { analytics, formatCompact, cn, type OrderbookSnapshot, type OrderbookLevel, type OrderbookStats, type OrderbookCompare } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
 import { StatCard as SharedStatCard } from '@/components/StatCard';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -725,6 +725,114 @@ function CompareBanner() {
 }
 
 // ----------------------------------------------------------------------------
+// Cross-exchange liquidity table — the flagship Compare view. Rows are venues
+// (BULK pinned + highlighted on top), columns are clip sizes; each cell is the
+// slippage in bps to fill that clip on that venue, colour-graded green→red.
+// ----------------------------------------------------------------------------
+
+const CMP_SIZES = [10_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000];
+
+// Slippage (bps) to fill `notional` on one side, or null if it exceeds the book.
+function slipForSize(levels: OrderbookLevel[], mid: number, side: Side, notional: number): number | null {
+  const r = simulateOrder(levels, mid, side, notional, 0);
+  return r.bookExhausted || r.slipBps == null ? null : r.slipBps;
+}
+
+// green (cheap) → red (expensive); transparent when the clip can't fill.
+function bpsHeat(bps: number | null): string {
+  if (bps == null) return 'transparent';
+  const t = Math.min(1, bps / 15); // 15 bps ≈ full red
+  const hue = 130 - t * 130;
+  return `hsl(${hue} 58% 45% / 0.20)`;
+}
+
+type CmpRow = { key: string; label: string; highlight: boolean; bids: OrderbookLevel[]; asks: OrderbookLevel[]; stats: OrderbookStats };
+
+function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapshot; compare: OrderbookCompare | null; base: string }) {
+  const [side, setSide] = useState<Side>('buy');
+
+  const rows = useMemo<CmpRow[]>(() => {
+    const out: CmpRow[] = [{ key: 'bulk', label: 'BULK', highlight: true, bids: book.bids, asks: book.asks, stats: book.stats }];
+    for (const v of compare?.venues ?? []) {
+      if (v.ok && v.bids && v.asks && v.stats) {
+        out.push({ key: v.id, label: v.label, highlight: false, bids: v.bids, asks: v.asks, stats: v.stats });
+      }
+    }
+    return out;
+  }, [book, compare]);
+
+  const th = 'px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)] whitespace-nowrap';
+  const td = 'px-3 py-2.5 text-right font-mono text-xs tabular-nums whitespace-nowrap';
+
+  return (
+    <div className="glass-card flex flex-col">
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2">Cross-exchange liquidity</h2>
+          <p className="t-caption truncate">{base} {side === 'buy' ? 'BUY' : 'SELL'} ladder · slippage in bps to fill each clip</p>
+        </div>
+        <div className="toggle-group">
+          <button onClick={() => setSide('buy')} className={cn('toggle-btn', side === 'buy' && 'active')}>Buy</button>
+          <button onClick={() => setSide('sell')} className={cn('toggle-btn', side === 'sell' && 'active')}>Sell</button>
+        </div>
+      </div>
+
+      <div className="min-h-0 overflow-x-auto custom-scrollbar">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-[var(--role-line)]">
+              <th className={cn(th, 'text-left')}>Exchange</th>
+              <th className={th}>Mid</th>
+              <th className={th}>Spread</th>
+              <th className={th}>Best Bid</th>
+              <th className={th}>Best Ask</th>
+              {CMP_SIZES.map((s) => (
+                <th key={s} className={th}>{formatUsd(s)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const levels = side === 'buy' ? r.asks : r.bids;
+              const mid = r.stats.mid ?? 0;
+              return (
+                <tr
+                  key={r.key}
+                  className="border-b border-[var(--role-line-subtle)] last:border-0"
+                  style={r.highlight ? { background: 'rgb(var(--pos-rgb) / 0.06)' } : undefined}
+                >
+                  <td className={cn(td, 'text-left')}>
+                    <span className="flex items-center gap-2">
+                      {r.highlight && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--role-chrome)' }} />}
+                      <span className={cn('font-sans font-medium', r.highlight ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)]')}>{r.label}</span>
+                    </span>
+                  </td>
+                  <td className={cn(td, 'text-[var(--role-content-muted)]')}>{mid ? `$${formatPrice(mid)}` : '-'}</td>
+                  <td className={cn(td, 'text-[var(--role-content-muted)]')}>{formatBps(r.stats.spreadBps)}</td>
+                  <td className={td} style={{ color: 'var(--pos)' }}>{r.stats.bestBid ? `$${formatPrice(r.stats.bestBid.px)}` : '-'}</td>
+                  <td className={td} style={{ color: 'var(--neg)' }}>{r.stats.bestAsk ? `$${formatPrice(r.stats.bestAsk.px)}` : '-'}</td>
+                  {CMP_SIZES.map((s) => {
+                    const bps = mid ? slipForSize(levels, mid, side, s) : null;
+                    return (
+                      <td key={s} className={td} style={{ backgroundColor: bpsHeat(bps), color: bps == null ? 'var(--role-content-subtle)' : 'var(--role-content)' }}>
+                        {bps == null ? '-' : `${bps.toFixed(2)}`}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="px-3 py-2 text-[11px] text-[var(--role-content-subtle)]">
+        Cells show pure book slippage (bps). "-" means the clip is larger than the visible book on that venue. Venue books are top-of-book depth from each exchange's public feed.
+      </p>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Page
 // ----------------------------------------------------------------------------
 
@@ -733,6 +841,7 @@ export default function OrderBookPage() {
   const [mode, setMode] = useState<'bulk' | 'compare'>('bulk');
   const { network } = useCurrentNetwork();
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
+  const [compare, setCompare] = useState<OrderbookCompare | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const lastFetchedCoinRef = useRef<Market | null>(null);
@@ -764,6 +873,18 @@ export default function OrderBookPage() {
     const id = setInterval(() => fetchBook(coin, false), REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [coin, fetchBook, network]);
+
+  // Cross-exchange feed — only polled while Compare mode is open.
+  useEffect(() => {
+    if (mode !== 'compare') return;
+    let alive = true;
+    const load = async () => {
+      try { const c = await analytics.getOrderbookCompare(coin); if (alive) setCompare(c); } catch { /* keep last */ }
+    };
+    load();
+    const id = setInterval(load, REFRESH_INTERVAL_MS);
+    return () => { alive = false; clearInterval(id); };
+  }, [mode, coin, network]);
 
   const stats = book?.stats;
 
@@ -802,6 +923,14 @@ export default function OrderBookPage() {
         <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="ask" />
       </div>
 
+      {mode === 'compare' ? (
+        book ? (
+          <CompareLiquidityTable book={book} compare={compare} base={coin.replace('-USD', '')} />
+        ) : (
+          <div className="glass-card flex h-40 items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading comparison…</div>
+        )
+      ) : (
+      <>
       {/* Depth chart + order book */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="h-[300px] lg:col-span-7 lg:h-[560px]">
@@ -847,6 +976,8 @@ export default function OrderBookPage() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

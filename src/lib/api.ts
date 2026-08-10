@@ -347,6 +347,24 @@ export interface OrderbookSnapshot {
   stats: OrderbookStats;
 }
 
+// One venue in the cross-exchange comparison (/api/analytics/orderbook-compare).
+// `ok:false` means that venue's feed was unavailable this tick — render it as a
+// gap, never let it break the view. `bids`/`asks`/`stats` mirror the shape above.
+export interface CompareVenue {
+  id: string;
+  label: string;
+  ok: boolean;
+  takerBps?: number;
+  bids?: OrderbookLevel[];
+  asks?: OrderbookLevel[];
+  stats?: OrderbookStats;
+}
+export interface OrderbookCompare {
+  coin: string;
+  base: string;
+  venues: CompareVenue[];
+}
+
 // ============ Risk Surfaces ============
 //
 // BULK publishes per-market maintenance margin surfaces as a 2D grid indexed
@@ -660,6 +678,10 @@ export const analytics = {
     return request<OrderbookSnapshot>(
       `/api/analytics/orderbook/${encodeURIComponent(coin)}?nlevels=${nlevels}`
     );
+  },
+  async getOrderbookCompare(coin: string, venues?: string[]): Promise<OrderbookCompare> {
+    const q = venues && venues.length ? `?venues=${venues.join(',')}` : '';
+    return request(`/api/analytics/orderbook-compare/${encodeURIComponent(coin)}${q}`);
   },
 
   // BULK's margin model for a given market — a grid of (notional x leverage)
