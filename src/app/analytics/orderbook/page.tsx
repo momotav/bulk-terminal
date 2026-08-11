@@ -233,15 +233,24 @@ function StatCard({
 
 type DepthPoint = { px: number; bid?: number; ask?: number };
 
-function buildDepthSeries(ob: OrderbookSnapshot): DepthPoint[] {
+// The default (BULK) depth chart focuses on the near-mid book; the deep tail of
+// the full book (sparse stray orders far out) would otherwise compress all the
+// real structure into a thin cliff. Everything past this stays available to the
+// impact / simulator / compare tools that walk the whole book.
+const DEFAULT_DEPTH_WINDOW = 0.02; // ±2% of mid
+
+function buildDepthSeries(ob: OrderbookSnapshot, mid: number | null): DepthPoint[] {
+  const inWin = (px: number) => mid == null || Math.abs(px - mid) / mid <= DEFAULT_DEPTH_WINDOW;
   const points: DepthPoint[] = [];
   let bidCum = 0;
   for (const l of ob.bids) {
+    if (!inWin(l.px)) continue;
     bidCum += l.px * l.sz;
     points.push({ px: l.px, bid: bidCum });
   }
   let askCum = 0;
   for (const l of ob.asks) {
+    if (!inWin(l.px)) continue;
     askCum += l.px * l.sz;
     points.push({ px: l.px, ask: askCum });
   }
@@ -282,16 +291,16 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
   const [view, setView] = useState<'depth' | 'levels'>('depth');
   const [midGeom, setMidGeom] = useState<MidGeom | null>(null);
 
-  const depthData = useMemo(() => buildDepthSeries(book), [book]);
+  const depthData = useMemo(() => buildDepthSeries(book, mid), [book, mid]);
   // Per-price-level size (not cumulative), one point per level, split by side.
-  const levelData = useMemo<LevelPoint[]>(
-    () =>
-      [
-        ...book.bids.map((l) => ({ px: l.px, bid: l.sz })),
-        ...book.asks.map((l) => ({ px: l.px, ask: l.sz })),
-      ].sort((a, b) => a.px - b.px),
-    [book]
-  );
+  // Clamped to the same near-mid window as the depth view.
+  const levelData = useMemo<LevelPoint[]>(() => {
+    const inWin = (px: number) => mid == null || Math.abs(px - mid) / mid <= DEFAULT_DEPTH_WINDOW;
+    return [
+      ...book.bids.filter((l) => inWin(l.px)).map((l) => ({ px: l.px, bid: l.sz })),
+      ...book.asks.filter((l) => inWin(l.px)).map((l) => ({ px: l.px, ask: l.sz })),
+    ].sort((a, b) => a.px - b.px);
+  }, [book, mid]);
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
@@ -724,9 +733,10 @@ type ActiveVenue = {
   bids: OrderbookLevel[]; asks: OrderbookLevel[]; mid: number; takerBps: number;
 };
 
-// ± distance presets (fraction of mid) for the multi-venue depth chart. Capped
-// at ±2% — perp books cluster near mid, so wider zooms are just empty space.
-const DEPTH_DISTANCES = [0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02];
+// ± distance presets (fraction of mid) for the multi-venue depth chart. Now
+// that the full book is fetched, there's real (if sparse) depth well past ±2%,
+// so the wider zooms are meaningful again.
+const DEPTH_DISTANCES = [0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1];
 function distLabel(d: number): string {
   const pct = d * 100;
   return `±${pct >= 1 ? pct : pct.toFixed(2)}%`;
@@ -1113,9 +1123,10 @@ export default function OrderBookPage() {
   const fetchBook = useCallback(async (target: Market, resetLoading: boolean) => {
     if (resetLoading) setInitialLoading(true);
     try {
-      // 50 levels: the ladder still shows the top 20, but the impact curve and
-      // size simulator get a deeper book to walk for larger clips.
-      const snap = await analytics.getOrderbook(target, 50);
+      // Ask for the full book (BULK returns however many real levels exist —
+      // ~130 on testnet, spanning well past ±2% of mid). The ladder still shows
+      // the top 20; the depth/impact/compare tools walk the whole thing.
+      const snap = await analytics.getOrderbook(target, 500);
       if (lastFetchedCoinRef.current !== target && lastFetchedCoinRef.current !== null) return;
       setBook(snap);
       setError(null);
