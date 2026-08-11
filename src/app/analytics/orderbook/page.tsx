@@ -716,9 +716,9 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
 
 const OVERLAY_VENUES: { id: string; label: string; available: boolean }[] = [
   { id: 'hyperliquid', label: 'Hyperliquid', available: true },
-  { id: 'lighter', label: 'Lighter', available: false },
-  { id: 'binance', label: 'Binance', available: false },
-  { id: 'bybit', label: 'Bybit', available: false },
+  { id: 'lighter', label: 'Lighter', available: true },
+  { id: 'binance', label: 'Binance', available: true },
+  { id: 'bybit', label: 'Bybit', available: true },
 ];
 const VENUE_COLOR: Record<string, string> = {
   bulk: 'var(--accent)',
@@ -1028,9 +1028,20 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
 // chosen side. Renders in place of the BULK impact curve when comparing.
 // ----------------------------------------------------------------------------
 
+// Floor for log-scale rendering: a log axis can't take 0, and sub-0.01 bps
+// slippage is visually meaningless anyway.
+const LOG_FLOOR_BPS = 0.01;
+const IMPACT_RANGES: { label: string; max: number | null }[] = [
+  { label: '$10M', max: 10_000_000 },
+  { label: '$100M', max: 100_000_000 },
+  { label: 'Full', max: null },
+];
+
 function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
   const [side, setSide] = useState<Side>('buy');
   const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
+  const [logScale, setLogScale] = useState(true);
+  const [xmax, setXmax] = useState<number | null>(10_000_000);
 
   const data = useMemo(() => {
     const key = metric === 'allin' ? 'allInBps' : 'slipBps';
@@ -1038,11 +1049,13 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
     for (const v of venues) {
       const levels = side === 'buy' ? v.asks : v.bids;
       for (const p of buildImpactCurve(levels, v.mid, side, v.takerBps)) {
-        all.push({ notional: p.notional, [v.id]: p[key] });
+        if (xmax != null && p.notional > xmax) break; // points are ascending per venue
+        if (logScale && p.notional <= 0) continue;    // log axis can't render 0
+        all.push({ notional: p.notional, [v.id]: logScale ? Math.max(p[key], LOG_FLOOR_BPS) : p[key] });
       }
     }
     return all.sort((a, b) => (a.notional as number) - (b.notional as number));
-  }, [venues, side, metric]);
+  }, [venues, side, metric, logScale, xmax]);
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
@@ -1065,19 +1078,59 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 px-4 pt-1">
-        {venues.map((v) => (
-          <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
-          </span>
-        ))}
+      {/* Toolbar: venue legend (left) + scale / x-range controls (right), one row. */}
+      <div className="flex items-center justify-between gap-3 px-4 pt-1">
+        <div className="flex flex-wrap items-center gap-3">
+          {venues.map((v) => (
+            <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
+            {IMPACT_RANGES.map((r) => (
+              <button
+                key={r.label}
+                onClick={() => setXmax(r.max)}
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums whitespace-nowrap transition-colors',
+                  xmax === r.max ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-0.5">
+            {([['Log', true], ['Linear', false]] as const).map(([label, isLog]) => (
+              <button
+                key={label}
+                onClick={() => setLogScale(isLog)}
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap transition-colors',
+                  logScale === isLog ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 px-2 py-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-            <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
-            <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
+            <XAxis dataKey="notional" type="number"
+              scale={logScale ? 'log' : 'linear'}
+              domain={logScale ? ['auto', 'auto'] : [0, 'dataMax']}
+              tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+            <YAxis
+              scale={logScale ? 'log' : 'linear'}
+              domain={logScale ? ['auto', 'auto'] : [0, 'auto']}
+              tickFormatter={(v) => (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0))}
+              tick={axisTick} axisLine={false} tickLine={false} width={44} unit=" bps" />
             <Tooltip
               cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
               content={({ active, payload, label }) => {
