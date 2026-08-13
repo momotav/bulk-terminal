@@ -720,17 +720,20 @@ const OVERLAY_VENUES: { id: string; label: string; available: boolean }[] = [
   { id: 'binance', label: 'Binance', available: true },
   { id: 'bybit', label: 'Bybit', available: true },
 ];
+// BULK keeps the palette accent (the "home" venue, adapts to theme); the rest
+// get fixed, maximally-distinct colours so five lines never blur together in a
+// warm/monochrome palette — and they roughly echo each venue's brand.
 const VENUE_COLOR: Record<string, string> = {
-  bulk: 'var(--accent)',
-  hyperliquid: 'var(--coin-3)',
-  lighter: 'var(--coin-5)',
-  binance: 'var(--coin-1)',
-  bybit: 'var(--coin-6)',
+  bulk: 'var(--role-content)', // theme-aware high-contrast — the reference line, never clashes
+  hyperliquid: '#4ade80',      // green
+  binance: '#f0b90b',          // gold
+  bybit: '#5b8def',            // blue
+  lighter: '#c084fc',          // purple
 };
 
 type ActiveVenue = {
   id: string; label: string; color: string;
-  bids: OrderbookLevel[]; asks: OrderbookLevel[]; mid: number; takerBps: number;
+  bids: OrderbookLevel[]; asks: OrderbookLevel[]; mid: number; takerBps: number; spreadBps: number | null;
 };
 
 // ± distance presets (fraction of mid) for the multi-venue depth chart. Now
@@ -742,15 +745,52 @@ function distLabel(d: number): string {
   return `±${pct >= 1 ? pct : pct.toFixed(2)}%`;
 }
 
-// Cumulative resting $ vs % from mid for one venue (a V around mid), keyed by
-// the venue id so several venues merge into one recharts dataset.
-function venueDepthPoints(v: ActiveVenue): Record<string, number>[] {
-  const pts: Record<string, number>[] = [{ pct: 0, [v.id]: 0 }];
-  let cum = 0;
-  for (const l of v.bids) { cum += l.px * l.sz; pts.push({ pct: ((l.px - v.mid) / v.mid) * 100, [v.id]: cum }); }
-  cum = 0;
-  for (const l of v.asks) { cum += l.px * l.sz; pts.push({ pct: ((l.px - v.mid) / v.mid) * 100, [v.id]: cum }); }
-  return pts;
+// Build ONE dataset where every venue has a cumulative-$ value at every x (%
+// from mid) within the window — so hovering shows a dot + value for every venue
+// at once (like loris), not just the venue that happens to own that breakpoint.
+// Each venue's depth is a step function of pct; we sample all of them on the
+// union of their price breakpoints (downsampled for perf on dense CEX books).
+function buildMergedDepth(venues: ActiveVenue[], distFrac: number): Record<string, number>[] {
+  const lim = distFrac * 100;
+  const prep = venues.map((v) => {
+    const bid: { pct: number; cum: number }[] = [];
+    let cum = 0;
+    for (const l of v.bids) { cum += l.px * l.sz; bid.push({ pct: ((l.px - v.mid) / v.mid) * 100, cum }); }
+    const ask: { pct: number; cum: number }[] = [];
+    cum = 0;
+    for (const l of v.asks) { cum += l.px * l.sz; ask.push({ pct: ((l.px - v.mid) / v.mid) * 100, cum }); }
+    return { id: v.id, bid, ask };
+  });
+
+  const xs = new Set<number>([0]);
+  for (const p of prep) {
+    for (const b of p.bid) if (Math.abs(b.pct) <= lim) xs.add(b.pct);
+    for (const a of p.ask) if (Math.abs(a.pct) <= lim) xs.add(a.pct);
+  }
+  let grid = [...xs].sort((a, b) => a - b);
+  const MAX = 480;
+  if (grid.length > MAX) {
+    const step = grid.length / MAX;
+    const s: number[] = [];
+    for (let i = 0; i < grid.length; i += step) s.push(grid[Math.floor(i)]);
+    if (s[s.length - 1] !== grid[grid.length - 1]) s.push(grid[grid.length - 1]);
+    grid = s;
+  }
+
+  // Cumulative at pct q on one side (bids best-first pct-desc; asks best-first pct-asc).
+  const valAt = (p: typeof prep[number], q: number): number => {
+    if (q === 0) return 0;
+    let c = 0;
+    if (q < 0) { for (const b of p.bid) { if (b.pct >= q) c = b.cum; else break; } }
+    else { for (const a of p.ask) { if (a.pct <= q) c = a.cum; else break; } }
+    return c;
+  };
+
+  return grid.map((q) => {
+    const row: Record<string, number> = { pct: q };
+    for (const p of prep) row[p.id] = valAt(p, q);
+    return row;
+  });
 }
 
 // One "Compare" button that opens a checklist of venues to overlay. BULK is
@@ -935,14 +975,17 @@ function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapsho
 // ----------------------------------------------------------------------------
 
 function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
-  const [dist, setDist] = useState(0.005); // ±0.5% default — close enough that BULK reads clearly
+  const [dist, setDist] = useState(0.005); // ±0.5% default
 
-  const data = useMemo(() => {
-    const lim = dist * 100 + 1e-9;
-    const all: Record<string, number>[] = [];
-    for (const v of venues) all.push(...venueDepthPoints(v).filter((p) => Math.abs(p.pct) <= lim));
-    return all.sort((a, b) => (a.pct as number) - (b.pct as number));
-  }, [venues, dist]);
+  const data = useMemo(() => buildMergedDepth(venues, dist), [venues, dist]);
+  // Per-venue totals + quote stats for the legend chips and the tooltip sublines.
+  const meta = useMemo(() =>
+    venues.map((v) => ({
+      id: v.id, label: v.label, color: v.color, mid: v.mid, spreadBps: v.spreadBps,
+      bidTotal: v.bids.reduce((s, l) => s + l.px * l.sz, 0),
+      askTotal: v.asks.reduce((s, l) => s + l.px * l.sz, 0),
+    })), [venues]);
+  const metaById = useMemo(() => new Map(meta.map((m) => [m.id, m])), [meta]);
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
   const dpct = dist * 100;
@@ -951,19 +994,9 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
 
   return (
     <div className="glass-card flex h-full flex-col">
+      {/* Title + ±distance filter, one row. */}
       <div className="panel-header">
         <h2 className="panel-title t-h2">Market depth</h2>
-      </div>
-
-      {/* Toolbar: venue legend (left) + ±distance filter (right), one row. */}
-      <div className="flex items-center justify-between gap-3 px-4 pt-1">
-        <div className="flex flex-wrap items-center gap-3">
-          {venues.map((v) => (
-            <span key={v.id} className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-muted)]">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: v.color }} /> {v.label}
-            </span>
-          ))}
-        </div>
         <div className="flex items-center gap-0.5">
           {DEPTH_DISTANCES.map((d) => (
             <button
@@ -978,6 +1011,17 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Venue chips with bid/ask totals. */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-0.5">
+        {meta.map((m) => (
+          <span key={m.id} className="flex items-center gap-1.5 rounded-lg border border-[var(--role-line-subtle)] px-2 py-1 text-[11px]">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: m.color }} />
+            <span className="font-medium text-[var(--role-content)]">{m.label}</span>
+            <span className="tabular-nums text-[var(--role-content-subtle)]">bid ${formatCompact(m.bidTotal)} / ask ${formatCompact(m.askTotal)}</span>
+          </span>
+        ))}
       </div>
 
       <div className="min-h-0 flex-1 px-2 py-2">
@@ -999,22 +1043,31 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
               cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
               content={({ active, payload, label }) => {
                 if (!active || !payload || !payload.length) return null;
+                const q = Number(label);
+                const side = q < 0 ? 'Bid' : q > 0 ? 'Ask' : 'Mid';
+                const rows = payload
+                  .map((p: any) => ({ id: p.dataKey as string, value: Number(p.value), color: p.stroke as string, m: metaById.get(p.dataKey) }))
+                  .filter((r) => r.m)
+                  .sort((a, b) => b.value - a.value);
                 return (
-                  <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
-                    <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">{Number(label).toFixed(3)}% from mid</p>
-                    {[...payload].reverse().map((p: any) => (
-                      <p key={p.dataKey} className="flex items-center gap-2 font-mono text-xs tabular-nums">
-                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.stroke }} />
-                        <span className="text-[var(--role-content-muted)]">{venues.find((v) => v.id === p.dataKey)?.label ?? p.dataKey}</span>
-                        <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.value)}</span>
-                      </p>
+                  <div className="min-w-[230px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2.5 shadow-[var(--shadow-lg)]">
+                    <p className="mb-2 text-[11px] font-medium text-[var(--role-content)]">{side} {Math.abs(q).toFixed(2)}% from mid</p>
+                    {rows.map((r) => (
+                      <div key={r.id} className="mb-1.5 last:mb-0">
+                        <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: r.color }} />
+                          <span className="text-[var(--role-content)]">{r.m!.label}</span>
+                          <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(r.value)}</span>
+                        </div>
+                        <p className="pl-3.5 text-[10px] text-[var(--role-content-subtle)]">Mid ${formatPrice(r.m!.mid)} · Spread {r.m!.spreadBps != null ? r.m!.spreadBps.toFixed(2) : '-'} bps</p>
+                      </div>
                     ))}
                   </div>
                 );
               }}
             />
             {drawOrder.map((v) => (
-              <Area key={v.id} type="stepAfter" dataKey={v.id} stroke={v.color} fill={`url(#dep-${v.id})`} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <Area key={v.id} type="stepAfter" dataKey={v.id} stroke={v.color} fill={`url(#dep-${v.id})`} strokeWidth={2} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} isAnimationActive={false} />
             ))}
           </AreaChart>
         </ResponsiveContainer>
@@ -1226,13 +1279,13 @@ export default function OrderBookPage() {
     if (!book) return [];
     const list: ActiveVenue[] = [{
       id: 'bulk', label: 'BULK', color: VENUE_COLOR.bulk,
-      bids: book.bids, asks: book.asks, mid: book.stats.mid ?? 0, takerBps: BULK_TAKER_BPS,
+      bids: book.bids, asks: book.asks, mid: book.stats.mid ?? 0, takerBps: BULK_TAKER_BPS, spreadBps: book.stats.spreadBps,
     }];
     for (const v of compare?.venues ?? []) {
       if (v.ok && v.bids && v.asks && v.stats?.mid) {
         list.push({
           id: v.id, label: v.label, color: VENUE_COLOR[v.id] ?? 'var(--coin-7)',
-          bids: v.bids, asks: v.asks, mid: v.stats.mid, takerBps: v.takerBps ?? 0,
+          bids: v.bids, asks: v.asks, mid: v.stats.mid, takerBps: v.takerBps ?? 0, spreadBps: v.stats.spreadBps,
         });
       }
     }
