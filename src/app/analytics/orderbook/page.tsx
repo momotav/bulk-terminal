@@ -45,6 +45,20 @@ function formatSize(sz: number): string {
   return sz.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
+// Round, evenly-spaced ticks from 0 to >= hi, aiming for ~`count` intervals of a
+// "nice" size (1/2/5 × 10ⁿ). The last tick is the domain max, so an axis can pin
+// its numeric domain to it and recharts won't regenerate its own labels.
+function niceTicks(lo: number, hi: number, count: number): number[] {
+  if (!(hi > lo)) return [lo];
+  const raw = (hi - lo) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = (raw / mag >= 5 ? 5 : raw / mag >= 2 ? 2 : 1) * mag;
+  const niceMax = Math.ceil(hi / step) * step;
+  const t: number[] = [];
+  for (let v = 0; v <= niceMax + step * 1e-6; v += step) t.push(Number(v.toFixed(10)));
+  return t;
+}
+
 function formatBps(bps: number | null | undefined): string {
   if (bps == null || !isFinite(bps)) return '-';
   return bps.toFixed(2);
@@ -546,16 +560,13 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
     ].sort((a, b) => a.notional - b.notional);
   }, [book, mid, metric]);
 
-  // Nice, sparse x ticks — recharts would otherwise label every level and smear.
-  const xTicks = useMemo(() => {
+  // Nice, sparse x ticks pinned to a numeric domain — recharts would otherwise
+  // label every level and smear them together along the axis.
+  const { xTicks, xDomain } = useMemo(() => {
     const hi = data.reduce((m, d) => Math.max(m, d.notional), 0);
-    if (hi <= 0) return undefined;
-    const raw = hi / 5;
-    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-    const step = (raw / mag >= 5 ? 5 : raw / mag >= 2 ? 2 : 1) * mag;
-    const t: number[] = [];
-    for (let v = 0; v <= hi * 1.001; v += step) t.push(v);
-    return t;
+    if (hi <= 0) return { xTicks: undefined, xDomain: [0, 'dataMax'] as [number, string] };
+    const t = niceTicks(0, hi, 5);
+    return { xTicks: t, xDomain: [0, t[t.length - 1]] as [number, number] };
   }, [data]);
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
@@ -588,7 +599,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
           <div className="flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">Not enough depth.</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 12, right: 8, bottom: 4, left: 4 }}>
+            <AreaChart data={data} margin={{ top: 12, right: 30, bottom: 4, left: 4 }}>
               <defs>
                 <linearGradient id="imp-buy" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={ASK} stopOpacity={0.22} />
@@ -599,7 +610,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
                   <stop offset="100%" stopColor={BID} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} ticks={xTicks} interval={0} minTickGap={24} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <XAxis dataKey="notional" type="number" domain={xDomain} allowDataOverflow ticks={xTicks} interval={0} minTickGap={24} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
               <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
               <Tooltip
                 cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
@@ -1122,11 +1133,12 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
     return all.sort((a, b) => (a.notional as number) - (b.notional as number));
   }, [venues, side, metric, logScale, xmax]);
 
-  // Explicit, nicely-spaced x ticks — otherwise recharts labels every data point
-  // (hundreds, across five deep books) and they collapse into a grey smear.
-  const xTicks = useMemo(() => {
+  // Explicit ticks + a numeric domain that matches them. Without a fixed numeric
+  // domain, recharts regenerates its own ticks (labelling every data point across
+  // five deep books) and they collapse into a grey smear along the axis.
+  const { xTicks, xDomain } = useMemo(() => {
     const ns = data.map((d) => d.notional as number).filter((n) => n > 0);
-    if (ns.length === 0) return undefined;
+    if (ns.length === 0) return { xTicks: undefined, xDomain: (logScale ? ['auto', 'auto'] : [0, 'dataMax']) as [number | string, number | string] };
     const lo = Math.min(...ns), hi = Math.max(...ns);
     if (logScale) {
       const t: number[] = [];
@@ -1134,15 +1146,35 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
         const v = Math.pow(10, e);
         if (v >= lo * 0.6 && v <= hi * 1.6) t.push(v);
       }
-      return t.length ? t : undefined;
+      return { xTicks: t.length ? t : undefined, xDomain: ['auto', 'auto'] as [string, string] };
     }
-    const raw = hi / 5;
-    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-    const step = (raw / mag >= 5 ? 5 : raw / mag >= 2 ? 2 : 1) * mag;
-    const t: number[] = [];
-    for (let v = 0; v <= hi * 1.001; v += step) t.push(v);
-    return t;
+    const t = niceTicks(0, hi, 5);
+    return { xTicks: t, xDomain: [0, t[t.length - 1]] as [number, number] };
   }, [data, logScale]);
+
+  // Same treatment for the y (bps) axis, so tick labels are uniformly formatted
+  // instead of a mix of "40", "15", "5.0", "0.00".
+  const { yTicks, yDomain, yFmt } = useMemo(() => {
+    let hi = 0, lo = Infinity;
+    for (const d of data) for (const v of venues) {
+      const y = d[v.id] as number | undefined;
+      if (typeof y === 'number' && isFinite(y)) { if (y > hi) hi = y; if (y > 0 && y < lo) lo = y; }
+    }
+    if (hi <= 0) return { yTicks: undefined, yDomain: (logScale ? ['auto', 'auto'] : [0, 'auto']) as [number | string, number | string], yFmt: (v: number) => v.toFixed(0) };
+    if (logScale) {
+      const t: number[] = [];
+      for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+        const v = Math.pow(10, e);
+        if (v >= lo * 0.5 && v <= hi * 2) t.push(v);
+      }
+      const fmt = (v: number) => (v >= 1 ? v.toFixed(0) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2));
+      return { yTicks: t.length ? t : undefined, yDomain: ['auto', 'auto'] as [string, string], yFmt: fmt };
+    }
+    const t = niceTicks(0, hi, 4);
+    const step = t.length > 1 ? t[1] - t[0] : t[0];
+    const dec = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    return { yTicks: t, yDomain: [0, t[t.length - 1]] as [number, number], yFmt: (v: number) => v.toFixed(dec) };
+  }, [data, venues, logScale]);
 
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
@@ -1208,16 +1240,17 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
 
       <div className="min-h-0 flex-1 px-2 py-2">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+          <LineChart data={data} margin={{ top: 8, right: 30, bottom: 4, left: 4 }}>
             <XAxis dataKey="notional" type="number"
               scale={logScale ? 'log' : 'linear'}
-              domain={logScale ? ['auto', 'auto'] : [0, 'dataMax']}
+              domain={xDomain} allowDataOverflow
               ticks={xTicks} interval={0} minTickGap={24}
               tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
             <YAxis
               scale={logScale ? 'log' : 'linear'}
-              domain={logScale ? ['auto', 'auto'] : [0, 'auto']}
-              tickFormatter={(v) => (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0))}
+              domain={yDomain} allowDataOverflow
+              ticks={yTicks} interval={0}
+              tickFormatter={yFmt}
               tick={axisTick} axisLine={false} tickLine={false} width={44} unit=" bps" />
             <Tooltip
               cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
