@@ -546,6 +546,18 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
     ].sort((a, b) => a.notional - b.notional);
   }, [book, mid, metric]);
 
+  // Nice, sparse x ticks — recharts would otherwise label every level and smear.
+  const xTicks = useMemo(() => {
+    const hi = data.reduce((m, d) => Math.max(m, d.notional), 0);
+    if (hi <= 0) return undefined;
+    const raw = hi / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = (raw / mag >= 5 ? 5 : raw / mag >= 2 ? 2 : 1) * mag;
+    const t: number[] = [];
+    for (let v = 0; v <= hi * 1.001; v += step) t.push(v);
+    return t;
+  }, [data]);
+
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
   return (
@@ -587,7 +599,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
                   <stop offset="100%" stopColor={BID} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <XAxis dataKey="notional" type="number" domain={[0, 'dataMax']} ticks={xTicks} interval={0} minTickGap={24} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
               <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
               <Tooltip
                 cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
@@ -1110,6 +1122,28 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
     return all.sort((a, b) => (a.notional as number) - (b.notional as number));
   }, [venues, side, metric, logScale, xmax]);
 
+  // Explicit, nicely-spaced x ticks — otherwise recharts labels every data point
+  // (hundreds, across five deep books) and they collapse into a grey smear.
+  const xTicks = useMemo(() => {
+    const ns = data.map((d) => d.notional as number).filter((n) => n > 0);
+    if (ns.length === 0) return undefined;
+    const lo = Math.min(...ns), hi = Math.max(...ns);
+    if (logScale) {
+      const t: number[] = [];
+      for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+        const v = Math.pow(10, e);
+        if (v >= lo * 0.6 && v <= hi * 1.6) t.push(v);
+      }
+      return t.length ? t : undefined;
+    }
+    const raw = hi / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = (raw / mag >= 5 ? 5 : raw / mag >= 2 ? 2 : 1) * mag;
+    const t: number[] = [];
+    for (let v = 0; v <= hi * 1.001; v += step) t.push(v);
+    return t;
+  }, [data, logScale]);
+
   const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
 
   return (
@@ -1178,6 +1212,7 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
             <XAxis dataKey="notional" type="number"
               scale={logScale ? 'log' : 'linear'}
               domain={logScale ? ['auto', 'auto'] : [0, 'dataMax']}
+              ticks={xTicks} interval={0} minTickGap={24}
               tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
             <YAxis
               scale={logScale ? 'log' : 'linear'}
