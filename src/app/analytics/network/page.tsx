@@ -324,7 +324,7 @@ export default function NetworkPage() {
   const hasLive = (liveHist?.length ?? 0) > 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
+    <div className="w-full p-4 md:p-6 space-y-4 md:space-y-6">
       <div className="flex items-center gap-3">
         <h1 className="page-title text-[var(--text-primary)]">Network</h1>
         <span

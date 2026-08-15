@@ -643,7 +643,7 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
   const fullNotional = useMemo(() => levels.reduce((s, l) => s + l.px * l.sz, 0), [levels]);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
-    <div className="flex items-baseline justify-between border-b border-[var(--role-line-subtle)] py-2 last:border-0">
+    <div className="flex items-baseline justify-between border-b border-[var(--role-line-subtle)] py-1.5 last:border-0">
       <span className="text-xs text-[var(--role-content-muted)]">{label}</span>
       <span className="font-mono text-sm font-medium tabular-nums" style={{ color: accent ?? 'var(--role-content)' }}>{value}</span>
     </div>
@@ -662,7 +662,7 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
         {/* Size input + presets */}
         <div>
           <label className="mb-1.5 block text-[11px] text-[var(--role-content-subtle)]">Order size (USD)</label>
@@ -725,10 +725,10 @@ const OVERLAY_VENUES: { id: string; label: string; available: boolean }[] = [
 // warm/monochrome palette — and they roughly echo each venue's brand.
 const VENUE_COLOR: Record<string, string> = {
   bulk: 'var(--role-content)', // theme-aware high-contrast — the reference line, never clashes
-  hyperliquid: '#4ade80',      // green
-  binance: '#f0b90b',          // gold
-  bybit: '#5b8def',            // blue
-  lighter: '#c084fc',          // purple
+  hyperliquid: '#6fae8e',      // muted sage green
+  binance: '#c99a52',          // muted ochre (harmonizes with the warm palette)
+  bybit: '#7f97c4',            // dusty blue
+  lighter: '#a98cc0',          // muted mauve
 };
 
 type ActiveVenue = {
@@ -1294,7 +1294,7 @@ export default function OrderBookPage() {
   const multi = comparing && activeVenues.length > 1;
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
+    <div className="w-full space-y-4 p-4 md:p-6">
       {/* Header */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
@@ -1354,7 +1354,7 @@ export default function OrderBookPage() {
 
       {/* Execution tools: price-impact curve + size simulator */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="h-[340px] lg:col-span-7">
+        <div className="h-[300px] lg:col-span-7 lg:h-[392px]">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
           ) : multi ? (
@@ -1363,7 +1363,7 @@ export default function OrderBookPage() {
             <ImpactCurvePanel book={book} mid={stats?.mid ?? null} />
           )}
         </div>
-        <div className="h-[340px] lg:col-span-5">
+        <div className="h-auto lg:col-span-5 lg:h-[392px]">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
           ) : (

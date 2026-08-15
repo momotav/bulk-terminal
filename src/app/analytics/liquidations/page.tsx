@@ -769,7 +769,7 @@ export default function LiquidationsPage() {
   }, [featuredFilter, network]);
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
+    <div className="w-full p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
       <h1 className="page-title text-[var(--text-primary)]">Liquidations</h1>
 
