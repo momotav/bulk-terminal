@@ -32,7 +32,10 @@ type Market = string;
 const BID = 'var(--pos)';
 const ASK = 'var(--neg)';
 
-const REFRESH_INTERVAL_MS = 3000;
+// Matches the backend order-book cache TTL. The backend coalesces upstream
+// requests, so polling here stays cheap regardless of how many users are on the
+// page — no need to poll faster than the cache refreshes.
+const REFRESH_INTERVAL_MS = 5000;
 
 function formatPrice(px: number): string {
   let decimals = 2;
@@ -511,9 +514,20 @@ function OrderBookPanel({
           <h2 className="panel-title t-h2 truncate">Order book</h2>
           <p className="t-caption truncate">{book.symbol}</p>
         </div>
-        <span className="text-[11px] font-medium" style={{ color: imbColor }}>
-          {imbLabel} {imb >= 0 ? '+' : ''}{(imb * 100).toFixed(1)}%
-        </span>
+        <div className="flex items-center gap-2.5">
+          {book.stale && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-medium text-[var(--role-content-muted)]"
+              title="Live feed momentarily unavailable — showing the last received book."
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              Delayed
+            </span>
+          )}
+          <span className="text-[11px] font-medium" style={{ color: imbColor }}>
+            {imbLabel} {imb >= 0 ? '+' : ''}{(imb * 100).toFixed(1)}%
+          </span>
+        </div>
       </div>
 
       {/* Imbalance ratio bar. */}

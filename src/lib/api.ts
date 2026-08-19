@@ -345,6 +345,10 @@ export interface OrderbookSnapshot {
   bids: OrderbookLevel[];
   asks: OrderbookLevel[];
   stats: OrderbookStats;
+  // Present and true when the backend served the last-known-good book because
+  // the live upstream was momentarily unavailable (e.g. BULK rate-limiting).
+  stale?: boolean;
+  staleAgeMs?: number;
 }
 
 // One venue in the cross-exchange comparison (/api/analytics/orderbook-compare).
