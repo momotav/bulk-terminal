@@ -8,6 +8,9 @@
 // Keep this list in sync with backend/src/services/systemWallets.ts.
 const SYSTEM_WALLETS = new Set<string>([
   '9J8TUdEWrrcADK913r1Cs7DdqX63VdVU88imfDzT1ypt',
+  // Liquidation engine — the protocol account that takes over every liquidated
+  // position (appears as the counterparty on every liquidation fill).
+  '5rXNKZnrV88vPbwWKDkUCsYUvNDCChY2Gzdj4MJDqvaa',
 ]);
 
 export function isSystemWallet(address: string | null | undefined): boolean {
