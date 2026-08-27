@@ -277,6 +277,11 @@ export interface WalletData {
       unrealizedPnl: number;
       leverage: number;
       liquidationPrice: number;
+      /** Maintenance-margin requirement for this position, in USD (BULK). */
+      maintenanceMargin?: number;
+      /** Share of the account's total portfolio risk, as a fraction 0–1 (BULK).
+       *  Can be out of range for degenerate system accounts — guard on render. */
+      riskAllocation?: number;
     }>;
   } | null;
   markPrices: Record<string, number>;

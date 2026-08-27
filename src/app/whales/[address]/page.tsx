@@ -2874,6 +2874,8 @@ export default function WalletPage() {
                           <th className="text-right font-medium px-4 py-2.5">PnL</th>
                           <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
                           <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Liq</th>
+                          <th className="text-right font-medium px-4 py-2.5 hidden xl:table-cell" title="Maintenance-margin requirement for this position (BULK portfolio margin)">Maint.</th>
+                          <th className="text-right font-medium px-4 py-2.5 hidden xl:table-cell" title="Share of the account's total portfolio risk (BULK)">Risk</th>
                           <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Opened</th>
                           <th className="text-right font-medium px-4 py-2.5 w-px"></th>
                         </tr>
@@ -2955,6 +2957,21 @@ export default function WalletPage() {
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono tabular-nums text-bulk-red hidden lg:table-cell">
                                 ${formatNumber(pos.liquidationPrice, 4)}
+                              </td>
+                              {/* Maintenance margin (USD) — documented BULK
+                                  portfolio-margin field. */}
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)] hidden xl:table-cell">
+                                {typeof pos.maintenanceMargin === 'number' && pos.maintenanceMargin > 0
+                                  ? `$${formatCompact(pos.maintenanceMargin)}`
+                                  : '-'}
+                              </td>
+                              {/* Risk allocation — documented as a 0–1 fraction
+                                  of portfolio risk. Guard against out-of-range
+                                  values (seen on degenerate system accounts). */}
+                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)] hidden xl:table-cell">
+                                {typeof pos.riskAllocation === 'number' && pos.riskAllocation >= 0 && pos.riskAllocation <= 1
+                                  ? `${(pos.riskAllocation * 100).toFixed(1)}%`
+                                  : '-'}
                               </td>
                               <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap hidden lg:table-cell">
                                 {ago !== null ? `${formatDuration(ago)} ago` : '-'}
