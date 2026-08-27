@@ -365,7 +365,7 @@ export default function NetworkPage() {
 
       {/* Live throughput — accumulates while the page is open */}
       <ResizableChart storageKey="network:live-throughput" defaultHeight={288}>
-      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Live Throughput</h2>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
@@ -407,7 +407,7 @@ export default function NetworkPage() {
       </ResizableChart>
 
       {/* Activity heatmap — avg TPS by weekday × hour */}
-      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Activity Heatmap</h2>
@@ -535,7 +535,7 @@ export default function NetworkPage() {
 
       {/* TPS vs Block Time — does the chain slow down under load? */}
       <ResizableChart storageKey="network:load-scatter" defaultHeight={256}>
-      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Does load slow the chain?</h2>
           <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
@@ -570,7 +570,7 @@ export default function NetworkPage() {
 
       {/* Recent block activity */}
       <ResizableChart storageKey="network:recent-blocks" defaultHeight={256}>
-      <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+      <div className="bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Recent Block Activity</h2>
           <span className="text-[11px] text-[var(--text-tertiary)]">last {blockBars.length} blocks</span>
@@ -615,7 +615,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
+    <div className={`bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
         {right}
@@ -683,7 +683,7 @@ function ByTypePanel({
   const labelFor = (k: string) => CATEGORIES.find((c) => c.key === k)?.label ?? k;
 
   return (
-    <div className={`bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
+    <div className={`bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6 h-full flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${isDragging ? 'blur-[1px] opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
         <RangeToggle value={range} onChange={onRange} />
@@ -752,7 +752,7 @@ function ActionMixPanel({
     r >= 1000 ? formatCompact(r) : r >= 10 ? String(Math.round(r)) : r.toFixed(1);
 
   return (
-    <div className="bg-transparent rounded-xl border border-[var(--border-color)] p-4 md:p-6">
+    <div className="bg-[var(--role-surface)] rounded-xl border border-[var(--border-color)] p-4 md:p-6">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Average Action Mix</h2>
         <RangeToggle value={range} onChange={onRange} />

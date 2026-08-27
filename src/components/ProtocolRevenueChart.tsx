@@ -240,7 +240,7 @@ export function ProtocolRevenueChart() {
   }, [displayData.length, activeBarCount]);
 
   return (
-    <div className="bg-transparent rounded-lg border border-[var(--border-color)] p-4">
+    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
       {/* Header: title left, timeframe + toggles stacked on the right */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <h3 className="text-lg font-semibold text-[var(--text-primary)] pt-1">Fees</h3>

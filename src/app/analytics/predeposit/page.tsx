@@ -67,7 +67,7 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 
 // Wrapper card for the secondary charts in the 2-col grid.
 function ChartCard({ title, subtitle, children, isDragging }: { title: string; subtitle?: string; children: React.ReactNode; isDragging?: boolean }) {
   return (
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 h-full flex flex-col min-w-0 overflow-hidden">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4 h-full flex flex-col min-w-0 overflow-hidden">
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate">{title}</h3>
         {subtitle && <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5 truncate">{subtitle}</p>}
@@ -87,7 +87,7 @@ function Empty({ loading }: { loading?: boolean }) {
 
 function ConcentrationCard({ label, pct, usd }: { label: string; pct: number; usd: number }) {
   return (
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
       <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-[0.12em] font-medium mb-1.5">{label}</div>
       <div className="flex items-baseline gap-2">
         <span className="text-2xl font-bold tabular-nums text-[var(--accent)]">{pct.toFixed(1)}%</span>
@@ -110,7 +110,7 @@ function DepositHeatmap({ data, loading }: { data: HeatCell[]; loading?: boolean
   const [hover, setHover] = useState<{ dow: number; hour: number; x: number; y: number } | null>(null);
   const hoverCell = hover ? lookup.get(`${hover.dow}-${hover.hour}`) : null;
   return (
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4 relative">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4 relative">
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Deposit Heatmap</h3>
       <p className="text-[11px] text-[var(--text-tertiary)] mb-4">When deposits happen - day of week × hour (UTC)</p>
       {data.length === 0 ? (
@@ -300,7 +300,7 @@ export default function PreDepositPage() {
       </div>
 
       {/* TVL history chart */}
-      <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+      <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">TVL History</h2>
           <div className="flex gap-1">
@@ -600,7 +600,7 @@ export default function PreDepositPage() {
       {/* Distribution + Leaderboard side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
         {/* Distribution buckets */}
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Deposit Distribution</h2>
           <div className="space-y-2.5">
             {dist.length === 0 ? (
@@ -627,7 +627,7 @@ export default function PreDepositPage() {
         </div>
 
         {/* Depositor leaderboard — the wallet-linked differentiator */}
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Top Depositors</h2>
             <div className="flex items-center gap-3">

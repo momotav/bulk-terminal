@@ -61,7 +61,7 @@
      EVERY palette. A palette only recolours content (functional, accent,
      shades, coins, info) — it never touches the shell. */
   --p-bg: 20 19 16;          /* #141310 page */
-  --p-surface: 27 26 20;     /* #1B1A14 panels */
+  --p-surface: 27 26 19;     /* #1B1A13 panels / charts / cards */
   --p-raise: 84 74 76;       /* #544A4C hover / secondary */
   --p-text: 255 254 239;     /* #FFFEEF primary text */
   --p-text2: 198 182 186;    /* secondary text */

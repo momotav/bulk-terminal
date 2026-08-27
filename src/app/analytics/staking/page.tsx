@@ -153,7 +153,7 @@ export default function StakingPage() {
 
       {/* Native vs Liquid share */}
       {totalTvl > 0 && (
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Native vs Liquid Share</h2>
             <span className="text-xs text-[var(--text-tertiary)] tabular-nums">
@@ -173,7 +173,7 @@ export default function StakingPage() {
 
       {/* Combined TVL over time */}
       <ResizableChart storageKey="staking:tvl-over-time" defaultHeight={320}>
-      <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+      <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">TVL Over Time · Native vs Liquid</h2>
         </div>
@@ -270,7 +270,7 @@ export default function StakingPage() {
 
       {/* Validator Distribution — where the pool stakes its SOL */}
       {validators.length > 0 && (
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-[var(--accent)]" />
@@ -302,7 +302,7 @@ export default function StakingPage() {
       {holders && holders.holders > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
           {holders.concentration.map((c) => (
-            <div key={c.count} className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+            <div key={c.count} className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-[0.12em] font-medium mb-1.5">Top {c.count} {c.count === 1 ? 'Holder' : 'Holders'}</div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold tabular-nums text-[var(--accent)]">{(c.share * 100).toFixed(1)}%</span>
@@ -318,7 +318,7 @@ export default function StakingPage() {
 
       {/* Wallet distribution (current holders) */}
       {holders && holders.distribution.some((d) => d.holders > 0) && (
-        <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+        <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Wallet Distribution</h2>
             <span className="text-xs text-[var(--text-tertiary)]">{holders.holders.toLocaleString()} holders</span>
@@ -382,7 +382,7 @@ function FlowChart({ title, yLabel, data, dataKey, unit, bar, loading }: {
 }) {
   return (
     <ResizableChart storageKey={`staking:${title}`} defaultHeight={300}>
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
       </div>
@@ -435,7 +435,7 @@ function TimeChart({ title, yLabel, data, dataKey, unit, range, setRange, loadin
 
   return (
     <ResizableChart storageKey={`staking:${title}`} defaultHeight={320}>
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
         <div className="flex gap-1">
@@ -498,7 +498,7 @@ function MintBurnChart({ flows, loading }: {
   const data = useMemo(() => flows.map((f) => ({ t: f.t, mint: f.mint, burnNeg: -f.burn })), [flows]);
   return (
     <ResizableChart storageKey="staking:mint-burn" defaultHeight={300}>
-    <div className="bg-transparent border border-[var(--border-color)] rounded-lg p-4">
+    <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">Stakes vs Unstakes per Day</h2>
       </div>

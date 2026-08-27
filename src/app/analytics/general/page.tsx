@@ -485,7 +485,7 @@ const ChartCard = ({
     // header wraps into more rows than the other at narrow widths.
     // min-w-0 + overflow-hidden: at small widths nothing (titles, pills,
     // timeframe selector) can bleed over the card edge into the neighbor.
-    "bg-transparent rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300 h-full flex flex-col min-w-0 overflow-hidden",
+    "bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300 h-full flex flex-col min-w-0 overflow-hidden",
     loading && "opacity-60"
   )}>
     {/* Header layout (matches Hyperliquid):
