@@ -56,7 +56,7 @@ export function FeeTiersWidget() {
   }, [network]);
 
   return (
-    <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
       <div className="flex items-center gap-2 mb-4">
         <Percent className="w-5 h-5 text-[var(--accent-primary)]" />
         <h3 className="text-lg font-semibold text-[var(--text-primary)]">Fee Tiers</h3>

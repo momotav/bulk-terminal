@@ -463,13 +463,13 @@ export default function RiskPage() {
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-[350px] animate-pulse" />
+              <div key={i} className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[350px] animate-pulse" />
             ))}
           </div>
         ) : (
           <div className="space-y-6">
             {/* Market Regime Section */}
-            <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-6">
+            <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-6">
               <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -592,7 +592,7 @@ export default function RiskPage() {
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>
               {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
+              <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -677,7 +677,7 @@ export default function RiskPage() {
               </div>
 
               {/* Volatility History. */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
+              <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -767,7 +767,7 @@ export default function RiskPage() {
                 panels are always in sync. */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Volatility Heatmap. */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -829,7 +829,7 @@ export default function RiskPage() {
                   panel updates both. When many coins are selected, cell values
                   are hidden by default and only revealed on hover, so the
                   matrix doesn't overflow the card. */}
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-[var(--accent-primary)]" />

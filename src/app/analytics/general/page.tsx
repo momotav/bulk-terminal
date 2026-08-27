@@ -1269,7 +1269,7 @@ export default function AnalyticsPage() {
         {loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4 h-[420px] animate-pulse" />
+              <div key={i} className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[420px] animate-pulse" />
             ))}
           </div>
         ) : (
@@ -1946,7 +1946,7 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+              <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Top Users By Volume</h3>
                 
                 {topUsers.length > 0 ? (

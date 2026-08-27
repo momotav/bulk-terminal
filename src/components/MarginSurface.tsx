@@ -304,7 +304,7 @@ export function MarginSurface() {
   const liveDecayActive = mode === 'live' && isViewingLiveRegime && regimeDt !== null;
 
   return (
-    <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-color)] p-4">
+    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
       {/* Header: title left, mode + side + regime selectors on the right. */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2">
