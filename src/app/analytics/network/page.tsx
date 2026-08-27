@@ -282,6 +282,9 @@ export default function NetworkPage() {
   // Derived values.
   const actionsPerTx = tp && tp.tps > 0 ? tp.aps / tp.tps : null;
   const statusOk = (tp?.status || '').toLowerCase().includes('oper') || (tp?.status || '').toLowerCase() === 'live';
+  // Feed is reporting but not healthy (disconnected/stale). Live values are
+  // meaningless in that state, so we blank them and show an explanatory banner.
+  const feedDown = tp != null && !statusOk;
 
   const opsByType = useMemo(() => (actionHist ? pivotByType(actionHist, 'ops') : null), [actionHist]);
   const txByType = useMemo(() => (actionHist ? pivotByType(actionHist, 'txs') : null), [actionHist]);
@@ -334,20 +337,30 @@ export default function NetworkPage() {
         />
       </div>
 
+      {feedDown && (
+        <div className="flex items-start gap-3 rounded-xl border border-[var(--neg)]/30 bg-[var(--neg)]/5 px-4 py-3">
+          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--neg)]" />
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">Live network feed temporarily unavailable</p>
+            <p className="mt-0.5 text-xs text-[var(--text-secondary)]">The upstream block/throughput stream is disconnected, so live TPS and the last-hour charts are paused. The historical metrics below are unaffected.</p>
+          </div>
+        </div>
+      )}
+
       {/* KPI strip — live throughput + today's peak, one row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
         <StatCard size="compact" label="Transactions / sec" loading={!tp}
-          value={tp ? formatNumber(tp.tps, tp.tps < 100 ? 1 : 0) : '-'} valueColor="var(--pos)" />
+          value={tp && !feedDown ? formatNumber(tp.tps, tp.tps < 100 ? 1 : 0) : '-'} valueColor="var(--pos)" />
         <StatCard size="compact" label="Operations / sec" loading={!tp}
-          value={tp ? formatCompact(tp.aps) : '-'} />
+          value={tp && !feedDown ? formatCompact(tp.aps) : '-'} />
         <StatCard size="compact" label="Block time" unit="ms" loading={!tp}
-          value={tp?.blockTimeMs != null ? formatNumber(tp.blockTimeMs, 1) : '-'} />
+          value={tp?.blockTimeMs != null && !feedDown ? formatNumber(tp.blockTimeMs, 1) : '-'} />
         <StatCard size="compact" label="Actions / tx" loading={!tp}
           value={actionsPerTx != null ? formatNumber(actionsPerTx, 1) : '-'} />
         <StatCard size="compact" label="Peak TPS today" loading={!stats}
           value={stats?.peak_tps != null ? formatNumber(stats.peak_tps, 0) : '-'} />
         <StatCard size="compact" label="Latest round" loading={!tp}
-          value={tp?.latestRound != null ? tp.latestRound.toLocaleString() : '-'} />
+          value={tp?.latestRound != null && !feedDown ? tp.latestRound.toLocaleString() : '-'} />
       </div>
 
       {/* Live throughput — accumulates while the page is open */}

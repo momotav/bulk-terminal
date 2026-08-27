@@ -163,6 +163,7 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
   }, [network]);
 
   const live = data?.status === 'live';
+  const down = data?.status === 'disconnected';
   const statusColor = live ? 'var(--bids)' : data?.status === 'stale' ? 'var(--accent)' : 'var(--asks)';
   const statusLabel = live ? 'Live' : data?.status === 'stale' ? 'Stale' : 'Down';
 
@@ -232,17 +233,25 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
       {/* Current value of the selected metric. */}
       <div className="px-4 pt-3">
         <p className="font-mono text-[26px] font-bold leading-none tracking-tight tabular-nums text-[var(--role-content)]">
-          {loading ? '--' : <AnimatedNumber value={m.value} format={formatRate} />}
+          {loading || down ? '--' : <AnimatedNumber value={m.value} format={formatRate} />}
           <span className="ml-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">
             {m.label}
           </span>
         </p>
-        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{m.sub}</p>
+        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{down ? 'feed unavailable' : m.sub}</p>
       </div>
 
-      {/* Live chart, filling the remaining height. */}
+      {/* Live chart, filling the remaining height. When the upstream feed is
+          down there's nothing to plot — say so rather than showing a flat
+          zero line that reads as broken. */}
       <div className="min-h-0 flex-1 px-1 pb-1 pt-3">
-        <LiveChart values={m.hist} color={chartColor} />
+        {down ? (
+          <div className="flex h-full w-full items-center justify-center px-4 text-center text-[11px] text-[var(--role-content-subtle)]">
+            Live network feed unavailable
+          </div>
+        ) : (
+          <LiveChart values={m.hist} color={chartColor} />
+        )}
       </div>
 
       {/* Context stats — the other telemetry that doesn't chart well. */}
