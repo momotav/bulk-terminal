@@ -462,7 +462,7 @@ function LiquidationTreemap({
           something stable to work with; width is 100% of the parent card. */}
       <div
         ref={containerRef}
-        className="relative w-full h-80 md:h-[400px] rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-base)]"
+        className="relative w-full h-80 md:h-[400px] rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--role-surface)]"
         onMouseLeave={() => setHoveredItem(null)}
       >
         {rects.map((rect) => {
