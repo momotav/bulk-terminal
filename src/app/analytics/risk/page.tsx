@@ -49,9 +49,14 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
   const { label, color } = getRegimeLabel(value);
   const percentage = ((value + 12) / 24) * 100;
   
+  const coinColor = getCoinColor(symbol);
+
   return (
     <div className="flex flex-col items-center p-4 bg-[var(--bg-muted)] rounded-lg">
-      <p className="text-sm text-[var(--text-tertiary)] mb-2">{symbol}</p>
+      <div className="mb-2 flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coinColor }} />
+        <p className="text-sm font-medium" style={{ color: coinColor }}>{symbol}</p>
+      </div>
       <div className="relative w-32 h-16 overflow-hidden">
         <div className="absolute inset-0">
           <svg viewBox="0 0 100 50" className="w-full h-full">
@@ -65,7 +70,8 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
             <path
               d="M 10 50 A 40 40 0 0 1 90 50"
               fill="none"
-              stroke="var(--border-color)"
+              stroke={coinColor}
+              strokeOpacity={0.2}
               strokeWidth="8"
               strokeLinecap="round"
             />
