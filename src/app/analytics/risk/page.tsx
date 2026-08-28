@@ -53,11 +53,8 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
 
   return (
     <div
-      className="flex flex-col items-center p-4 rounded-lg border"
-      style={{
-        background: `color-mix(in srgb, ${coinColor} 10%, var(--bg-muted))`,
-        borderColor: `color-mix(in srgb, ${coinColor} 22%, transparent)`,
-      }}
+      className="flex flex-col items-center p-4 rounded-lg"
+      style={{ backgroundColor: 'rgb(var(--p-inset))' }}
     >
       <div className="mb-2 flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coinColor }} />
@@ -501,7 +498,7 @@ export default function RiskPage() {
               {regimeData ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div className="col-span-1 flex flex-col items-center justify-center p-4 bg-[var(--bg-muted)] rounded-lg">
+                    <div className="col-span-1 flex flex-col items-center justify-center p-4 rounded-lg" style={{ backgroundColor: 'rgb(var(--p-inset))' }}>
                       <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
                       <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
                         {regimeData.aggregateRegime > 0 ? '+' : ''}{regimeData.aggregateRegime.toFixed(1)}

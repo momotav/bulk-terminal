@@ -62,6 +62,7 @@
      shades, coins, info) — it never touches the shell. */
   --p-bg: 20 19 16;          /* #141310 page */
   --p-surface: 27 26 19;     /* #1B1A13 panels / charts / cards */
+  --p-inset: 18 17 15;       /* #12110F recessed wells inside a panel (gauges) */
   --p-raise: 84 74 76;       /* #544A4C hover / secondary */
   --p-text: 255 254 239;     /* #FFFEEF primary text */
   --p-text2: 198 182 186;    /* secondary text */
@@ -253,6 +254,7 @@
 .light, [data-theme="light"] {
   --p-bg: 237 236 227;       /* #EDECE3 page */
   --p-surface: 249 248 237;  /* #F9F8ED panels */
+  --p-inset: 228 227 216;    /* #E4E3D8 recessed wells (a shade below the light page) */
   --p-raise: 198 182 186;    /* #C6B6BA hover / secondary */
   --p-text: 27 26 20;        /* #1B1A14 primary text */
   --p-text2: 115 106 108;
