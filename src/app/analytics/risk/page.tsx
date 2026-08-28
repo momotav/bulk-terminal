@@ -52,7 +52,13 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
   const coinColor = getCoinColor(symbol);
 
   return (
-    <div className="flex flex-col items-center p-4 bg-[var(--bg-muted)] rounded-lg">
+    <div
+      className="flex flex-col items-center p-4 rounded-lg border"
+      style={{
+        background: `color-mix(in srgb, ${coinColor} 10%, var(--bg-muted))`,
+        borderColor: `color-mix(in srgb, ${coinColor} 22%, transparent)`,
+      }}
+    >
       <div className="mb-2 flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coinColor }} />
         <p className="text-sm font-medium" style={{ color: coinColor }}>{symbol}</p>
@@ -70,8 +76,7 @@ const RegimeGauge = ({ value, symbol }: { value: number; symbol: string }) => {
             <path
               d="M 10 50 A 40 40 0 0 1 90 50"
               fill="none"
-              stroke={coinColor}
-              strokeOpacity={0.2}
+              stroke="var(--border-color)"
               strokeWidth="8"
               strokeLinecap="round"
             />
