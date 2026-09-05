@@ -25,10 +25,10 @@ const TONE: Record<NetworkId, { dot: string; text: string }> = {
   devnet: { dot: 'bg-amber-400', text: 'text-amber-400' },
 };
 
-// Networks offered in the dropdown. Testnet ("Paper Trading" competition) is no
-// longer surfaced now that BULK is on mainnet — it stays reachable via ?net=testnet
-// for debugging, but the UI is mainnet-first with devnet kept for the dev.
-const MENU_NETWORKS: NetworkId[] = ['mainnet', 'devnet'];
+// The site is mainnet-only. Testnet/devnet stay reachable via ?net=… for
+// debugging, but are not surfaced in the UI. With a single entry the switcher
+// renders as a static badge (no dropdown).
+const MENU_NETWORKS: NetworkId[] = ['mainnet'];
 
 export function NetworkSwitcher() {
   const { network, setNetwork } = useCurrentNetwork();
@@ -48,13 +48,15 @@ export function NetworkSwitcher() {
   }, [open]);
 
   const tone = TONE[network];
+  // With a single network the switcher is a static badge (no dropdown).
+  const hasMenu = MENU_NETWORKS.length > 1;
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 h-9 px-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] hover:bg-[var(--bg-secondary-20)] transition-colors"
+        onClick={() => hasMenu && setOpen((v) => !v)}
+        className={`flex items-center gap-2 h-9 px-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] transition-colors ${hasMenu ? 'hover:bg-[var(--bg-secondary-20)] cursor-pointer' : 'cursor-default'}`}
         title={`Network: ${NETWORK_LABELS[network]}`}
       >
         <Globe className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
@@ -62,10 +64,10 @@ export function NetworkSwitcher() {
           {NETWORK_LABELS[network]}
         </span>
         <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-        <ChevronDown className="w-3 h-3 text-[var(--text-tertiary)]" />
+        {hasMenu && <ChevronDown className="w-3 h-3 text-[var(--text-tertiary)]" />}
       </button>
 
-      {open && (
+      {open && hasMenu && (
         <div className="absolute right-0 mt-1.5 w-44 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-md shadow-lg overflow-hidden z-50">
           {MENU_NETWORKS.map((id) => {
             const optionTone = TONE[id];
