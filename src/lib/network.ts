@@ -28,20 +28,26 @@
 // (which doesn't have access to hooks). React components use the
 // `useCurrentNetwork()` hook in `hooks/useCurrentNetwork.ts`.
 
-export type NetworkId = 'testnet' | 'devnet';
+export type NetworkId = 'mainnet' | 'testnet' | 'devnet';
 
-export const DEFAULT_NETWORK: NetworkId = 'testnet';
+// BULK is live on mainnet (v1.0.19). Mainnet is the default and the network the
+// site tracks; testnet (the old Paper Trading competition) stays reachable via
+// ?net=testnet for debugging but is no longer surfaced in the UI.
+export const DEFAULT_NETWORK: NetworkId = 'mainnet';
 
-const LS_KEY = 'bulkstats:network';
+// v2: bumped for the mainnet cutover so anyone with an old stored 'testnet'
+// value starts fresh on the new mainnet default instead of sticking on testnet.
+const LS_KEY = 'bulkstats:network:v2';
 const CHANGE_EVENT = 'bulkstats:network-changed';
 
 export const NETWORK_LABELS: Record<NetworkId, string> = {
+  mainnet: 'Mainnet',
   testnet: 'Paper Trading Testnet',
   devnet: 'Devnet',
 };
 
 function isValidNetwork(s: unknown): s is NetworkId {
-  return s === 'testnet' || s === 'devnet';
+  return s === 'mainnet' || s === 'testnet' || s === 'devnet';
 }
 
 // Returns the active network. Checks URL param first, then

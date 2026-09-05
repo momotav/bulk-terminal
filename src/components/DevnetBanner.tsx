@@ -16,7 +16,9 @@ import { NETWORK_LABELS } from '@/lib/network';
 export function DevnetBanner() {
   const { network, setNetwork } = useCurrentNetwork();
 
-  if (network === 'testnet') return null;
+  // Mainnet is the production network — no banner. Any non-mainnet view
+  // (testnet/devnet) shows the reminder that it isn't the live network.
+  if (network === 'mainnet') return null;
 
   return (
     <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-300">

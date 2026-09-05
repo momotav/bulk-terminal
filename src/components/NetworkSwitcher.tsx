@@ -20,9 +20,15 @@ import { NETWORK_LABELS, type NetworkId } from '@/lib/network';
 // because users SHOULD notice they're not on the public testnet.
 // they're not on the production network.
 const TONE: Record<NetworkId, { dot: string; text: string }> = {
-  testnet: { dot: 'bg-bulk-green', text: 'text-[var(--text-primary)]' },
+  mainnet: { dot: 'bg-bulk-green', text: 'text-[var(--text-primary)]' },
+  testnet: { dot: 'bg-amber-400', text: 'text-amber-400' },
   devnet: { dot: 'bg-amber-400', text: 'text-amber-400' },
 };
+
+// Networks offered in the dropdown. Testnet ("Paper Trading" competition) is no
+// longer surfaced now that BULK is on mainnet — it stays reachable via ?net=testnet
+// for debugging, but the UI is mainnet-first with devnet kept for the dev.
+const MENU_NETWORKS: NetworkId[] = ['mainnet', 'devnet'];
 
 export function NetworkSwitcher() {
   const { network, setNetwork } = useCurrentNetwork();
@@ -61,7 +67,7 @@ export function NetworkSwitcher() {
 
       {open && (
         <div className="absolute right-0 mt-1.5 w-44 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-md shadow-lg overflow-hidden z-50">
-          {(Object.keys(NETWORK_LABELS) as NetworkId[]).map((id) => {
+          {MENU_NETWORKS.map((id) => {
             const optionTone = TONE[id];
             const selected = id === network;
             return (
