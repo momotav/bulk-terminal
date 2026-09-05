@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Trophy, Flame, Anchor, Activity } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
-import { BulkLeaderboardTable } from '@/components/leaderboard/BulkLeaderboardTable';
 import { WalletRankSearch } from '@/components/leaderboard/WalletRankSearch';
 import { cn } from '@/lib/api';
 
@@ -55,31 +54,17 @@ export default function LeaderboardPage() {
           ))}
         </div>
 
-        {/* Leaderboard.
-            'pnl' and 'whales' are now sourced from BULK's official indexer
-            so the ranks match bulk.trade exactly - critical for tournament
-            viewing where streamers will flick between the two sites. The
-            other two tabs (liquidations, activity) stay on our DB-backed
-            views since BULK's indexer doesn't expose those concepts. */}
+        {/* Leaderboard — all tabs are served from OUR collected data (the
+            `traders` table). Volume/whales/activity/liquidations come straight
+            from the indexed trade feed; PnL is enriched every few minutes from
+            BULK's public account endpoint for our top traders by volume. (We no
+            longer use BULK's indexer leaderboard — it's disabled upstream.) */}
         <div className="h-[600px]">
-          {activeTab === 'pnl' ? (
-            <BulkLeaderboardTable limit={50} />
-          ) : activeTab === 'whales' ? (
-            <BulkLeaderboardTable
-              limit={50}
-              defaultMetric="volume"
-              defaultWindow="all"
-              allowMetricChange={false}
-              title="Whale Watch"
-              icon={Anchor}
-            />
-          ) : (
-            <LeaderboardTable
-              type={activeTab}
-              limit={50}
-              showTimeframe={true}
-            />
-          )}
+          <LeaderboardTable
+            type={activeTab}
+            limit={50}
+            showTimeframe={activeTab !== 'pnl' && activeTab !== 'whales'}
+          />
         </div>
       </main>
     </div>
