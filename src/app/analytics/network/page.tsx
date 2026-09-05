@@ -202,8 +202,10 @@ export default function NetworkPage() {
   const [blockRange, setBlockRange] = useState<Range>('7d');
   const [blockMetrics, setBlockMetrics] = useState<BlockMetricPoint[] | null>(null);
 
-  // KPI tiles — poll live throughput every 3s.
+  // KPI tiles — poll live throughput every 3s. Skipped on mainnet: no mainnet
+  // explorer feed for the first ~30 days, so there's nothing (mainnet) to poll.
   useEffect(() => {
+    if (network === 'mainnet') return;
     let alive = true;
     const tick = async () => {
       try { const t = await explorer.getThroughput(); if (alive) setTp(t); } catch { /* keep last good */ }
@@ -218,6 +220,7 @@ export default function NetworkPage() {
   // refresh, no per-tick client accumulation, so it doesn't tax the page.
   useEffect(() => {
     let alive = true;
+    if (network === "mainnet") return;
     const load = async () => {
       try { const r = await explorer.getNetworkHistory('1h'); if (alive) setLiveHist(r.points || []); } catch { /* keep last */ }
     };
@@ -325,6 +328,28 @@ export default function NetworkPage() {
 
   const hasHistory = (history?.length ?? 0) > 0;
   const hasLive = (liveHist?.length ?? 0) > 0;
+
+  // BULK isn't running a mainnet explorer WS for mainnet's first ~30 days (the
+  // load is too high), so there's no mainnet chain telemetry yet. The testnet
+  // chain still streams, but that isn't mainnet — so on mainnet we show a
+  // "coming soon" placeholder instead of surfacing testnet numbers.
+  if (network === 'mainnet') {
+    return (
+      <div className="w-full p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex items-center gap-3">
+          <h1 className="page-title text-[var(--text-primary)]">Network</h1>
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--accent)' }} title="Coming soon" />
+        </div>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--role-surface)] px-6 py-20 text-center">
+          <Timer className="w-8 h-8 text-[var(--text-tertiary)]" />
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Mainnet network telemetry is coming soon</h2>
+          <p className="max-w-md text-sm text-[var(--text-secondary)]">
+            Live TPS, block times and chain activity will appear here once BULK&apos;s mainnet explorer goes live — expected within mainnet&apos;s first ~30 days. Market analytics — volume, open interest, liquidations and fees — are live now on the other pages.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full p-4 md:p-6 space-y-4 md:space-y-6">

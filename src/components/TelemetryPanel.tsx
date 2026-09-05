@@ -128,7 +128,14 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
   const [tab, setTab] = useState<Metric>('tps');
   const [loading, setLoading] = useState(true);
 
+  // BULK is not running a mainnet explorer WS for mainnet's first ~30 days
+  // (the load is too high), so there's no mainnet chain telemetry yet. The
+  // explorer node still streams the TESTNET chain, but that isn't mainnet data,
+  // so on mainnet we show a "coming soon" state rather than the testnet numbers.
+  const pending = network === 'mainnet';
+
   useEffect(() => {
+    if (pending) return; // don't poll / don't surface testnet numbers on mainnet
     let cancelled = false;
     // A network switch is a different chain — its history must not share a
     // line with the previous one.
@@ -160,12 +167,14 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, [network]);
+  }, [network, pending]);
 
-  const live = data?.status === 'live';
-  const down = data?.status === 'disconnected';
-  const statusColor = live ? 'var(--bids)' : data?.status === 'stale' ? 'var(--accent)' : 'var(--asks)';
-  const statusLabel = live ? 'Live' : data?.status === 'stale' ? 'Stale' : 'Down';
+  const live = !pending && data?.status === 'live';
+  const down = !pending && data?.status === 'disconnected';
+  const statusColor = pending
+    ? 'var(--accent)'
+    : live ? 'var(--bids)' : data?.status === 'stale' ? 'var(--accent)' : 'var(--asks)';
+  const statusLabel = pending ? 'Soon' : live ? 'Live' : data?.status === 'stale' ? 'Stale' : 'Down';
 
   // The throughput line reads as "live pulse", so it takes the same
   // semantic-positive colour as the live-status dot (--pos / --bids),
@@ -233,19 +242,24 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
       {/* Current value of the selected metric. */}
       <div className="px-4 pt-3">
         <p className="font-mono text-[26px] font-bold leading-none tracking-tight tabular-nums text-[var(--role-content)]">
-          {loading || down ? '--' : <AnimatedNumber value={m.value} format={formatRate} />}
+          {pending || loading || down ? '--' : <AnimatedNumber value={m.value} format={formatRate} />}
           <span className="ml-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">
             {m.label}
           </span>
         </p>
-        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{down ? 'feed unavailable' : m.sub}</p>
+        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{pending ? 'mainnet telemetry — coming soon' : down ? 'feed unavailable' : m.sub}</p>
       </div>
 
       {/* Live chart, filling the remaining height. When the upstream feed is
           down there's nothing to plot — say so rather than showing a flat
           zero line that reads as broken. */}
       <div className="min-h-0 flex-1 px-1 pb-1 pt-3">
-        {down ? (
+        {pending ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-4 text-center">
+            <p className="text-[11px] font-medium text-[var(--role-content-muted)]">Mainnet network telemetry</p>
+            <p className="text-[10px] text-[var(--role-content-subtle)]">Launches with BULK&apos;s mainnet explorer (~30 days)</p>
+          </div>
+        ) : down ? (
           <div className="flex h-full w-full items-center justify-center px-4 text-center text-[11px] text-[var(--role-content-subtle)]">
             Live network feed unavailable
           </div>
