@@ -518,7 +518,7 @@ function OrderBookPanel({
           {book.stale && (
             <span
               className="flex items-center gap-1 text-[10px] font-medium text-[var(--role-content-muted)]"
-              title="Live feed momentarily unavailable — showing the last received book."
+              title="Live feed momentarily unavailable - showing the last received book."
             >
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
               Delayed
@@ -736,7 +736,7 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
 
         {result?.bookExhausted && (
           <div className="rounded-[var(--radius-sm)] px-3 py-2 text-[11px]" style={{ backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
-            Order exceeds the visible book — only {formatUsd(result.filledNotional)} fills before {side === 'buy' ? 'asks' : 'bids'} run out.
+            Order exceeds the visible book - only {formatUsd(result.filledNotional)} fills before {side === 'buy' ? 'asks' : 'bids'} run out.
           </div>
         )}
       </div>

@@ -33,8 +33,8 @@ export default function ExplorerLayout({ children }: { children: React.ReactNode
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">Chain explorer is coming soon</h2>
           <p className="max-w-md text-sm text-[var(--text-secondary)]">
             Blocks, transactions and live chain activity will appear here once BULK&apos;s mainnet
-            explorer goes live — expected within mainnet&apos;s first ~30 days. Market analytics —
-            volume, open interest, liquidations and fees — are live now.
+            explorer goes live - expected within mainnet&apos;s first ~30 days. Market analytics -
+            volume, open interest, liquidations and fees - are live now.
           </p>
         </div>
       </div>

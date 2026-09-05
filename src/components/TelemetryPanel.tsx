@@ -247,7 +247,7 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
             {m.label}
           </span>
         </p>
-        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{pending ? 'mainnet telemetry — coming soon' : down ? 'feed unavailable' : m.sub}</p>
+        <p className="mt-1 text-[11px] text-[var(--role-content-subtle)]">{pending ? 'mainnet telemetry - coming soon' : down ? 'feed unavailable' : m.sub}</p>
       </div>
 
       {/* Live chart, filling the remaining height. When the upstream feed is
