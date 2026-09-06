@@ -719,7 +719,8 @@ export default function AnalyticsPage() {
             totalOI += oi * mark;
           }
         }
-        setLiveOI(totalOI);
+        // BULK reports one-sided OI; ×2 for the two-sided (long+short) total.
+        setLiveOI(totalOI * 2);
       } catch (error) {
         console.error('Failed to fetch live OI:', error);
       }
