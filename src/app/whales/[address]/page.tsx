@@ -1645,8 +1645,16 @@ export default function WalletPage() {
   // {t: ms, v: cumulative total PnL}. The chart's Value toggle anchors this to
   // the live balance for an equity curve.
   const heroPnl = useMemo(() => {
+    // Best: fills + klines continuous total-PnL (realized + marked unrealized).
     if (continuousPnl.length >= 2) {
       return { data: continuousPnl, source: 'reconstructed' as const };
+    }
+    // Fallback: the fills-only realized-PnL curve — exactly the dev's method
+    // (walk the account's fills, book realized PnL per closing fill). This needs
+    // no klines, so it still gives a real multi-point curve when the kline mark
+    // isn't available, instead of collapsing to the single snapshot point.
+    if (reconstructedRealized.length >= 2) {
+      return { data: reconstructedRealized.map((p) => ({ t: p.t, v: p.v })), source: 'realized' as const };
     }
     const snap = history
       .map((h) => ({
@@ -1656,7 +1664,7 @@ export default function WalletPage() {
       .filter((p) => Number.isFinite(p.t))
       .sort((a, b) => a.t - b.t);
     return { data: snap, source: 'snapshot' as const };
-  }, [continuousPnl, history]);
+  }, [continuousPnl, reconstructedRealized, history]);
 
   // Get the most recent PnL from history (snapshots) - this matches the chart
   const latestSnapshot = history.length > 0 ? history[history.length - 1] : null;
