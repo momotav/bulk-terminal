@@ -199,140 +199,149 @@ export function PortfolioMarginCard() {
   const removePos = (id: number) => setPositions((p) => (p.length > 1 ? p.filter((x) => x.id !== id) : p));
   const update = (id: number, patch: Partial<Position>) => setPositions((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
+  const capitalFreed = calc ? Math.max(0, calc.sumM - calc.mp) : 0;
+
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-4 lg:p-5">
+    <div className="glass-card flex flex-col">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-[var(--accent)]" />
-          <div>
-            <h3 className="font-semibold text-[var(--text-primary)]">Portfolio Margining</h3>
-            <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              BULK nets correlated positions - build a book and watch the requirement drop.
-            </p>
-          </div>
+      <div className="panel-header">
+        <div className="min-w-0">
+          <h2 className="panel-title t-h2 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[var(--accent)]" /> Portfolio Margining
+          </h2>
+          <p className="t-caption truncate">Build a book — BULK nets correlated legs and the requirement drops.</p>
         </div>
-        {/* Live / Strict decay toggle */}
-        <div className="flex rounded-md border border-[var(--border-color)] overflow-hidden text-[11px] font-medium">
+        <div className="toggle-group shrink-0">
           {(['live', 'strict'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={cn('px-2.5 py-1 capitalize transition-colors', mode === m ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-base)]')}
-            >
-              {m}
-            </button>
+            <button key={m} onClick={() => setMode(m)} className={cn('toggle-btn capitalize', mode === m && 'active')}>{m}</button>
           ))}
         </div>
       </div>
 
-      {/* Controls: collateral + regime */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <label className="block">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Collateral (USDC)</span>
-          <input
-            type="text"
-            value={`$${collateral.toLocaleString('en-US')}`}
-            onChange={(e) => setCollateral(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
-            className="mt-1 w-full bg-[var(--bg-base)] border border-[var(--border-color)] rounded-md px-2.5 py-1.5 text-sm font-mono text-[var(--text-primary)] outline-none"
-          />
-        </label>
-        <label className="block">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Regime</span>
-          <select
-            value={regimeSel === 'live' ? 'live' : String(regimeSel)}
-            onChange={(e) => setRegimeSel(e.target.value === 'live' ? 'live' : Number(e.target.value))}
-            className="mt-1 w-full bg-[var(--bg-base)] border border-[var(--border-color)] rounded-md px-2.5 py-1.5 text-sm text-[var(--text-primary)] outline-none cursor-pointer"
-          >
-            <option value="live">
-              Live · current{aggRegime !== null ? ` (${aggRegime >= 0 ? '+' : ''}${Math.round(aggRegime)})` : ''}
-            </option>
-            {REGIMES.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.label}</option>)}
-          </select>
-        </label>
-      </div>
-
-      {/* Positions */}
-      <div className="space-y-2 mb-4">
-        {positions.map((p) => (
-          <div key={p.id} className="bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg p-2.5">
-            <div className="flex items-center gap-2">
-              <div className="shrink-0"><CoinPicker value={p.asset} onChange={(c) => update(p.id, { asset: c })} ariaLabel="Asset" /></div>
-              <div className="flex rounded-md border border-[var(--border-color)] overflow-hidden text-[11px] font-bold shrink-0">
-                <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1', p.side === 'long' ? 'bg-bulk-green/20 text-[var(--pos)]' : 'text-[var(--text-tertiary)]')}>LONG</button>
-                <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1', p.side === 'short' ? 'bg-bulk-red/20 text-[var(--neg)]' : 'text-[var(--text-tertiary)]')}>SHORT</button>
-              </div>
-              <div className="flex-1" />
-              <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--text-tertiary)] hover:text-[var(--neg)] transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
-            </div>
-            {/* Notional: type it or drag it. Own line so long coin names never collide. */}
-            <div className="flex items-center gap-2 mt-2">
-              <div className="flex items-center gap-1 shrink-0 w-28 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-md px-2 py-1">
-                <span className="text-[var(--text-tertiary)] text-xs">$</span>
-                <input
-                  type="text"
-                  value={p.notional.toLocaleString('en-US')}
-                  onChange={(e) => update(p.id, { notional: Number(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
-                  className="w-full bg-transparent text-sm font-mono text-[var(--text-primary)] outline-none min-w-0"
-                />
-              </div>
+      {/* Two-column cockpit: builder (left) · result (right). Stacks under lg. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        {/* ── LEFT · builder ─────────────────────────────────────────── */}
+        <div className="p-4 lg:p-5 lg:border-r border-[var(--role-line)] space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="t-caption uppercase tracking-wider">Collateral (USDC)</span>
               <input
-                type="range"
-                min={10_000}
-                max={1_000_000}
-                step={10_000}
-                value={Math.min(1_000_000, Math.max(10_000, p.notional))}
-                onChange={(e) => update(p.id, { notional: Number(e.target.value) })}
-                className="flex-1 h-1.5 cursor-pointer min-w-0"
-                style={{ accentColor: p.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}
+                type="text"
+                value={`$${collateral.toLocaleString('en-US')}`}
+                onChange={(e) => setCollateral(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+                className="mt-1 w-full bg-[rgb(var(--p-inset))] border border-[var(--role-line)] rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm font-mono text-[var(--role-content)] outline-none focus:border-[var(--role-content-subtle)] transition-colors"
               />
-            </div>
+            </label>
+            <label className="block">
+              <span className="t-caption uppercase tracking-wider">Regime</span>
+              <select
+                value={regimeSel === 'live' ? 'live' : String(regimeSel)}
+                onChange={(e) => setRegimeSel(e.target.value === 'live' ? 'live' : Number(e.target.value))}
+                className="mt-1 w-full bg-[rgb(var(--p-inset))] border border-[var(--role-line)] rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm text-[var(--role-content)] outline-none cursor-pointer focus:border-[var(--role-content-subtle)] transition-colors"
+              >
+                <option value="live">Live{aggRegime !== null ? ` (${aggRegime >= 0 ? '+' : ''}${Math.round(aggRegime)})` : ''}</option>
+                {REGIMES.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.label}</option>)}
+              </select>
+            </label>
           </div>
-        ))}
-        <button onClick={addPos} className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-[var(--border-color)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-base)] transition-colors">
-          <Plus className="w-3.5 h-3.5" /> Add position
-        </button>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="t-caption uppercase tracking-wider">Positions</span>
+              <span className="t-caption">{positions.length} legs</span>
+            </div>
+            {positions.map((p) => (
+              <div key={p.id} className="bg-[rgb(var(--p-inset))] border border-[var(--role-line)] rounded-[var(--radius-md)] p-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="shrink-0"><CoinPicker value={p.asset} onChange={(c) => update(p.id, { asset: c })} ariaLabel="Asset" /></div>
+                  <div className="flex rounded-[var(--radius-sm)] border border-[var(--role-line)] overflow-hidden text-[11px] font-bold shrink-0">
+                    <button onClick={() => update(p.id, { side: 'long' })} className={cn('px-2 py-1 transition-colors', p.side === 'long' ? 'bg-[var(--pos)]/20 text-[var(--pos)]' : 'text-[var(--role-content-subtle)]')}>LONG</button>
+                    <button onClick={() => update(p.id, { side: 'short' })} className={cn('px-2 py-1 transition-colors', p.side === 'short' ? 'bg-[var(--neg)]/20 text-[var(--neg)]' : 'text-[var(--role-content-subtle)]')}>SHORT</button>
+                  </div>
+                  <div className="flex-1" />
+                  <button onClick={() => removePos(p.id)} className="shrink-0 text-[var(--role-content-subtle)] hover:text-[var(--neg)] transition-colors p-1" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-1 shrink-0 w-28 bg-[var(--role-surface)] border border-[var(--role-line)] rounded-[var(--radius-sm)] px-2 py-1">
+                    <span className="text-[var(--role-content-subtle)] text-xs">$</span>
+                    <input
+                      type="text"
+                      value={p.notional.toLocaleString('en-US')}
+                      onChange={(e) => update(p.id, { notional: Number(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
+                      className="w-full bg-transparent text-sm font-mono text-[var(--role-content)] outline-none min-w-0"
+                    />
+                  </div>
+                  <input
+                    type="range" min={10_000} max={1_000_000} step={10_000}
+                    value={Math.min(1_000_000, Math.max(10_000, p.notional))}
+                    onChange={(e) => update(p.id, { notional: Number(e.target.value) })}
+                    className="flex-1 h-1.5 cursor-pointer min-w-0"
+                    style={{ accentColor: p.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}
+                  />
+                </div>
+              </div>
+            ))}
+            <button onClick={addPos} className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[var(--radius-md)] border border-dashed border-[var(--role-line)] text-[11px] text-[var(--role-content-muted)] hover:bg-[rgb(var(--p-inset))] hover:text-[var(--role-content)] transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Add position
+            </button>
+          </div>
+        </div>
+
+        {/* ── RIGHT · result ─────────────────────────────────────────── */}
+        <div className="p-4 lg:p-5 flex flex-col gap-4 border-t lg:border-t-0 border-[var(--role-line)]">
+          {calc ? (
+            <>
+              {/* HERO — capital freed by netting. */}
+              <div className="rounded-[var(--radius-md)] bg-[rgb(var(--p-inset))] border border-[var(--pos)]/25 p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="t-caption uppercase tracking-wider">Capital freed by netting</span>
+                  {calc.hedgeDiscount > 0 && (
+                    <span className="text-[11px] font-semibold text-[var(--pos)] tabular-nums">−{calc.hedgeDiscount.toFixed(1)}%</span>
+                  )}
+                </div>
+                <div className="mt-1 font-mono font-bold tabular-nums text-[28px] leading-none text-[var(--pos)]">
+                  {loading ? '—' : `$${formatNumber(capitalFreed, 0)}`}
+                </div>
+                <p className="t-caption mt-1.5">
+                  vs. margining each leg separately — {loading ? '' : `${calc.efficiency.toFixed(1)}× more capital-efficient`}
+                </p>
+              </div>
+
+              {/* Sum-of-legs vs BULK comparison. */}
+              <div className="space-y-2.5">
+                <CompareBar label="Sum of legs" sub="separate margin" value={calc.sumM} widthPct={1} barClass="bg-[var(--role-content-subtle)]/50" />
+                <CompareBar label="BULK portfolio" sub="netted by correlation" value={calc.mp} widthPct={calc.sumM > 0 ? calc.mp / calc.sumM : 0} barClass="bg-[var(--pos)]" highlight />
+              </div>
+
+              {/* Metric wells. */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Metric label="Efficiency" value={loading ? '—' : `${calc.efficiency.toFixed(1)}x`} tone="green" />
+                <Metric label="Margin usage" value={loading ? '—' : `${(calc.marginUsage * 100).toFixed(1)}%`} tone="neutral" />
+                <Metric label="Port. leverage" value={loading ? '—' : `${calc.portLev.toFixed(2)}x`} tone="neutral" />
+                <Metric label="Eff. notional" value={loading ? '—' : `$${formatCompact(calc.nEff)}`} tone="neutral" />
+              </div>
+
+              {/* Correlations used. */}
+              {calc.pairs.length > 0 && (
+                <div>
+                  <div className="t-caption uppercase tracking-wider mb-1.5">Correlations used (live)</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {calc.pairs.map((pr) => (
+                      <span key={pr.label} className="inline-flex items-center gap-1 rounded-[var(--radius-xs)] bg-[rgb(var(--p-inset))] border border-[var(--role-line)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--role-content-muted)]">
+                        {pr.label} <span className="text-[var(--role-content)] font-semibold">{pr.rho.toFixed(2)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">Add a position to see the netting.</div>
+          )}
+        </div>
       </div>
 
-      {/* Comparison bars */}
-      {calc && (
-        <>
-          <div className="space-y-2.5 mb-4">
-            <CompareBar label="Sum of legs" sub="margined separately (other DEXs)" value={calc.sumM} widthPct={1} barClass="bg-[var(--text-tertiary)]/50" />
-            <CompareBar label="BULK portfolio" sub="netted by live correlation" value={calc.mp} widthPct={calc.sumM > 0 ? calc.mp / calc.sumM : 0} barClass="bg-[var(--pos)]" highlight />
-          </div>
-
-          {/* Headline metrics */}
-          <div className="grid grid-cols-3 gap-2.5 mb-3">
-            <Metric label="Hedge discount" value={loading ? '-' : `${calc.hedgeDiscount.toFixed(1)}%`} tone="green" />
-            <Metric label="Capital efficiency" value={loading ? '-' : `${calc.efficiency.toFixed(1)}x`} tone="green" />
-            <Metric label="Margin usage" value={loading ? '-' : `${(calc.marginUsage * 100).toFixed(1)}%`} tone="neutral" />
-          </div>
-
-          {/* Secondary readouts */}
-          <div className="grid grid-cols-3 gap-2.5 mb-4 text-center">
-            <Readout label="Total notional" value={`$${formatCompact(calc.sumN)}`} />
-            <Readout label="Effective notional" value={`$${formatCompact(calc.nEff)}`} />
-            <Readout label="Portfolio leverage" value={`${calc.portLev.toFixed(2)}x`} />
-          </div>
-
-          {/* Correlations used */}
-          {calc.pairs.length > 0 && (
-            <div className="mb-3">
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1.5">Correlations used (live)</div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {calc.pairs.map((pr) => (
-                  <span key={pr.label} className="text-[11px] font-mono text-[var(--text-secondary)]">
-                    {pr.label} <span className="text-[var(--text-primary)] font-semibold">{pr.rho.toFixed(2)}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <p className="text-[10px] text-[var(--text-tertiary)] mt-2 leading-relaxed">
+      <p className="t-caption px-4 lg:px-5 pb-4 leading-relaxed border-t border-[var(--role-line)] pt-3">
         Implements BULK&apos;s published portfolio-margin calculator: live correlation matrix, risk-surface
         maintenance rates, and regime time-decay (λ = mmrE + (mmrO−mmrE)·p^t). &quot;Live&quot; uses the current
         time-in-regime; &quot;Strict&quot; shows the worst case the instant a regime kicks in.
@@ -345,13 +354,13 @@ function CompareBar({ label, sub, value, widthPct, barClass, highlight }: { labe
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
-        <div className="flex items-baseline gap-2">
-          <span className={cn('text-xs font-medium', highlight ? 'text-[var(--pos)]' : 'text-[var(--text-secondary)]')}>{label}</span>
-          <span className="text-[10px] text-[var(--text-tertiary)]">{sub}</span>
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span className={cn('text-xs font-medium', highlight ? 'text-[var(--pos)]' : 'text-[var(--role-content-muted)]')}>{label}</span>
+          <span className="t-caption truncate">{sub}</span>
         </div>
-        <span className={cn('font-mono font-semibold text-sm tabular-nums', highlight ? 'text-[var(--pos)]' : 'text-[var(--text-primary)]')}>${formatNumber(value, 0)}</span>
+        <span className={cn('font-mono font-semibold text-sm tabular-nums', highlight ? 'text-[var(--pos)]' : 'text-[var(--role-content)]')}>${formatNumber(value, 0)}</span>
       </div>
-      <div className="h-2.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden">
+      <div className="h-2.5 w-full rounded-full bg-[rgb(var(--p-inset))] overflow-hidden">
         <div className={cn('h-full rounded-full transition-all duration-300', barClass)} style={{ width: `${Math.max(2, Math.min(100, widthPct * 100))}%` }} />
       </div>
     </div>
@@ -360,18 +369,9 @@ function CompareBar({ label, sub, value, widthPct, barClass, highlight }: { labe
 
 function Metric({ label, value, tone }: { label: string; value: string; tone: 'green' | 'neutral'; }) {
   return (
-    <div className="bg-[var(--bg-base)] border border-[var(--border-color)] rounded-lg p-2.5 text-center">
-      <div className="text-[9px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1">{label}</div>
-      <div className={cn('font-mono font-bold tabular-nums text-sm', tone === 'green' ? 'text-[var(--pos)]' : 'text-[var(--text-primary)]')}>{value}</div>
-    </div>
-  );
-}
-
-function Readout({ label, value }: { label: string; value: string; }) {
-  return (
-    <div>
-      <div className="text-[9px] uppercase tracking-wider text-[var(--text-tertiary)] mb-0.5">{label}</div>
-      <div className="font-mono font-semibold text-xs text-[var(--text-primary)] tabular-nums">{value}</div>
+    <div className="bg-[rgb(var(--p-inset))] border border-[var(--role-line)] rounded-[var(--radius-md)] p-2.5 text-center">
+      <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)] mb-1">{label}</div>
+      <div className={cn('font-mono font-bold tabular-nums text-sm', tone === 'green' ? 'text-[var(--pos)]' : 'text-[var(--role-content)]')}>{value}</div>
     </div>
   );
 }
