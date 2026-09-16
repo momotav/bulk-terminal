@@ -1059,56 +1059,45 @@ export default function AnalyticsPage() {
       return withCumulativeForCoins(visible, enabled);
     }
 
-    // Historical baseline = sum of allTime points whose UTC day is STRICTLY
-    // BEFORE the UTC day of the visible window's first timestamp.
-    //
-    // This prevents double-counting on the 1D view: 1D's visible window
-    // starts mid-day (24h ago, e.g. May 8 10:00). The allTime dataset is
-    // daily, so May 8's row covers ALL of May 8 (00:00-23:59). If we
-    // included May 8's daily total in baseline AND showed the May 8
-    // 10:00-23:59 hours as visible bars, the May 8 afternoon volume
-    // would be counted twice. The 1D cumulative would then exceed the
-    // W/M/Q/Y/ALL cumulative for the same instant-in-time, making the
-    // two views disagree.
-    //
-    // By comparing UTC days (not raw timestamps), we exclude any allTime
-    // row whose day overlaps with any visible bar.
-    const firstVisibleDate = new Date(visible[0].timestamp);
-    const firstVisibleDayUTC = Date.UTC(
-      firstVisibleDate.getUTCFullYear(),
-      firstVisibleDate.getUTCMonth(),
-      firstVisibleDate.getUTCDate()
-    );
     const enabledSet = new Set(enabled);
     const showOther = enabledSet.has(OTHER_KEY);
 
-    let baseline = 0;
-    for (const point of allTime) {
-      const pointDate = new Date(point.timestamp);
-      const pointDayUTC = Date.UTC(
-        pointDate.getUTCFullYear(),
-        pointDate.getUTCMonth(),
-        pointDate.getUTCDate()
-      );
-      // Strictly-before-day comparison. allTime is sorted ascending, so
-      // we can break early once we hit the first overlapping day.
-      if (pointDayUTC >= firstVisibleDayUTC) break;
-      const dict = coinsFromRow(point);
+    // Sum a coins dict under the current selection (enabled coins, plus every
+    // non-enabled coin when Other is on). Shared by the all-time and window sums
+    // so both count the exact same set.
+    const sumSelected = (dict: Record<string, number>): number => {
+      let s = 0;
       for (const [coin, v] of Object.entries(dict)) {
         if (typeof v !== 'number' || !isFinite(v)) continue;
-        if (enabledSet.has(coin)) baseline += v;
-        else if (showOther) baseline += v;
+        if (enabledSet.has(coin) || showOther) s += v;
       }
-    }
+      return s;
+    };
 
-    // Now bucket the visible window and attach cumulative seeded from baseline.
+    // Bucket the visible window for the chart bars.
     const normalized = visible.map(row => ({
       ...row,
       coins: coinsFromRow(row),
     })) as (ChartData & { coins: Record<string, number> })[];
     const bucketed = bucketWithOther(normalized as any, enabled);
 
-    let cumulative = baseline;
+    // Baseline = all-time total − window total, so the cumulative line ALWAYS
+    // ends at the same all-time value for every timeframe (1D/W/M/…). The old
+    // "strictly-before-day" summation broke on 1D: its window is hourly and
+    // starts mid-day, while allTime is daily — so the first day's earlier hours
+    // fell into neither baseline nor window and were dropped, making 1D read
+    // lower than W. This form has no such gap: baseline + Σwindow = all-time.
+    const allTimeTotal = allTime.reduce((s, p) => s + sumSelected(coinsFromRow(p)), 0);
+    const windowTotal = bucketed.reduce((s, row) => {
+      let rowSum = 0;
+      for (const [k, v] of Object.entries(row)) {
+        if (k === 'timestamp' || k === 'total' || k === 'Cumulative') continue;
+        if (typeof v === 'number') rowSum += v;
+      }
+      return s + rowSum;
+    }, 0);
+
+    let cumulative = Math.max(0, allTimeTotal - windowTotal);
     return bucketed.map(row => {
       let rowSum = 0;
       for (const [k, v] of Object.entries(row)) {
