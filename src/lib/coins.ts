@@ -190,10 +190,16 @@ export function bucketWithOther(
       }
     }
 
-    // Carry forward any pre-computed fields like `total` or `Cumulative` so
-    // existing composed charts keep working without changes.
+    // Carry forward pre-computed metadata like `total` / `Cumulative` so
+    // existing composed charts keep working. CRUCIAL: do NOT copy the raw row's
+    // top-level per-coin fields (backend rows carry both a `coins` dict AND
+    // legacy top-level BTC/ETH/SOL/Other keys). Those are already handled by the
+    // bucketing above; re-copying them re-introduces a DESELECTED coin's value
+    // as a stray key, which then gets counted a second time (once as the leftover
+    // key, once inside Other) — making the total rise when a coin is unchecked.
     for (const [k, v] of Object.entries(row)) {
       if (k === 'timestamp' || k === 'coins') continue;
+      if (k === OTHER_KEY || (row.coins && k in row.coins)) continue; // per-coin: handled by bucketing
       if (typeof v === 'number') out[k] = v;
     }
 
