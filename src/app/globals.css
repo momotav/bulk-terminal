@@ -923,6 +923,49 @@ html[data-palette="orchid"] {
   animation-delay: calc(var(--row-index, 0) * 24ms);
 }
 
+/* Sparkline draw-on: the trend line traces itself left→right and the area
+   fades up under it. One authored moment on the dashboard KPI cards, keyed to
+   real data. --spark-len is the measured path length (set per-instance in JS)
+   so the dash covers exactly the line. */
+@keyframes spark-draw {
+  from { stroke-dashoffset: var(--spark-len); }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes spark-area-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.spark-line {
+  stroke-dasharray: var(--spark-len);
+  animation: spark-draw 900ms var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 40ms + 120ms);
+}
+.spark-area {
+  animation: spark-area-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 40ms + 260ms);
+}
+
+/* KPI stat card: a quiet lift + border warm on hover, so the row feels alive
+   to the cursor without turning into a bouncy toy. GPU-friendly (transform +
+   colour only). */
+.stat-card-interactive {
+  transition: transform var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out),
+              background-color var(--dur-base) var(--ease-out);
+  will-change: transform;
+}
+.stat-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--role-content-subtle);
+  background-color: color-mix(in srgb, var(--role-surface) 92%, var(--role-content));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-line, .spark-area, .animate-row-enter { animation: none; }
+  .spark-line { stroke-dashoffset: 0; }
+  .stat-card-interactive { transition: none; }
+}
+
 /* Liquidation-treemap hover tooltip: fade + slight rise on appear, so it
    arrives softly instead of snapping into place. */
 @keyframes treemap-tip-in {

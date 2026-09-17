@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatedNumber } from './AnimatedNumber';
 import { StatCard } from './StatCard';
+import { Sparkline } from './Sparkline';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
@@ -13,6 +14,9 @@ interface ExchangeStats {
   liquidations24h: number;
   timestamp: number;
 }
+
+type SparkKey = 'volume24h' | 'openInterest' | 'activeTraders' | 'liquidations24h';
+type Sparklines = Record<SparkKey, { series: number[]; changePct: number | null }>;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -46,6 +50,7 @@ const formatCount = (num: number | undefined | null): string => {
 export function ExchangeHealthStats() {
   const { network } = useCurrentNetwork();
   const [stats, setStats] = useState<ExchangeStats | null>(null);
+  const [sparks, setSparks] = useState<Sparklines | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,11 +109,23 @@ export function ExchangeHealthStats() {
     }
   };
 
+  // Sparkline trends — a separate, non-blocking fetch. If it fails the cards
+  // just render without a trend line (graceful), never an error.
+  const fetchSparks = async () => {
+    try {
+      const res = await fetch(`${API_URL}${withNetwork('/api/analytics/dashboard-sparklines')}`);
+      if (res.ok) setSparks(await res.json());
+    } catch {
+      /* sparklines are an enhancement, not a blocker */
+    }
+  };
+
   useEffect(() => {
     fetchStats();
-    
+    fetchSparks();
+
     // Refresh every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
+    const interval = setInterval(() => { fetchStats(); fetchSparks(); }, 30000);
     return () => clearInterval(interval);
   }, [network]);
 
@@ -119,25 +136,31 @@ export function ExchangeHealthStats() {
     label: string;
     raw: number;
     format: (n: number) => string;
+    spark: SparkKey;
   }[] = [
-    { label: '24h Volume', raw: stats?.volume24h ?? 0, format: formatNumber },
-    { label: 'Open Interest', raw: stats?.openInterest ?? 0, format: formatNumber },
-    { label: 'Active Traders', raw: stats?.activeTraders ?? 0, format: formatCount },
-    { label: '24h Liquidations', raw: stats?.liquidations24h ?? 0, format: formatNumber },
+    { label: '24h Volume', raw: stats?.volume24h ?? 0, format: formatNumber, spark: 'volume24h' },
+    { label: 'Open Interest', raw: stats?.openInterest ?? 0, format: formatNumber, spark: 'openInterest' },
+    { label: 'Active Traders', raw: stats?.activeTraders ?? 0, format: formatCount, spark: 'activeTraders' },
+    { label: '24h Liquidations', raw: stats?.liquidations24h ?? 0, format: formatNumber, spark: 'liquidations24h' },
   ];
 
   return (
     <>
-      {cards.map((c, i) => (
-        <StatCard
-          key={c.label}
-          label={c.label}
-          loading={loading}
-          className="animate-row-enter"
-          style={{ '--row-index': i } as React.CSSProperties}
-          value={<AnimatedNumber value={c.raw} format={c.format} />}
-        />
-      ))}
+      {cards.map((c, i) => {
+        const series = sparks?.[c.spark]?.series ?? [];
+        return (
+          <StatCard
+            key={c.label}
+            label={c.label}
+            loading={loading}
+            interactive
+            className="animate-row-enter"
+            style={{ '--row-index': i } as React.CSSProperties}
+            value={<AnimatedNumber value={c.raw} format={c.format} />}
+            chart={series.length >= 2 ? <Sparkline data={series} /> : undefined}
+          />
+        );
+      })}
     </>
   );
 }

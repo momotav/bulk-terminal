@@ -33,6 +33,11 @@ export interface StatCardProps {
   size?: 'default' | 'compact';
   className?: string;
   style?: CSSProperties;
+  /** Optional visual that fills the card's right side (e.g. a <Sparkline/>).
+   *  Turns the card into a two-column layout: text left, chart right. */
+  chart?: ReactNode;
+  /** Adds a quiet hover lift + border-warm. Use on interactive KPI strips. */
+  interactive?: boolean;
 }
 
 const SIZES = {
@@ -40,17 +45,11 @@ const SIZES = {
   compact: { pad: 'px-3.5 py-2.5', label: 'text-[10px]', value: 'text-[20px]', gap: 'mt-1.5', skel: 'h-[20px]', unit: 'text-[10px]', sub: 'mt-1 text-[10px]' },
 } as const;
 
-export function StatCard({ label, value, unit, sub, valueColor, loading, size = 'default', className, style }: StatCardProps) {
+export function StatCard({ label, value, unit, sub, valueColor, loading, size = 'default', className, style, chart, interactive }: StatCardProps) {
   const s = SIZES[size];
-  return (
-    <div
-      style={style}
-      className={cn(
-        'rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)]',
-        s.pad,
-        className,
-      )}
-    >
+
+  const text = (
+    <div className="min-w-0">
       <span className={cn('block font-medium leading-tight text-[var(--role-content-subtle)]', s.label)}>
         {label}
       </span>
@@ -62,7 +61,7 @@ export function StatCard({ label, value, unit, sub, valueColor, loading, size = 
           className={cn('flex items-baseline gap-1 font-bold font-mono leading-none tracking-tight tabular-nums', s.gap, s.value)}
           style={{ color: valueColor ?? 'var(--role-content)' }}
         >
-          <span>{value}</span>
+          <span className="truncate">{value}</span>
           {unit && (
             <span className={cn('font-medium text-[var(--role-content-subtle)]', s.unit)}>{unit}</span>
           )}
@@ -71,6 +70,28 @@ export function StatCard({ label, value, unit, sub, valueColor, loading, size = 
 
       {sub != null && sub !== '' && (
         <p className={cn('truncate text-[var(--role-content-subtle)]', s.sub)}>{sub}</p>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      style={style}
+      className={cn(
+        'rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)]',
+        s.pad,
+        interactive && 'stat-card-interactive',
+        // With a chart, lay text and chart on one row and let the chart claim the
+        // empty right space; otherwise keep the plain stacked card.
+        chart && !loading ? 'flex items-center justify-between gap-3 overflow-hidden' : '',
+        className,
+      )}
+    >
+      {text}
+      {chart && !loading && (
+        <div className="shrink-0 self-stretch flex items-end pointer-events-none opacity-90">
+          {chart}
+        </div>
       )}
     </div>
   );
