@@ -31,6 +31,30 @@
   font-display: swap;
 }
 
+/* Symbol + punctuation fallback for the BULK display face.
+   The official BULK font is a display face with poor / missing glyphs for the
+   symbols a finance UI leans on ($, %, comma, period, +/-, currency, dashes…).
+   This override is declared for the SAME `BULK` family but AFTER the .otf faces
+   above and scoped by `unicode-range` to ONLY those characters — so anywhere
+   `BULK` is used, letters keep the brand face while symbols render in a clean
+   system sans. `src: local(...)` lists real system fonts by name; if none
+   resolve, the character simply falls through to the CSS font stack (current
+   behaviour), so this can never make things worse. Digits are intentionally
+   NOT overridden — data numbers already use the mono stack, and BULK's own
+   digits carry the brand on headings. */
+@font-face {
+  font-family: 'BULK';
+  src: local('Helvetica Neue'), local('Helvetica'), local('Segoe UI'), local('Roboto'), local('Arial'), local('sans-serif');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  /* # $ % & ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ { | } ~
+     ¢ £ ¤ ¥ · × ÷ – — … ′ ″ ‰ € − */
+  unicode-range: U+0023-0026, U+0028-002F, U+003A-0040, U+005B-005F, U+007B-007E,
+                 U+00A2-00A5, U+00B7, U+00D7, U+00F7, U+2013-2014, U+2026,
+                 U+2032-2033, U+2030, U+20AC, U+2212;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -944,6 +968,17 @@ html[data-palette="orchid"] {
   animation: spark-area-in var(--dur-slow) var(--ease-out) both;
   animation-delay: calc(var(--row-index, 0) * 40ms + 260ms);
 }
+/* End dot appears once the line has drawn — a small confident pop. */
+@keyframes spark-end-in {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: none; }
+}
+.spark-end {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spark-end-in var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 40ms + 860ms);
+}
 
 /* KPI stat card: a quiet lift + border warm on hover, so the row feels alive
    to the cursor without turning into a bouncy toy. GPU-friendly (transform +
@@ -961,7 +996,7 @@ html[data-palette="orchid"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spark-line, .spark-area, .animate-row-enter { animation: none; }
+  .spark-line, .spark-area, .spark-end, .animate-row-enter { animation: none; }
   .spark-line { stroke-dashoffset: 0; }
   .stat-card-interactive { transition: none; }
 }

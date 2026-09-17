@@ -28,20 +28,22 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
   const pathRef = useRef<SVGPathElement>(null);
   const [len, setLen] = useState(0);
 
-  const { line, area, ok } = useMemo(() => {
+  const { line, area, ok, end } = useMemo(() => {
     const pts = data.filter((n) => Number.isFinite(n));
-    if (pts.length < 2) return { line: '', area: '', ok: false };
+    if (pts.length < 2) return { line: '', area: '', ok: false, end: null as null | [number, number] };
     const min = Math.min(...pts);
     const max = Math.max(...pts);
     const span = max - min || 1;
-    // Small vertical inset so the peak/trough don't touch the edges.
-    const pad = 3;
+    // Vertical inset so the peak/trough — and the end dot — never clip the edges.
+    const pad = 4;
     const h = height - pad * 2;
     const step = width / (pts.length - 1);
     const xy = pts.map((v, i) => [i * step, pad + h - ((v - min) / span) * h] as const);
     const line = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
     const area = `${line} L${width},${height} L0,${height} Z`;
-    return { line, area, ok: true };
+    const last = xy[xy.length - 1];
+    // Pull the end dot in a hair so its halo doesn't get clipped by the viewBox.
+    return { line, area, ok: true, end: [Math.min(last[0], width - 3), last[1]] as [number, number] };
   }, [data, width, height]);
 
   // Measure the drawn path length so the draw-on animation covers exactly it.
@@ -62,7 +64,8 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.18} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.26} />
+          <stop offset="55%" stopColor={color} stopOpacity={0.07} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
@@ -72,12 +75,21 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
         d={line}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={1.75}
         strokeLinecap="round"
         strokeLinejoin="round"
         className="spark-line"
         style={len ? ({ '--spark-len': len } as React.CSSProperties) : undefined}
       />
+      {/* End marker at the current value — a soft halo + a solid dot. This is
+          what makes a sparkline read as finished rather than a stray line. It
+          fades in after the line finishes drawing. */}
+      {end && (
+        <g className="spark-end">
+          <circle cx={end[0]} cy={end[1]} r={4} fill={color} opacity={0.18} />
+          <circle cx={end[0]} cy={end[1]} r={2} fill={color} />
+        </g>
+      )}
     </svg>
   );
 }

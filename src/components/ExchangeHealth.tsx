@@ -157,7 +157,7 @@ export function ExchangeHealthStats() {
             className="animate-row-enter"
             style={{ '--row-index': i } as React.CSSProperties}
             value={<AnimatedNumber value={c.raw} format={c.format} />}
-            chart={series.length >= 2 ? <Sparkline data={series} /> : undefined}
+            chart={series.length >= 2 ? <Sparkline data={series} width={150} height={46} /> : undefined}
           />
         );
       })}
