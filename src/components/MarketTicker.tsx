@@ -12,7 +12,6 @@
 // hand when it overflows instead.
 
 import { type BulkTicker, formatPrice } from '@/hooks/useTickers';
-import { getCoinColor } from '@/lib/coins';
 import { AnimatedNumber } from './AnimatedNumber';
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '');
@@ -52,16 +51,8 @@ export function MarketTicker({ tickers, loading }: MarketTickerProps) {
                 key={t.symbol}
                 className="group flex shrink-0 items-center gap-2 px-3.5 py-2 transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] hover:bg-[var(--bg-secondary-20)]"
               >
-                {/* Coin identity: a small colour dot + ticker, so the eye can
-                    lock onto a market by colour, matching the charts' coin ramp. */}
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full transition-transform duration-[var(--dur-base)] ease-[var(--ease-out)] group-hover:scale-125"
-                    style={{ backgroundColor: getCoinColor(coin) }}
-                  />
-                  <span className="font-mono text-[11px] font-semibold tracking-tight text-[var(--role-content)]">
-                    {coin}
-                  </span>
+                <span className="font-mono text-[11px] font-semibold tracking-tight text-[var(--role-content)]">
+                  {coin}
                 </span>
                 {/* Price tweens to its new value on each poll instead of
                     hard-snapping — the difference between a live feed and a
