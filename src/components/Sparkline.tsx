@@ -24,7 +24,10 @@ interface SparklineProps {
 }
 
 export function Sparkline({ data, width = 132, height = 40, color = 'var(--accent)', className }: SparklineProps) {
-  const gradId = useId();
+  const rawId = useId();
+  const gradId = `g${rawId.replace(/[:]/g, '')}`;
+  const dotsId = `d${rawId.replace(/[:]/g, '')}`;
+  const clipId = `c${rawId.replace(/[:]/g, '')}`;
   const pathRef = useRef<SVGPathElement>(null);
   const [len, setLen] = useState(0);
 
@@ -64,12 +67,22 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.26} />
-          <stop offset="55%" stopColor={color} stopOpacity={0.07} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+          <stop offset="60%" stopColor={color} stopOpacity={0.08} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
+        {/* Fine dot-grid that gives the filled area a textured, "printed" feel
+            instead of a flat wash — the touch that keeps a sparkline from
+            looking bare. Clipped to the area so it never spills. */}
+        <pattern id={dotsId} width="5" height="5" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill={color} fillOpacity={0.22} />
+        </pattern>
+        <clipPath id={clipId}>
+          <path d={area} />
+        </clipPath>
       </defs>
       <path d={area} fill={`url(#${gradId})`} className="spark-area" />
+      <rect x={0} y={0} width={width} height={height} fill={`url(#${dotsId})`} clipPath={`url(#${clipId})`} className="spark-area" />
       <path
         ref={pathRef}
         d={line}

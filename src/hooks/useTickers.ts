@@ -102,7 +102,11 @@ export function openInterestUsd(t: BulkTicker): number {
 // a cent, so precision scales with magnitude rather than being fixed.
 export function formatPrice(n: number): string {
   if (!Number.isFinite(n)) return '--';
-  if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  // FIXED decimal counts per magnitude so the string width never changes as the
+  // value tweens (a variable count made the live ticker reflow every frame and
+  // the whole tape shake). Paired with tabular-nums, the rendered width is now
+  // rock-stable for a given magnitude.
+  if (n >= 1000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (n >= 1) return n.toFixed(2);
   if (n >= 0.01) return n.toFixed(4);
   return n.toFixed(6);
