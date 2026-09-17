@@ -1317,7 +1317,13 @@ export default function WalletPage() {
 
         setData(walletResult);
         setProfile((profileResult as any)?.profile || null);
-        setClosedPositions(closedResult.positions || []);
+        // Don't blank closed positions on a BACKGROUND tick that came back empty
+        // — a transient fetch failure returns { positions: [] }, and overwriting
+        // would flash the Daily / Per-trade tabs to their empty state every time
+        // it hiccups. Keep the last-good list; only the initial load may set empty.
+        if (!silent || (closedResult.positions?.length ?? 0) > 0) {
+          setClosedPositions(closedResult.positions || []);
+        }
 
         // Only track on first load — no need to re-track every 10s.
         if (!silent) {
@@ -1621,7 +1627,13 @@ export default function WalletPage() {
       const feesFund = (fees + funding) * ((p.t - t0) / span);
       return { t: p.t, v: p.realized + attrib + feesFund };
     });
-  }, [allFills, margin]);
+    // Depend on the PRIMITIVE margin numbers, not the margin OBJECT. The 10s
+    // background refresh hands us a brand-new margin object every tick even when
+    // the values are identical — depending on the object made this whole
+    // reconstruction (and continuousPnl / dailyPnl below it) recompute every 10s,
+    // which is what made the Daily/Per-trade/Compare tabs lag and flicker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allFills, margin?.fees, margin?.funding, margin?.realizedPnl]);
 
   // Step 2: continuous TOTAL PnL (realized + unrealized) reconstructed from
   // fills + klines. At each hourly grid step we take the fill-derived open
