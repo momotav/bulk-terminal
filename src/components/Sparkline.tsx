@@ -71,11 +71,12 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
           <stop offset="60%" stopColor={color} stopOpacity={0.08} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
-        {/* Fine dot-grid that gives the filled area a textured, "printed" feel
-            instead of a flat wash — the touch that keeps a sparkline from
-            looking bare. Clipped to the area so it never spills. */}
-        <pattern id={dotsId} width="5" height="5" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill={color} fillOpacity={0.22} />
+        {/* Fine diagonal engraved hatch — the filled area reads like a printed
+            financial chart (etched, editorial) rather than a flat wash. A hatch,
+            not a dot-grid, so it's our own texture, not a borrowed one. Clipped
+            to the area so it never spills. */}
+        <pattern id={dotsId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="4" stroke={color} strokeWidth="0.6" strokeOpacity={0.2} />
         </pattern>
         <clipPath id={clipId}>
           <path d={area} />

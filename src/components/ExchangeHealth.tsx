@@ -16,7 +16,7 @@ interface ExchangeStats {
 }
 
 type SparkKey = 'volume24h' | 'openInterest' | 'activeTraders' | 'liquidations24h';
-type Sparklines = Record<SparkKey, { series: number[]; changePct: number | null }>;
+type Sparklines = Record<SparkKey, { series: number[]; changePct: number | null; low: number | null; high: number | null }>;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -147,7 +147,17 @@ export function ExchangeHealthStats() {
   return (
     <>
       {cards.map((c, i) => {
-        const series = sparks?.[c.spark]?.series ?? [];
+        const sp = sparks?.[c.spark];
+        const series = sp?.series ?? [];
+        // Low / High range as a supporting stat under the number.
+        const range =
+          sp && sp.low != null && sp.high != null ? (
+            <span className="tabular-nums">
+              <span className="text-[var(--role-content-subtle)]/70">L</span> {c.format(sp.low)}
+              <span className="mx-1 text-[var(--role-line)]">·</span>
+              <span className="text-[var(--role-content-subtle)]/70">H</span> {c.format(sp.high)}
+            </span>
+          ) : undefined;
         return (
           <StatCard
             key={c.label}
@@ -157,7 +167,8 @@ export function ExchangeHealthStats() {
             className="animate-row-enter"
             style={{ '--row-index': i } as React.CSSProperties}
             value={<AnimatedNumber value={c.raw} format={c.format} />}
-            chart={series.length >= 2 ? <Sparkline data={series} width={150} height={46} /> : undefined}
+            sub={range}
+            chart={series.length >= 2 ? <Sparkline data={series} width={140} height={48} /> : undefined}
           />
         );
       })}
