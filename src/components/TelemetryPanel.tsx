@@ -241,7 +241,7 @@ export function TelemetryPanel({ flush = false }: TelemetryPanelProps) {
 
       {/* Current value of the selected metric. */}
       <div className="px-4 pt-3">
-        <p className="font-mono text-[26px] font-bold leading-none tracking-tight tabular-nums text-[var(--role-content)]">
+        <p className="font-sans text-[26px] font-bold leading-none tracking-tight tabular-nums text-[var(--role-content)]">
           {pending || loading || down ? '--' : <AnimatedNumber value={m.value} format={formatRate} />}
           <span className="ml-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">
             {m.label}

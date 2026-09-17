@@ -299,7 +299,7 @@ export function PortfolioMarginCard() {
                     <span className="text-[11px] font-semibold text-[var(--pos)] tabular-nums">−{calc.hedgeDiscount.toFixed(1)}%</span>
                   )}
                 </div>
-                <div className="mt-1 font-mono font-bold tabular-nums text-[28px] leading-none text-[var(--pos)]">
+                <div className="mt-1 font-sans font-bold tabular-nums text-[28px] leading-none text-[var(--pos)]">
                   {loading ? '—' : `$${formatNumber(capitalFreed, 0)}`}
                 </div>
                 <p className="t-caption mt-1.5">

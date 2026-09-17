@@ -58,7 +58,7 @@ export function StatCard({ label, value, unit, sub, valueColor, loading, size = 
         <div className={cn('w-24 animate-pulse rounded bg-[var(--role-surface-raised)]', s.gap, s.skel)} />
       ) : (
         <div
-          className={cn('flex items-baseline gap-1 font-bold font-mono leading-none tracking-tight tabular-nums', s.gap, s.value)}
+          className={cn('flex items-baseline gap-1 font-bold font-sans leading-none tracking-tight tabular-nums', s.gap, s.value)}
           style={{ color: valueColor ?? 'var(--role-content)' }}
         >
           <span className="truncate">{value}</span>
