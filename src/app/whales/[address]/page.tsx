@@ -680,14 +680,19 @@ function HeatmapCell({
   );
 }
 
-function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPosition[] }) {
-  if (closedPositions.length === 0) {
+function PnlCalendarHeatmap({ closedPositions, dailyOverride }: { closedPositions: ClosedPosition[]; dailyOverride?: Map<string, number> | null }) {
+  // Wallets with only OPEN positions have no closed trades, so instead of a dead
+  // "No trade history" we fall back to a daily PnL derived from the reconstructed
+  // (mark-to-market) curve, passed in as dailyOverride.
+  const useOverride = closedPositions.length === 0 && !!dailyOverride && dailyOverride.size > 0;
+
+  if (closedPositions.length === 0 && !useOverride) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
         <div>
           <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>No trade history yet</p>
-          <p className="text-xs mt-1">Calendar view appears once the wallet has closed trades</p>
+          <p className="text-xs mt-1">Daily PnL appears once the wallet has trades</p>
         </div>
       </div>
     );
@@ -698,7 +703,17 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
   const dayBuckets = new Map<string, number>();
   let earliest = Infinity;
   let latest = -Infinity;
-  for (const p of closedPositions) {
+  const noteDay = (dayKey: string, ms: number) => {
+    if (ms < earliest) earliest = ms;
+    if (ms > latest) latest = ms;
+  };
+  if (useOverride) {
+    for (const [dayKey, pnl] of dailyOverride!) {
+      dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + pnl);
+      const [y, mo, da] = dayKey.split('-').map(Number);
+      noteDay(dayKey, new Date(y, mo - 1, da).getTime());
+    }
+  } else for (const p of closedPositions) {
     // Guard against ns-precision timestamps slipping through un-converted
     // (BULK ships closeTime in nanoseconds; if any path forgets the ÷1e6
     // the date lands in the far future and the whole heatmap renders
@@ -710,8 +725,7 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
     // fall on the same calendar day bucket together.
     const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + p.realizedPnl);
-    if (closedMs < earliest) earliest = closedMs;
-    if (closedMs > latest) latest = closedMs;
+    noteDay(dayKey, closedMs);
   }
 
   // If every position was filtered out (all bad timestamps), show the
@@ -1678,6 +1692,28 @@ export default function WalletPage() {
     return { rows, snapCount: snap.length, recCount: reconstructedRealized.length, eqCount: continuousPnl.length };
   }, [history, reconstructedRealized, continuousPnl]);
 
+  // Daily PnL derived from the reconstructed cumulative curve — the day-over-day
+  // change in total PnL. Lets the Daily calendar work for wallets with only OPEN
+  // positions (no closed trades) via mark-to-market, instead of a dead panel.
+  const dailyPnlFromSeries = useMemo<Map<string, number> | null>(() => {
+    const src = continuousPnl.length >= 2
+      ? continuousPnl
+      : reconstructedRealized.map((p) => ({ t: p.t, v: p.v }));
+    if (src.length < 2) return null;
+    // Last cumulative value seen on each local calendar day.
+    const lastByDay = new Map<string, number>();
+    for (const p of src) {
+      const d = new Date(p.t);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      lastByDay.set(key, p.v);
+    }
+    const days = Array.from(lastByDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const out = new Map<string, number>();
+    let prev = 0;
+    for (const [key, v] of days) { out.set(key, v - prev); prev = v; }
+    return out;
+  }, [continuousPnl, reconstructedRealized]);
+
   // The series the hero PnL/Value chart plots: the fills+klines continuous
   // total-PnL curve when we could reconstruct it, otherwise the coarse
   // snapshot curve (wallets with no fills, or before fills load). Each point is
@@ -2570,7 +2606,7 @@ export default function WalletPage() {
                 </div>
               ) : chartView === 'calendar' ? (
                 <div className="min-h-[380px]">
-                  <PnlCalendarHeatmap closedPositions={closedPositions} />
+                  <PnlCalendarHeatmap closedPositions={closedPositions} dailyOverride={dailyPnlFromSeries} />
                 </div>
               ) : chartView === 'drawdown' ? (
                 <DrawdownChart history={history} address={address} />
