@@ -799,6 +799,13 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
     if (pnl < worstDay) worstDay = pnl;
   }
 
+  // Per-day PnL bars for the panel beside the heatmap — the days that actually
+  // traded, chronological. Turns the empty right half into a real readout.
+  const dailyBars = Array.from(dayBuckets.entries())
+    .filter(([, pnl]) => pnl !== 0)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, pnl]) => ({ label: key.slice(5).replace('-', '/'), pnl }));
+
   return (
     <div className="flex-1 p-4 min-h-[420px]">
       {/* Summary strip — gives context for the heatmap below. */}
@@ -831,7 +838,8 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
           wallet with one week of data shows a few small squares in the
           corner, not giant blocks. The panel scrolls horizontally if a
           very long history overflows. */}
-      <div className="w-full">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
+      <div className="shrink-0">
         <div className="inline-flex items-start gap-2">
           {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
           <div className="flex flex-col gap-[5px] shrink-0 pr-1">
@@ -889,6 +897,33 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
           })}
         </div>
       </div>
+
+      {/* Daily-PnL bars — fills the space beside the heatmap with a real
+          readout of each trading day's realized PnL, green up / red down. */}
+      {dailyBars.length > 0 && (
+        <div className="min-w-0 flex-1 lg:min-h-[220px]">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Daily PnL</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={dailyBars} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+              <XAxis dataKey="label" tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
+              <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
+              <ReferenceLine y={0} stroke="var(--border-color)" />
+              <Tooltip
+                cursor={{ fill: 'var(--text-primary)', opacity: 0.05 }}
+                contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: 'var(--text-secondary)' }}
+                formatter={(v: number) => [<span style={{ color: v >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{v >= 0 ? '+' : '-'}${formatNumber(Math.abs(v), 2)}</span>, 'PnL']}
+              />
+              <Bar dataKey="pnl" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                {dailyBars.map((d, i) => (
+                  <Cell key={i} fill={d.pnl >= 0 ? 'var(--pos)' : 'var(--neg)'} fillOpacity={0.85} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      </div>
     </div>
   );
 }
@@ -927,6 +962,9 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
                 <stop offset="0%" stopColor="var(--neg)" stopOpacity={0} />
                 <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.3} />
               </linearGradient>
+              <pattern id="ddHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="5" stroke="var(--role-content)" strokeWidth="0.6" strokeOpacity={0.06} />
+              </pattern>
             </defs>
             <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
             <YAxis tickFormatter={(v) => (v === 0 ? '$0' : `-$${formatCompact(Math.abs(v))}`)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} domain={[(min: number) => (min < 0 ? min * 1.1 : -1), 0]} />
@@ -939,6 +977,7 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
               formatter={(v: number) => [Math.abs(v) < 0.005 ? '$0.00' : `-$${formatNumber(Math.abs(v), 2)}`, 'Drawdown']}
             />
             <Area type="monotone" dataKey="dd" stroke="var(--neg)" strokeWidth={2} fill="url(#ddGrad)" />
+            <Area type="monotone" dataKey="dd" stroke="none" fill="url(#ddHatch)" isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       </ChartFrame>
@@ -2663,6 +2702,13 @@ export default function WalletPage() {
                             <stop offset={`${zeroPosition * 100}%`} stopColor="var(--neg)" stopOpacity={0.1} />
                             <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.3} />
                           </linearGradient>
+                          {/* Diagonal engraved hatch, laid over the gradient fill
+                              for an etched, editorial texture (same language as the
+                              dashboard sparklines). Neutral + faint so it reads over
+                              both the green and red halves. */}
+                          <pattern id="pnlHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="5" stroke="var(--role-content)" strokeWidth="0.6" strokeOpacity={0.06} />
+                          </pattern>
                         </defs>
                         <XAxis
                           dataKey="timestamp"
@@ -2710,6 +2756,16 @@ export default function WalletPage() {
                           isAnimationActive
                           animationDuration={550}
                           animationEasing="ease-out"
+                        />
+                        {/* Hatch texture overlay — same curve, no line, just the
+                            engraved fill on top of the gradient. */}
+                        <Area
+                          key={`hatch-${chartRange}-${heroMetric}`}
+                          type="monotone"
+                          dataKey="series"
+                          stroke="none"
+                          fill="url(#pnlHatch)"
+                          isAnimationActive={false}
                         />
                         {/* Buy (bids) / sell (asks) markers, aggregated per hour
                             and sitting on the curve. A bg-tinted ring lifts them
