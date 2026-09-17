@@ -1677,10 +1677,19 @@ export default function WalletPage() {
       return res;
     };
 
-    // Hourly grid across the union of kline times, from the first fill to now.
+    // Grid across the union of kline times, from the first fill to now.
     const t0 = Math.min(...allFills.map((f) => f.timestamp));
     const gridSet = new Set<number>();
     for (const s of symbols) for (const m of marks[s]) if (m.t >= t0) gridSet.add(m.t);
+    // Anchor the grid to the realized backbone (one point per closing fill) so
+    // the curve ALWAYS spans the full fill history — even when klines only come
+    // back for a recent window. Without this the reconstructed curve collapses
+    // to wherever klines happen to exist (e.g. just today), then replaces the
+    // full snapshot curve ~1s after load. Where no kline mark reaches back to an
+    // early point, unrealized is 0 there, so the point sits on the realized
+    // curve (correct); marked-unrealized detail is layered in only where klines
+    // do exist.
+    for (const p of reconstructedRealized) if (p.t >= t0) gridSet.add(p.t);
     gridSet.add(Date.now());
     const grid = Array.from(gridSet).sort((a, b) => a - b);
 
