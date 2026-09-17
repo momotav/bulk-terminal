@@ -16,6 +16,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 interface SparklineProps {
   data: number[];
+  /** Fixed width. Omit to fill the parent (measured live) — the card layout
+   *  uses that so the trend hugs the number and reaches the card's edge. */
   width?: number;
   height?: number;
   /** Palette colour for the stroke + gradient. Defaults to the accent. */
@@ -23,13 +25,31 @@ interface SparklineProps {
   className?: string;
 }
 
-export function Sparkline({ data, width = 132, height = 40, color = 'var(--accent)', className }: SparklineProps) {
+export function Sparkline({ data, width: fixedWidth, height = 44, color = 'var(--accent)', className }: SparklineProps) {
   const rawId = useId();
   const gradId = `g${rawId.replace(/[:]/g, '')}`;
   const dotsId = `d${rawId.replace(/[:]/g, '')}`;
   const clipId = `c${rawId.replace(/[:]/g, '')}`;
   const pathRef = useRef<SVGPathElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [len, setLen] = useState(0);
+  // When no fixed width is given, measure the wrapper and render to it, so the
+  // sparkline fills the space after the number (no distortion — we recompute
+  // the path at the real pixel width rather than stretching the SVG).
+  const [measured, setMeasured] = useState(fixedWidth ?? 140);
+  const width = fixedWidth ?? measured;
+
+  useEffect(() => {
+    if (fixedWidth != null) return;
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0].contentRect.width);
+      if (w > 8) setMeasured(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fixedWidth]);
 
   const { line, area, ok, end } = useMemo(() => {
     const pts = data.filter((n) => Number.isFinite(n));
@@ -54,16 +74,17 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
     if (pathRef.current) setLen(pathRef.current.getTotalLength());
   }, [line]);
 
-  if (!ok) return null;
+  if (!ok) return <div ref={wrapRef} className={className} style={{ height }} aria-hidden />;
 
   return (
+    <div ref={wrapRef} className={className} style={{ width: fixedWidth, lineHeight: 0 }}>
     <svg
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      className={className}
       preserveAspectRatio="none"
       aria-hidden
+      style={{ display: 'block' }}
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -105,5 +126,6 @@ export function Sparkline({ data, width = 132, height = 40, color = 'var(--accen
         </g>
       )}
     </svg>
+    </div>
   );
 }

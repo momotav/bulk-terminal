@@ -81,15 +81,16 @@ export function StatCard({ label, value, unit, sub, valueColor, loading, size = 
         'rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)]',
         s.pad,
         interactive && 'stat-card-interactive',
-        // With a chart, lay text and chart on one row and let the chart claim the
-        // empty right space; otherwise keep the plain stacked card.
-        chart && !loading ? 'flex items-center justify-between gap-3 overflow-hidden' : '',
+        // With a chart, lay text and chart on one row; the chart GROWS to fill
+        // the space right after the number (hugs it, reaches the card edge) so
+        // there's no dead gap in the middle.
+        chart && !loading ? 'flex items-center gap-3 overflow-hidden' : '',
         className,
       )}
     >
       {text}
       {chart && !loading && (
-        <div className="shrink-0 self-stretch flex items-end pointer-events-none opacity-90">
+        <div className="flex-1 min-w-0 self-center flex items-center pointer-events-none opacity-90">
           {chart}
         </div>
       )}

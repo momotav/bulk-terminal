@@ -55,19 +55,16 @@ export function MarketTicker({ tickers, loading }: MarketTickerProps) {
                   {coin}
                 </span>
                 {/* Price tweens to its new value on each poll instead of
-                    hard-snapping — the difference between a live feed and a
-                    flicker. Fixed-width, right-aligned slot so the tween can
-                    NEVER push its neighbours (that reflow is what shook the
-                    whole tape). */}
-                <span className="inline-block min-w-[4.75rem] text-right font-mono text-[11px] tabular-nums text-[var(--role-content-muted)]">
+                    hard-snapping. formatPrice now emits a FIXED decimal count,
+                    so with tabular-nums the width is stable through the tween —
+                    no reflow, no tape shake, and no wasteful fixed-width slot. */}
+                <span className="font-mono text-[11px] tabular-nums text-[var(--role-content-muted)]">
                   <AnimatedNumber value={t.lastPrice} format={formatPrice} />
                 </span>
                 {/* 24h change with a directional caret. Colour eases when it
-                    crosses zero, so a market turning red/green fades not blinks.
-                    Its own fixed slot so a magnitude change (9.9% → 10.1%) can't
-                    jostle the row either. */}
+                    crosses zero, so a market turning red/green fades not blinks. */}
                 <span
-                  className="inline-flex min-w-[3.75rem] items-center justify-end gap-0.5 font-mono text-[11px] font-medium tabular-nums transition-colors duration-500 ease-[var(--ease-out)]"
+                  className="inline-flex items-center gap-0.5 font-mono text-[11px] font-medium tabular-nums transition-colors duration-500 ease-[var(--ease-out)]"
                   style={{ color }}
                 >
                   <span aria-hidden className="text-[9px] leading-none">{up ? '▲' : '▼'}</span>
