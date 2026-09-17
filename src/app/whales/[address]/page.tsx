@@ -646,7 +646,7 @@ function HeatmapCell({
   return (
     <div className="relative">
       <div
-        className="w-[25px] h-[25px] rounded-sm cursor-pointer transition-transform hover:scale-110 hover:ring-1 hover:ring-[var(--text-secondary)]/40"
+        className="w-[36px] h-[36px] rounded-[5px] cursor-pointer transition-transform hover:scale-110 hover:ring-1 hover:ring-[var(--text-secondary)]/40"
         style={
           isNoTrade
             ? { backgroundColor: 'var(--border-color)', opacity: 0.5 }
@@ -834,24 +834,24 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
       <div className="w-full">
         <div className="inline-flex items-start gap-2">
           {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
-          <div className="flex flex-col gap-[4px] shrink-0 pr-1">
+          <div className="flex flex-col gap-[5px] shrink-0 pr-1">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
               <div
                 key={d}
-                className="h-[25px] text-[10px] text-[var(--text-tertiary)] leading-[25px] tabular-nums"
+                className="h-[36px] text-[10px] text-[var(--text-tertiary)] leading-[36px] tabular-nums"
                 style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
               >
                 {d}
               </div>
             ))}
           </div>
-          {/* Week columns — fixed 25px cells, 4px gaps. */}
-          <div className="flex gap-[4px]">
+          {/* Week columns — 36px cells, 5px gaps. */}
+          <div className="flex gap-[5px]">
             {weeks.map((week, col) => (
-              <div key={col} className="flex flex-col gap-[4px]">
+              <div key={col} className="flex flex-col gap-[5px]">
                 {week.map((day, row) => {
                   if (day.isFuture) {
-                    return <div key={row} className="w-[25px] h-[25px]" />;
+                    return <div key={row} className="w-[36px] h-[36px]" />;
                   }
                   const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
                   const isWin = day.pnl !== null && day.pnl > 0;
@@ -877,12 +877,12 @@ function PnlCalendarHeatmap({ closedPositions }: { closedPositions: ClosedPositi
           </div>
         </div>
         {/* Month labels — fixed 17px per column (14px cell + 3px gap). */}
-        <div className="flex mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider" style={{ marginLeft: '32px' }}>
+        <div className="flex mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider" style={{ marginLeft: "41px" }}>
           {monthLabels.map((m, idx) => {
             const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
             const widthCols = nextCol - m.col;
             return (
-              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 29}px` }}>
+              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * 41}px` }}>
                 {m.label}
               </div>
             );
@@ -2566,6 +2566,23 @@ export default function WalletPage() {
                 const isValue = heroMetric === 'value';
                 const chartData = filtered.map((p) => ({ timestamp: p.t, series: isValue ? base + p.v : p.v }));
 
+                // ONE x-axis tick per calendar day (or hour for 24h). Without
+                // this recharts labels every data point, so a day with many
+                // fills prints "Sep 6 · Sep 6 · Sep 7 · Sep 7 · Sep 7…". We take
+                // the first timestamp of each distinct bucket instead.
+                const dayTicks = (() => {
+                  const seen = new Set<string>();
+                  const ticks: number[] = [];
+                  for (const d of chartData) {
+                    const dt = new Date(d.timestamp);
+                    const key = chartRange === '24h'
+                      ? `${dt.getHours()}`
+                      : `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+                    if (!seen.has(key)) { seen.add(key); ticks.push(d.timestamp); }
+                  }
+                  return ticks;
+                })();
+
                 const vals = chartData.map((d) => d.series);
                 const minV = vals.length > 0 ? Math.min(...vals) : 0;
                 const maxV = vals.length > 0 ? Math.max(...vals) : 0;
@@ -2649,6 +2666,12 @@ export default function WalletPage() {
                         </defs>
                         <XAxis
                           dataKey="timestamp"
+                          type="number"
+                          scale="time"
+                          domain={['dataMin', 'dataMax']}
+                          ticks={dayTicks}
+                          interval={0}
+                          minTickGap={28}
                           tickFormatter={(ts) => {
                             const d = new Date(ts);
                             return chartRange === '24h'
