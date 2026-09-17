@@ -965,6 +965,18 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
       return { timestamp: h.timestamp, dd: cum - peak };
     });
   }, [history]);
+  // One x-axis tick per calendar day — otherwise recharts labels adjacent
+  // points that fall on the SAME day and prints "Sep 5 · Sep 5 · Sep 6 · Sep 6".
+  const dayTicks = useMemo(() => {
+    const seen = new Set<string>();
+    const ticks: Array<(typeof data)[number]['timestamp']> = [];
+    for (const d of data) {
+      const dt = new Date(d.timestamp);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+      if (!seen.has(key)) { seen.add(key); ticks.push(d.timestamp); }
+    }
+    return ticks;
+  }, [data]);
   if (!history.length) return <ChartEmpty label="No history data yet" />;
   return (
     <div className="flex-1 p-4 min-h-[420px]">
@@ -980,7 +992,7 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
                 <line x1="0" y1="0" x2="0" y2="5" stroke="var(--role-content)" strokeWidth="0.6" strokeOpacity={0.06} />
               </pattern>
             </defs>
-            <XAxis dataKey="timestamp" tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={40} />
+            <XAxis dataKey="timestamp" ticks={dayTicks} tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} minTickGap={20} />
             <YAxis tickFormatter={(v) => (v === 0 ? '$0' : `-$${formatCompact(Math.abs(v))}`)} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} domain={[(min: number) => (min < 0 ? min * 1.1 : -1), 0]} />
             <Tooltip
               cursor={{ stroke: 'var(--text-tertiary)', strokeOpacity: 0.3 }}
@@ -2760,12 +2772,7 @@ export default function WalletPage() {
                         </defs>
                         <XAxis
                           dataKey="timestamp"
-                          type="number"
-                          scale="time"
-                          domain={['dataMin', 'dataMax']}
                           ticks={dayTicks}
-                          interval={0}
-                          minTickGap={28}
                           tickFormatter={(ts) => {
                             const d = new Date(ts);
                             return chartRange === '24h'
