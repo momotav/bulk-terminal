@@ -7,6 +7,7 @@
 // ----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Palette, Sun, Moon, Check } from 'lucide-react';
 
 type Theme = 'dark' | 'light';
@@ -24,7 +25,13 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<Theme>('dark');
   const [palette, setPalette] = useState<PaletteId>('classic');
+  // Popover is portaled to <body> so no ancestor's overflow/stacking context can
+  // clip it (the old in-flow popover got cut off on mobile). We position it with
+  // fixed coords measured from the trigger button.
+  const [coords, setCoords] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -32,13 +39,29 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
     setPalette((localStorage.getItem('bulkstats-palette') as PaletteId) || 'classic');
   }, []);
 
+  // Measure the trigger and anchor the fixed popover under its right edge,
+  // clamped into the viewport. Recomputed on open, resize, and scroll.
   useEffect(() => {
     if (!open) return;
+    const place = () => {
+      const b = btnRef.current?.getBoundingClientRect();
+      if (!b) return;
+      setCoords({ top: b.bottom + 8, right: Math.max(12, window.innerWidth - b.right) });
+    };
+    place();
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
   }, [open]);
 
   const chooseTheme = (t: Theme) => {
@@ -61,6 +84,7 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
+        ref={btnRef}
         onClick={() => setOpen((o) => !o)}
         className="flex items-center justify-center w-9 h-9 rounded-md transition-colors hover:bg-[var(--bg-secondary-20)] text-[var(--text-secondary)]"
         aria-label="Appearance settings"
@@ -70,8 +94,11 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
         <Palette className="w-4 h-4" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 origin-top-right mt-2 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-[100]">
+      {open && mounted && createPortal(
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', top: coords.top, right: coords.right }}
+          className="origin-top-right w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-[100]">
           {/* Theme */}
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)] font-medium mb-1.5">Theme</div>
           <div className="flex gap-1.5 mb-3">
@@ -111,7 +138,8 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

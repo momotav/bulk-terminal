@@ -334,7 +334,7 @@ export function ChartFrame({
         {/* Left axis description — vertical, in a slim gutter so it's part of
             the captured node (shows in-app AND in the exported PNG). */}
         {yLabel && (
-          <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
+          <div className="relative z-10 shrink-0 w-6 hidden sm:flex items-center justify-center select-none">
             <span
               className="whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide"
               style={{ transform: `translateY(${-axisLift}px) rotate(-90deg)` }}
@@ -352,7 +352,7 @@ export function ChartFrame({
 
         {/* Right axis description (dual-axis charts). */}
         {yLabelRight && (
-          <div className="relative z-10 shrink-0 w-6 flex items-center justify-center select-none">
+          <div className="relative z-10 shrink-0 w-6 hidden sm:flex items-center justify-center select-none">
             <span
               className="whitespace-nowrap text-[13px] text-[var(--text-secondary)] tracking-wide"
               style={{ transform: `translateY(${-axisLift}px) rotate(90deg)` }}

@@ -13,6 +13,7 @@ import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { CoinSelector } from '@/components/CoinSelector';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -564,6 +565,26 @@ export default function AnalyticsPage() {
   // networks triggers one full refresh (otherwise charts keep the old
   // network's data until a timeframe toggle forces a refetch).
   const { network } = useCurrentNetwork();
+  // Phones get a tighter chart layout: fewer x-axis labels (so they don't
+  // overlap) and narrower y-axis gutters (so the plot itself is wider).
+  const isMobile = useIsMobile();
+  const yAxisWidth = isMobile ? 44 : 60;
+  const yAxisWidthRight = isMobile ? 46 : 65;
+  // Y-axis tick labels: full 2-decimal compact on desktop; a tighter form on
+  // phones ("1.4M", "380K") so the labels fit the narrower gutter without
+  // clipping and leave more room for the plot.
+  const fmtAxis = useCallback((v: number): string => {
+    if (!isMobile) return formatCompact(v);
+    const abs = Math.abs(v);
+    const short = (unit: number, suf: string) => {
+      const s = v / unit;
+      return (Math.abs(s) >= 100 ? s.toFixed(0) : s.toFixed(1)).replace(/\.0$/, '') + suf;
+    };
+    if (abs >= 1e9) return short(1e9, 'B');
+    if (abs >= 1e6) return short(1e6, 'M');
+    if (abs >= 1e3) return short(1e3, 'K');
+    return v.toFixed(0);
+  }, [isMobile]);
 
   const [volumeHours, setVolumeHours] = useState(24);
   const [oiHours, setOiHours] = useState(24);
@@ -1137,8 +1158,11 @@ export default function AnalyticsPage() {
 
   // Calculate optimal tick interval - show 4-6 clean labels max
   const getTickInterval = (dataLength: number, hours: number) => {
-    // Target 4-5 labels for clean spacing
-    const targetLabels = hours <= 24 ? 5 : hours <= 168 ? 5 : 5;
+    // Target a handful of evenly spaced labels. Phones are much narrower, so
+    // aim for 3 (a "00:00 … 12:00 … 23:00" feel) instead of 5 — otherwise the
+    // time labels run together into "00:0005:0010:00…".
+    void hours;
+    const targetLabels = isMobile ? 3 : 5;
     return Math.max(1, Math.floor(dataLength / targetLabels));
   };
 
@@ -1302,8 +1326,8 @@ export default function AnalyticsPage() {
                             interval={getTickInterval(volumeDataFiltered.length, volumeHours)}
                             padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<ChartTooltip />} />
                           {/* One stacked Bar per enabled coin — dynamic so new coins Just Work.
                               Each Bar renders a Cell per data point so we can fade today's
@@ -1404,7 +1428,7 @@ export default function AnalyticsPage() {
                             interval={getTickInterval(oiChartData.length, oiHours)}
                             padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
+                          <YAxis tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
                           <Tooltip content={<ChartTooltip />} />
                           {orderedSeriesFor(oiCoins).map(coin => (
                             <Area
@@ -1496,7 +1520,7 @@ export default function AnalyticsPage() {
                             interval={getTickInterval(fundingChartData.length, fundingHours)}
                             padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis tickFormatter={v => `${(v * 100).toFixed(4)}%`} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={70} domain={['auto', 'auto']} />
+                          <YAxis tickFormatter={v => `${(v * 100).toFixed(isMobile ? 3 : 4)}%`} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 54 : 70} domain={['auto', 'auto']} />
                           <ReferenceLine y={0} stroke="var(--border-color)" strokeDasharray="3 3" />
                           <Tooltip content={<FundingTooltip />} />
                           {orderedSeriesFor(fundingCoins)
@@ -1571,8 +1595,8 @@ export default function AnalyticsPage() {
                             interval={getTickInterval(liquidationsDataFiltered.length, liquidationsHours)}
                             padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<ChartTooltip />} />
                           {orderedSeriesFor(liquidationsCoins).map((coin, i, arr) => (
                             <Bar
@@ -1656,8 +1680,8 @@ export default function AnalyticsPage() {
                             interval={getTickInterval(tradesDataFiltered.length, tradesHours)}
                             padding={{ left: 10, right: 10 }} 
                           />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<ChartTooltip />} />
                           {orderedSeriesFor(tradesCoins).map((coin, i, arr) => (
                             <Bar
@@ -1727,8 +1751,8 @@ export default function AnalyticsPage() {
                           barCategoryGap="20%"
                         >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, adlHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<ChartTooltip />} />
                           {orderedSeriesFor(adlCoins).map((coin, i, arr) => (
                             <Bar
@@ -1810,8 +1834,8 @@ export default function AnalyticsPage() {
                           barCategoryGap={sliceDataByRange(uniqueTradersData, uniqueTradersRange).length <= 5 ? "30%" : "20%"}
                         >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, uniqueTradersHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<UserStatsTooltip />} />
                           {orderedSeriesFor(uniqueTradersCoins).map((coin, i, arr) => (
                             <Bar
@@ -1878,8 +1902,8 @@ export default function AnalyticsPage() {
                           barCategoryGap={sliceDataByRange(newUsersData, newUsersRange).length <= 5 ? "30%" : "20%"}
                         >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, newUsersHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
-                          <YAxis yAxisId="left" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
-                          <YAxis yAxisId="right" orientation="right" tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={65} />
+                          <YAxis yAxisId="left" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
+                          <YAxis yAxisId="right" orientation="right" tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidthRight} />
                           <Tooltip content={<UserStatsTooltip />} />
                           <Bar yAxisId="left" dataKey="newUsers" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(newUsersData, newUsersRange).length <= 3 ? 150 : 80} radius={[2, 2, 0, 0]}>
                             {sliceDataByRange(newUsersData, newUsersRange).map((entry: any, idx: number) => (
@@ -1935,7 +1959,7 @@ export default function AnalyticsPage() {
                           barCategoryGap={sliceDataByRange(dauData, dauRange).length <= 5 ? "25%" : "15%"}
                         >
                           <XAxis dataKey="timestamp" tickFormatter={(ts) => formatDateForChart(ts, dauHours)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} padding={{ left: 20, right: 20 }} />
-                          <YAxis tickFormatter={v => formatCompact(v)} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={60} />
+                          <YAxis tickFormatter={fmtAxis} tick={{ fill: 'var(--text-secondary)', fontSize: 14, fontFamily: '"Overused Grotesk", sans-serif' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={yAxisWidth} />
                           <Tooltip content={<UserStatsTooltip />} />
                           <Bar dataKey="dau" fill={COLORS.BTC} animationDuration={400} animationEasing="ease-out" maxBarSize={sliceDataByRange(dauData, dauRange).length <= 3 ? 200 : 80} radius={[2, 2, 0, 0]}>
                             {sliceDataByRange(dauData, dauRange).map((entry: any, idx: number) => (
