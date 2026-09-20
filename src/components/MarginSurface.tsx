@@ -556,7 +556,7 @@ function Heatmap({
               return (
                 <div
                   key={j}
-                  className="aspect-square min-h-[10px] cursor-default transition-[filter] hover:brightness-125"
+                  className="min-h-[16px] sm:aspect-square sm:min-h-[10px] cursor-default transition-[filter] hover:brightness-125"
                   style={{ backgroundColor: cellColor(effective, baseline, maxMmr) }}
                   onMouseEnter={() =>
                     onHover({

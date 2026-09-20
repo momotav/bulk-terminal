@@ -461,23 +461,26 @@ function LadderColumn({ side, rows, maxSz }: { side: 'bid' | 'ask'; rows: Return
   const fill = side === 'bid' ? 'rgb(var(--pos-rgb) / 0.14)' : 'rgb(var(--neg-rgb) / 0.14)';
   return (
     <div className="min-w-0">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 pb-1.5 pt-2">
+      {/* On phones the Total (cumulative) column is dropped and spacing is
+          tightened — 2 sides × 3 numeric columns don't fit a phone width, so
+          the bid Total was overlapping the ask Price. */}
+      <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] gap-1.5 sm:gap-3 px-2 sm:px-3 pb-1.5 pt-2">
         <span className="table-header">Price</span>
         <span className="table-header text-right">Size</span>
-        <span className="table-header w-16 text-right">Total</span>
+        <span className="table-header w-16 text-right hidden sm:block">Total</span>
       </div>
       <div>
         {rows.map((l) => {
           const pct = (l.sz / maxSz) * 100;
           return (
-            <div key={`${side}-${l.px}`} className="relative grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-[3px] font-mono text-xs tabular-nums">
+            <div key={`${side}-${l.px}`} className="relative grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] items-center gap-1.5 sm:gap-3 px-2 sm:px-3 py-[3px] font-mono text-[11px] sm:text-xs tabular-nums">
               <div
                 className={cn('pointer-events-none absolute inset-y-px transition-[width] duration-500 ease-out', side === 'bid' ? 'right-0' : 'left-0')}
                 style={{ width: `${pct}%`, background: fill }}
               />
               <span className="relative font-medium" style={{ color: pxColor }}>{formatPrice(l.px)}</span>
               <span className="relative text-right text-[var(--role-content)]">{formatSize(l.sz)}</span>
-              <span className="relative w-16 text-right text-[var(--role-content-subtle)]">{formatSize(l.cum)}</span>
+              <span className="relative w-16 text-right text-[var(--role-content-subtle)] hidden sm:block">{formatSize(l.cum)}</span>
             </div>
           );
         })}

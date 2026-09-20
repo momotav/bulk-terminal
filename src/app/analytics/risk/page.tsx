@@ -11,6 +11,7 @@ import { CoinSelector } from '@/components/CoinSelector';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { ChartFrame } from '@/components/ChartFrame';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import { PortfolioMarginCard } from '@/components/PortfolioMarginCard';
@@ -325,6 +326,7 @@ export default function RiskPage() {
   // immediately refetches every chart with the new network's data (otherwise
   // the chart keeps the old network's series until the timeframe is toggled).
   const { network } = useCurrentNetwork();
+  const isMobile = useIsMobile();
 
   // Market Regime coin selection — capped at 4 via CoinSelector's maxCount so
   // the gauge grid stays visually manageable. Aggregate card + up to 4 coins
@@ -465,7 +467,7 @@ export default function RiskPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
-      <main className="flex-1 w-full px-6 lg:px-10 py-6">
+      <main className="flex-1 w-full px-3 sm:px-6 lg:px-10 py-6">
         <h1 className="page-title text-[var(--text-primary)] mb-6">Risk</h1>
 
         {loading ? (
@@ -497,8 +499,8 @@ export default function RiskPage() {
 
               {regimeData ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div className="col-span-1 flex flex-col items-center justify-center p-4 rounded-lg" style={{ backgroundColor: 'rgb(var(--p-inset))' }}>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+                    <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center p-4 rounded-lg" style={{ backgroundColor: 'rgb(var(--p-inset))' }}>
                       <p className="text-sm text-[var(--text-tertiary)] mb-2">Aggregate</p>
                       <p className="text-4xl font-bold" style={{ color: getRegimeLabel(Math.round(regimeData.aggregateRegime)).color }}>
                         {regimeData.aggregateRegime > 0 ? '+' : ''}{regimeData.aggregateRegime.toFixed(1)}
@@ -655,6 +657,8 @@ export default function RiskPage() {
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
+                          interval="preserveStartEnd"
+                          minTickGap={isMobile ? 30 : 12}
                         />
                         <YAxis
                           tickFormatter={(v) => `${v.toFixed(1)}`}
@@ -738,12 +742,15 @@ export default function RiskPage() {
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
+                          interval="preserveStartEnd"
+                          minTickGap={isMobile ? 30 : 12}
                         />
                         <YAxis
                           tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           tickLine={false}
                           tickFormatter={(v) => formatCompact(v)}
+                          width={isMobile ? 40 : 60}
                         />
                         <Tooltip content={<ChartTooltip />} />
                         {volatilityCoins
