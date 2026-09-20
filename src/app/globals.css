@@ -947,6 +947,15 @@ html[data-palette="orchid"] {
   animation-delay: calc(var(--row-index, 0) * 24ms);
 }
 
+/* Mobile bottom-sheet slide-up (appearance menu). */
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: none; }
+}
+.animate-sheet-up {
+  animation: sheet-up var(--dur-base) var(--ease-out) both;
+}
+
 /* Sparkline draw-on: the trend line traces itself left→right and the area
    fades up under it. One authored moment on the dashboard KPI cards, keyed to
    real data. --spark-len is the measured path length (set per-instance in JS)
@@ -996,7 +1005,7 @@ html[data-palette="orchid"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spark-line, .spark-area, .spark-end, .animate-row-enter { animation: none; }
+  .spark-line, .spark-area, .spark-end, .animate-row-enter, .animate-sheet-up { animation: none; }
   .spark-line { stroke-dashoffset: 0; }
   .stat-card-interactive { transition: none; }
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { analytics, formatCompact, cn } from '@/lib/api';
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -62,6 +63,20 @@ const RevenueTooltip = ({ active, payload, label, showTime }: any) => {
 
 export function ProtocolRevenueChart() {
   const { network } = useCurrentNetwork();
+  const isMobile = useIsMobile();
+  // Compact axis labels on phones so the y-gutter can be narrow (more plot).
+  const fmtAxis = useCallback((v: number): string => {
+    if (!isMobile) return formatCompact(v);
+    const abs = Math.abs(v);
+    const short = (unit: number, suf: string) => {
+      const s = v / unit;
+      return (Math.abs(s) >= 100 ? s.toFixed(0) : s.toFixed(1)).replace(/\.0$/, '') + suf;
+    };
+    if (abs >= 1e9) return short(1e9, 'B');
+    if (abs >= 1e6) return short(1e6, 'M');
+    if (abs >= 1e3) return short(1e3, 'K');
+    return v.toFixed(0);
+  }, [isMobile]);
   const [revenueHours, setRevenueHours] = useState(168);
   const [revenueData, setRevenueData] = useState<{ 
     timestamp: string; 
@@ -279,8 +294,9 @@ export function ProtocolRevenueChart() {
         </div>
       ) : displayData.length > 0 ? (
         <div className="flex">
-          {/* Left Y-axis label - aligned with chart area (350px) */}
-          <div className="relative w-6 shrink-0">
+          {/* Left Y-axis label - aligned with chart area (350px). Hidden on
+              mobile so the plot gets the width instead. */}
+          <div className="relative w-6 shrink-0 hidden sm:block">
             <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
               <span 
                 className="transform -rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
@@ -311,30 +327,32 @@ export function ProtocolRevenueChart() {
                   barGap={4}
                   barCategoryGap={dynamicCategoryGap}
                 >
-                  <XAxis 
-                    dataKey="timestamp" 
+                  <XAxis
+                    dataKey="timestamp"
                     tickFormatter={formatDateForChart}
                     tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                     axisLine={{ stroke: 'var(--border-color)' }}
                     tickLine={false}
+                    interval={isMobile ? Math.max(0, Math.floor(displayData.length / 4)) : 'preserveStartEnd'}
+                    minTickGap={isMobile ? 20 : 5}
                   />
-                  <YAxis 
+                  <YAxis
                     yAxisId="left"
-                    tickFormatter={(v) => formatCompact(v)}
+                    tickFormatter={fmtAxis}
                     tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                     axisLine={{ stroke: 'var(--border-color)' }}
                     tickLine={false}
-                    width={60}
+                    width={isMobile ? 44 : 60}
                   />
                   {showCumulative && (
-                    <YAxis 
+                    <YAxis
                       yAxisId="right"
                       orientation="right"
-                      tickFormatter={(v) => formatCompact(v)}
+                      tickFormatter={fmtAxis}
                       tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                       axisLine={{ stroke: 'var(--border-color)' }}
                       tickLine={false}
-                      width={65}
+                      width={isMobile ? 46 : 65}
                     />
                   )}
                   <Tooltip content={<RevenueTooltip showTime={revenueHours <= 24} />} />
@@ -389,7 +407,7 @@ export function ProtocolRevenueChart() {
 
           {/* Right Y-axis label - only visible when cumulative toggle is on */}
           {showCumulative && (
-            <div className="relative w-6 shrink-0">
+            <div className="relative w-6 shrink-0 hidden sm:block">
               <div className="absolute top-0 h-[350px] flex items-center justify-center w-full">
                 <span 
                   className="transform rotate-90 whitespace-nowrap text-[14px] text-[var(--text-secondary)] tracking-wide origin-center"
