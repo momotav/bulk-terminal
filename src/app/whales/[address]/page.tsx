@@ -1262,6 +1262,13 @@ export default function WalletPage() {
   // derived client-side from the wallet's recent fills. Null while loading.
   const [volByWindow, setVolByWindow] = useState<{ d7: number; d14: number; d30: number; d90: number } | null>(null);
 
+  // Lifetime traded volume, summed from the wallet's OWN fills (both the
+  // maker-side and taker-side fills BULK returns for the account). This matches
+  // BULK's portfolio figure exactly; our DB total_volume was historically
+  // taker-only and undercounts. `truncated` marks a heavy wallet whose fill
+  // history hit the fetch cap, so the sum is a lower bound there.
+  const [lifetimeFillVol, setLifetimeFillVol] = useState<{ total: number; truncated: boolean } | null>(null);
+
   // Get current user's wallet address from multiple sources
   const solanaWalletAddress = solanaWallets?.[0]?.address;
   const privyWalletAddress = privyUser?.wallet?.address;
@@ -1455,12 +1462,15 @@ export default function WalletPage() {
     wallet.getFills(address, { limit: 1000 })
       .then((res) => {
         if (cancelled) return;
-        setAllFills(res.fills || []);
+        const fills = res.fills || [];
+        setAllFills(fills);
         const now = Date.now();
         const D = 86_400_000;
         const acc = { d7: 0, d14: 0, d30: 0, d90: 0 };
-        for (const f of res.fills || []) {
+        let lifetime = 0;
+        for (const f of fills) {
           const v = Math.abs(f.size || 0) * (f.price || 0);
+          lifetime += v;
           const age = now - f.timestamp;
           if (age <= 7 * D) acc.d7 += v;
           if (age <= 14 * D) acc.d14 += v;
@@ -1468,6 +1478,7 @@ export default function WalletPage() {
           if (age <= 90 * D) acc.d90 += v;
         }
         setVolByWindow(acc);
+        setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
       })
       .catch(() => { if (!cancelled) setVolByWindow(null); });
     return () => { cancelled = true; };
@@ -1796,7 +1807,16 @@ export default function WalletPage() {
   // wallets the indexer doesn't know about (brand-new traders) and the
   // brief moment before BULK stats load on page mount.
   const bulkRow = bulkStats?.found ? bulkStats.row : null;
-  const bulkVolume = bulkRow?.volume ?? tracked?.total_volume ?? 0;
+  // Lifetime volume: the wallet's OWN fills (maker + taker sides) are the
+  // authoritative figure and match BULK's portfolio exactly. Our indexed
+  // total_volume / leaderboard volume was historically taker-only and
+  // undercounts by ~half, so prefer the fill sum. When the fill history was
+  // truncated (very heavy wallet past the fetch cap) fall back to whichever
+  // known figure is larger, so we never display less than we've counted.
+  const trackedVolume = bulkRow?.volume ?? tracked?.total_volume ?? 0;
+  const bulkVolume = lifetimeFillVol
+    ? (lifetimeFillVol.truncated ? Math.max(lifetimeFillVol.total, trackedVolume) : lifetimeFillVol.total)
+    : trackedVolume;
   const bulkClosedCount = bulkRow?.closed_count ?? tracked?.total_trades ?? 0;
   // Total PnL: use the NET realized PnL from the indexer (already net
   // of fees) so the headline number matches what the trader actually

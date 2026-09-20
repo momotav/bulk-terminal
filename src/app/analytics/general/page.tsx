@@ -421,8 +421,8 @@ const FundingTooltip = ({ active, payload, label }: any) => {
             <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
             <span className="text-[var(--text-secondary)]">{entry.name}</span>
           </div>
-          <span className={cn("font-medium", entry.value >= 0 ? "text-green-400" : "text-red-400")}>
-            {(entry.value * 100).toFixed(4)}%
+          <span className="font-medium tabular-nums text-[var(--text-primary)]">
+            {entry.value >= 0 ? '+' : ''}{(entry.value * 100).toFixed(4)}%
           </span>
         </div>
       ))}
@@ -1572,9 +1572,9 @@ export default function AnalyticsPage() {
                       </ResponsiveContainer>
                       </ChartFrame>
                     </div>
-                    <InteractiveRangeSlider 
-                      data={liquidationsDataFull} 
-                      color="var(--neg)"
+                    <InteractiveRangeSlider
+                      data={liquidationsDataFull}
+                      color={COLORS.BTC}
                       rangeStart={liquidationsRange.start}
                       rangeEnd={liquidationsRange.end}
                       onRangeChange={(start, end) => setLiquidationsRange({ start, end })}
