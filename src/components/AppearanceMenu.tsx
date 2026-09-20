@@ -71,7 +71,7 @@ export function AppearanceMenu({ className = '' }: { className?: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-50">
+        <div className="absolute right-0 origin-top-right mt-2 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-xl p-3 z-[100]">
           {/* Theme */}
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)] font-medium mb-1.5">Theme</div>
           <div className="flex gap-1.5 mb-3">

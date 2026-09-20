@@ -530,8 +530,11 @@ export const leaderboard = {
   },
 
   async getMostActive(timeframe: string = 'all', limit: number = 50): Promise<LeaderboardEntry[]> {
+    // Ranks by traded VOLUME (the "Volume" tab). Same response shape as
+    // /active, but ORDER BY total_volume — so the label, the ranking, and the
+    // displayed value all agree on volume (now counted both sides).
     const data = await request<{ data: LeaderboardEntry[] }>(
-      `/api/leaderboard/active?timeframe=${timeframe}&limit=${limit}`
+      `/api/leaderboard/volume?timeframe=${timeframe}&limit=${limit}`
     );
     return data.data;
   },

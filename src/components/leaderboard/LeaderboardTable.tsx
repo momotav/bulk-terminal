@@ -24,7 +24,7 @@ interface LeaderboardTableProps {
 // instead of a headline in one hue and numbers in another.
 const typeConfig = {
   pnl: {
-    title: 'Top Traders',
+    title: 'Top PnL',
     subtitle: 'Ranked by PnL',
     icon: Trophy,
     color: 'text-bulk-green',
@@ -33,8 +33,8 @@ const typeConfig = {
     valuePrefix: '$',
   },
   liquidated: {
-    title: 'Hall of Shame',
-    subtitle: 'Most Liquidated',
+    title: 'Most Liquidated',
+    subtitle: 'By liquidated value',
     icon: Flame,
     color: 'text-bulk-red',
     accent: 'var(--asks)',
@@ -42,8 +42,8 @@ const typeConfig = {
     valuePrefix: '$',
   },
   whales: {
-    title: 'Whale Watch',
-    subtitle: 'Biggest Positions',
+    title: 'Largest Positions',
+    subtitle: 'By notional',
     icon: Anchor,
     color: 'text-bulk-blue',
     accent: 'var(--role-signal-info)',
@@ -51,8 +51,8 @@ const typeConfig = {
     valuePrefix: '$',
   },
   active: {
-    title: 'Most Active',
-    subtitle: 'By Trade Count',
+    title: 'Top Volume',
+    subtitle: 'By volume',
     icon: Activity,
     color: 'text-bulk-purple',
     accent: 'var(--role-signal-info)',

@@ -251,7 +251,7 @@ export default function WhalesPage() {
               defaultMetric="realized_pnl"
               defaultWindow="24h"
               allowMetricChange={false}
-              title="Top Traders"
+              title="Top PnL"
             />
           </div>
         </div>

@@ -57,16 +57,20 @@ export function Sparkline({ data, width: fixedWidth, height = 44, color = 'var(-
     const min = Math.min(...pts);
     const max = Math.max(...pts);
     const span = max - min || 1;
-    // Vertical inset so the peak/trough — and the end dot — never clip the edges.
-    const pad = 4;
-    const h = height - pad * 2;
-    const step = width / (pts.length - 1);
-    const xy = pts.map((v, i) => [i * step, pad + h - ((v - min) / span) * h] as const);
+    // Insets so the peak/trough AND the end-dot halo (r≈4) always sit fully
+    // inside the SVG — the KPI card clips overflow, so a dot flush to the edge
+    // got half-cut on narrow (mobile) cards. Reserve room on the right for the
+    // dot and top/bottom for its halo.
+    const padY = 5;
+    const padR = 5;
+    const h = height - padY * 2;
+    const w = Math.max(1, width - padR);
+    const step = w / (pts.length - 1);
+    const xy = pts.map((v, i) => [i * step, padY + h - ((v - min) / span) * h] as const);
     const line = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-    const area = `${line} L${width},${height} L0,${height} Z`;
+    const area = `${line} L${w.toFixed(1)},${height} L0,${height} Z`;
     const last = xy[xy.length - 1];
-    // Pull the end dot in a hair so its halo doesn't get clipped by the viewBox.
-    return { line, area, ok: true, end: [Math.min(last[0], width - 3), last[1]] as [number, number] };
+    return { line, area, ok: true, end: [last[0], last[1]] as [number, number] };
   }, [data, width, height]);
 
   // Measure the drawn path length so the draw-on animation covers exactly it.

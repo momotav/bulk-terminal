@@ -1359,17 +1359,31 @@ export default function AnalyticsPage() {
                 {oiChartData.length > 0 ? (
                   <>
                     <div style={{ height: 'var(--chart-h, 260px)' }}>
-                      <ChartFrame title="Open Interest" className="h-full" yLabel="Open Interest (USD)" legend={orderedSeriesFor(oiCoins).map(c => ({ label: c, color: getCoinColor(c) }))}>
+                      <ChartFrame title="Open Interest" className="h-full" yLabel="Open Interest (USD)" legend={[...orderedSeriesFor(oiCoins).map(c => ({ label: c, color: getCoinColor(c) })), { label: 'Total OI', color: COLORS.cumulative }]}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart 
+                        <AreaChart
                           key={`oi-${oiAnimKey}`}
-                          data={sliceDataByRange(
-                            bucketWithOther(
-                              oiChartData.map(r => ({ ...r, coins: coinsFromRow(r) })) as any,
-                              oiCoins
-                            ),
-                            oiRange
-                          )}
+                          data={(() => {
+                            const rows = sliceDataByRange(
+                              bucketWithOther(
+                                oiChartData.map(r => ({ ...r, coins: coinsFromRow(r) })) as any,
+                                oiCoins
+                              ),
+                              oiRange
+                            );
+                            // Total OI = sum of exactly the plotted series (each
+                            // enabled coin + the Other bucket), so the line traces
+                            // the aggregate the stacked areas don't show on their own.
+                            const seriesKeys = orderedSeriesFor(oiCoins);
+                            return (rows as any[]).map(row => {
+                              let total = 0;
+                              for (const k of seriesKeys) {
+                                const v = row[k];
+                                if (typeof v === 'number') total += v;
+                              }
+                              return { ...row, __totalOI: total };
+                            });
+                          })()}
                           margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
                         >
                           <defs>
@@ -1405,6 +1419,20 @@ export default function AnalyticsPage() {
                               animationEasing="ease-in-out"
                             />
                           ))}
+                          {/* Total OI — line only (no fill), drawn on top so the
+                              aggregate is legible above the per-coin areas. */}
+                          <Area
+                            type="monotone"
+                            dataKey="__totalOI"
+                            name="Total OI"
+                            stroke={COLORS.cumulative}
+                            fill="none"
+                            strokeWidth={2}
+                            dot={false}
+                            isAnimationActive={true}
+                            animationDuration={800}
+                            animationEasing="ease-in-out"
+                          />
                         </AreaChart>
                       </ResponsiveContainer>
                       </ChartFrame>

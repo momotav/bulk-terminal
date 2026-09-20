@@ -10,10 +10,10 @@ import { cn } from '@/lib/api';
 type LeaderboardType = 'pnl' | 'liquidated' | 'whales' | 'active';
 
 const tabs = [
-  { id: 'pnl', label: 'Top Traders', icon: Trophy, color: 'text-bulk-green' },
-  { id: 'liquidated', label: 'Most Liquidated', icon: Flame, color: 'text-bulk-red' },
-  { id: 'whales', label: 'Whale Watch', icon: Anchor, color: 'text-bulk-blue' },
-  { id: 'active', label: 'Most Active', icon: Activity, color: 'text-bulk-purple' },
+  { id: 'pnl', label: 'PnL', icon: Trophy, color: 'text-bulk-green' },
+  { id: 'liquidated', label: 'Liquidations', icon: Flame, color: 'text-bulk-red' },
+  { id: 'whales', label: 'Positions', icon: Anchor, color: 'text-bulk-blue' },
+  { id: 'active', label: 'Volume', icon: Activity, color: 'text-bulk-purple' },
 ] as const;
 
 export default function LeaderboardPage() {
