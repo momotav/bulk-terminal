@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network } from 'lucide-react';
+import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 const menuItems = [
   {
@@ -49,37 +49,62 @@ export default function AnalyticsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-
+  // Collapsible desktop sidebar — collapses to a slim icon rail. Persisted so
+  // the choice sticks across navigations and reloads.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem('bulkstats:analytics-sidebar') === 'collapsed');
+    } catch { /* private mode / disabled storage — default expanded */ }
+  }, []);
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem('bulkstats:analytics-sidebar', next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:block w-56 flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)]">
+      <aside className={`hidden md:block flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)] transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-56'}`}>
         <div className="sticky top-14 pt-6 pb-4">
-          <div className="px-4 mb-6">
-            <h2 className="text-lg font-medium text-[var(--text-primary)]">Analytics</h2>
+          <div className={`mb-6 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+            {!collapsed && <h2 className="text-lg font-medium text-[var(--text-primary)]">Analytics</h2>}
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--text-primary)]"
+            >
+              {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
           </div>
-          
+
           <nav className="space-y-1 px-2">
             {menuItems.map((item) => {
-              const isActive = pathname === item.href || 
+              const isActive = pathname === item.href ||
                 (item.href === '/analytics/general' && pathname === '/analytics');
               const Icon = item.icon;
-              
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={collapsed ? item.name : undefined}
                   className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                    ${isActive 
-                      ? 'bg-bulk-accent/10 text-[var(--accent)] border-l-2 border-[var(--accent)]' 
+                    flex items-center rounded-lg text-sm font-medium transition-colors
+                    ${collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'}
+                    ${isActive
+                      ? `bg-bulk-accent/10 text-[var(--accent)] ${collapsed ? '' : 'border-l-2 border-[var(--accent)]'}`
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-muted)]'
                     }
                   `}
                 >
                   <Icon size={18} className={isActive ? 'text-[var(--accent)]' : ''} />
-                  <span>{item.name}</span>
+                  {!collapsed && <span>{item.name}</span>}
                 </Link>
               );
             })}
