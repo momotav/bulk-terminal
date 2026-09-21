@@ -593,21 +593,21 @@ function HeroKpi({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
-      className="stat-card-interactive group relative flex min-h-[144px] w-full cursor-pointer flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] px-4 py-3.5 text-left"
+      className="stat-card-interactive group relative flex min-h-[132px] w-full cursor-pointer flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] px-4 py-3.5 text-left"
     >
       {/* Sparkline fills the lower part of the card as a soft backdrop. Keyed by
           mode so it re-runs its draw-on animation when the toggle flips. */}
       {series.length >= 2 && !loading && (
-        <div key={mode ?? 'x'} className="pointer-events-none absolute inset-x-0 bottom-0 h-[94px] opacity-80">
-          <Sparkline data={series} color={color} height={94} className="h-full w-full" />
+        <div key={mode ?? 'x'} className="pointer-events-none absolute inset-x-0 bottom-0 h-[86px] opacity-90">
+          <Sparkline data={series} color={color} height={86} className="h-full w-full" />
         </div>
       )}
       <div className="relative z-10 pr-16">
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
         {loading ? (
-          <div className="mt-2.5 h-[38px] w-32 animate-pulse rounded bg-[var(--role-surface-raised)]" />
+          <div className="mt-2 h-[32px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
         ) : (
-          <div className="mt-1.5 text-[38px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
+          <div className="mt-1.5 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}
@@ -764,6 +764,9 @@ export default function AnalyticsPage() {
   const [volumeAllTime, setVolumeAllTime] = useState<ChartData[]>([]);
   const [tradesAllTime, setTradesAllTime] = useState<ChartData[]>([]);
   const [liquidationsAllTime, setLiquidationsAllTime] = useState<ChartData[]>([]);
+  // Daily trade COUNTS for the Trades KPI card (the trades chart itself is
+  // dollar volume, so counts come from a separate field on the same endpoint).
+  const [tradesCounts, setTradesCounts] = useState<{ timestamp: string; count: number }[]>([]);
 
   // NEW: User statistics charts
   const [uniqueTradersHours, setUniqueTradersHours] = useState(720); // Default 30 days
@@ -864,6 +867,9 @@ export default function AnalyticsPage() {
       analytics.getTradesChart(ALL_HOURS)
         .then(setTradesAllTime)
         .catch(err => console.error('Failed to fetch trades all-time:', err));
+      analytics.getTradesCounts(ALL_HOURS)
+        .then(setTradesCounts)
+        .catch(err => console.error('Failed to fetch trade counts:', err));
       analytics.getLiquidationsChart(ALL_HOURS)
         .then(setLiquidationsAllTime)
         .catch(err => console.error('Failed to fetch liquidations all-time:', err));
@@ -1355,7 +1361,7 @@ export default function AnalyticsPage() {
     }
     return out.slice(-40);
   }, []);
-  const dailyTrades = useMemo(() => dailySeries(tradesAllTime as unknown as Record<string, unknown>[]), [tradesAllTime, dailySeries]);
+  const dailyTrades = useMemo(() => tradesCounts.map(r => r.count).slice(-40), [tradesCounts]);
   const dailyVolume = useMemo(() => dailySeries(volumeAllTime as unknown as Record<string, unknown>[]), [volumeAllTime, dailySeries]);
   const dailyOI = useMemo(() => oiChartData.map(r => { const c = coinsFromRow(r); return Object.values(c).reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0); }).slice(-40), [oiChartData, coinsFromRow]);
   const dailyTraders = useMemo(() => uniqueTradersData.map(r => r.total).slice(-40), [uniqueTradersData]);
@@ -1403,7 +1409,6 @@ export default function AnalyticsPage() {
             format={fmtCount}
             series={kpiModes.trades === 'total' ? cumTrades : dailyTrades}
             changePct={pctChange(dailyTrades)}
-            color={getCoinColor('BTC')}
             sub={kpiModes.trades === 'total' ? `${fmtCount(Math.round(last(dailyTrades)))} in 24h` : `${fmtCount(stats?.trades.count ?? 0)} all-time`}
             mode={kpiModes.trades}
             onToggle={(m) => setKpiMode('trades', m)}
@@ -1416,7 +1421,6 @@ export default function AnalyticsPage() {
             format={fmtUsd}
             series={kpiModes.volume === 'total' ? cumVolume : dailyVolume}
             changePct={pctChange(dailyVolume)}
-            color={getCoinColor('ETH')}
             sub={kpiModes.volume === 'total' ? `${fmtUsd(stats?.trades.volume ?? 0)} in 24h` : `${fmtUsd(totalCumulativeVolume ?? 0)} all-time`}
             mode={kpiModes.volume}
             onToggle={(m) => setKpiMode('volume', m)}
@@ -1429,7 +1433,6 @@ export default function AnalyticsPage() {
             format={fmtUsd}
             series={dailyOI}
             changePct={pctChange(dailyOI)}
-            color={getCoinColor('SOL')}
             sub="live · 24h change"
             onClick={() => scrollToChart('kpi-volume-oi')}
           />
@@ -1440,7 +1443,6 @@ export default function AnalyticsPage() {
             format={fmtCount}
             series={dailyTraders}
             changePct={pctChange(dailyTraders)}
-            color="var(--accent)"
             sub={kpiModes.traders === 'total' ? `${fmtCount(Math.round(last(dailyTraders)))} in 24h` : `${fmtCount(stats?.uniqueTraders ?? 0)} all-time`}
             mode={kpiModes.traders}
             onToggle={(m) => setKpiMode('traders', m)}

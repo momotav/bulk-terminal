@@ -774,6 +774,15 @@ export const analytics = {
     return data.data;
   },
 
+  // Daily trade COUNTS (the trades-chart's per-coin values are dollar volume,
+  // not counts, so the Trades KPI card fetches the count series separately).
+  async getTradesCounts(hours: number = 24): Promise<{ timestamp: string; count: number }[]> {
+    const data = await request<{ counts?: { timestamp: string; count: number }[] }>(
+      `/api/analytics/trades-chart?hours=${hours}`
+    );
+    return data.counts ?? [];
+  },
+
   // Exchange health stats
   async getExchangeHealth(): Promise<ExchangeHealth> {
     return request('/api/analytics/exchange-stats');
