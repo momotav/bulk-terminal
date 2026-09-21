@@ -128,7 +128,7 @@ export default function HomePage() {
           low-noise colour, tabular numbers. Their vibe, my structure. */}
       <header className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
         <div className="shrink-0">
-          <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
+          <h1 className="font-sans text-2xl font-semibold leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
             Overview
           </h1>
           <p className="mt-1.5 text-[13px] text-[var(--role-content-muted)]">
