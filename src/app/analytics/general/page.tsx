@@ -23,7 +23,6 @@ import {
 } from '@/lib/coins';
 import { withNetwork } from '@/lib/network';
 import { ChartFrame } from '@/components/ChartFrame';
-import { StatCard } from '@/components/StatCard';
 import { Sparkline } from '@/components/Sparkline';
 
 const timeRanges = [
@@ -560,27 +559,74 @@ const ChartCard = ({
   </div>
 );
 
-// Small segmented toggle that lives inside the Total Volume KPI card and flips
-// it between all-time cumulative and rolling 24h (per the BULK dev's request).
-function VolumeToggle({ mode, onChange }: { mode: 'total' | '24h'; onChange: (m: 'total' | '24h') => void }) {
+// Segmented toggle for the whole KPI row: all-time totals vs rolling 24h.
+function KpiModeToggle({ mode, onChange }: { mode: 'total' | '24h'; onChange: (m: 'total' | '24h') => void }) {
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)] p-0.5">
+    <span className="inline-flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)] p-0.5">
       {(['total', '24h'] as const).map((m) => (
         <button
           key={m}
           type="button"
           onClick={() => onChange(m)}
           className={cn(
-            'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors',
+            'rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors',
             mode === m
               ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm'
               : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
           )}
         >
-          {m === 'total' ? 'Total' : '24h'}
+          {m === 'total' ? 'All-time' : '24h'}
         </button>
       ))}
     </span>
+  );
+}
+
+// Hyperliquid-style hero KPI: big number over a full-bleed sparkline, a
+// day-over-day change stat, a supporting sub-line, and click-to-scroll to the
+// matching full chart below.
+function HeroKpi({
+  label, value, changePct, sub, series, color = 'var(--accent)', loading, onClick,
+}: {
+  label: React.ReactNode;
+  value: string;
+  changePct?: number | null;
+  sub?: React.ReactNode;
+  series: number[];
+  color?: string;
+  loading?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="stat-card-interactive group relative flex min-h-[132px] w-full flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] px-4 py-3.5 text-left"
+    >
+      {/* Sparkline fills the lower part of the card as a soft backdrop. */}
+      {series.length >= 2 && !loading && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[86px] opacity-80">
+          <Sparkline data={series} color={color} height={86} className="h-full w-full" />
+        </div>
+      )}
+      <div className="relative z-10">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
+        {loading ? (
+          <div className="mt-2 h-[30px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
+        ) : (
+          <div className="mt-1.5 text-[30px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">{value}</div>
+        )}
+        <div className="mt-2 flex items-center gap-2 text-[11px]">
+          {changePct != null && Number.isFinite(changePct) && (
+            <span className={cn('font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
+              {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
+            </span>
+          )}
+          {sub != null && <span className="text-[var(--role-content-subtle)]">{sub}</span>}
+        </div>
+      </div>
+      <ChevronRight className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-[var(--role-content-subtle)] opacity-0 transition-opacity group-hover:opacity-60" />
+    </button>
   );
 }
 
@@ -682,8 +728,8 @@ export default function AnalyticsPage() {
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
   const [liveOI, setLiveOI] = useState<number>(0); // Live OI from BULK API for stats card
-  // Top-bar Volume KPI toggle: all-time cumulative vs rolling 24h (dev request).
-  const [volumeMode, setVolumeMode] = useState<'total' | '24h'>('total');
+  // Top-bar KPI toggle: all-time totals vs rolling 24h (applies to every card).
+  const [kpiMode, setKpiMode] = useState<'total' | '24h'>('total');
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
@@ -1288,10 +1334,29 @@ export default function AnalyticsPage() {
     }
     return out.slice(-40);
   }, []);
-  const sparkTrades = useMemo(() => dailySeries(tradesAllTime as unknown as Record<string, unknown>[]), [tradesAllTime, dailySeries]);
-  const sparkVolume = useMemo(() => dailySeries(volumeAllTime as unknown as Record<string, unknown>[]), [volumeAllTime, dailySeries]);
-  const sparkOI = useMemo(() => oiChartData.map(r => { const c = coinsFromRow(r); return Object.values(c).reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0); }).slice(-40), [oiChartData, coinsFromRow]);
-  const sparkTraders = useMemo(() => uniqueTradersData.map(r => r.total).slice(-40), [uniqueTradersData]);
+  const dailyTrades = useMemo(() => dailySeries(tradesAllTime as unknown as Record<string, unknown>[]), [tradesAllTime, dailySeries]);
+  const dailyVolume = useMemo(() => dailySeries(volumeAllTime as unknown as Record<string, unknown>[]), [volumeAllTime, dailySeries]);
+  const dailyOI = useMemo(() => oiChartData.map(r => { const c = coinsFromRow(r); return Object.values(c).reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0); }).slice(-40), [oiChartData, coinsFromRow]);
+  const dailyTraders = useMemo(() => uniqueTradersData.map(r => r.total).slice(-40), [uniqueTradersData]);
+
+  // Running-sum series so "Total" mode shows the growth curve and "24h" mode
+  // shows the daily bars — toggling then visibly changes the sparkline shape.
+  const cumulate = (s: number[]): number[] => { let a = 0; return s.map(v => (a += v)); };
+  // Day-over-day % change from a daily series (the little green/red stat).
+  const pctChange = (s: number[]): number | null => {
+    if (s.length < 2) return null;
+    const prev = s[s.length - 2];
+    if (!prev) return null;
+    return ((s[s.length - 1] - prev) / Math.abs(prev)) * 100;
+  };
+  const cumTrades = useMemo(() => cumulate(dailyTrades), [dailyTrades]);
+  const cumVolume = useMemo(() => cumulate(dailyVolume), [dailyVolume]);
+  const last = (s: number[]) => (s.length ? s[s.length - 1] : 0);
+  const scrollToChart = (id: string) => {
+    if (typeof document !== 'undefined') {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
@@ -1309,39 +1374,49 @@ export default function AnalyticsPage() {
       <main className="flex-1 w-full px-3 sm:px-6 lg:px-10 py-6">
         <h1 className="page-title text-[var(--text-primary)] mb-6">General</h1>
 
+        <div className="mb-2 flex items-center justify-end">
+          <KpiModeToggle mode={kpiMode} onChange={setKpiMode} />
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <StatCard
-            label="Total Trades"
+          <HeroKpi
+            label={`Trades · ${kpiMode === 'total' ? 'All-time' : '24h'}`}
             loading={stats == null}
-            interactive
-            value={(stats?.trades.count ?? 0).toLocaleString()}
-            chart={sparkTrades.length >= 2 ? <Sparkline data={sparkTrades} height={46} className="w-full" /> : undefined}
+            value={kpiMode === 'total' ? (stats?.trades.count ?? 0).toLocaleString() : Math.round(last(dailyTrades)).toLocaleString()}
+            series={kpiMode === 'total' ? cumTrades : dailyTrades}
+            changePct={pctChange(dailyTrades)}
+            color={getCoinColor('BTC')}
+            sub={kpiMode === 'total' ? `${Math.round(last(dailyTrades)).toLocaleString()} in 24h` : `${(stats?.trades.count ?? 0).toLocaleString()} all-time`}
+            onClick={() => scrollToChart('kpi-trades')}
           />
-          <StatCard
-            label={
-              <span className="flex items-center gap-2">
-                {volumeMode === 'total' ? 'Total Volume' : '24h Volume'}
-                <VolumeToggle mode={volumeMode} onChange={setVolumeMode} />
-              </span>
-            }
-            loading={volumeMode === 'total' ? totalCumulativeVolume == null : stats == null}
-            interactive
-            value={`$${formatCompact(volumeMode === 'total' ? (totalCumulativeVolume ?? 0) : (stats?.trades.volume ?? 0))}`}
-            chart={sparkVolume.length >= 2 ? <Sparkline data={sparkVolume} height={46} className="w-full" /> : undefined}
+          <HeroKpi
+            label={`Volume · ${kpiMode === 'total' ? 'All-time' : '24h'}`}
+            loading={kpiMode === 'total' ? totalCumulativeVolume == null : stats == null}
+            value={`$${formatCompact(kpiMode === 'total' ? (totalCumulativeVolume ?? 0) : (stats?.trades.volume ?? 0))}`}
+            series={kpiMode === 'total' ? cumVolume : dailyVolume}
+            changePct={pctChange(dailyVolume)}
+            color={getCoinColor('ETH')}
+            sub={kpiMode === 'total' ? `$${formatCompact(stats?.trades.volume ?? 0)} in 24h` : `$${formatCompact(totalCumulativeVolume ?? 0)} all-time`}
+            onClick={() => scrollToChart('kpi-volume-oi')}
           />
-          <StatCard
+          <HeroKpi
             label="Open Interest"
             loading={liveOI === 0 && oiChartData.length === 0}
-            interactive
             value={`$${formatCompact(liveOI)}`}
-            chart={sparkOI.length >= 2 ? <Sparkline data={sparkOI} height={46} className="w-full" /> : undefined}
+            series={dailyOI}
+            changePct={pctChange(dailyOI)}
+            color={getCoinColor('SOL')}
+            sub="live · 24h change"
+            onClick={() => scrollToChart('kpi-volume-oi')}
           />
-          <StatCard
-            label="Unique Traders"
+          <HeroKpi
+            label={kpiMode === 'total' ? 'Unique Traders' : 'Active Traders · 24h'}
             loading={stats == null}
-            interactive
-            value={(stats?.uniqueTraders ?? 0).toLocaleString()}
-            chart={sparkTraders.length >= 2 ? <Sparkline data={sparkTraders} height={46} className="w-full" /> : undefined}
+            value={kpiMode === 'total' ? (stats?.uniqueTraders ?? 0).toLocaleString() : Math.round(last(dailyTraders)).toLocaleString()}
+            series={dailyTraders}
+            changePct={pctChange(dailyTraders)}
+            color="var(--accent)"
+            sub={kpiMode === 'total' ? `${Math.round(last(dailyTraders)).toLocaleString()} in 24h` : `${(stats?.uniqueTraders ?? 0).toLocaleString()} all-time`}
+            onClick={() => scrollToChart('kpi-traders')}
           />
         </div>
 
@@ -1353,6 +1428,7 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            <div id="kpi-volume-oi" className="scroll-mt-20" />
             <ResizableChartRow storageKey="general-volume-oi">
               <ChartCard 
                 title="Total Volume"
@@ -1707,6 +1783,7 @@ export default function AnalyticsPage() {
               <ProtocolRevenueChart />
             </div>
 
+            <div id="kpi-trades" className="scroll-mt-20" />
             <ResizableChartRow storageKey="general-trades-adl">
               <ChartCard 
                 title="Number Of Trades"
@@ -1859,6 +1936,7 @@ export default function AnalyticsPage() {
             </ResizableChartRow>
 
             {/* New Row: Unique Traders by Coin + Cumulative New Users (side by side) */}
+            <div id="kpi-traders" className="scroll-mt-20" />
             <ResizableChartRow storageKey="general-users-revenue">
               {/* Unique Traders by Coin */}
               <ChartCard 
