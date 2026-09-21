@@ -24,6 +24,7 @@ import {
 import { withNetwork } from '@/lib/network';
 import { ChartFrame } from '@/components/ChartFrame';
 import { StatCard } from '@/components/StatCard';
+import { Sparkline } from '@/components/Sparkline';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -559,6 +560,30 @@ const ChartCard = ({
   </div>
 );
 
+// Small segmented toggle that lives inside the Total Volume KPI card and flips
+// it between all-time cumulative and rolling 24h (per the BULK dev's request).
+function VolumeToggle({ mode, onChange }: { mode: 'total' | '24h'; onChange: (m: 'total' | '24h') => void }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)] p-0.5">
+      {(['total', '24h'] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChange(m)}
+          className={cn(
+            'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors',
+            mode === m
+              ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm'
+              : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+          )}
+        >
+          {m === 'total' ? 'Total' : '24h'}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export default function AnalyticsPage() {
   // Per-chart timeframes - default to 24h since BULK just launched
   // Active network — added to the mount-fetch deps below so switching
@@ -657,6 +682,8 @@ export default function AnalyticsPage() {
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
   const [liveOI, setLiveOI] = useState<number>(0); // Live OI from BULK API for stats card
+  // Top-bar Volume KPI toggle: all-time cumulative vs rolling 24h (dev request).
+  const [volumeMode, setVolumeMode] = useState<'total' | '24h'>('total');
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
@@ -1245,6 +1272,27 @@ export default function AnalyticsPage() {
     return typeof cum === 'number' && isFinite(cum) ? cum : null;
   }, [volumeDataFull]);
   
+  // Tiny trend series for the top-bar KPI sparklines, derived from data the
+  // page already loads (no extra fetch). Each point is a day's total for that
+  // metric — coins summed, cumulative/total helper keys skipped — last 40 days.
+  const dailySeries = useCallback((rows: Array<Record<string, unknown>>, totalKey?: string): number[] => {
+    const out: number[] = [];
+    for (const r of rows) {
+      if (totalKey && typeof r[totalKey] === 'number') { out.push(r[totalKey] as number); continue; }
+      let s = 0;
+      for (const [k, v] of Object.entries(r)) {
+        if (k === 'timestamp' || k === 'Cumulative' || k === 'total' || k === 'coins') continue;
+        if (typeof v === 'number') s += v;
+      }
+      out.push(s);
+    }
+    return out.slice(-40);
+  }, []);
+  const sparkTrades = useMemo(() => dailySeries(tradesAllTime as unknown as Record<string, unknown>[]), [tradesAllTime, dailySeries]);
+  const sparkVolume = useMemo(() => dailySeries(volumeAllTime as unknown as Record<string, unknown>[]), [volumeAllTime, dailySeries]);
+  const sparkOI = useMemo(() => oiChartData.map(r => { const c = coinsFromRow(r); return Object.values(c).reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0); }).slice(-40), [oiChartData, coinsFromRow]);
+  const sparkTraders = useMemo(() => uniqueTradersData.map(r => r.total).slice(-40), [uniqueTradersData]);
+
   const tradesDataFull = useMemo(() => withContinuousCumulative(tradesChart, tradesCoins, tradesAllTime), [tradesChart, tradesCoins, tradesAllTime, withContinuousCumulative]);
   const tradesDataFiltered = useMemo(() => sliceDataByRange(tradesDataFull, tradesRange), [tradesDataFull, tradesRange, sliceDataByRange]);
   
@@ -1262,22 +1310,39 @@ export default function AnalyticsPage() {
         <h1 className="page-title text-[var(--text-primary)] mb-6">General</h1>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: 'Total Trades', value: stats?.trades.count || 0, format: 'number' },
-            { label: 'Total Volume', value: totalCumulativeVolume, format: 'currency' },
-            { label: 'Open Interest', value: liveOI, format: 'currency' },
-            { label: 'Unique Traders', value: stats?.uniqueTraders || 0, format: 'number' },
-          ].map((stat, i) => {
-            // Show a skeleton while the value is still loading (null). This
-            // prevents Total Volume from briefly flashing a wrong (window-only)
-            // number before the all-time dataset finishes loading.
-            const isLoading = stat.value === null || stat.value === undefined;
-            const display =
-              stat.format === 'currency'
-                ? `$${formatCompact(stat.value as number)}`
-                : (stat.value as number).toLocaleString();
-            return <StatCard key={i} label={stat.label} value={display} loading={isLoading} />;
-          })}
+          <StatCard
+            label="Total Trades"
+            loading={stats == null}
+            interactive
+            value={(stats?.trades.count ?? 0).toLocaleString()}
+            chart={sparkTrades.length >= 2 ? <Sparkline data={sparkTrades} height={46} className="w-full" /> : undefined}
+          />
+          <StatCard
+            label={
+              <span className="flex items-center gap-2">
+                {volumeMode === 'total' ? 'Total Volume' : '24h Volume'}
+                <VolumeToggle mode={volumeMode} onChange={setVolumeMode} />
+              </span>
+            }
+            loading={volumeMode === 'total' ? totalCumulativeVolume == null : stats == null}
+            interactive
+            value={`$${formatCompact(volumeMode === 'total' ? (totalCumulativeVolume ?? 0) : (stats?.trades.volume ?? 0))}`}
+            chart={sparkVolume.length >= 2 ? <Sparkline data={sparkVolume} height={46} className="w-full" /> : undefined}
+          />
+          <StatCard
+            label="Open Interest"
+            loading={liveOI === 0 && oiChartData.length === 0}
+            interactive
+            value={`$${formatCompact(liveOI)}`}
+            chart={sparkOI.length >= 2 ? <Sparkline data={sparkOI} height={46} className="w-full" /> : undefined}
+          />
+          <StatCard
+            label="Unique Traders"
+            loading={stats == null}
+            interactive
+            value={(stats?.uniqueTraders ?? 0).toLocaleString()}
+            chart={sparkTraders.length >= 2 ? <Sparkline data={sparkTraders} height={46} className="w-full" /> : undefined}
+          />
         </div>
 
         {loading ? (
