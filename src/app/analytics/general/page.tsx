@@ -24,6 +24,7 @@ import {
 import { withNetwork } from '@/lib/network';
 import { ChartFrame } from '@/components/ChartFrame';
 import { Sparkline } from '@/components/Sparkline';
+import { AnimatedNumber } from '@/components/AnimatedNumber';
 
 const timeRanges = [
   { label: '1D', hours: 24 },
@@ -559,64 +560,58 @@ const ChartCard = ({
   </div>
 );
 
-// Segmented toggle for the whole KPI row: all-time totals vs rolling 24h.
-function KpiModeToggle({ mode, onChange }: { mode: 'total' | '24h'; onChange: (m: 'total' | '24h') => void }) {
-  return (
-    <span className="inline-flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)] p-0.5">
-      {(['total', '24h'] as const).map((m) => (
-        <button
-          key={m}
-          type="button"
-          onClick={() => onChange(m)}
-          className={cn(
-            'rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors',
-            mode === m
-              ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm'
-              : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
-          )}
-        >
-          {m === 'total' ? 'All-time' : '24h'}
-        </button>
-      ))}
-    </span>
-  );
-}
+// Module-scope formatters so their identity is stable across renders — the
+// AnimatedNumber in HeroKpi keys its motion off the `format` prop.
+const fmtUsd = (n: number): string => `$${formatCompact(n)}`;
+const fmtCount = (n: number): string => Math.round(n).toLocaleString();
 
-// Hyperliquid-style hero KPI: big number over a full-bleed sparkline, a
-// day-over-day change stat, a supporting sub-line, and click-to-scroll to the
-// matching full chart below.
+// Hyperliquid-style hero KPI: big animated number over a full-bleed sparkline,
+// a day-over-day change stat, a supporting sub-line, an optional per-card
+// All/24h toggle, and click-to-scroll to the matching full chart below.
+//
+// The outer element is a div (not a button) so the per-card toggle's own
+// buttons can nest without invalid button-in-button markup.
 function HeroKpi({
-  label, value, changePct, sub, series, color = 'var(--accent)', loading, onClick,
+  label, rawValue, format, changePct, sub, series, color = 'var(--accent)', loading, onClick,
+  mode, onToggle,
 }: {
   label: React.ReactNode;
-  value: string;
+  rawValue: number;
+  format: (n: number) => string;
   changePct?: number | null;
   sub?: React.ReactNode;
   series: number[];
   color?: string;
   loading?: boolean;
   onClick?: () => void;
+  mode?: 'total' | '24h';
+  onToggle?: (m: 'total' | '24h') => void;
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="stat-card-interactive group relative flex min-h-[132px] w-full flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] px-4 py-3.5 text-left"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+      className="stat-card-interactive group relative flex min-h-[144px] w-full cursor-pointer flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--role-line)] bg-[var(--role-surface)] px-4 py-3.5 text-left"
     >
-      {/* Sparkline fills the lower part of the card as a soft backdrop. */}
+      {/* Sparkline fills the lower part of the card as a soft backdrop. Keyed by
+          mode so it re-runs its draw-on animation when the toggle flips. */}
       {series.length >= 2 && !loading && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[86px] opacity-80">
-          <Sparkline data={series} color={color} height={86} className="h-full w-full" />
+        <div key={mode ?? 'x'} className="pointer-events-none absolute inset-x-0 bottom-0 h-[94px] opacity-80">
+          <Sparkline data={series} color={color} height={94} className="h-full w-full" />
         </div>
       )}
-      <div className="relative z-10">
+      <div className="relative z-10 pr-16">
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
         {loading ? (
-          <div className="mt-2 h-[30px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
+          <div className="mt-2.5 h-[38px] w-32 animate-pulse rounded bg-[var(--role-surface-raised)]" />
         ) : (
-          <div className="mt-1.5 text-[30px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">{value}</div>
+          <div className="mt-1.5 text-[38px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
+            <AnimatedNumber value={rawValue} format={format} />
+          </div>
         )}
-        <div className="mt-2 flex items-center gap-2 text-[11px]">
+        <div className="mt-2.5 flex items-center gap-2 text-[11px]">
           {changePct != null && Number.isFinite(changePct) && (
             <span className={cn('font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
@@ -625,8 +620,30 @@ function HeroKpi({
           {sub != null && <span className="text-[var(--role-content-subtle)]">{sub}</span>}
         </div>
       </div>
-      <ChevronRight className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-[var(--role-content-subtle)] opacity-0 transition-opacity group-hover:opacity-60" />
-    </button>
+
+      {/* Per-card All / 24h toggle. stopPropagation so it doesn't trigger the
+          card's scroll-to-chart click. */}
+      {mode && onToggle && (
+        <span
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-2.5 top-2.5 z-20 inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)]/90 p-0.5 backdrop-blur-sm"
+        >
+          {(['total', '24h'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggle(m); }}
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors',
+                mode === m ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+              )}
+            >
+              {m === 'total' ? 'All' : '24h'}
+            </button>
+          ))}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -728,8 +745,12 @@ export default function AnalyticsPage() {
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
   const [liveOI, setLiveOI] = useState<number>(0); // Live OI from BULK API for stats card
-  // Top-bar KPI toggle: all-time totals vs rolling 24h (applies to every card).
-  const [kpiMode, setKpiMode] = useState<'total' | '24h'>('total');
+  // Per-card KPI toggle: each card independently shows all-time or rolling 24h.
+  const [kpiModes, setKpiModes] = useState<{ trades: 'total' | '24h'; volume: 'total' | '24h'; traders: 'total' | '24h' }>(
+    { trades: 'total', volume: 'total', traders: 'total' },
+  );
+  const setKpiMode = (k: 'trades' | 'volume' | 'traders', m: 'total' | '24h') =>
+    setKpiModes((s) => ({ ...s, [k]: m }));
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
@@ -1374,34 +1395,38 @@ export default function AnalyticsPage() {
       <main className="flex-1 w-full px-3 sm:px-6 lg:px-10 py-6">
         <h1 className="page-title text-[var(--text-primary)] mb-6">General</h1>
 
-        <div className="mb-2 flex items-center justify-end">
-          <KpiModeToggle mode={kpiMode} onChange={setKpiMode} />
-        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <HeroKpi
-            label={`Trades · ${kpiMode === 'total' ? 'All-time' : '24h'}`}
+            label={`Trades · ${kpiModes.trades === 'total' ? 'All-time' : '24h'}`}
             loading={stats == null}
-            value={kpiMode === 'total' ? (stats?.trades.count ?? 0).toLocaleString() : Math.round(last(dailyTrades)).toLocaleString()}
-            series={kpiMode === 'total' ? cumTrades : dailyTrades}
+            rawValue={kpiModes.trades === 'total' ? (stats?.trades.count ?? 0) : Math.round(last(dailyTrades))}
+            format={fmtCount}
+            series={kpiModes.trades === 'total' ? cumTrades : dailyTrades}
             changePct={pctChange(dailyTrades)}
             color={getCoinColor('BTC')}
-            sub={kpiMode === 'total' ? `${Math.round(last(dailyTrades)).toLocaleString()} in 24h` : `${(stats?.trades.count ?? 0).toLocaleString()} all-time`}
+            sub={kpiModes.trades === 'total' ? `${fmtCount(Math.round(last(dailyTrades)))} in 24h` : `${fmtCount(stats?.trades.count ?? 0)} all-time`}
+            mode={kpiModes.trades}
+            onToggle={(m) => setKpiMode('trades', m)}
             onClick={() => scrollToChart('kpi-trades')}
           />
           <HeroKpi
-            label={`Volume · ${kpiMode === 'total' ? 'All-time' : '24h'}`}
-            loading={kpiMode === 'total' ? totalCumulativeVolume == null : stats == null}
-            value={`$${formatCompact(kpiMode === 'total' ? (totalCumulativeVolume ?? 0) : (stats?.trades.volume ?? 0))}`}
-            series={kpiMode === 'total' ? cumVolume : dailyVolume}
+            label={`Volume · ${kpiModes.volume === 'total' ? 'All-time' : '24h'}`}
+            loading={kpiModes.volume === 'total' ? totalCumulativeVolume == null : stats == null}
+            rawValue={kpiModes.volume === 'total' ? (totalCumulativeVolume ?? 0) : (stats?.trades.volume ?? 0)}
+            format={fmtUsd}
+            series={kpiModes.volume === 'total' ? cumVolume : dailyVolume}
             changePct={pctChange(dailyVolume)}
             color={getCoinColor('ETH')}
-            sub={kpiMode === 'total' ? `$${formatCompact(stats?.trades.volume ?? 0)} in 24h` : `$${formatCompact(totalCumulativeVolume ?? 0)} all-time`}
+            sub={kpiModes.volume === 'total' ? `${fmtUsd(stats?.trades.volume ?? 0)} in 24h` : `${fmtUsd(totalCumulativeVolume ?? 0)} all-time`}
+            mode={kpiModes.volume}
+            onToggle={(m) => setKpiMode('volume', m)}
             onClick={() => scrollToChart('kpi-volume-oi')}
           />
           <HeroKpi
             label="Open Interest"
             loading={liveOI === 0 && oiChartData.length === 0}
-            value={`$${formatCompact(liveOI)}`}
+            rawValue={liveOI}
+            format={fmtUsd}
             series={dailyOI}
             changePct={pctChange(dailyOI)}
             color={getCoinColor('SOL')}
@@ -1409,13 +1434,16 @@ export default function AnalyticsPage() {
             onClick={() => scrollToChart('kpi-volume-oi')}
           />
           <HeroKpi
-            label={kpiMode === 'total' ? 'Unique Traders' : 'Active Traders · 24h'}
+            label={kpiModes.traders === 'total' ? 'Unique Traders · All-time' : 'Active Traders · 24h'}
             loading={stats == null}
-            value={kpiMode === 'total' ? (stats?.uniqueTraders ?? 0).toLocaleString() : Math.round(last(dailyTraders)).toLocaleString()}
+            rawValue={kpiModes.traders === 'total' ? (stats?.uniqueTraders ?? 0) : Math.round(last(dailyTraders))}
+            format={fmtCount}
             series={dailyTraders}
             changePct={pctChange(dailyTraders)}
             color="var(--accent)"
-            sub={kpiMode === 'total' ? `${Math.round(last(dailyTraders)).toLocaleString()} in 24h` : `${(stats?.uniqueTraders ?? 0).toLocaleString()} all-time`}
+            sub={kpiModes.traders === 'total' ? `${fmtCount(Math.round(last(dailyTraders)))} in 24h` : `${fmtCount(stats?.uniqueTraders ?? 0)} all-time`}
+            mode={kpiModes.traders}
+            onToggle={(m) => setKpiMode('traders', m)}
             onClick={() => scrollToChart('kpi-traders')}
           />
         </div>
