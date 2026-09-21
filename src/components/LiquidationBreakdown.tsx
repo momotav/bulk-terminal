@@ -140,10 +140,10 @@ export function LiquidationBreakdown({ flush = false }: LiquidationBreakdownProp
                   className="data-row animate-row-enter px-4 py-2.5"
                 >
                   <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                    <span className="truncate font-mono text-xs font-medium text-[var(--role-content)]">
+                    <span className="truncate font-sans text-xs font-medium text-[var(--role-content)]">
                       {r.symbol}
                     </span>
-                    <span className="shrink-0 font-mono text-xs font-bold tabular-nums text-[var(--role-content)]">
+                    <span className="shrink-0 font-sans text-xs font-bold tabular-nums text-[var(--role-content)]">
                       ${formatCompact(r.total)}
                     </span>
                   </div>
@@ -169,10 +169,10 @@ export function LiquidationBreakdown({ flush = false }: LiquidationBreakdownProp
                   </div>
 
                   <div className="mt-1 flex items-baseline justify-between">
-                    <span className="t-caption font-mono tabular-nums">
+                    <span className="t-caption font-sans tabular-nums">
                       {longPct.toFixed(0)}% long
                     </span>
-                    <span className="t-caption font-mono tabular-nums">
+                    <span className="t-caption font-sans tabular-nums">
                       {r.count.toLocaleString()} events
                     </span>
                   </div>

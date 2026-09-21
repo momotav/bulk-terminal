@@ -51,20 +51,20 @@ export function MarketTicker({ tickers, loading }: MarketTickerProps) {
                 key={t.symbol}
                 className="group flex shrink-0 items-center gap-2 px-3.5 py-2 transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] hover:bg-[var(--bg-secondary-20)]"
               >
-                <span className="font-sans text-[11px] font-semibold tracking-tight text-[var(--role-content)]">
+                <span className="font-sans text-[11px] font-semibold leading-none tracking-tight text-[var(--role-content)]">
                   {coin}
                 </span>
                 {/* Price tweens to its new value on each poll instead of
                     hard-snapping. formatPrice now emits a FIXED decimal count,
                     so with tabular-nums the width is stable through the tween —
                     no reflow, no tape shake, and no wasteful fixed-width slot. */}
-                <span className="font-sans text-[11px] tabular-nums text-[var(--role-content-muted)]">
+                <span className="font-sans text-[11px] leading-none tabular-nums text-[var(--role-content-muted)]">
                   <AnimatedNumber value={t.lastPrice} format={formatPrice} />
                 </span>
                 {/* 24h change with a directional caret. Colour eases when it
                     crosses zero, so a market turning red/green fades not blinks. */}
                 <span
-                  className="inline-flex items-center gap-0.5 font-sans text-[11px] font-medium tabular-nums transition-colors duration-500 ease-[var(--ease-out)]"
+                  className="inline-flex items-center gap-0.5 font-sans text-[11px] font-medium leading-none tabular-nums transition-colors duration-500 ease-[var(--ease-out)]"
                   style={{ color }}
                 >
                   <span aria-hidden className="text-[9px] leading-none">{up ? '▲' : '▼'}</span>

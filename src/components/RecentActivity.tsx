@@ -223,19 +223,19 @@ export function RecentActivity({ flush = false }: RecentActivityProps) {
                   </p>
 
                   {/* Price */}
-                  <p className="t-caption hidden w-24 shrink-0 text-right font-mono tabular-nums lg:block">
+                  <p className="t-caption hidden w-24 shrink-0 text-right font-sans tabular-nums lg:block">
                     ${Number(item.price).toLocaleString()}
                   </p>
 
                   {/* Value */}
                   <div className="w-24 shrink-0 text-right">
                     <p
-                      className="font-mono text-xs font-bold tabular-nums tracking-tight"
+                      className="font-sans text-xs font-bold tabular-nums tracking-tight"
                       style={{ color: isLiq ? 'var(--role-signal-negative)' : 'var(--role-content)' }}
                     >
                       ${formatCompact(item.value)}
                     </p>
-                    <p className="t-caption font-mono tabular-nums lg:hidden">
+                    <p className="t-caption font-sans tabular-nums lg:hidden">
                       @ ${Number(item.price).toLocaleString()}
                     </p>
                   </div>

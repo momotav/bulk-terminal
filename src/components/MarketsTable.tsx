@@ -96,18 +96,18 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
                   className="data-row animate-row-enter flex items-center gap-3 px-5 py-3"
                 >
                   {/* Market */}
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs font-medium tracking-tight text-[var(--role-content)]">
+                  <span className="min-w-0 flex-1 truncate font-sans text-xs font-medium tracking-tight text-[var(--role-content)]">
                     {t.symbol}
                   </span>
 
                   {/* Last price */}
-                  <span className="w-24 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--role-content)]">
+                  <span className="w-24 shrink-0 text-right font-sans text-xs tabular-nums text-[var(--role-content)]">
                     {formatPrice(t.lastPrice)}
                   </span>
 
                   {/* 24h change */}
                   <span
-                    className="w-20 shrink-0 text-right font-mono text-xs font-medium tabular-nums"
+                    className="w-20 shrink-0 text-right font-sans text-xs font-medium tabular-nums"
                     style={{ color: signal }}
                   >
                     {up ? '+' : ''}
@@ -115,26 +115,26 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
                   </span>
 
                   {/* 24h high / low — first to go when width runs out. */}
-                  <span className="t-caption hidden w-24 shrink-0 text-right font-mono tabular-nums 2xl:block">
+                  <span className="t-caption hidden w-24 shrink-0 text-right font-sans tabular-nums 2xl:block">
                     {formatPrice(t.highPrice)}
                   </span>
-                  <span className="t-caption hidden w-24 shrink-0 text-right font-mono tabular-nums 2xl:block">
+                  <span className="t-caption hidden w-24 shrink-0 text-right font-sans tabular-nums 2xl:block">
                     {formatPrice(t.lowPrice)}
                   </span>
 
                   {/* Quote volume */}
-                  <span className="t-caption hidden w-24 shrink-0 text-right font-mono tabular-nums lg:block">
+                  <span className="t-caption hidden w-24 shrink-0 text-right font-sans tabular-nums lg:block">
                     ${formatCompact(t.quoteVolume)}
                   </span>
 
                   {/* Open interest, converted from base coin to USD notional */}
-                  <span className="t-caption hidden w-24 shrink-0 text-right font-mono tabular-nums lg:block">
+                  <span className="t-caption hidden w-24 shrink-0 text-right font-sans tabular-nums lg:block">
                     ${formatCompact(openInterestUsd(t))}
                   </span>
 
                   {/* Funding — outranks High/Low, survives down to xl. */}
                   <span
-                    className="hidden w-24 shrink-0 text-right font-mono text-[11px] tabular-nums xl:block"
+                    className="hidden w-24 shrink-0 text-right font-sans text-[11px] tabular-nums xl:block"
                     style={{
                       color:
                         t.fundingRate >= 0
