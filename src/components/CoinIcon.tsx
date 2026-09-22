@@ -28,6 +28,7 @@ const LOCAL: Record<string, string> = {
   FARTCOIN: '/coins/FARTCOIN.png', JTO: '/coins/JTO.png', JUP: '/coins/JUP.png', LIT: '/coins/LIT.png', MEGA: '/coins/MEGA.png',
   MON: '/coins/MON.png', NEAR: '/coins/NEAR.png', PUMP: '/coins/PUMP.png', SUI: '/coins/SUI.png', TAO: '/coins/TAO.png',
   XAU: '/coins/XAU.png', ZEC: '/coins/ZEC.png', DOGE: '/coins/DOGE.png', AAVE: '/coins/AAVE.png',
+  PAXG: '/coins/PAXG.png',
 };
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '').toUpperCase();

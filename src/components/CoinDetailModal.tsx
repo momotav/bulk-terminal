@@ -157,10 +157,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
           {/* Header stats */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[var(--role-line-subtle)] px-4 py-3 sm:px-5">
-            <div className="flex items-center gap-2">
-              <CoinIcon symbol={symbol} size={26} />
-              <span className="text-lg font-bold text-[var(--role-content)]">{coinOf(symbol)}</span>
-              <span className="text-[11px] text-[var(--role-content-subtle)]">{symbol}</span>
+            <div className="flex items-center gap-2.5">
+              <CoinIcon symbol={symbol} size={28} />
+              <span className="font-sans text-xl font-bold tracking-tight text-[var(--role-content)]">{symbol}</span>
             </div>
             <Stat label="Mark Price" value={usd(ticker.markPrice || ticker.lastPrice)} />
             <Stat label="24H Change" value={`${up ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`} color={changeColor} />
@@ -215,7 +214,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
                   href={`https://app.bulk.trade/trade/${symbol}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-sm font-bold text-white transition-[filter] hover:brightness-110"
+                  className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-base font-bold tracking-wide text-white transition-[filter] hover:brightness-110"
                   style={{
                     background: 'linear-gradient(135deg, #8f8582 0%, #6b615e 48%, #443c39 100%)',
                     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.20), inset 0 -1px 0 rgba(0,0,0,0.28), 0 1px 2px rgba(0,0,0,0.35)',
