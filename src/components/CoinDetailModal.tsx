@@ -164,23 +164,13 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             <Stat label="24H Change" value={`${up ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`} color={changeColor} />
             <Stat label="24H Volume" value={usd(ticker.quoteVolume)} />
             <Stat label="Open Interest" value={usd(openInterestUsd(ticker))} />
-            <div className="ml-auto flex items-center gap-2">
-              <a
-                href={`https://app.bulk.trade/trade/${symbol}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-md bg-[var(--accent)] px-3.5 py-1.5 text-xs font-semibold text-[var(--accent-text)] transition-opacity hover:opacity-90"
-              >
-                Trade
-              </a>
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Interval toggles */}
@@ -213,9 +203,19 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           </div>
         </div>
 
-            {/* ---- Right: order book ---- */}
-            <div className="flex h-[480px] w-full flex-col border-b border-[var(--role-line-subtle)] lg:h-auto lg:w-[380px] lg:border-b-0 xl:w-[440px]">
-              <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+            {/* ---- Right: order book + Trade button ---- */}
+            <div className="flex h-[520px] w-full flex-col border-b border-[var(--role-line-subtle)] lg:h-auto lg:w-[380px] lg:border-b-0 xl:w-[440px]">
+              <div className="min-h-0 flex-1">
+                <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+              </div>
+              <a
+                href={`https://app.bulk.trade/trade/${symbol}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block border-t border-[var(--role-line-subtle)] bg-[var(--accent)] px-4 py-3 text-center text-sm font-semibold text-[var(--accent-text)] transition-opacity hover:opacity-90"
+              >
+                Trade {coinOf(symbol)}
+              </a>
             </div>
           </div>
 
@@ -252,7 +252,7 @@ const fmtUsdShort = (n: number): string => {
 // below. Price / Size (USD) / Sum (USD) columns, gradient cumulative-depth bars
 // growing from the Sum side, and a bid/ask imbalance bar at the bottom.
 function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; mark: number; last: number; up: boolean }) {
-  const N = 12;
+  const N = 10;
   const rawAsks = (book?.asks ?? []).slice(0, N); // ascending px (nearest mid first)
   const rawBids = (book?.bids ?? []).slice(0, N); // descending px (nearest mid first)
 
@@ -289,8 +289,8 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
         <span className="text-right">Sum (USD)</span>
       </div>
 
-      {/* Ladder: asks, mid, bids */}
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      {/* Ladder: asks, mid, bids — solid (fixed depth, no scroll) */}
+      <div className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden">
         {!book ? (
           <div className="flex h-full items-center justify-center py-10 text-[11px] text-[var(--role-content-subtle)]">Loading book…</div>
         ) : (
@@ -354,18 +354,40 @@ function timeAgo(ts: number): string {
 // `side` is the taker's side. Treat buy/long as the taker buying.
 const isBuySide = (side: string) => /^(buy|long|b)$/i.test(side.trim());
 
+// Row-count selector (10 / 25 / 50) for the feed tables.
+function LimitToggle({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)] p-0.5">
+      {[10, 25, 50].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          className={cn(
+            'rounded px-2 py-0.5 text-[11px] font-semibold transition-colors',
+            value === n ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+          )}
+        >
+          {n}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 // Recent trade tape for the market — header stats (last price, buy/sell split,
 // VWAP) plus a live table. Buyer/seller are derived from the taker's side.
 function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
   const [trades, setTrades] = useState<MarketTrade[] | null>(null);
+  const [limit, setLimit] = useState(25);
   useEffect(() => {
     let cancelled = false;
     const coin = coinOf(symbol);
-    const load = () => analytics.getMarketTrades(coin, 50).then((t) => { if (!cancelled) setTrades(t); }).catch(() => {});
+    const load = () => analytics.getMarketTrades(coin, limit).then((t) => { if (!cancelled) setTrades(t); }).catch(() => {});
     load();
     const id = window.setInterval(load, 4000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [symbol]);
+  }, [symbol, limit]);
 
   const rows = trades ?? [];
   const buys = rows.filter((t) => isBuySide(t.side)).length;
@@ -379,7 +401,10 @@ function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
 
   return (
     <section className="border-t border-[var(--role-line-subtle)] px-4 py-4 sm:px-5">
-      <h3 className="mb-3 text-base font-bold text-[var(--role-content)]">Recent Trades</h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-bold text-[var(--role-content)]">Recent Trades</h3>
+        <LimitToggle value={limit} onChange={setLimit} />
+      </div>
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="rounded-md border border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 px-3 py-2">
           <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Last Price</p>
@@ -447,21 +472,25 @@ function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
 // Recent liquidation events for the market.
 function LiquidationFeed({ symbol }: { symbol: string }) {
   const [liqs, setLiqs] = useState<MarketLiquidation[] | null>(null);
+  const [limit, setLimit] = useState(25);
   useEffect(() => {
     let cancelled = false;
     const coin = coinOf(symbol);
-    const load = () => analytics.getMarketLiquidations(coin, 50).then((l) => { if (!cancelled) setLiqs(l); }).catch(() => {});
+    const load = () => analytics.getMarketLiquidations(coin, limit).then((l) => { if (!cancelled) setLiqs(l); }).catch(() => {});
     load();
     const id = window.setInterval(load, 6000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [symbol]);
+  }, [symbol, limit]);
 
   const rows = liqs ?? [];
   const isLong = (s: string) => /long|buy/i.test(s);
 
   return (
     <section className="border-t border-[var(--role-line-subtle)] px-4 py-4 sm:px-5">
-      <h3 className="mb-3 text-base font-bold text-[var(--role-content)]">Liquidation Feed</h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-bold text-[var(--role-content)]">Liquidation Feed</h3>
+        <LimitToggle value={limit} onChange={setLimit} />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] text-[11px] tabular-nums">
           <thead>
