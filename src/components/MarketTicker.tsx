@@ -13,6 +13,7 @@
 
 import { type BulkTicker, formatPrice } from '@/hooks/useTickers';
 import { AnimatedNumber } from './AnimatedNumber';
+import { CoinIcon } from './CoinIcon';
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '');
 
@@ -51,8 +52,11 @@ export function MarketTicker({ tickers, loading }: MarketTickerProps) {
                 key={t.symbol}
                 className="group flex shrink-0 items-center gap-2 px-3.5 py-2 transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] hover:bg-[var(--bg-secondary-20)]"
               >
-                <span className="font-sans text-[11px] font-semibold leading-none tracking-tight text-[var(--role-content)]">
-                  {coin}
+                <span className="flex items-center gap-1.5">
+                  <CoinIcon symbol={t.symbol} size={14} />
+                  <span className="font-sans text-[11px] font-semibold leading-none tracking-tight text-[var(--role-content)]">
+                    {coin}
+                  </span>
                 </span>
                 {/* Price tweens to its new value on each poll instead of
                     hard-snapping. formatPrice now emits a FIXED decimal count,

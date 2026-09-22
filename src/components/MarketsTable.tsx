@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { formatCompact } from '@/lib/api';
 import { type BulkTicker, formatPrice, openInterestUsd } from '@/hooks/useTickers';
 import { CoinDetailModal } from '@/components/CoinDetailModal';
+import { CoinIcon } from '@/components/CoinIcon';
 
 interface MarketsTableProps {
   tickers: BulkTicker[];
@@ -107,8 +108,11 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
                   className="data-row animate-row-enter flex cursor-pointer items-center gap-3 px-5 py-3"
                 >
                   {/* Market */}
-                  <span className="min-w-0 flex-1 truncate font-sans text-xs font-medium tracking-tight text-[var(--role-content)]">
-                    {t.symbol}
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <CoinIcon symbol={t.symbol} size={18} />
+                    <span className="truncate font-sans text-xs font-medium tracking-tight text-[var(--role-content)]">
+                      {t.symbol}
+                    </span>
                   </span>
 
                   {/* Last price */}

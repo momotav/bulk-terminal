@@ -17,6 +17,7 @@ import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
 import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
+import { CoinIcon } from '@/components/CoinIcon';
 
 const INTERVALS: { label: string; value: string }[] = [
   { label: '1m', value: '1m' },
@@ -157,6 +158,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           {/* Header stats */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[var(--role-line-subtle)] px-4 py-3 sm:px-5">
             <div className="flex items-center gap-2">
+              <CoinIcon symbol={symbol} size={26} />
               <span className="text-lg font-bold text-[var(--role-content)]">{coinOf(symbol)}</span>
               <span className="text-[11px] text-[var(--role-content-subtle)]">{symbol}</span>
             </div>
