@@ -8,8 +8,10 @@
 // so the table stays readable from 1920px down to a phone.
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { formatCompact } from '@/lib/api';
 import { type BulkTicker, formatPrice, openInterestUsd } from '@/hooks/useTickers';
+import { CoinDetailModal } from '@/components/CoinDetailModal';
 
 interface MarketsTableProps {
   tickers: BulkTicker[];
@@ -25,6 +27,11 @@ function formatFunding(rate: number): string {
 }
 
 export function MarketsTable({ tickers, loading, flush = false }: MarketsTableProps) {
+  // Clicking a row opens a full chart + order book popover. Track the symbol
+  // (not the ticker object) so the modal header stays live as tickers refresh.
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const selectedTicker = tickers.find((t) => t.symbol === selectedSymbol) ?? null;
+
   return (
     <div className={`glass-card flex h-full flex-col ${flush ? 'panel-flush' : ''}`}>
       <div className="panel-header">
@@ -90,10 +97,14 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
               return (
                 <div
                   key={t.symbol}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedSymbol(t.symbol)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSymbol(t.symbol); } }}
                   style={
                     { '--row-accent': signal, '--row-index': i } as React.CSSProperties
                   }
-                  className="data-row animate-row-enter flex items-center gap-3 px-5 py-3"
+                  className="data-row animate-row-enter flex cursor-pointer items-center gap-3 px-5 py-3"
                 >
                   {/* Market */}
                   <span className="min-w-0 flex-1 truncate font-sans text-xs font-medium tracking-tight text-[var(--role-content)]">
@@ -150,6 +161,8 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
           </div>
         )}
       </div>
+
+      <CoinDetailModal ticker={selectedTicker} onClose={() => setSelectedSymbol(null)} />
     </div>
   );
 }
