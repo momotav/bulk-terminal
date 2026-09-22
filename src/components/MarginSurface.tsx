@@ -146,8 +146,10 @@ interface HoveredCell {
 
 type ViewMode = 'live' | 'strict';
 
-export function MarginSurface() {
-  const [coin, setCoin] = useState('BTC');
+export function MarginSurface({ coin: coinProp }: { coin?: string } = {}) {
+  const [coin, setCoin] = useState(coinProp || 'BTC');
+  // When embedded with a fixed coin (e.g. the coin detail modal), follow it.
+  useEffect(() => { if (coinProp) setCoin(coinProp); }, [coinProp]);
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [mode, setMode] = useState<ViewMode>('live');
 
@@ -387,7 +389,7 @@ export function MarginSurface() {
 
       {/* Coin picker on its own row so the header stays single-line. */}
       <div className="mb-3">
-        <CoinPicker value={coin} onChange={setCoin} ariaLabel="Coin for margin surface" />
+        {!coinProp && <CoinPicker value={coin} onChange={setCoin} ariaLabel="Coin for margin surface" />}
       </div>
 
       {/* Heatmap body. */}

@@ -18,6 +18,8 @@ import { analytics, cn, formatCompact, formatAddress, type Candle, type Orderboo
 import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 import { CoinIcon } from '@/components/CoinIcon';
+import { MarginSurface } from '@/components/MarginSurface';
+import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 
 const INTERVALS: { label: string; value: string }[] = [
   { label: '1m', value: '1m' },
@@ -33,6 +35,7 @@ const usd = (n: number) => `$${formatCompact(n)}`;
 
 export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null; onClose: () => void }) {
   const [interval, setIntervalValue] = useState('1h');
+  const [chartView, setChartView] = useState<'chart' | 'depth' | 'margin'>('chart');
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -174,32 +177,57 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             </button>
           </div>
 
-          {/* Interval toggles */}
-          <div className="flex items-center gap-1 px-4 py-2 sm:px-5">
-            {INTERVALS.map((it) => (
-              <button
-                key={it.value}
-                onClick={() => setIntervalValue(it.value)}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
-                  interval === it.value
-                    ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]'
-                    : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
-                )}
-              >
-                {it.label}
-              </button>
-            ))}
+          {/* Interval toggles (chart view only) + Chart/Depth/Margin switcher */}
+          <div className="flex items-center justify-between gap-2 px-4 py-2 sm:px-5">
+            <div className="flex items-center gap-1">
+              {chartView === 'chart' && INTERVALS.map((it) => (
+                <button
+                  key={it.value}
+                  onClick={() => setIntervalValue(it.value)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
+                    interval === it.value
+                      ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]'
+                      : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
+                  )}
+                >
+                  {it.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 text-sm font-semibold">
+              {(['chart', 'depth', 'margin'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setChartView(v)}
+                  className={cn('capitalize transition-colors', chartView === v ? 'text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Chart — grows to match the order-book column's full height. */}
+          {/* Chart — grows to match the order-book column's full height. The
+              candlestick chart stays mounted (kept alive); Depth/Margin render
+              as overlays on top when selected. */}
           <div className="relative min-h-[360px] flex-1 px-2 pb-2 lg:min-h-0">
             <div ref={wrapRef} className="h-full w-full" />
-            {loading && plotted.length === 0 && (
+            {chartView === 'chart' && loading && plotted.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
             )}
-            {!loading && plotted.length === 0 && (
+            {chartView === 'chart' && !loading && plotted.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">No candle data.</div>
+            )}
+            {chartView === 'depth' && (
+              <div className="absolute inset-0 bg-[var(--role-surface)] px-2 pb-2 pt-1">
+                <DepthChart book={book} />
+              </div>
+            )}
+            {chartView === 'margin' && (
+              <div className="absolute inset-0 overflow-y-auto bg-[var(--role-surface)] custom-scrollbar">
+                <MarginSurface coin={coinOf(symbol)} />
+              </div>
             )}
           </div>
         </div>
@@ -346,6 +374,50 @@ function BookRow({ row, max, side }: { row: { px: number; usd: number; sum: numb
       <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.usd)}</span>
       <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.sum)}</span>
     </div>
+  );
+}
+
+// Depth chart — cumulative bid/ask liquidity (USD) by price, meeting at the mid.
+function DepthChart({ book }: { book: OrderbookSnapshot | null }) {
+  const data = useMemo(() => {
+    if (!book) return [] as { px: number; bid?: number; ask?: number }[];
+    const bids = [...book.bids].sort((a, b) => b.px - a.px); // best (highest) first
+    const asks = [...book.asks].sort((a, b) => a.px - b.px); // best (lowest) first
+    let cb = 0;
+    const bidRows = bids.map((l) => { cb += l.px * l.sz; return { px: l.px, bid: cb }; }).reverse();
+    let ca = 0;
+    const askRows = asks.map((l) => { ca += l.px * l.sz; return { px: l.px, ask: ca }; });
+    return [...bidRows, ...askRows];
+  }, [book]);
+
+  if (!book) return <div className="flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading depth…</div>;
+  if (data.length < 2) return <div className="flex h-full items-center justify-center text-sm text-[var(--role-content-subtle)]">Not enough depth.</div>;
+
+  const axis = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+        <defs>
+          <linearGradient id="depthBid" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--pos)" stopOpacity={0.02} />
+          </linearGradient>
+          <linearGradient id="depthAsk" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--neg)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <XAxis dataKey="px" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => `$${formatCompact(Number(v))}`} tick={axis} axisLine={{ stroke: 'var(--role-line-subtle)' }} tickLine={false} minTickGap={44} />
+        <YAxis tickFormatter={(v) => `$${formatCompact(Number(v))}`} tick={axis} axisLine={{ stroke: 'var(--role-line-subtle)' }} tickLine={false} width={52} />
+        <RTooltip
+          contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }}
+          labelFormatter={(v) => `$${fmtPx(Number(v))}`}
+          formatter={(val: number, name: string) => [`$${formatCompact(val)}`, name === 'bid' ? 'Bid depth' : 'Ask depth']}
+        />
+        <Area type="stepAfter" dataKey="bid" stroke="var(--pos)" strokeWidth={1.75} fill="url(#depthBid)" connectNulls={false} isAnimationActive={false} />
+        <Area type="stepBefore" dataKey="ask" stroke="var(--neg)" strokeWidth={1.75} fill="url(#depthAsk)" connectNulls={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
