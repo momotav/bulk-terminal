@@ -85,22 +85,37 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   useEffect(() => {
     const container = wrapRef.current;
     if (!symbol || !container) return;
-    const cs = getComputedStyle(document.documentElement);
-    const v = (name: string, fb: string) => cs.getPropertyValue(name).trim() || fb;
+    // lightweight-charts renders to canvas and can't parse CSS variables OR the
+    // modern space-separated `rgb(128 118 120)` syntax our tokens use. Resolve
+    // each to a canonical comma-form rgb() via a throwaway element.
+    const v = (expr: string, fb: string): string => {
+      const probe = document.createElement('span');
+      probe.style.color = expr;
+      probe.style.display = 'none';
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      return resolved || fb;
+    };
+    const pos = v('var(--pos)', 'rgb(33, 192, 122)');
+    const neg = v('var(--neg)', 'rgb(229, 72, 77)');
+    const grid = v('var(--role-line-subtle)', 'rgba(128, 118, 120, 0.12)');
+    const border = v('var(--role-line)', 'rgba(128, 118, 120, 0.24)');
+    const text = v('var(--role-content-subtle)', 'rgb(138, 138, 138)');
     const chart = createChart(container, {
       width: container.clientWidth || 800,
       height: container.clientHeight || 420,
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: v('--role-content-subtle', '#8a8a8a'), fontSize: 11 },
-      grid: { vertLines: { color: v('--role-line-subtle', '#ffffff10') }, horzLines: { color: v('--role-line-subtle', '#ffffff10') } },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11 },
+      grid: { vertLines: { color: grid }, horzLines: { color: grid } },
       crosshair: { mode: 0 },
-      rightPriceScale: { borderColor: v('--role-line', '#ffffff18') },
-      timeScale: { borderColor: v('--role-line', '#ffffff18'), timeVisible: true, secondsVisible: false },
+      rightPriceScale: { borderColor: border },
+      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
     });
     chartRef.current = chart;
     seriesRef.current = chart.addCandlestickSeries({
-      upColor: v('--pos', '#21C07A'), downColor: v('--neg', '#E5484D'),
-      borderUpColor: v('--pos', '#21C07A'), borderDownColor: v('--neg', '#E5484D'),
-      wickUpColor: v('--pos', '#21C07A'), wickDownColor: v('--neg', '#E5484D'),
+      upColor: pos, downColor: neg,
+      borderUpColor: pos, borderDownColor: neg,
+      wickUpColor: pos, wickDownColor: neg,
     });
     const resize = () => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     const obs = new ResizeObserver(resize);
