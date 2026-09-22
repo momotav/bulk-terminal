@@ -15,7 +15,7 @@ import {
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, type Candle, type OrderbookSnapshot } from '@/lib/api';
-import { type BulkTicker, formatPrice, openInterestUsd } from '@/hooks/useTickers';
+import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 
 const INTERVALS: { label: string; value: string }[] = [
@@ -200,8 +200,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         </div>
 
         {/* ---- Right: order book ---- */}
-        <div className="flex min-h-0 w-full flex-col lg:w-[380px] xl:w-[420px]">
-          <OrderBook book={book} />
+        <div className="flex min-h-0 w-full flex-col lg:w-[380px] xl:w-[440px]">
+          <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
         </div>
       </div>
     </div>,
@@ -218,13 +218,43 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-// Compact order book: spread strip, bid/ask imbalance bar, then coupled ladders.
-function OrderBook({ book }: { book: OrderbookSnapshot | null }) {
-  const levels = 16;
-  const bids = (book?.bids ?? []).slice(0, levels);
-  const asks = (book?.asks ?? []).slice(0, levels);
-  const maxSz = Math.max(1e-9, ...bids.map((l) => l.sz), ...asks.map((l) => l.sz));
-  const stats = book?.stats;
+// Price to a fixed 2-decimal, comma-grouped string (85,952.00).
+const fmtPx = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// USD amount, compact like the reference: 92.91 / 2.50K / 1.39M.
+const fmtUsdShort = (n: number): string => {
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return n.toFixed(2);
+};
+
+// Hyperliquid-style vertical order book: asks on top, a mid-price row, bids
+// below. Price / Size (USD) / Sum (USD) columns, gradient cumulative-depth bars
+// growing from the Sum side, and a bid/ask imbalance bar at the bottom.
+function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; mark: number; last: number; up: boolean }) {
+  const N = 12;
+  const rawAsks = (book?.asks ?? []).slice(0, N); // ascending px (nearest mid first)
+  const rawBids = (book?.bids ?? []).slice(0, N); // descending px (nearest mid first)
+
+  // Cumulative USD summed from the mid outward, so the level nearest the mid
+  // has the smallest Sum and the farthest has the largest (= full-width bar).
+  let ackAsk = 0;
+  const asks = rawAsks.map((l) => { const u = l.px * l.sz; ackAsk += u; return { px: l.px, usd: u, sum: ackAsk }; });
+  let ackBid = 0;
+  const bids = rawBids.map((l) => { const u = l.px * l.sz; ackBid += u; return { px: l.px, usd: u, sum: ackBid }; });
+  const maxAsk = asks.length ? asks[asks.length - 1].sum : 1;
+  const maxBid = bids.length ? bids[bids.length - 1].sum : 1;
+
+  const mid = book?.stats?.mid ?? last ?? mark;
+  const bestBid = rawBids[0]?.px;
+  const bestAsk = rawAsks[0]?.px;
+  const spreadPct = bestBid && bestAsk && mid ? ((bestAsk - bestBid) / mid) * 100 : null;
+
+  const total = maxAsk + maxBid;
+  const bidPct = total > 0 ? (maxBid / total) * 100 : 50;
+  const askPct = 100 - bidPct;
+
+  const asksDisplay = [...asks].reverse(); // highest price at the top
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -236,61 +266,62 @@ function OrderBook({ book }: { book: OrderbookSnapshot | null }) {
         </span>
       </div>
 
-      {/* Spread + mid */}
-      <div className="flex items-center justify-center gap-2.5 border-b border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 py-2 text-[11px] tabular-nums">
-        <span className="text-[var(--role-content-subtle)]">Spread</span>
-        <span className="font-semibold text-[var(--role-content)]">{stats?.spreadBps != null ? `${stats.spreadBps.toFixed(2)} bps` : '—'}</span>
-        <span className="text-[var(--role-line)]">·</span>
-        <span className="text-[var(--role-content-subtle)]">Mid</span>
-        <span className="font-semibold text-[var(--role-content)]">{stats?.mid != null ? `$${formatPrice(stats.mid)}` : '—'}</span>
+      {/* Column headers */}
+      <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-4 pb-1.5 pt-2 text-[11px] font-medium text-[var(--role-content-subtle)]">
+        <span>Price</span>
+        <span className="text-right">Size (USD)</span>
+        <span className="text-right">Sum (USD)</span>
       </div>
 
-      {/* Column header */}
-      <div className="grid grid-cols-2 gap-3 px-4 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">
-        <div className="flex justify-between"><span>Price</span><span>Size</span></div>
-        <div className="flex justify-between"><span>Price</span><span>Size</span></div>
-      </div>
-
-      {/* Ladders */}
+      {/* Ladder: asks, mid, bids */}
       <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
         {!book ? (
           <div className="flex h-full items-center justify-center py-10 text-[11px] text-[var(--role-content-subtle)]">Loading book…</div>
         ) : (
-          <div className="grid grid-cols-2">
-            <Ladder rows={bids} maxSz={maxSz} side="bid" />
-            <Ladder rows={asks} maxSz={maxSz} side="ask" />
-          </div>
+          <>
+            {asksDisplay.map((r, i) => <BookRow key={`a${i}`} row={r} max={maxAsk} side="ask" />)}
+
+            {/* Mid / last price row */}
+            <div className="flex items-center justify-between gap-2 border-y border-[var(--role-line-subtle)] px-4 py-2">
+              <span
+                className="flex items-center gap-1 text-lg font-bold tabular-nums"
+                style={{ color: up ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)' }}
+              >
+                {fmtPx(mid)} <span className="text-sm">{up ? '↑' : '↓'}</span>
+              </span>
+              <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">${fmtPx(mark)}</span>
+              <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">{spreadPct != null ? `${spreadPct.toFixed(5)}%` : '—'}</span>
+            </div>
+
+            {bids.map((r, i) => <BookRow key={`b${i}`} row={r} max={maxBid} side="bid" />)}
+          </>
         )}
       </div>
 
-      {book?.timestamp ? (
-        <div className="border-t border-[var(--role-line-subtle)] py-1.5 text-center text-[10px] text-[var(--role-content-subtle)]">
-          Last update: {new Date(book.timestamp).toLocaleTimeString()}
-        </div>
-      ) : null}
+      {/* Bid / ask imbalance */}
+      <div className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-4 py-2 text-[11px] font-semibold tabular-nums">
+        <span style={{ color: 'var(--role-signal-positive)' }}>B {bidPct.toFixed(2)}%</span>
+        <span className="relative h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--role-signal-negative)' }}>
+          <span className="absolute inset-y-0 left-0" style={{ width: `${bidPct}%`, background: 'var(--role-signal-positive)' }} />
+        </span>
+        <span style={{ color: 'var(--role-signal-negative)' }}>{askPct.toFixed(2)}% S</span>
+      </div>
     </div>
   );
 }
 
-function Ladder({ rows, maxSz, side }: { rows: { px: number; sz: number }[]; maxSz: number; side: 'bid' | 'ask' }) {
+function BookRow({ row, max, side }: { row: { px: number; usd: number; sum: number }; max: number; side: 'ask' | 'bid' }) {
+  const pct = max > 0 ? (row.sum / max) * 100 : 0;
   const pxColor = side === 'bid' ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
-  const fill = side === 'bid' ? 'rgb(var(--pos-rgb) / 0.14)' : 'rgb(var(--neg-rgb) / 0.14)';
+  const grad = side === 'bid'
+    ? 'linear-gradient(to left, rgb(var(--pos-rgb) / 0.42), rgb(var(--pos-rgb) / 0.05))'
+    : 'linear-gradient(to left, rgb(var(--neg-rgb) / 0.42), rgb(var(--neg-rgb) / 0.05))';
   return (
-    <div className={side === 'ask' ? 'border-l border-[var(--role-line-subtle)]' : ''}>
-      {rows.map((l, i) => {
-        const pct = (l.sz / maxSz) * 100;
-        return (
-          <div key={`${side}-${i}`} className="relative grid grid-cols-[1fr_auto] items-center gap-2 px-4 py-[3px] text-[11px] tabular-nums">
-            <div
-              className={cn('pointer-events-none absolute inset-y-px', side === 'bid' ? 'right-0' : 'left-0')}
-              style={{ width: `${pct}%`, background: fill }}
-            />
-            <span className="relative font-medium" style={{ color: pxColor }}>${formatPrice(l.px)}</span>
-            <span className="relative text-right text-[var(--role-content)]">{l.sz.toFixed(4)}</span>
-          </div>
-        );
-      })}
-      {rows.length === 0 && <div className="py-6 text-center text-[11px] text-[var(--role-content-subtle)]">No levels</div>}
+    <div className="relative grid grid-cols-[1fr_1fr_1fr] items-center gap-2 px-4 py-[3px] text-[11px] tabular-nums">
+      <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: `${pct}%`, background: grad }} />
+      <span className="relative font-medium" style={{ color: pxColor }}>{fmtPx(row.px)}</span>
+      <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.usd)}</span>
+      <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.sum)}</span>
     </div>
   );
 }
