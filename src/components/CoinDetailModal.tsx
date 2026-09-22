@@ -39,6 +39,10 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  // Only treat a click as "backdrop click to close" when BOTH the press and the
+  // release land on the backdrop itself — so a drag that starts inside the
+  // panel (e.g. panning the chart) and ends outside never closes the modal.
+  const backdropDown = useRef(false);
 
   const symbol = ticker?.symbol ?? null;
 
@@ -141,13 +145,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-3 sm:p-6"
-      onClick={onClose}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-3 backdrop-blur-md sm:p-6"
+      onMouseDown={(e) => { backdropDown.current = e.target === e.currentTarget; }}
+      onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl lg:flex-row"
-      >
+      <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl lg:flex-row">
         {/* ---- Left: header stats + candlestick chart ---- */}
         <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
           {/* Header stats */}
@@ -160,13 +162,23 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             <Stat label="24H Change" value={`${up ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`} color={changeColor} />
             <Stat label="24H Volume" value={usd(ticker.quoteVolume)} />
             <Stat label="Open Interest" value={usd(openInterestUsd(ticker))} />
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <a
+                href={`https://app.bulk.trade/trade/${symbol}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md bg-[var(--accent)] px-3.5 py-1.5 text-xs font-semibold text-[var(--accent-text)] transition-opacity hover:opacity-90"
+              >
+                Trade
+              </a>
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Interval toggles */}
@@ -258,12 +270,8 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--role-line-subtle)] px-4 py-3">
+      <div className="flex items-center border-b border-[var(--role-line-subtle)] px-4 py-3">
         <h3 className="text-base font-bold text-[var(--role-content)]">Order Book</h3>
-        <span className="flex items-center gap-1.5 text-[11px] text-[var(--role-content-subtle)]">
-          <span className={cn('h-1.5 w-1.5 rounded-full', book?.stale ? 'bg-[var(--role-signal-negative)]' : 'bg-[var(--role-signal-positive)]')} />
-          {book?.stale ? 'STALE' : 'LIVE'}
-        </span>
       </div>
 
       {/* Column headers */}
