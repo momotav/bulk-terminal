@@ -17,18 +17,28 @@ import { getCoinColor } from '@/lib/coins';
 // + common majors). Others skip the CDN and fall straight to the monogram so
 // we don't fire a request that's guaranteed to 404.
 const CDN_HAS = new Set([
-  'BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AAVE', 'XRP', 'ZEC',
+  'BTC', 'BNB', 'XRP',
   'LINK', 'AVAX', 'ADA', 'LTC', 'DOT', 'UNI', 'ATOM', 'XLM', 'TRX', 'BCH', 'ETC', 'FIL',
 ]);
+
+// Exact local files in public/coins (the logos dropped in to match BULK). Keyed
+// by symbol → path so we never fire a guessed 404 for a coin we already have.
+const LOCAL: Record<string, string> = {
+  ETH: '/coins/ETH.svg', SOL: '/coins/SOL.svg', HYPE: '/coins/HYPE.svg', ENA: '/coins/ENA.svg', XPL: '/coins/XPL.svg',
+  FARTCOIN: '/coins/FARTCOIN.png', JTO: '/coins/JTO.png', JUP: '/coins/JUP.png', LIT: '/coins/LIT.png', MEGA: '/coins/MEGA.png',
+  MON: '/coins/MON.png', NEAR: '/coins/NEAR.png', PUMP: '/coins/PUMP.png', SUI: '/coins/SUI.png', TAO: '/coins/TAO.png',
+  XAU: '/coins/XAU.png', ZEC: '/coins/ZEC.png', DOGE: '/coins/DOGE.png', AAVE: '/coins/AAVE.png',
+};
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '').toUpperCase();
 
 export function CoinIcon({ symbol, size = 20, className = '' }: { symbol: string; size?: number; className?: string }) {
   const coin = coinOf(symbol);
   const sources = useMemo(() => {
-    const s = [`/coins/${coin}.svg`, `/coins/${coin}.png`];
-    if (CDN_HAS.has(coin)) s.push(`https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/${coin.toLowerCase()}.svg`);
-    return s;
+    if (LOCAL[coin]) return [LOCAL[coin]];
+    if (CDN_HAS.has(coin)) return [`https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/${coin.toLowerCase()}.svg`];
+    // Unknown coin: try drop-in files (public/coins/<SYMBOL>.svg|png), then monogram.
+    return [`/coins/${coin}.svg`, `/coins/${coin}.png`];
   }, [coin]);
   const [idx, setIdx] = useState(0);
 
