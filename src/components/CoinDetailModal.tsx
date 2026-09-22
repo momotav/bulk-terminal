@@ -14,7 +14,7 @@ import {
   type CandlestickData, type UTCTimestamp, type WhitespaceData,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
-import { analytics, cn, formatCompact, type Candle, type OrderbookSnapshot } from '@/lib/api';
+import { analytics, cn, formatCompact, formatAddress, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
 import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 
@@ -149,9 +149,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       onMouseDown={(e) => { backdropDown.current = e.target === e.currentTarget; }}
       onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
-      <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl lg:flex-row">
-        {/* ---- Left: header stats + candlestick chart ---- */}
-        <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
+      <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
+        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex flex-col lg:h-[560px] lg:flex-row">
+            {/* ---- Left: header stats + candlestick chart ---- */}
+            <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
           {/* Header stats */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[var(--role-line-subtle)] px-4 py-3 sm:px-5">
             <div className="flex items-center gap-2">
@@ -200,7 +202,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           </div>
 
           {/* Chart */}
-          <div className="relative min-h-0 flex-1 px-2 pb-2">
+          <div className="relative min-h-[320px] flex-1 px-2 pb-2 lg:min-h-0">
             <div ref={wrapRef} className="h-full w-full" />
             {loading && plotted.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
@@ -211,9 +213,15 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           </div>
         </div>
 
-        {/* ---- Right: order book ---- */}
-        <div className="flex min-h-0 w-full flex-col lg:w-[380px] xl:w-[440px]">
-          <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+            {/* ---- Right: order book ---- */}
+            <div className="flex h-[480px] w-full flex-col border-b border-[var(--role-line-subtle)] lg:h-auto lg:w-[380px] lg:border-b-0 xl:w-[440px]">
+              <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+            </div>
+          </div>
+
+          {/* ---- Bottom feeds ---- */}
+          <RecentTrades symbol={symbol} up={up} />
+          <LiquidationFeed symbol={symbol} />
         </div>
       </div>
     </div>,
@@ -331,5 +339,163 @@ function BookRow({ row, max, side }: { row: { px: number; usd: number; sum: numb
       <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.usd)}</span>
       <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.sum)}</span>
     </div>
+  );
+}
+
+function timeAgo(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+// `side` is the taker's side. Treat buy/long as the taker buying.
+const isBuySide = (side: string) => /^(buy|long|b)$/i.test(side.trim());
+
+// Recent trade tape for the market — header stats (last price, buy/sell split,
+// VWAP) plus a live table. Buyer/seller are derived from the taker's side.
+function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
+  const [trades, setTrades] = useState<MarketTrade[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const coin = coinOf(symbol);
+    const load = () => analytics.getMarketTrades(coin, 50).then((t) => { if (!cancelled) setTrades(t); }).catch(() => {});
+    load();
+    const id = window.setInterval(load, 4000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [symbol]);
+
+  const rows = trades ?? [];
+  const buys = rows.filter((t) => isBuySide(t.side)).length;
+  const buyPct = rows.length ? (buys / rows.length) * 100 : 50;
+  const sellPct = 100 - buyPct;
+  const volSum = rows.reduce((s, t) => s + t.value, 0);
+  const szSum = rows.reduce((s, t) => s + t.size, 0);
+  const vwap = szSum > 0 ? rows.reduce((s, t) => s + t.price * t.size, 0) / szSum : 0;
+  const lastPx = rows[0]?.price ?? 0;
+  const lastBuy = rows[0] ? isBuySide(rows[0].side) : up;
+
+  return (
+    <section className="border-t border-[var(--role-line-subtle)] px-4 py-4 sm:px-5">
+      <h3 className="mb-3 text-base font-bold text-[var(--role-content)]">Recent Trades</h3>
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-md border border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 px-3 py-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Last Price</p>
+          <p className="text-lg font-bold tabular-nums" style={{ color: lastBuy ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)' }}>${fmtPx(lastPx)}</p>
+        </div>
+        <div className="rounded-md border border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 px-3 py-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">Buy / Sell</p>
+          <div className="mt-2 flex h-1.5 overflow-hidden rounded-full">
+            <span style={{ width: `${buyPct}%`, background: 'var(--role-signal-positive)' }} />
+            <span style={{ width: `${sellPct}%`, background: 'var(--role-signal-negative)' }} />
+          </div>
+          <div className="mt-1 flex justify-between text-[11px] font-semibold tabular-nums">
+            <span style={{ color: 'var(--role-signal-positive)' }}>{buyPct.toFixed(0)}%</span>
+            <span style={{ color: 'var(--role-signal-negative)' }}>{sellPct.toFixed(0)}%</span>
+          </div>
+        </div>
+        <div className="rounded-md border border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 px-3 py-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">VWAP</p>
+          <p className="text-lg font-bold tabular-nums text-[var(--role-content)]">${fmtPx(vwap)}</p>
+          <p className="text-[11px] text-[var(--role-content-subtle)]">Vol: ${formatCompact(volSum)}</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-[11px] tabular-nums">
+          <thead>
+            <tr className="text-left text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">
+              <th className="py-1.5 pr-3">Time</th>
+              <th className="py-1.5 pr-3">Direction</th>
+              <th className="py-1.5 pr-3 text-right">Price</th>
+              <th className="py-1.5 pr-3 text-right">Size</th>
+              <th className="py-1.5 pr-3 text-right">Value</th>
+              <th className="py-1.5 pr-3">Buyer</th>
+              <th className="py-1.5">Seller</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!trades ? (
+              <tr><td colSpan={7} className="py-6 text-center text-[var(--role-content-subtle)]">Loading trades…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={7} className="py-6 text-center text-[var(--role-content-subtle)]">No recent trades.</td></tr>
+            ) : rows.map((t, i) => {
+              const buy = isBuySide(t.side);
+              const buyer = buy ? t.taker : (t.maker ?? '');
+              const seller = buy ? (t.maker ?? '') : t.taker;
+              const col = buy ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
+              return (
+                <tr key={i} className="border-t border-[var(--role-line-subtle)]">
+                  <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{new Date(t.timestamp).toLocaleTimeString('en-US', { hour12: false })}</td>
+                  <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{buy ? 'BUY' : 'SELL'}</span></td>
+                  <td className="py-1.5 pr-3 text-right font-medium" style={{ color: col }}>${fmtPx(t.price)}</td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">{t.size.toFixed(4)}</td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtUsdShort(t.value)}</td>
+                  <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{buyer ? formatAddress(buyer) : '—'}</td>
+                  <td className="py-1.5 text-[var(--role-content-subtle)]">{seller ? formatAddress(seller) : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// Recent liquidation events for the market.
+function LiquidationFeed({ symbol }: { symbol: string }) {
+  const [liqs, setLiqs] = useState<MarketLiquidation[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const coin = coinOf(symbol);
+    const load = () => analytics.getMarketLiquidations(coin, 50).then((l) => { if (!cancelled) setLiqs(l); }).catch(() => {});
+    load();
+    const id = window.setInterval(load, 6000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [symbol]);
+
+  const rows = liqs ?? [];
+  const isLong = (s: string) => /long|buy/i.test(s);
+
+  return (
+    <section className="border-t border-[var(--role-line-subtle)] px-4 py-4 sm:px-5">
+      <h3 className="mb-3 text-base font-bold text-[var(--role-content)]">Liquidation Feed</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] text-[11px] tabular-nums">
+          <thead>
+            <tr className="text-left text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">
+              <th className="py-1.5 pr-3">Address</th>
+              <th className="py-1.5 pr-3">Direction</th>
+              <th className="py-1.5 pr-3 text-right">Value</th>
+              <th className="py-1.5 pr-3 text-right">Price</th>
+              <th className="py-1.5 pr-3 text-right">Size</th>
+              <th className="py-1.5 text-right">Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!liqs ? (
+              <tr><td colSpan={6} className="py-6 text-center text-[var(--role-content-subtle)]">Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6} className="py-6 text-center text-[var(--role-content-subtle)]">No recent liquidations.</td></tr>
+            ) : rows.map((l, i) => {
+              const long = isLong(l.side);
+              const col = long ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
+              return (
+                <tr key={i} className="border-t border-[var(--role-line-subtle)]">
+                  <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{l.wallet ? formatAddress(l.wallet) : '—'}</td>
+                  <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{long ? 'LONG LIQ' : 'SHORT LIQ'}</span></td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtUsdShort(l.value)}</td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtPx(l.price)}</td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">{l.size.toFixed(4)}</td>
+                  <td className="py-1.5 text-right text-[var(--role-content-subtle)]">{timeAgo(l.timestamp)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

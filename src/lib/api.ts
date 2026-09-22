@@ -341,6 +341,28 @@ export interface OrderbookStats {
   imbalance: number; // [-1, +1]
 }
 
+// One recent trade in a market's tape (/api/analytics/market-trades/:coin).
+// `side` is the taker's side; buyer/seller are derived from it + taker/maker.
+export interface MarketTrade {
+  taker: string;
+  maker: string | null;
+  side: string;
+  price: number;
+  size: number;
+  value: number;
+  timestamp: number; // ms
+}
+
+// One liquidation in a market's feed (/api/analytics/market-liquidations/:coin).
+export interface MarketLiquidation {
+  wallet: string;
+  side: string;
+  price: number;
+  size: number;
+  value: number;
+  timestamp: number; // ms
+}
+
 // Full order book snapshot returned by /api/analytics/orderbook/:coin.
 // `bids` are sorted DESCENDING by price; `asks` are sorted ASCENDING.
 export interface OrderbookSnapshot {
@@ -694,6 +716,37 @@ export const analytics = {
   async getOrderbookCompare(coin: string, venues?: string[]): Promise<OrderbookCompare> {
     const q = venues && venues.length ? `?venues=${venues.join(',')}` : '';
     return request(`/api/analytics/orderbook-compare/${encodeURIComponent(coin)}${q}`);
+  },
+
+  // Recent trade tape for one market (coin detail modal).
+  async getMarketTrades(coin: string, limit: number = 50): Promise<MarketTrade[]> {
+    const data = await request<{ data: MarketTrade[] }>(
+      `/api/analytics/market-trades/${encodeURIComponent(coin)}?limit=${limit}`
+    );
+    return (data.data || []).map((t) => ({
+      taker: String(t.taker ?? ''),
+      maker: t.maker ? String(t.maker) : null,
+      side: String(t.side ?? ''),
+      price: Number(t.price) || 0,
+      size: Number(t.size) || 0,
+      value: Number(t.value) || 0,
+      timestamp: Number(t.timestamp) || 0,
+    }));
+  },
+
+  // Recent liquidation events for one market (coin detail modal).
+  async getMarketLiquidations(coin: string, limit: number = 50): Promise<MarketLiquidation[]> {
+    const data = await request<{ data: MarketLiquidation[] }>(
+      `/api/analytics/market-liquidations/${encodeURIComponent(coin)}?limit=${limit}`
+    );
+    return (data.data || []).map((l) => ({
+      wallet: String(l.wallet ?? ''),
+      side: String(l.side ?? ''),
+      price: Number(l.price) || 0,
+      size: Number(l.size) || 0,
+      value: Number(l.value) || 0,
+      timestamp: Number(l.timestamp) || 0,
+    }));
   },
 
   // BULK's margin model for a given market — a grid of (notional x leverage)
