@@ -60,17 +60,22 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [symbol, onClose]);
 
-  // Candles for the selected interval.
+  // Candles for the selected interval — polled so the in-progress bar moves
+  // with live price (a silent refetch every 12s doesn't flash the spinner).
   useEffect(() => {
-    if (!symbol) return;
+    if (!symbol || chartView !== 'chart') return;
     let cancelled = false;
-    setLoading(true);
-    analytics.getCandles(symbol, interval, 300)
-      .then((res) => { if (!cancelled) setCandles(res.candles); })
-      .catch(() => { if (!cancelled) setCandles([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [symbol, interval]);
+    const load = (silent: boolean) => {
+      if (!silent) setLoading(true);
+      analytics.getCandles(symbol, interval, 300)
+        .then((res) => { if (!cancelled) setCandles(res.candles); })
+        .catch(() => { if (!cancelled && !silent) setCandles([]); })
+        .finally(() => { if (!cancelled && !silent) setLoading(false); });
+    };
+    load(false);
+    const id = window.setInterval(() => load(true), 12000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [symbol, interval, chartView]);
 
   // Order book — poll every 3s while open.
   useEffect(() => {
@@ -89,10 +94,10 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     [candles],
   );
 
-  // Create the chart once per open. Data is pushed by the effect below.
+  // Create the chart when the Chart view is active. Data is pushed below.
   useEffect(() => {
     const container = wrapRef.current;
-    if (!symbol || !container) return;
+    if (!symbol || chartView !== 'chart' || !container) return;
     // lightweight-charts renders to canvas and can't parse CSS variables OR the
     // modern space-separated `rgb(128 118 120)` syntax our tokens use. Resolve
     // each to a canonical comma-form rgb() via a throwaway element.
@@ -129,10 +134,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     const obs = new ResizeObserver(resize);
     obs.observe(container);
     return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
-  }, [symbol]);
+  }, [symbol, chartView]);
 
-  // Push candle data whenever it changes.
+  // Push candle data whenever it changes (or when returning to the Chart view).
   useEffect(() => {
+    if (chartView !== 'chart') return;
     const series = seriesRef.current;
     if (!series) return;
     const data: (CandlestickData | WhitespaceData)[] = plotted.map((c) => ({
@@ -140,7 +146,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     }));
     series.setData(data);
     chartRef.current?.timeScale().fitContent();
-  }, [plotted]);
+  }, [plotted, chartView]);
 
   if (typeof document === 'undefined' || !symbol || !ticker) return null;
 
@@ -208,24 +214,22 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             </div>
           </div>
 
-          {/* Chart — grows to match the order-book column's full height. The
-              candlestick chart stays mounted (kept alive); Depth/Margin render
-              as overlays on top when selected. */}
+          {/* One view at a time — grows to match the order-book column height. */}
           <div className="relative min-h-[360px] flex-1 px-2 pb-2 lg:min-h-0">
-            <div ref={wrapRef} className="h-full w-full" />
-            {chartView === 'chart' && loading && plotted.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
+            {chartView === 'chart' && (
+              <>
+                <div ref={wrapRef} className="h-full w-full" />
+                {loading && plotted.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
+                )}
+                {!loading && plotted.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">No candle data.</div>
+                )}
+              </>
             )}
-            {chartView === 'chart' && !loading && plotted.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">No candle data.</div>
-            )}
-            {chartView === 'depth' && (
-              <div className="absolute inset-0 bg-[var(--role-surface)] px-2 pb-2 pt-1">
-                <DepthChart book={book} />
-              </div>
-            )}
+            {chartView === 'depth' && <div className="h-full w-full"><DepthChart book={book} /></div>}
             {chartView === 'margin' && (
-              <div className="absolute inset-0 overflow-y-auto bg-[var(--role-surface)] custom-scrollbar">
+              <div className="h-full w-full overflow-y-auto custom-scrollbar">
                 <MarginSurface coin={coinOf(symbol)} />
               </div>
             )}
