@@ -151,7 +151,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     >
       <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
         <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-          <div className="flex flex-col lg:h-[560px] lg:flex-row">
+          <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
             <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
           {/* Header stats */}
@@ -191,8 +191,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             ))}
           </div>
 
-          {/* Chart */}
-          <div className="relative min-h-[320px] flex-1 px-2 pb-2 lg:min-h-0">
+          {/* Chart — grows to match the order-book column's full height. */}
+          <div className="relative min-h-[360px] flex-1 px-2 pb-2 lg:min-h-0">
             <div ref={wrapRef} className="h-full w-full" />
             {loading && plotted.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
@@ -204,18 +204,24 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         </div>
 
             {/* ---- Right: order book + Trade button ---- */}
-            <div className="flex h-[520px] w-full flex-col border-b border-[var(--role-line-subtle)] lg:h-auto lg:w-[380px] lg:border-b-0 xl:w-[440px]">
-              <div className="min-h-0 flex-1">
-                <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+            <div className="flex w-full flex-col border-b border-[var(--role-line-subtle)] lg:w-[380px] lg:border-b-0 xl:w-[440px]">
+              <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+              {/* Trade CTA under the book. The chart column stretches to this
+                  column's height, so chart height = order book + this button. */}
+              <div className="p-3">
+                <a
+                  href={`https://app.bulk.trade/trade/${symbol}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-sm font-bold text-white transition-[filter] hover:brightness-110"
+                  style={{
+                    background: 'linear-gradient(135deg, #8f8582 0%, #6b615e 48%, #443c39 100%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.20), inset 0 -1px 0 rgba(0,0,0,0.28), 0 1px 2px rgba(0,0,0,0.35)',
+                  }}
+                >
+                  Trade {coinOf(symbol)}
+                </a>
               </div>
-              <a
-                href={`https://app.bulk.trade/trade/${symbol}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block border-t border-[var(--role-line-subtle)] bg-[var(--accent)] px-4 py-3 text-center text-sm font-semibold text-[var(--accent-text)] transition-opacity hover:opacity-90"
-              >
-                Trade {coinOf(symbol)}
-              </a>
             </div>
           </div>
 
@@ -252,7 +258,7 @@ const fmtUsdShort = (n: number): string => {
 // below. Price / Size (USD) / Sum (USD) columns, gradient cumulative-depth bars
 // growing from the Sum side, and a bid/ask imbalance bar at the bottom.
 function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; mark: number; last: number; up: boolean }) {
-  const N = 10;
+  const N = 12;
   const rawAsks = (book?.asks ?? []).slice(0, N); // ascending px (nearest mid first)
   const rawBids = (book?.bids ?? []).slice(0, N); // descending px (nearest mid first)
 
@@ -277,7 +283,7 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
   const asksDisplay = [...asks].reverse(); // highest price at the top
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex flex-col">
       <div className="flex items-center border-b border-[var(--role-line-subtle)] px-4 py-3">
         <h3 className="text-base font-bold text-[var(--role-content)]">Order Book</h3>
       </div>
@@ -289,8 +295,8 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
         <span className="text-right">Sum (USD)</span>
       </div>
 
-      {/* Ladder: asks, mid, bids — solid (fixed depth, no scroll) */}
-      <div className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden">
+      {/* Ladder: asks, mid, bids — solid, natural full height (no scroll) */}
+      <div>
         {!book ? (
           <div className="flex h-full items-center justify-center py-10 text-[11px] text-[var(--role-content-subtle)]">Loading book…</div>
         ) : (
