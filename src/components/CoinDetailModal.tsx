@@ -47,6 +47,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // release land on the backdrop itself — so a drag that starts inside the
   // panel (e.g. panning the chart) and ends outside never closes the modal.
   const backdropDown = useRef(false);
+  // Last (in-progress) bar, so we can extend it live from the ticker price.
+  const liveBarRef = useRef<{ time: number; o: number; h: number; l: number } | null>(null);
 
   const symbol = ticker?.symbol ?? null;
 
@@ -145,8 +147,24 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c,
     }));
     series.setData(data);
+    // Seed the in-progress bar so live ticks extend it instead of snapping.
+    const lc = plotted[plotted.length - 1];
+    liveBarRef.current = lc ? { time: Math.floor(lc.t / 1000), o: lc.o, h: lc.h, l: lc.l } : null;
     chartRef.current?.timeScale().fitContent();
   }, [plotted, chartView]);
+
+  // Live: extend the last bar with the ticker price on every tick, so the chart
+  // moves in real time (not only on the 12s candle refetch).
+  useEffect(() => {
+    if (chartView !== 'chart') return;
+    const series = seriesRef.current;
+    const bar = liveBarRef.current;
+    const px = ticker?.lastPrice || ticker?.markPrice || 0;
+    if (!series || !bar || !px) return;
+    bar.h = Math.max(bar.h, px);
+    bar.l = Math.min(bar.l, px);
+    series.update({ time: bar.time as UTCTimestamp, open: bar.o, high: bar.h, low: bar.l, close: px });
+  }, [ticker?.lastPrice, ticker?.markPrice, chartView]);
 
   if (typeof document === 'undefined' || !symbol || !ticker) return null;
 
@@ -229,8 +247,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             )}
             {chartView === 'depth' && <div className="h-full w-full"><DepthChart book={book} /></div>}
             {chartView === 'margin' && (
-              <div className="h-full w-full overflow-y-auto custom-scrollbar">
-                <MarginSurface coin={coinOf(symbol)} />
+              <div className="h-full w-full overflow-hidden">
+                <MarginSurface coin={coinOf(symbol)} embedded />
               </div>
             )}
           </div>
@@ -246,11 +264,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
                   href={`https://app.bulk.trade/trade/${symbol}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-base font-bold tracking-wide text-white transition-[filter] hover:brightness-110"
-                  style={{
-                    background: 'linear-gradient(135deg, #8f8582 0%, #6b615e 48%, #443c39 100%)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.20), inset 0 -1px 0 rgba(0,0,0,0.28), 0 1px 2px rgba(0,0,0,0.35)',
-                  }}
+                  className="trade-cta flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-base font-bold tracking-wide transition-[filter] hover:brightness-105"
                 >
                   Trade {coinOf(symbol)}
                 </a>

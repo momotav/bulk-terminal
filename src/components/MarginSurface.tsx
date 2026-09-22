@@ -146,7 +146,7 @@ interface HoveredCell {
 
 type ViewMode = 'live' | 'strict';
 
-export function MarginSurface({ coin: coinProp }: { coin?: string } = {}) {
+export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: string; embedded?: boolean } = {}) {
   const [coin, setCoin] = useState(coinProp || 'BTC');
   // When embedded with a fixed coin (e.g. the coin detail modal), follow it.
   useEffect(() => { if (coinProp) setCoin(coinProp); }, [coinProp]);
@@ -306,7 +306,7 @@ export function MarginSurface({ coin: coinProp }: { coin?: string } = {}) {
   const liveDecayActive = mode === 'live' && isViewingLiveRegime && regimeDt !== null;
 
   return (
-    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
+    <div className={embedded ? 'flex h-full flex-col p-3' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
       {/* Header: title left, mode + side + regime selectors on the right. */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2">
@@ -387,34 +387,41 @@ export function MarginSurface({ coin: coinProp }: { coin?: string } = {}) {
         </div>
       </div>
 
-      {/* Coin picker on its own row so the header stays single-line. */}
-      <div className="mb-3">
-        {!coinProp && <CoinPicker value={coin} onChange={setCoin} ariaLabel="Coin for margin surface" />}
-      </div>
+      {/* Coin picker on its own row so the header stays single-line. Hidden
+          when a coin is fixed (embedded in the coin detail modal). */}
+      {!coinProp && (
+        <div className="mb-3">
+          <CoinPicker value={coin} onChange={setCoin} ariaLabel="Coin for margin surface" />
+        </div>
+      )}
 
-      {/* Heatmap body. */}
+      {/* Heatmap body. In embedded mode it grows to fill the space so the
+          blocks are as large as possible. */}
       {loading ? (
-        <div className="h-[280px] flex items-center justify-center text-[var(--text-tertiary)]">
+        <div className={cn('flex items-center justify-center text-[var(--text-tertiary)]', embedded ? 'flex-1' : 'h-[280px]')}>
           Loading margin surface...
         </div>
       ) : error ? (
-        <div className="h-[280px] flex items-center justify-center text-[var(--text-tertiary)]">
+        <div className={cn('flex items-center justify-center text-[var(--text-tertiary)]', embedded ? 'flex-1' : 'h-[280px]')}>
           {error}
         </div>
       ) : !surface || !effectiveGrid ? (
-        <div className="h-[280px] flex items-center justify-center text-[var(--text-tertiary)]">
+        <div className={cn('flex items-center justify-center text-[var(--text-tertiary)]', embedded ? 'flex-1' : 'h-[280px]')}>
           No surface available for regime {regime}.
         </div>
       ) : (
-        <Heatmap
-          leverage={surface.leverage}
-          notionals={surface.notionals}
-          rawCells={surface[side]}
-          effectiveGrid={effectiveGrid}
-          baseline={baseline}
-          maxMmr={maxMmr}
-          onHover={setHover}
-        />
+        <div className={embedded ? 'min-h-0 flex-1' : ''}>
+          <Heatmap
+            leverage={surface.leverage}
+            notionals={surface.notionals}
+            rawCells={surface[side]}
+            effectiveGrid={effectiveGrid}
+            baseline={baseline}
+            maxMmr={maxMmr}
+            onHover={setHover}
+            fill={embedded}
+          />
+        </div>
       )}
 
       {/* Footer readout — single-line, professional.
@@ -495,6 +502,7 @@ function Heatmap({
   baseline,
   maxMmr,
   onHover,
+  fill = false,
 }: {
   leverage: number[];
   notionals: number[];
@@ -503,6 +511,7 @@ function Heatmap({
   baseline: number;
   maxMmr: number;
   onHover: (h: HoveredCell | null) => void;
+  fill?: boolean;
 }) {
   // Pick a sparse set of axis ticks to label — labelling all 50 leverages or
   // 21 notionals is too dense, so we show every Nth.
@@ -518,7 +527,7 @@ function Heatmap({
   const notionalTickStep = Math.max(1, Math.floor(notionals.length / 6));
 
   return (
-    <div className="w-full" onMouseLeave={() => onHover(null)}>
+    <div className={cn('w-full', fill && 'flex h-full flex-col')} onMouseLeave={() => onHover(null)}>
       {/* Top legend: leverage labels along X axis.
           We use `whitespace-nowrap` and `overflow-visible` instead of the
           old `truncate` so labels can spill into adjacent (empty) columns
@@ -540,11 +549,11 @@ function Heatmap({
       </div>
 
       {/* Body: one row per notional bucket, plus a label column on the left. */}
-      <div className="space-y-[1px]">
+      <div className={fill ? 'flex min-h-0 flex-1 flex-col gap-[1px]' : 'space-y-[1px]'}>
         {notionals.map((notional, i) => (
           <div
             key={i}
-            className="grid items-stretch"
+            className={cn('grid items-stretch', fill && 'min-h-0 flex-1')}
             style={{
               gridTemplateColumns: `52px repeat(${leverage.length}, minmax(0, 1fr))`,
               gap: '1px',
@@ -558,7 +567,10 @@ function Heatmap({
               return (
                 <div
                   key={j}
-                  className="min-h-[16px] sm:aspect-square sm:min-h-[10px] cursor-default transition-[filter] hover:brightness-125"
+                  className={cn(
+                    'cursor-default transition-[filter] hover:brightness-125',
+                    fill ? 'min-h-0 h-full' : 'min-h-[16px] sm:aspect-square sm:min-h-[10px]',
+                  )}
                   style={{ backgroundColor: cellColor(effective, baseline, maxMmr) }}
                   onMouseEnter={() =>
                     onHover({
