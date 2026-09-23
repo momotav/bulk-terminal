@@ -365,7 +365,10 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
   const maxAsk = asks.length ? asks[asks.length - 1].sum : 1;
   const maxBid = bids.length ? bids[bids.length - 1].sum : 1;
 
-  const mid = book?.stats?.mid ?? last ?? mark;
+  // Big center price = the live SSE price (ticks every print), falling back to
+  // the order book's mid only when the live price isn't available yet.
+  const mid = last || mark || book?.stats?.mid || 0;
+  const bookMid = book?.stats?.mid ?? null; // order-book mid for the small line
   const bestBid = rawBids[0]?.px;
   const bestAsk = rawAsks[0]?.px;
   const spreadPct = bestBid && bestAsk && mid ? ((bestAsk - bestBid) / mid) * 100 : null;
@@ -405,7 +408,7 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
               >
                 {fmtPx(mid)} <span className="text-sm">{up ? '↑' : '↓'}</span>
               </span>
-              <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">${fmtPx(mark)}</span>
+              <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">{bookMid != null ? `$${fmtPx(bookMid)}` : '—'}</span>
               <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">{spreadPct != null ? `${spreadPct.toFixed(5)}%` : '—'}</span>
             </div>
 
