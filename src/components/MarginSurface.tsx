@@ -306,13 +306,17 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
   const liveDecayActive = mode === 'live' && isViewingLiveRegime && regimeDt !== null;
 
   return (
-    <div className={embedded ? 'flex h-full flex-col p-3' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
-      {/* Header: title left, mode + side + regime selectors on the right. */}
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Margin Surface</h3>
-        </div>
+    <div className={embedded ? 'flex h-full flex-col px-3 pb-2 pt-1' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
+      {/* Header: title left, mode + side + regime selectors on the right. In
+          embedded mode the title/icon are dropped (the tab already says
+          "Margin") and the controls sit in one clean toolbar row. */}
+      <div className={cn('flex items-center gap-3 flex-wrap', embedded ? 'justify-end mb-2' : 'justify-between mb-3')}>
+        {!embedded && (
+          <div className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
+            <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Margin Surface</h3>
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Live / Strict toggle.
               "Live" applies time decay using the regime's elapsed seconds,
@@ -428,7 +432,7 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
           Format: "BTC long · $15M at 28x → 2.00% maintenance margin ($300K)"
           When in live mode AND viewing the live regime, we add a small
           context line below explaining how long the regime has been active. */}
-      <div className="mt-3 text-xs text-[var(--text-secondary)] min-h-[20px]">
+      <div className={cn('text-xs text-[var(--text-secondary)] min-h-[20px]', embedded ? 'mt-2' : 'mt-3')}>
         {hover ? (
           <span>
             <span className="text-[var(--text-primary)] font-medium">{coin}</span>
