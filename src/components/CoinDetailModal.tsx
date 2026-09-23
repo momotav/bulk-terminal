@@ -39,6 +39,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  // Live mark price from the SSE stream — drives the header + order-book mid so
+  // the numbers tick in real time (not only on the parent's slow ticker poll).
+  const [livePrice, setLivePrice] = useState<number | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -49,6 +52,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const backdropDown = useRef(false);
   // Last (in-progress) bar, extended live from the market SSE stream.
   const liveBarRef = useRef<{ time: number; o: number; h: number; l: number; c: number } | null>(null);
+  // Current interval's bucket length in seconds (read inside the SSE handler).
+  const bucketSecRef = useRef(3600);
 
   const symbol = ticker?.symbol ?? null;
 
@@ -62,21 +67,63 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [symbol, onClose]);
 
-  // Candles for the selected interval — polled so the in-progress bar moves
-  // with live price (a silent refetch every 12s doesn't flash the spinner).
+  // Reset the live price when the market changes.
+  useEffect(() => { setLivePrice(null); }, [symbol]);
+
+  // Market SSE stream — kept open the whole time the modal is open (not just on
+  // the Chart tab), so the header/mid tick live in every view. Drives livePrice.
+  useEffect(() => {
+    if (!symbol) return;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(marketStreamUrl(symbol));
+      es.onmessage = (ev) => {
+        let msg: { price: number; ts: number };
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        const price = Number(msg.price);
+        if (!(price > 0)) return;
+        setLivePrice(price);
+        // Extend the in-progress candle (Chart view only, chart mounted).
+        const s = seriesRef.current;
+        const bs = bucketSecRef.current;
+        if (!s || !bs) return;
+        const tSec = Math.floor((msg.ts || Date.now()) / 1000);
+        const bucketStart = Math.floor(tSec / bs) * bs;
+        const bar = liveBarRef.current;
+        try {
+          if (!bar || bucketStart > bar.time) {
+            const nb = { time: bucketStart, o: price, h: price, l: price, c: price };
+            liveBarRef.current = nb;
+            s.update({ time: nb.time as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
+          } else if (bucketStart === bar.time) {
+            bar.c = price;
+            if (price > bar.h) bar.h = price;
+            if (price < bar.l) bar.l = price;
+            s.update({ time: bar.time as UTCTimestamp, open: bar.o, high: bar.h, low: bar.l, close: bar.c });
+          }
+        } catch { /* stale/out-of-order print — ignore, never break the stream */ }
+      };
+      es.onerror = () => { /* EventSource auto-reconnects */ };
+    } catch { /* stream unavailable */ }
+    return () => { es?.close(); };
+  }, [symbol]);
+
+  // Load candles ONCE per (symbol, interval, view). We deliberately don't poll:
+  // the SSE stream below drives all live movement, and re-running setData on a
+  // timer would reset the user's zoom/pan (fitContent). A backstop refetch every
+  // 60s keeps the history fresh without disturbing the view mid-interaction.
   useEffect(() => {
     if (!symbol || chartView !== 'chart') return;
     let cancelled = false;
+    setLoading(true);
     const load = (silent: boolean) => {
-      if (!silent) setLoading(true);
       analytics.getCandles(symbol, interval, 300)
         .then((res) => { if (!cancelled) setCandles(res.candles); })
         .catch(() => { if (!cancelled && !silent) setCandles([]); })
         .finally(() => { if (!cancelled && !silent) setLoading(false); });
     };
     load(false);
-    const id = window.setInterval(() => load(true), 12000);
-    return () => { cancelled = true; window.clearInterval(id); };
+    return () => { cancelled = true; };
   }, [symbol, interval, chartView]);
 
   // Order book — poll every 3s while open.
@@ -153,51 +200,23 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     chartRef.current?.timeScale().fitContent();
   }, [plotted, chartView]);
 
-  // TRUE live updates via the market SSE stream (same feed the position chart
-  // uses) — every price print extends the in-progress candle or opens a new
-  // one, so the chart ticks in real time like an exchange terminal. Uses the
-  // imperative series API (no React re-render per tick).
+  // Keep the SSE handler's bucket length in sync with the selected interval.
   useEffect(() => {
-    if (!symbol || chartView !== 'chart') return;
-    const bucketSec =
+    bucketSecRef.current =
       interval === '1m' ? 60 :
       interval === '5m' ? 300 :
       interval === '15m' ? 900 :
       interval === '1h' ? 3600 :
       interval === '4h' ? 14400 :
       interval === '1d' ? 86400 : 3600;
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource(marketStreamUrl(symbol));
-      es.onmessage = (ev) => {
-        let msg: { price: number; ts: number };
-        try { msg = JSON.parse(ev.data); } catch { return; }
-        const price = Number(msg.price);
-        const s = seriesRef.current;
-        if (!(price > 0) || !s) return;
-        const tSec = Math.floor((msg.ts || Date.now()) / 1000);
-        const bucketStart = Math.floor(tSec / bucketSec) * bucketSec;
-        const bar = liveBarRef.current;
-        if (!bar || bucketStart > bar.time) {
-          const nb = { time: bucketStart, o: price, h: price, l: price, c: price };
-          liveBarRef.current = nb;
-          s.update({ time: nb.time as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
-        } else if (bucketStart === bar.time) {
-          bar.c = price;
-          if (price > bar.h) bar.h = price;
-          if (price < bar.l) bar.l = price;
-          s.update({ time: bar.time as UTCTimestamp, open: bar.o, high: bar.h, low: bar.l, close: bar.c });
-        }
-      };
-      es.onerror = () => { /* EventSource auto-reconnects */ };
-    } catch { /* stream unavailable — the 12s poll still refreshes candles */ }
-    return () => { es?.close(); };
-  }, [symbol, interval, chartView]);
+  }, [interval]);
 
   if (typeof document === 'undefined' || !symbol || !ticker) return null;
 
   const up = ticker.priceChangePercent >= 0;
   const changeColor = up ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
+  // Prefer the live SSE price for the header + order-book mid.
+  const displayPrice = livePrice ?? ticker.markPrice ?? ticker.lastPrice;
 
   return createPortal(
     <div
@@ -216,7 +235,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
               <CoinIcon symbol={symbol} size={28} />
               <span className="font-sans text-xl font-bold tracking-tight text-[var(--role-content)]">{symbol}</span>
             </div>
-            <Stat label="Mark Price" value={usd(ticker.markPrice || ticker.lastPrice)} />
+            <Stat label="Mark Price" value={usd(displayPrice)} />
             <Stat label="24H Change" value={`${up ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`} color={changeColor} />
             <Stat label="24H Volume" value={usd(ticker.quoteVolume)} />
             <Stat label="Open Interest" value={usd(openInterestUsd(ticker))} />
@@ -284,7 +303,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
 
             {/* ---- Right: order book + Trade button ---- */}
             <div className="flex w-full flex-col border-b border-[var(--role-line-subtle)] lg:w-[380px] lg:border-b-0 xl:w-[440px]">
-              <OrderBook book={book} mark={ticker.markPrice || ticker.lastPrice} last={ticker.lastPrice} up={up} />
+              <OrderBook book={book} mark={displayPrice} last={displayPrice} up={up} />
               {/* Trade CTA under the book. The chart column stretches to this
                   column's height, so chart height = order book + this button. */}
               <div className="p-3">
