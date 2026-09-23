@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AnimatedNumber } from './AnimatedNumber';
-import { StatCard } from './StatCard';
-import { Sparkline } from './Sparkline';
+import { HeroKpi } from './HeroKpi';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
@@ -129,9 +127,9 @@ export function ExchangeHealthStats() {
     return () => clearInterval(interval);
   }, [network]);
 
-  // Four exchange KPIs, rendered through the shared StatCard so they match
-  // every other KPI strip in the app. Values stay neutral because absolute
-  // magnitudes aren't directional; colour is spent only where it points.
+  // Four exchange KPIs, rendered through the shared HeroKpi so the dashboard
+  // matches the analytics strip: big number over a full-bleed sparkline, a
+  // 24h change stat, and a Low/High supporting line.
   const cards: {
     label: string;
     raw: number;
@@ -146,10 +144,9 @@ export function ExchangeHealthStats() {
 
   return (
     <>
-      {cards.map((c, i) => {
+      {cards.map((c) => {
         const sp = sparks?.[c.spark];
         const series = sp?.series ?? [];
-        // Low / High range as a supporting stat under the number.
         const range =
           sp && sp.low != null && sp.high != null ? (
             <span className="tabular-nums">
@@ -159,16 +156,15 @@ export function ExchangeHealthStats() {
             </span>
           ) : undefined;
         return (
-          <StatCard
+          <HeroKpi
             key={c.label}
             label={c.label}
             loading={loading}
-            interactive
-            className="animate-row-enter"
-            style={{ '--row-index': i } as React.CSSProperties}
-            value={<AnimatedNumber value={c.raw} format={c.format} />}
+            rawValue={c.raw}
+            format={c.format}
+            series={series}
+            changePct={sp?.changePct ?? null}
             sub={range}
-            chart={series.length >= 2 ? <Sparkline data={series} height={48} className="w-full" /> : undefined}
           />
         );
       })}
