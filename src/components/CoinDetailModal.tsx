@@ -14,7 +14,7 @@ import {
   type CandlestickData, type UTCTimestamp, type WhitespaceData,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
-import { analytics, cn, formatCompact, formatAddress, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
+import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
 import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 import { CoinIcon } from '@/components/CoinIcon';
@@ -47,8 +47,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // release land on the backdrop itself — so a drag that starts inside the
   // panel (e.g. panning the chart) and ends outside never closes the modal.
   const backdropDown = useRef(false);
-  // Last (in-progress) bar, so we can extend it live from the ticker price.
-  const liveBarRef = useRef<{ time: number; o: number; h: number; l: number } | null>(null);
+  // Last (in-progress) bar, extended live from the market SSE stream.
+  const liveBarRef = useRef<{ time: number; o: number; h: number; l: number; c: number } | null>(null);
 
   const symbol = ticker?.symbol ?? null;
 
@@ -149,22 +149,50 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     series.setData(data);
     // Seed the in-progress bar so live ticks extend it instead of snapping.
     const lc = plotted[plotted.length - 1];
-    liveBarRef.current = lc ? { time: Math.floor(lc.t / 1000), o: lc.o, h: lc.h, l: lc.l } : null;
+    liveBarRef.current = lc ? { time: Math.floor(lc.t / 1000), o: lc.o, h: lc.h, l: lc.l, c: lc.c } : null;
     chartRef.current?.timeScale().fitContent();
   }, [plotted, chartView]);
 
-  // Live: extend the last bar with the ticker price on every tick, so the chart
-  // moves in real time (not only on the 12s candle refetch).
+  // TRUE live updates via the market SSE stream (same feed the position chart
+  // uses) — every price print extends the in-progress candle or opens a new
+  // one, so the chart ticks in real time like an exchange terminal. Uses the
+  // imperative series API (no React re-render per tick).
   useEffect(() => {
-    if (chartView !== 'chart') return;
-    const series = seriesRef.current;
-    const bar = liveBarRef.current;
-    const px = ticker?.lastPrice || ticker?.markPrice || 0;
-    if (!series || !bar || !px) return;
-    bar.h = Math.max(bar.h, px);
-    bar.l = Math.min(bar.l, px);
-    series.update({ time: bar.time as UTCTimestamp, open: bar.o, high: bar.h, low: bar.l, close: px });
-  }, [ticker?.lastPrice, ticker?.markPrice, chartView]);
+    if (!symbol || chartView !== 'chart') return;
+    const bucketSec =
+      interval === '1m' ? 60 :
+      interval === '5m' ? 300 :
+      interval === '15m' ? 900 :
+      interval === '1h' ? 3600 :
+      interval === '4h' ? 14400 :
+      interval === '1d' ? 86400 : 3600;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(marketStreamUrl(symbol));
+      es.onmessage = (ev) => {
+        let msg: { price: number; ts: number };
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        const price = Number(msg.price);
+        const s = seriesRef.current;
+        if (!(price > 0) || !s) return;
+        const tSec = Math.floor((msg.ts || Date.now()) / 1000);
+        const bucketStart = Math.floor(tSec / bucketSec) * bucketSec;
+        const bar = liveBarRef.current;
+        if (!bar || bucketStart > bar.time) {
+          const nb = { time: bucketStart, o: price, h: price, l: price, c: price };
+          liveBarRef.current = nb;
+          s.update({ time: nb.time as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
+        } else if (bucketStart === bar.time) {
+          bar.c = price;
+          if (price > bar.h) bar.h = price;
+          if (price < bar.l) bar.l = price;
+          s.update({ time: bar.time as UTCTimestamp, open: bar.o, high: bar.h, low: bar.l, close: bar.c });
+        }
+      };
+      es.onerror = () => { /* EventSource auto-reconnects */ };
+    } catch { /* stream unavailable — the 12s poll still refreshes candles */ }
+    return () => { es?.close(); };
+  }, [symbol, interval, chartView]);
 
   if (typeof document === 'undefined' || !symbol || !ticker) return null;
 
