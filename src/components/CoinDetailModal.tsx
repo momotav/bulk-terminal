@@ -12,7 +12,6 @@ import { createPortal } from 'react-dom';
 import {
   createChart, ColorType, type IChartApi, type ISeriesApi,
   type CandlestickData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
-  type SeriesMarker,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
@@ -55,15 +54,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // Live mark price from the SSE stream — drives the header + order-book mid so
   // the numbers tick in real time (not only on the parent's slow ticker poll).
   const [livePrice, setLivePrice] = useState<number | null>(null);
-  // A row (trade/liquidation) the user clicked to pin onto the chart.
+  // A row (trade/liquidation) the user clicked to pin as a price line on the chart.
   const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
-  // Recent liquidations, drawn on the chart as markers so you can see where
-  // liquidations happened relative to price.
-  const [chartLiqs, setChartLiqs] = useState<MarketLiquidation[]>([]);
   const focusEventRef = useRef<FocusEvent | null>(null);
   // Live pixel position of the pinned marker (DOM overlay, so we can place it
   // exactly on the price and float it above the candle, unlike native markers).
-  const [markerPos, setMarkerPos] = useState<{ x: number; y: number } | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -169,25 +164,24 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     return () => { cancelled = true; };
   }, [symbol, interval, chartView]);
 
-  // Order book — poll every 3s while open.
+  // Order book — poll ~1s while open so depth/volume changes show live (BULK's
+  // book moves even when the price is static). Skips a tick if the previous
+  // fetch is still in flight, so a slow response can't stack requests.
   useEffect(() => {
     if (!symbol) return;
     let cancelled = false;
+    let inFlight = false;
     const coin = coinOf(symbol);
-    const load = () => analytics.getOrderbook(coin, 20).then((b) => { if (!cancelled) setBook(b); }).catch(() => {});
+    const load = () => {
+      if (inFlight) return;
+      inFlight = true;
+      analytics.getOrderbook(coin, 20)
+        .then((b) => { if (!cancelled) setBook(b); })
+        .catch(() => {})
+        .finally(() => { inFlight = false; });
+    };
     load();
-    const id = window.setInterval(load, 3000);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [symbol]);
-
-  // Recent liquidations for the chart markers — poll every 15s.
-  useEffect(() => {
-    if (!symbol) return;
-    let cancelled = false;
-    const coin = coinOf(symbol);
-    const load = () => analytics.getMarketLiquidations(coin, 40).then((l) => { if (!cancelled) setChartLiqs(l); }).catch(() => {});
-    load();
-    const id = window.setInterval(load, 15000);
+    const id = window.setInterval(load, 1000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [symbol]);
 
@@ -268,39 +262,6 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     chartRef.current?.timeScale().fitContent();
   }, [plotted, chartView]);
 
-  // Draw recent liquidations as chart markers (colored circles at their bar), so
-  // you can see WHERE liquidations happened relative to price. Only markers
-  // whose time falls within the loaded candle range are shown.
-  useEffect(() => {
-    if (chartView !== 'chart') return;
-    const series = seriesRef.current;
-    if (!series || plotted.length === 0) return;
-    const resolve = (expr: string) => {
-      const probe = document.createElement('span'); probe.style.color = expr; probe.style.display = 'none';
-      document.body.appendChild(probe); const c = getComputedStyle(probe).color; document.body.removeChild(probe); return c || '#888';
-    };
-    const posC = resolve('var(--pos)'); const negC = resolve('var(--neg)');
-    const firstT = Math.floor(plotted[0].t / 1000);
-    const bs = bucketSecRef.current;
-    const seen = new Set<number>();
-    const markers: SeriesMarker<UTCTimestamp>[] = chartLiqs
-      .map((l) => {
-        const bucket = Math.floor(Math.floor(l.timestamp / 1000) / bs) * bs;
-        const long = /long|buy/i.test(l.side);
-        return { bucket, long };
-      })
-      .filter((m) => m.bucket >= firstT)
-      .filter((m) => { if (seen.has(m.bucket)) return false; seen.add(m.bucket); return true; })
-      .sort((a, b) => a.bucket - b.bucket)
-      .map((m) => ({
-        time: m.bucket as UTCTimestamp,
-        position: 'aboveBar' as const,
-        color: m.long ? posC : negC,
-        shape: 'circle' as const,
-        text: 'Liq',
-      }));
-    try { series.setMarkers(markers); } catch { /* out-of-range — ignore */ }
-  }, [chartLiqs, plotted, chartView]);
 
   // Keep the SSE handler's bucket length in sync with the selected interval.
   useEffect(() => {
@@ -313,9 +274,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       interval === '1d' ? 86400 : 3600;
   }, [interval]);
 
-  // Draw the pinned trade/liquidation's dashed price line. The circular B/S/L
-  // badge itself is a DOM overlay (positioned by the effect below) so it can
-  // float above the candle exactly on the price — native markers can't.
+  // Clicking a Recent Trades / Liquidation row draws a clean horizontal price
+  // line at that price (with a labeled axis tag), so you can see where it sits
+  // on the chart. Cleared when focusEvent is null.
   useEffect(() => {
     focusEventRef.current = focusEvent;
     const series = seriesRef.current;
@@ -336,43 +297,13 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       focusLineRef.current = series.createPriceLine({
         price: focusEvent.price,
         color: resolved,
-        lineWidth: 1,
-        lineStyle: 2, // dashed
+        lineWidth: 2,
+        lineStyle: 0, // solid
         axisLabelVisible: true,
         title: focusEvent.kind === 'liq' ? 'LIQ' : (isBuy ? 'BUY' : 'SELL'),
       });
     } catch { /* out-of-range price — ignore */ }
   }, [focusEvent, chartView, plotted]);
-
-  // Keep the DOM badge glued to (time, price): recompute its pixel coords each
-  // frame while pinned, so it tracks zoom/pan/live candles. One element, so the
-  // rAF loop is cheap; we only re-render when it moves > ~0.5px.
-  useEffect(() => {
-    if (!focusEvent || chartView !== 'chart') { setMarkerPos(null); return; }
-    let raf = 0;
-    const last = { x: -1, y: -1 };
-    const tick = () => {
-      const chart = chartRef.current;
-      const series = seriesRef.current;
-      if (chart && series) {
-        const bs = bucketSecRef.current;
-        const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
-        const x = chart.timeScale().timeToCoordinate(bucketStart as UTCTimestamp);
-        const y = series.priceToCoordinate(focusEvent.price);
-        if (x != null && y != null) {
-          if (Math.abs(x - last.x) > 0.5 || Math.abs(y - last.y) > 0.5) {
-            last.x = x; last.y = y;
-            setMarkerPos({ x, y });
-          }
-        } else {
-          setMarkerPos(null); // scrolled out of view
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [focusEvent, chartView]);
 
   // Pin a row and jump to the chart.
   const focusRow = (e: FocusEvent) => {
@@ -457,31 +388,6 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
-                {focusEvent && markerPos && (() => {
-                  const isBuy = /buy|long/i.test(focusEvent.side) && focusEvent.kind !== 'liq';
-                  const color = isBuy ? 'var(--pos)' : 'var(--neg)';
-                  const letter = focusEvent.kind === 'liq' ? 'L' : (isBuy ? 'B' : 'S');
-                  const verb = focusEvent.kind === 'liq' ? 'Liquidation' : (isBuy ? 'Buy' : 'Sell');
-                  return (
-                    <div
-                      className="group absolute z-20"
-                      // Float the badge above the price point (translate up so its
-                      // bottom sits ~18px over the exact price coordinate).
-                      style={{ left: markerPos.x, top: markerPos.y, transform: 'translate(-50%, -180%)' }}
-                    >
-                      <div
-                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold text-white shadow-md"
-                        style={{ background: color, borderColor: 'var(--role-surface)' }}
-                      >
-                        {letter}
-                      </div>
-                      {/* Hover tooltip */}
-                      <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                        {verb} at ${fmtPx(focusEvent.price)}
-                      </div>
-                    </div>
-                  );
-                })()}
                 {focusEvent && (
                   <button
                     onClick={() => setFocusEvent(null)}
