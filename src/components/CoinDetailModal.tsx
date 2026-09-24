@@ -323,11 +323,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     } catch { /* out-of-range price — ignore */ }
   }, [focusEvent, chartView, plotted]);
 
-  // Floating B/S badge for a pinned TRADE (liquidations use only the line +
-  // axis label). Recompute its pixel coords each frame so it tracks zoom/pan/
-  // live candles; one element, so the rAF loop is cheap.
+  // Floating badge for the pinned event (B/S for trades, LIQ for liquidations),
+  // plus the price line. Recompute its pixel coords each frame so it tracks
+  // zoom/pan/live candles; one element, so the rAF loop is cheap.
   useEffect(() => {
-    if (!focusEvent || focusEvent.kind !== 'trade' || chartView !== 'chart') { setMarkerPos(null); return; }
+    if (!focusEvent || chartView !== 'chart') { setMarkerPos(null); return; }
     let raf = 0;
     const last = { x: -1, y: -1 };
     const tick = () => {
@@ -433,23 +433,26 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
-                {/* Floating B/S badge — trades only. */}
-                {focusEvent && focusEvent.kind === 'trade' && markerPos && (() => {
+                {/* Floating badge — B/S for a trade, LIQ for a liquidation. */}
+                {focusEvent && markerPos && (() => {
+                  const isLiq = focusEvent.kind === 'liq';
                   const isBuy = /buy|long/i.test(focusEvent.side);
-                  const color = isBuy ? 'var(--pos)' : 'var(--neg)';
+                  const color = isLiq ? 'var(--neg)' : (isBuy ? 'var(--pos)' : 'var(--neg)');
+                  const label = isLiq ? 'LIQ' : (isBuy ? 'B' : 'S');
+                  const verb = isLiq ? 'Liquidation' : (isBuy ? 'Buy' : 'Sell');
                   return (
                     <div
                       className="group absolute z-20"
                       style={{ left: markerPos.x, top: markerPos.y, transform: 'translate(-50%, -180%)' }}
                     >
                       <div
-                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold text-white shadow-md"
+                        className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 px-1.5 text-[11px] font-bold text-white shadow-md"
                         style={{ background: color, borderColor: 'var(--role-surface)' }}
                       >
-                        {isBuy ? 'B' : 'S'}
+                        {label}
                       </div>
                       <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                        {isBuy ? 'Buy' : 'Sell'} at ${fmtPx(focusEvent.price)}
+                        {verb} at ${fmtPx(focusEvent.price)}
                       </div>
                     </div>
                   );
