@@ -12,7 +12,6 @@ import { createPortal } from 'react-dom';
 import {
   createChart, ColorType, type IChartApi, type ISeriesApi,
   type CandlestickData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
-  type SeriesMarker,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
@@ -56,8 +55,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // A row (trade/liquidation) the user clicked to pin onto the chart.
   const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
   const focusEventRef = useRef<FocusEvent | null>(null);
-  // Tooltip shown when hovering the pinned marker's bar.
-  const [markerTip, setMarkerTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  // Live pixel position of the pinned marker (DOM overlay, so we can place it
+  // exactly on the price and float it above the candle, unlike native markers).
+  const [markerPos, setMarkerPos] = useState<{ x: number; y: number } | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -201,19 +201,6 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     const resize = () => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     const obs = new ResizeObserver(resize);
     obs.observe(container);
-
-    // Hover tooltip for the pinned marker: when the crosshair is over the
-    // focus event's bar, show "Buy/Sell/Liq at $price" near the cursor.
-    chart.subscribeCrosshairMove((param) => {
-      const fe = focusEventRef.current;
-      if (!fe || param.time == null || !param.point) { setMarkerTip(null); return; }
-      const bs = bucketSecRef.current;
-      const bucketStart = Math.floor(Math.floor(fe.ts / 1000) / bs) * bs;
-      if ((param.time as number) !== bucketStart) { setMarkerTip(null); return; }
-      const verb = fe.kind === 'liq' ? 'Liquidation' : (/buy|long/i.test(fe.side) ? 'Buy' : 'Sell');
-      setMarkerTip({ x: param.point.x, y: param.point.y, text: `${verb} at $${fmtPx(fe.price)}` });
-    });
-
     return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
   }, [symbol, chartView]);
 
@@ -243,14 +230,15 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       interval === '1d' ? 86400 : 3600;
   }, [interval]);
 
-  // Draw the pinned trade/liquidation on the chart: a dashed price line at its
-  // price + a circular B/S/L marker at its bar. Cleared when focusEvent is null.
+  // Draw the pinned trade/liquidation's dashed price line. The circular B/S/L
+  // badge itself is a DOM overlay (positioned by the effect below) so it can
+  // float above the candle exactly on the price — native markers can't.
   useEffect(() => {
     focusEventRef.current = focusEvent;
     const series = seriesRef.current;
     if (!series || chartView !== 'chart') return;
     if (focusLineRef.current) { try { series.removePriceLine(focusLineRef.current); } catch { /* gone */ } focusLineRef.current = null; }
-    if (!focusEvent) { try { series.setMarkers([]); } catch { /* noop */ } setMarkerTip(null); return; }
+    if (!focusEvent) { return; }
 
     const isBuy = /buy|long/i.test(focusEvent.side);
     const color = focusEvent.kind === 'liq' ? 'var(--neg)' : (isBuy ? 'var(--pos)' : 'var(--neg)');
@@ -270,18 +258,38 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         axisLabelVisible: true,
         title: focusEvent.kind === 'liq' ? 'LIQ' : (isBuy ? 'BUY' : 'SELL'),
       });
-      const bs = bucketSecRef.current;
-      const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
-      const marker: SeriesMarker<UTCTimestamp> = {
-        time: bucketStart as UTCTimestamp,
-        position: isBuy ? 'belowBar' : 'aboveBar',
-        color: resolved,
-        shape: 'circle',
-        text: focusEvent.kind === 'liq' ? 'L' : (isBuy ? 'B' : 'S'),
-      };
-      series.setMarkers([marker]);
-    } catch { /* out-of-range time/price — ignore */ }
+    } catch { /* out-of-range price — ignore */ }
   }, [focusEvent, chartView, plotted]);
+
+  // Keep the DOM badge glued to (time, price): recompute its pixel coords each
+  // frame while pinned, so it tracks zoom/pan/live candles. One element, so the
+  // rAF loop is cheap; we only re-render when it moves > ~0.5px.
+  useEffect(() => {
+    if (!focusEvent || chartView !== 'chart') { setMarkerPos(null); return; }
+    let raf = 0;
+    const last = { x: -1, y: -1 };
+    const tick = () => {
+      const chart = chartRef.current;
+      const series = seriesRef.current;
+      if (chart && series) {
+        const bs = bucketSecRef.current;
+        const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
+        const x = chart.timeScale().timeToCoordinate(bucketStart as UTCTimestamp);
+        const y = series.priceToCoordinate(focusEvent.price);
+        if (x != null && y != null) {
+          if (Math.abs(x - last.x) > 0.5 || Math.abs(y - last.y) > 0.5) {
+            last.x = x; last.y = y;
+            setMarkerPos({ x, y });
+          }
+        } else {
+          setMarkerPos(null); // scrolled out of view
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [focusEvent, chartView]);
 
   // Pin a row and jump to the chart.
   const focusRow = (e: FocusEvent) => {
@@ -363,14 +371,31 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" />
-                {markerTip && (
-                  <div
-                    className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] shadow-lg"
-                    style={{ left: markerTip.x, top: markerTip.y }}
-                  >
-                    {markerTip.text}
-                  </div>
-                )}
+                {focusEvent && markerPos && (() => {
+                  const isBuy = /buy|long/i.test(focusEvent.side) && focusEvent.kind !== 'liq';
+                  const color = isBuy ? 'var(--pos)' : 'var(--neg)';
+                  const letter = focusEvent.kind === 'liq' ? 'L' : (isBuy ? 'B' : 'S');
+                  const verb = focusEvent.kind === 'liq' ? 'Liquidation' : (isBuy ? 'Buy' : 'Sell');
+                  return (
+                    <div
+                      className="group absolute z-20"
+                      // Float the badge above the price point (translate up so its
+                      // bottom sits ~18px over the exact price coordinate).
+                      style={{ left: markerPos.x, top: markerPos.y, transform: 'translate(-50%, -180%)' }}
+                    >
+                      <div
+                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold text-white shadow-md"
+                        style={{ background: color, borderColor: 'var(--role-surface)' }}
+                      >
+                        {letter}
+                      </div>
+                      {/* Hover tooltip */}
+                      <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                        {verb} at ${fmtPx(focusEvent.price)}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {focusEvent && (
                   <button
                     onClick={() => setFocusEvent(null)}
