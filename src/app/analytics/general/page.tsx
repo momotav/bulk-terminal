@@ -681,6 +681,9 @@ export default function AnalyticsPage() {
   // KPI — a real trailing 24h window, NOT the partial calendar-day figure the
   // per-coin daily breakdown gives for "today".
   const [activeTraders24h, setActiveTraders24h] = useState<number | null>(null);
+  // Total accounts ever created (BULK world_accounts, ~11k) — the real
+  // cumulative account count, vs our fill-based traders table (~3k).
+  const [totalAccounts, setTotalAccounts] = useState<number | null>(null);
   // Per-card KPI toggle: each card independently shows all-time or rolling 24h.
   const [kpiModes, setKpiModes] = useState<{ trades: 'total' | '24h'; volume: 'total' | '24h'; traders: 'total' | '24h' }>(
     { trades: 'total', volume: 'total', traders: 'total' },
@@ -788,6 +791,7 @@ export default function AnalyticsPage() {
         if (!res.ok) return;
         const d = await res.json();
         if (typeof d?.activeTraders === 'number') setActiveTraders24h(d.activeTraders);
+        if (typeof d?.totalAccounts === 'number') setTotalAccounts(d.totalAccounts);
       } catch { /* non-blocking */ }
     };
 
@@ -1378,15 +1382,19 @@ export default function AnalyticsPage() {
             onClick={() => scrollToChart('kpi-volume-oi')}
           />
           <HeroKpi
-            label={kpiModes.traders === 'total' ? 'Unique Traders · All-time' : 'Active Traders · 24h'}
+            label={kpiModes.traders === 'total' ? 'Total Accounts' : 'Active Traders · 24h'}
             loading={stats == null}
-            // 24h uses the rolling-24h KPI (all observable actions: makers +
-            // takers + liquidations + ADL), not the partial calendar-day figure.
-            rawValue={kpiModes.traders === 'total' ? (stats?.uniqueTraders ?? 0) : (activeTraders24h ?? Math.round(last(dailyTraders)))}
+            // All-time = BULK's total accounts ever (world_accounts, ~11k).
+            // 24h = rolling active accounts (cached_accounts, ~2k).
+            rawValue={kpiModes.traders === 'total'
+              ? (totalAccounts ?? stats?.uniqueTraders ?? 0)
+              : (activeTraders24h ?? Math.round(last(dailyTraders)))}
             format={fmtCount}
             series={dailyTraders}
             changePct={pctChange(dailyTraders)}
-            sub={kpiModes.traders === 'total' ? `${fmtCount(activeTraders24h ?? Math.round(last(dailyTraders)))} in 24h` : `${fmtCount(stats?.uniqueTraders ?? 0)} all-time`}
+            sub={kpiModes.traders === 'total'
+              ? `${fmtCount(activeTraders24h ?? Math.round(last(dailyTraders)))} active now`
+              : `${fmtCount(totalAccounts ?? 0)} total`}
             mode={kpiModes.traders}
             onToggle={(m) => setKpiMode('traders', m)}
             onClick={() => scrollToChart('kpi-traders')}
