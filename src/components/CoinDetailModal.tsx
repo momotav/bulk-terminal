@@ -305,6 +305,21 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         axisLabelVisible: true,
         title: focusEvent.kind === 'liq' ? 'LIQ' : (isBuy ? 'BUY' : 'SELL'),
       });
+      // Scroll the chart to the event's candle so its price line is on-screen —
+      // the event may sit at a time/price the current view isn't showing (this
+      // is why a liquidation line looked "missing"). Centre ~40 candles on it.
+      const chart = chartRef.current;
+      if (chart && plotted.length > 1) {
+        const bs = bucketSecRef.current;
+        const bucket = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
+        let idx = plotted.findIndex((c) => Math.floor(c.t / 1000) >= bucket);
+        if (idx < 0) idx = plotted.length - 1;
+        const span = 40;
+        chart.timeScale().setVisibleLogicalRange({
+          from: Math.max(0, idx - span),
+          to: Math.min(plotted.length + 2, idx + span),
+        });
+      }
     } catch { /* out-of-range price — ignore */ }
   }, [focusEvent, chartView, plotted]);
 
