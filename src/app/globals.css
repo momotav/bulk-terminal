@@ -317,8 +317,10 @@
   html, body {
     background-color: var(--bg-base);
     color: var(--text-primary);
-    overscroll-behavior: none;
-    overscroll-behavior-y: none;
+    /* Block only horizontal overscroll (back/forward swipe glitches); allow
+       vertical so mobile pull-to-refresh works. Was `none` on both axes, which
+       killed pull-to-refresh across the whole site. */
+    overscroll-behavior-x: none;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
   

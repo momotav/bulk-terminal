@@ -19,6 +19,7 @@ import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 import { CoinIcon } from '@/components/CoinIcon';
 import { MarginSurface } from '@/components/MarginSurface';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 
 const INTERVALS: { label: string; value: string }[] = [
@@ -44,6 +45,7 @@ interface FocusEvent {
 }
 
 export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null; onClose: () => void }) {
+  const isMobile = useIsMobile();
   const [interval, setIntervalValue] = useState('1h');
   const [chartView, setChartView] = useState<'chart' | 'depth' | 'margin'>('chart');
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -191,6 +193,15 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       crosshair: { mode: 0 },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+      // On phones, DON'T let a touch drag pan the chart — let it scroll the
+      // modal vertically instead. Pinch-zoom stays on so the chart is still
+      // explorable. On desktop, full mouse pan/zoom as usual.
+      handleScroll: isMobile
+        ? { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: false, vertTouchDrag: false }
+        : true,
+      handleScale: isMobile
+        ? { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true }
+        : true,
     });
     chartRef.current = chart;
     seriesRef.current = chart.addCandlestickSeries({
@@ -202,7 +213,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     const obs = new ResizeObserver(resize);
     obs.observe(container);
     return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
-  }, [symbol, chartView]);
+  }, [symbol, chartView, isMobile]);
 
   // Push candle data whenever it changes (or when returning to the Chart view).
   useEffect(() => {
@@ -312,7 +323,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
       <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar">
           <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
             <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
@@ -336,15 +347,17 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             </button>
           </div>
 
-          {/* Interval toggles (chart view only) + Chart/Depth/Margin switcher */}
+          {/* Interval toggles (chart view only) + Chart/Depth/Margin switcher.
+              The interval strip scrolls within its own space (min-w-0 + scroll)
+              so it can never push the view switcher off the right edge. */}
           <div className="flex items-center justify-between gap-2 px-4 py-2 sm:px-5">
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">
               {chartView === 'chart' && INTERVALS.map((it) => (
                 <button
                   key={it.value}
                   onClick={() => setIntervalValue(it.value)}
                   className={cn(
-                    'rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
+                    'shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
                     interval === it.value
                       ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]'
                       : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]',
@@ -354,7 +367,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-3 text-sm font-semibold">
+            <div className="flex shrink-0 items-center gap-3 text-sm font-semibold">
               {(['chart', 'depth', 'margin'] as const).map((v) => (
                 <button
                   key={v}
@@ -371,7 +384,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           <div className="relative min-h-[360px] flex-1 px-2 pb-2 lg:min-h-0">
             {chartView === 'chart' && (
               <>
-                <div ref={wrapRef} className="h-full w-full" />
+                <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
                 {focusEvent && markerPos && (() => {
                   const isBuy = /buy|long/i.test(focusEvent.side) && focusEvent.kind !== 'liq';
                   const color = isBuy ? 'var(--pos)' : 'var(--neg)';
