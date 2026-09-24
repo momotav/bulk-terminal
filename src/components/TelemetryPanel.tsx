@@ -64,10 +64,10 @@ export function TelemetryPanel() {
           <h2 className="panel-title t-h2">Network</h2>
           <p className="t-caption truncate">BULK sequencer · live performance</p>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-muted)]">
-          <span className={cn('h-1.5 w-1.5 rounded-full', live ? (healthy ? 'bg-[var(--pos)]' : 'bg-[var(--neg)]') : 'bg-[var(--role-line)]')} />
-          {live ? (healthy ? 'Healthy' : 'Degraded') : '—'}
-        </span>
+        <span
+          title={live ? (healthy ? 'Sequencer healthy' : 'Sequencer degraded') : undefined}
+          className={cn('h-2 w-2 rounded-full', live ? (healthy ? 'bg-[var(--pos)]' : 'bg-[var(--neg)]') : 'bg-[var(--role-line)]')}
+        />
       </div>
 
       {/* Metric tabs */}

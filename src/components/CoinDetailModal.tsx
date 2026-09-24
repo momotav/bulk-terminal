@@ -721,8 +721,10 @@ function RecentTrades({ symbol, up, onPin }: { symbol: string; up: boolean; onPi
   const sellPct = 100 - buyPct;
   const volSum = rows.reduce((s, t) => s + t.value, 0);
   const szSum = rows.reduce((s, t) => s + t.size, 0);
-  const vwap = szSum > 0 ? rows.reduce((s, t) => s + t.price * t.size, 0) / szSum : 0;
-  const lastPx = rows[0]?.price ?? 0;
+  // The stored `price` column is DECIMAL(20,2), so sub-cent coins (PUMP) round
+  // to 0.00 — derive the real price from value/size, which are stored intact.
+  const vwap = szSum > 0 ? volSum / szSum : 0;
+  const lastPx = rows[0] && rows[0].size > 0 ? rows[0].value / rows[0].size : 0;
   const lastBuy = rows[0] ? isBuySide(rows[0].side) : up;
 
   return (
@@ -776,15 +778,17 @@ function RecentTrades({ symbol, up, onPin }: { symbol: string; up: boolean; onPi
               const buyer = buy ? t.taker : (t.maker ?? '');
               const seller = buy ? (t.maker ?? '') : t.taker;
               const col = buy ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
+              // Derive price from value/size (stored price rounds sub-cent to 0).
+              const px = t.size > 0 ? t.value / t.size : 0;
               return (
                 <tr
                   key={i}
-                  onClick={() => onPin({ kind: 'trade', price: t.price, ts: t.timestamp, side: t.side, size: t.size, value: t.value })}
+                  onClick={() => onPin({ kind: 'trade', price: px, ts: t.timestamp, side: t.side, size: t.size, value: t.value })}
                   className="cursor-pointer border-t border-[var(--role-line-subtle)] transition-colors hover:bg-[var(--bg-secondary-20)]"
                 >
                   <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{new Date(t.timestamp).toLocaleTimeString('en-US', { hour12: false })}</td>
                   <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{buy ? 'BUY' : 'SELL'}</span></td>
-                  <td className="py-1.5 pr-3 text-right font-medium" style={{ color: col }}>${fmtPx(t.price)}</td>
+                  <td className="py-1.5 pr-3 text-right font-medium" style={{ color: col }}>${fmtPx(px)}</td>
                   <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">{t.size.toFixed(4)}</td>
                   <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtUsdShort(t.value)}</td>
                   <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{buyer ? formatAddress(buyer) : '—'}</td>
@@ -841,16 +845,17 @@ function LiquidationFeed({ symbol, onPin }: { symbol: string; onPin: (e: FocusEv
             ) : rows.map((l, i) => {
               const long = isLong(l.side);
               const col = long ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
+              const px = l.size > 0 ? l.value / l.size : 0; // derive (stored price rounds sub-cent to 0)
               return (
                 <tr
                   key={i}
-                  onClick={() => onPin({ kind: 'liq', price: l.price, ts: l.timestamp, side: l.side, size: l.size, value: l.value })}
+                  onClick={() => onPin({ kind: 'liq', price: px, ts: l.timestamp, side: l.side, size: l.size, value: l.value })}
                   className="cursor-pointer border-t border-[var(--role-line-subtle)] transition-colors hover:bg-[var(--bg-secondary-20)]"
                 >
                   <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{l.wallet ? formatAddress(l.wallet) : '—'}</td>
                   <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{long ? 'LONG LIQ' : 'SHORT LIQ'}</span></td>
                   <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtUsdShort(l.value)}</td>
-                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtPx(l.price)}</td>
+                  <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtPx(px)}</td>
                   <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">{l.size.toFixed(4)}</td>
                   <td className="py-1.5 text-right text-[var(--role-content-subtle)]">{timeAgo(l.timestamp)}</td>
                 </tr>
