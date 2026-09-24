@@ -74,6 +74,10 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const liveBarRef = useRef<{ time: number; o: number; h: number; l: number; c: number } | null>(null);
   // Current interval's bucket length in seconds (read inside the SSE handler).
   const bucketSecRef = useRef(3600);
+  // True once the historical candles are set on the series. The SSE stream must
+  // NOT draw the live bar before this, or it paints a single candle on an empty
+  // series (the ~300ms flash of "one candle then all") before setData lands.
+  const chartReadyRef = useRef(false);
   // Price line + marker for a pinned trade/liquidation, so we can clear it.
   const focusLineRef = useRef<IPriceLine | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,11 +109,12 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         try { msg = JSON.parse(ev.data); } catch { return; }
         const price = Number(msg.price);
         if (!(price > 0)) return;
-        setLivePrice(price);
-        // Extend the in-progress candle (Chart view only, chart mounted).
+        setLivePrice(price); // header ticks regardless
+        // Don't touch the series until the historical candles are set, or the
+        // live bar paints a lone candle on an empty chart (the open flash).
         const s = seriesRef.current;
         const bs = bucketSecRef.current;
-        if (!s || !bs) return;
+        if (!s || !bs || !chartReadyRef.current) return;
         const tSec = Math.floor((msg.ts || Date.now()) / 1000);
         const bucketStart = Math.floor(tSec / bs) * bs;
         const bar = liveBarRef.current;
@@ -139,7 +144,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     if (!symbol || chartView !== 'chart') return;
     let cancelled = false;
     // Reset so we show a loading state (not the previous coin's candles or a
-    // stale "No candle data") while the new coin loads.
+    // stale "No candle data") while the new coin loads. Block SSE draws until
+    // the fresh history is on the series.
+    chartReadyRef.current = false;
     setCandles(null);
     setLoading(true);
     // BULK's candle endpoint occasionally returns empty or errors on a coin
@@ -263,6 +270,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     const lc = plotted[plotted.length - 1];
     liveBarRef.current = lc ? { time: Math.floor(lc.t / 1000), o: lc.o, h: lc.h, l: lc.l, c: lc.c } : null;
     chartRef.current?.timeScale().fitContent();
+    // History is on the series now — the SSE stream may draw the live bar.
+    if (plotted.length > 0) chartReadyRef.current = true;
   }, [plotted, chartView]);
 
 
