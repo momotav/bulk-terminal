@@ -55,6 +55,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const [livePrice, setLivePrice] = useState<number | null>(null);
   // A row (trade/liquidation) the user clicked to pin onto the chart.
   const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
+  const focusEventRef = useRef<FocusEvent | null>(null);
+  // Tooltip shown when hovering the pinned marker's bar.
+  const [markerTip, setMarkerTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -198,6 +201,19 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     const resize = () => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     const obs = new ResizeObserver(resize);
     obs.observe(container);
+
+    // Hover tooltip for the pinned marker: when the crosshair is over the
+    // focus event's bar, show "Buy/Sell/Liq at $price" near the cursor.
+    chart.subscribeCrosshairMove((param) => {
+      const fe = focusEventRef.current;
+      if (!fe || param.time == null || !param.point) { setMarkerTip(null); return; }
+      const bs = bucketSecRef.current;
+      const bucketStart = Math.floor(Math.floor(fe.ts / 1000) / bs) * bs;
+      if ((param.time as number) !== bucketStart) { setMarkerTip(null); return; }
+      const verb = fe.kind === 'liq' ? 'Liquidation' : (/buy|long/i.test(fe.side) ? 'Buy' : 'Sell');
+      setMarkerTip({ x: param.point.x, y: param.point.y, text: `${verb} at $${fmtPx(fe.price)}` });
+    });
+
     return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
   }, [symbol, chartView]);
 
@@ -228,18 +244,16 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   }, [interval]);
 
   // Draw the pinned trade/liquidation on the chart: a dashed price line at its
-  // price + a marker at its bar. Cleared when focusEvent is null.
+  // price + a circular B/S/L marker at its bar. Cleared when focusEvent is null.
   useEffect(() => {
+    focusEventRef.current = focusEvent;
     const series = seriesRef.current;
     if (!series || chartView !== 'chart') return;
-    // Clear any previous line.
     if (focusLineRef.current) { try { series.removePriceLine(focusLineRef.current); } catch { /* gone */ } focusLineRef.current = null; }
-    if (!focusEvent) { try { series.setMarkers([]); } catch { /* noop */ } return; }
+    if (!focusEvent) { try { series.setMarkers([]); } catch { /* noop */ } setMarkerTip(null); return; }
 
     const isBuy = /buy|long/i.test(focusEvent.side);
-    const color = focusEvent.kind === 'liq'
-      ? 'var(--neg)'
-      : (isBuy ? 'var(--pos)' : 'var(--neg)');
+    const color = focusEvent.kind === 'liq' ? 'var(--neg)' : (isBuy ? 'var(--pos)' : 'var(--neg)');
     const resolved = (() => {
       const probe = document.createElement('span');
       probe.style.color = color; probe.style.display = 'none';
@@ -262,8 +276,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         time: bucketStart as UTCTimestamp,
         position: isBuy ? 'belowBar' : 'aboveBar',
         color: resolved,
-        shape: isBuy ? 'arrowUp' : 'arrowDown',
-        text: focusEvent.kind === 'liq' ? 'LIQ' : `$${fmtUsdShort(focusEvent.value)}`,
+        shape: 'circle',
+        text: focusEvent.kind === 'liq' ? 'L' : (isBuy ? 'B' : 'S'),
       };
       series.setMarkers([marker]);
     } catch { /* out-of-range time/price — ignore */ }
@@ -349,6 +363,14 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" />
+                {markerTip && (
+                  <div
+                    className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] shadow-lg"
+                    style={{ left: markerTip.x, top: markerTip.y }}
+                  >
+                    {markerTip.text}
+                  </div>
+                )}
                 {focusEvent && (
                   <button
                     onClick={() => setFocusEvent(null)}
