@@ -326,6 +326,13 @@
     /* BULK first, then system fonts for symbols fallback */
     font-family: 'BULK', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     @apply antialiased min-h-screen;
+    /* BULK ships only Regular (400) + Medium (500). We map bold weights
+       (600/700) to BULK-Medium, but its internal OS/2 weight is 500 — so when a
+       `font-bold` element asks for 700 the browser can SYNTHESIZE a fake bold,
+       thickening and distorting the clean BULK-Medium glyphs (this is why bold
+       text looked "not like the font"). Disable synthesis so bold text renders
+       the true BULK-Medium outlines. */
+    font-synthesis: none;
   }
 
   /* Custom selection colors — tinted with the active accent chrome */
