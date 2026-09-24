@@ -979,6 +979,24 @@ html.light .trade-cta {
   animation: sheet-up var(--dur-base) var(--ease-out) both;
 }
 
+/* Coin detail modal: backdrop fades, panel scales + fades up. */
+@keyframes modal-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.animate-modal-backdrop { animation: modal-backdrop-in 180ms var(--ease-out) both; }
+.animate-modal-panel { animation: modal-panel-in var(--dur-slow) var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-backdrop, .animate-modal-panel { animation: none; }
+}
+
+/* Order-book row value change flash + smooth depth-bar width. */
+@keyframes ob-flash-up { 0% { background-color: rgb(var(--pos-rgb) / 0.18); } 100% { background-color: transparent; } }
+@keyframes ob-flash-down { 0% { background-color: rgb(var(--neg-rgb) / 0.18); } 100% { background-color: transparent; } }
+.ob-flash-up { animation: ob-flash-up 600ms ease-out; }
+.ob-flash-down { animation: ob-flash-down 600ms ease-out; }
+
 /* Sparkline draw-on: the trend line traces itself left→right and the area
    fades up under it. One authored moment on the dashboard KPI cards, keyed to
    real data. --spark-len is the measured path length (set per-instance in JS)

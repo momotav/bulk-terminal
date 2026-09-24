@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import {
   createChart, ColorType, type IChartApi, type ISeriesApi,
   type CandlestickData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
+  type SeriesMarker,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
@@ -56,6 +57,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const [livePrice, setLivePrice] = useState<number | null>(null);
   // A row (trade/liquidation) the user clicked to pin onto the chart.
   const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
+  // Recent liquidations, drawn on the chart as markers so you can see where
+  // liquidations happened relative to price.
+  const [chartLiqs, setChartLiqs] = useState<MarketLiquidation[]>([]);
   const focusEventRef = useRef<FocusEvent | null>(null);
   // Live pixel position of the pinned marker (DOM overlay, so we can place it
   // exactly on the price and float it above the candle, unlike native markers).
@@ -176,6 +180,17 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     return () => { cancelled = true; window.clearInterval(id); };
   }, [symbol]);
 
+  // Recent liquidations for the chart markers — poll every 15s.
+  useEffect(() => {
+    if (!symbol) return;
+    let cancelled = false;
+    const coin = coinOf(symbol);
+    const load = () => analytics.getMarketLiquidations(coin, 40).then((l) => { if (!cancelled) setChartLiqs(l); }).catch(() => {});
+    load();
+    const id = window.setInterval(load, 15000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [symbol]);
+
   // Drop BULK's empty no-trade filler candles + clamp bad-print wicks.
   const plotted = useMemo(
     () => clampWicks((candles ?? []).filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0)),
@@ -252,6 +267,40 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     liveBarRef.current = lc ? { time: Math.floor(lc.t / 1000), o: lc.o, h: lc.h, l: lc.l, c: lc.c } : null;
     chartRef.current?.timeScale().fitContent();
   }, [plotted, chartView]);
+
+  // Draw recent liquidations as chart markers (colored circles at their bar), so
+  // you can see WHERE liquidations happened relative to price. Only markers
+  // whose time falls within the loaded candle range are shown.
+  useEffect(() => {
+    if (chartView !== 'chart') return;
+    const series = seriesRef.current;
+    if (!series || plotted.length === 0) return;
+    const resolve = (expr: string) => {
+      const probe = document.createElement('span'); probe.style.color = expr; probe.style.display = 'none';
+      document.body.appendChild(probe); const c = getComputedStyle(probe).color; document.body.removeChild(probe); return c || '#888';
+    };
+    const posC = resolve('var(--pos)'); const negC = resolve('var(--neg)');
+    const firstT = Math.floor(plotted[0].t / 1000);
+    const bs = bucketSecRef.current;
+    const seen = new Set<number>();
+    const markers: SeriesMarker<UTCTimestamp>[] = chartLiqs
+      .map((l) => {
+        const bucket = Math.floor(Math.floor(l.timestamp / 1000) / bs) * bs;
+        const long = /long|buy/i.test(l.side);
+        return { bucket, long };
+      })
+      .filter((m) => m.bucket >= firstT)
+      .filter((m) => { if (seen.has(m.bucket)) return false; seen.add(m.bucket); return true; })
+      .sort((a, b) => a.bucket - b.bucket)
+      .map((m) => ({
+        time: m.bucket as UTCTimestamp,
+        position: 'aboveBar' as const,
+        color: m.long ? posC : negC,
+        shape: 'circle' as const,
+        text: 'Liq',
+      }));
+    try { series.setMarkers(markers); } catch { /* out-of-range — ignore */ }
+  }, [chartLiqs, plotted, chartView]);
 
   // Keep the SSE handler's bucket length in sync with the selected interval.
   useEffect(() => {
@@ -341,11 +390,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-3 backdrop-blur-md sm:p-6"
+      className="animate-modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-3 backdrop-blur-md sm:p-6"
       onMouseDown={(e) => { backdropDown.current = e.target === e.currentTarget; }}
       onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
-      <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
+      <div className="animate-modal-panel flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar">
           <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
@@ -600,7 +649,7 @@ function OrderBook({ book, mark, last, up }: { book: OrderbookSnapshot | null; m
       <div className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-4 py-2 text-[11px] font-semibold tabular-nums">
         <span style={{ color: 'var(--role-signal-positive)' }}>B {bidPct.toFixed(2)}%</span>
         <span className="relative h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--role-signal-negative)' }}>
-          <span className="absolute inset-y-0 left-0" style={{ width: `${bidPct}%`, background: 'var(--role-signal-positive)' }} />
+          <span className="absolute inset-y-0 left-0 transition-[width] duration-500 ease-out" style={{ width: `${bidPct}%`, background: 'var(--role-signal-positive)' }} />
         </span>
         <span style={{ color: 'var(--role-signal-negative)' }}>{askPct.toFixed(2)}% S</span>
       </div>
@@ -616,10 +665,12 @@ function BookRow({ row, max, side }: { row: { px: number; usd: number; sum: numb
     : 'linear-gradient(to left, rgb(var(--neg-rgb) / 0.42), rgb(var(--neg-rgb) / 0.05))';
   return (
     <div className="relative grid grid-cols-[1fr_1fr_1fr] items-center gap-2 px-4 py-[3px] text-[11px] tabular-nums">
-      <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: `${pct}%`, background: grad }} />
-      <span className="relative font-medium" style={{ color: pxColor }}>{fmtPx(row.px)}</span>
-      <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.usd)}</span>
-      <span className="relative text-right text-[var(--role-content)]">{fmtUsdShort(row.sum)}</span>
+      {/* Depth bar animates its width as the book updates, so changes glide
+          instead of snapping on each 3s poll. */}
+      <div className="pointer-events-none absolute inset-y-0 right-0 transition-[width] duration-500 ease-out" style={{ width: `${pct}%`, background: grad }} />
+      <span className="relative font-medium transition-colors duration-300" style={{ color: pxColor }}>{fmtPx(row.px)}</span>
+      <span className="relative text-right text-[var(--role-content)] transition-colors duration-300">{fmtUsdShort(row.usd)}</span>
+      <span className="relative text-right text-[var(--role-content)] transition-colors duration-300">{fmtUsdShort(row.sum)}</span>
     </div>
   );
 }
