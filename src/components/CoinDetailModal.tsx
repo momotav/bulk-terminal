@@ -316,8 +316,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
             <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
-          {/* Header stats */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[var(--role-line-subtle)] px-4 py-3 sm:px-5">
+          {/* Header stats. The close button is pinned to the top-right corner
+              (absolute) so it stays put no matter how the stats wrap. */}
+          <div className="relative flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[var(--role-line-subtle)] px-4 py-3 pr-12 sm:px-5 sm:pr-12">
             <div className="flex items-center gap-2.5">
               <CoinIcon symbol={symbol} size={28} />
               <span className="font-sans text-xl font-bold tracking-tight text-[var(--role-content)]">{symbol}</span>
@@ -329,7 +330,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             <button
               onClick={onClose}
               aria-label="Close"
-              className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--role-content)]"
             >
               <X className="h-4 w-4" />
             </button>
