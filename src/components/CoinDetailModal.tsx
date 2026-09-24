@@ -57,6 +57,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // A row (trade/liquidation) the user clicked to pin as a price line on the chart.
   const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
   const focusEventRef = useRef<FocusEvent | null>(null);
+  // Pixel position of the floating B/S badge (trades only; liquidations use just
+  // the price line + right-axis label).
+  const [markerPos, setMarkerPos] = useState<{ x: number; y: number } | null>(null);
   // Live pixel position of the pinned marker (DOM overlay, so we can place it
   // exactly on the price and float it above the candle, unlike native markers).
 
@@ -305,6 +308,33 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
     } catch { /* out-of-range price — ignore */ }
   }, [focusEvent, chartView, plotted]);
 
+  // Floating B/S badge for a pinned TRADE (liquidations use only the line +
+  // axis label). Recompute its pixel coords each frame so it tracks zoom/pan/
+  // live candles; one element, so the rAF loop is cheap.
+  useEffect(() => {
+    if (!focusEvent || focusEvent.kind !== 'trade' || chartView !== 'chart') { setMarkerPos(null); return; }
+    let raf = 0;
+    const last = { x: -1, y: -1 };
+    const tick = () => {
+      const chart = chartRef.current;
+      const series = seriesRef.current;
+      if (chart && series) {
+        const bs = bucketSecRef.current;
+        const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
+        const x = chart.timeScale().timeToCoordinate(bucketStart as UTCTimestamp);
+        const y = series.priceToCoordinate(focusEvent.price);
+        if (x != null && y != null) {
+          if (Math.abs(x - last.x) > 0.5 || Math.abs(y - last.y) > 0.5) { last.x = x; last.y = y; setMarkerPos({ x, y }); }
+        } else {
+          setMarkerPos(null);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [focusEvent, chartView]);
+
   // Pin a row and jump to the chart.
   const focusRow = (e: FocusEvent) => {
     setChartView('chart');
@@ -388,6 +418,27 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
+                {/* Floating B/S badge — trades only. */}
+                {focusEvent && focusEvent.kind === 'trade' && markerPos && (() => {
+                  const isBuy = /buy|long/i.test(focusEvent.side);
+                  const color = isBuy ? 'var(--pos)' : 'var(--neg)';
+                  return (
+                    <div
+                      className="group absolute z-20"
+                      style={{ left: markerPos.x, top: markerPos.y, transform: 'translate(-50%, -180%)' }}
+                    >
+                      <div
+                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold text-white shadow-md"
+                        style={{ background: color, borderColor: 'var(--role-surface)' }}
+                      >
+                        {isBuy ? 'B' : 'S'}
+                      </div>
+                      <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                        {isBuy ? 'Buy' : 'Sell'} at ${fmtPx(focusEvent.price)}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {focusEvent && (
                   <button
                     onClick={() => setFocusEvent(null)}
