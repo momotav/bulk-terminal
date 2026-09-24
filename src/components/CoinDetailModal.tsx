@@ -416,9 +416,12 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
                 )}
               </>
             )}
-            {chartView === 'depth' && <div className="h-full w-full"><DepthChart book={book} /></div>}
+            {/* Explicit mobile height — recharts/embedded layouts need a real
+                pixel height (a parent min-height alone measures 0, so the Depth
+                chart came up blank on phones). Desktop stretches via h-full. */}
+            {chartView === 'depth' && <div className="h-[360px] w-full lg:h-full"><DepthChart book={book} /></div>}
             {chartView === 'margin' && (
-              <div className="h-full w-full overflow-hidden">
+              <div className="h-[440px] w-full overflow-hidden lg:h-full">
                 <MarginSurface coin={coinOf(symbol)} embedded />
               </div>
             )}
