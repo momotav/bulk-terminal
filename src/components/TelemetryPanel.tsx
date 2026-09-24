@@ -14,10 +14,12 @@ import { AnimatedNumber } from './AnimatedNumber';
 import { analytics, cn, formatCompact, type PerformanceLive } from '@/lib/api';
 
 type Metric = 'latency' | 'rounds' | 'subs';
+// Colors chosen to contrast on BOTH the light (cream) and dark themes — the
+// gold/coin palette blended into the light background.
 const METRICS: { key: Metric; label: string; unit: string; color: string; pick: (p: PerformanceLive) => number }[] = [
   { key: 'latency', label: 'Latency', unit: 'ms', color: 'var(--pos)', pick: (p) => p.latencyMedianMs ?? 0 },
-  { key: 'rounds', label: 'Rounds/s', unit: '/s', color: 'var(--accent)', pick: (p) => p.roundsPerSec ?? 0 },
-  { key: 'subs', label: 'Orders/s', unit: '/s', color: 'var(--coin-1)', pick: (p) => p.submissionsPerSec ?? 0 },
+  { key: 'rounds', label: 'Rounds/s', unit: '/s', color: 'var(--role-content)', pick: (p) => p.roundsPerSec ?? 0 },
+  { key: 'subs', label: 'Orders/s', unit: '/s', color: 'var(--role-signal-info)', pick: (p) => p.submissionsPerSec ?? 0 },
 ];
 const HISTORY = 60; // ~3 min at 3s cadence
 
@@ -38,6 +40,15 @@ export function TelemetryPanel() {
       if (cancelled || !d) return;
       setLive(d);
       setHist((prev) => {
+        // First load: seed from the server's rolling ~60s buffer so the chart
+        // is already populated instead of showing "Sampling…".
+        if (prev.latency.length === 0 && d.recent && d.recent.length >= 2) {
+          return {
+            latency: d.recent.map((s) => s.latencyMedianMs ?? 0).slice(-HISTORY),
+            rounds: d.recent.map((s) => s.roundsPerSec ?? 0).slice(-HISTORY),
+            subs: d.recent.map((s) => s.submissionsPerSec ?? 0).slice(-HISTORY),
+          };
+        }
         const push = (arr: number[], v: number) => [...arr, v].slice(-HISTORY);
         return {
           latency: push(prev.latency, d.latencyMedianMs ?? 0),
@@ -53,7 +64,6 @@ export function TelemetryPanel() {
 
   const active = METRICS.find((m) => m.key === metric)!;
   const chartData = useMemo(() => hist[metric].map((v, i) => ({ i, v })), [hist, metric]);
-  const healthy = live?.workerSaturation != null && live.workerSaturation < 0.8 && (live.queueDepth ?? 0) < 100;
   const value = live ? active.pick(live) : 0;
 
   return (
@@ -62,12 +72,7 @@ export function TelemetryPanel() {
       <div className="panel-header">
         <div className="min-w-0">
           <h2 className="panel-title t-h2">Network</h2>
-          <p className="t-caption truncate">BULK sequencer · live performance</p>
         </div>
-        <span
-          title={live ? (healthy ? 'Sequencer healthy' : 'Sequencer degraded') : undefined}
-          className={cn('h-2 w-2 rounded-full', live ? (healthy ? 'bg-[var(--pos)]' : 'bg-[var(--neg)]') : 'bg-[var(--role-line)]')}
-        />
       </div>
 
       {/* Metric tabs */}

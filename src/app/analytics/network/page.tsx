@@ -46,11 +46,22 @@ export default function NetworkPage() {
     };
   }, [hist]);
 
-  const fmtTime = (ts: string) => {
+  // Drop the empty leading points (early snapshots recorded before a given
+  // metric column existed have nulls) so charts don't start with a blank gap.
+  const histLatency = useMemo(() => hist.filter((p) => p.latencyMedianMs != null), [hist]);
+  const histAccounts = useMemo(() => hist.filter((p) => p.totalAccounts != null || p.activeAccounts != null), [hist]);
+  const histReward = useMemo(() => hist.filter((p) => p.rewardPool != null), [hist]);
+
+  // Axis label: show the time when the data spans < ~36h (so a single day of
+  // hourly buckets reads "18:00, 19:00…" not "Sep 24, Sep 24…"); the date once
+  // it spans multiple days.
+  const spanHours = hist.length >= 2 ? (new Date(hist[hist.length - 1].timestamp).getTime() - new Date(hist[0].timestamp).getTime()) / 3.6e6 : 0;
+  const fmtAxis = (ts: string) => {
     const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return spanHours < 36
+      ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
-  const fmtDay = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   const axis = { fill: 'var(--text-secondary)', fontSize: isMobile ? 10 : 12 };
   const healthy = live?.workerSaturation != null && live.workerSaturation < 0.8 && (live.queueDepth ?? 0) < 100;
@@ -114,19 +125,19 @@ export default function NetworkPage() {
           <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col">
             <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Consensus Latency</h3>
             <div className="flex-1 min-h-0">
-              {hist.length < 2 ? (
+              {histLatency.length < 2 ? (
                 <Empty label="Latency history builds as snapshots accumulate" />
               ) : (
                 <ChartFrame title="Consensus Latency" className="h-full" yLabel="ms" legend={[{ label: 'Median', color: 'var(--pos)' }, { label: 'p99', color: 'var(--neg)' }]}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={hist}>
+                    <AreaChart data={histLatency}>
                       <defs>
                         <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.25} />
                           <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtTime} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
                       <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 32 : 44} domain={['auto', 'auto']} />
                       <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [`${Number(v).toFixed(2)} ms`, n === 'latencyMedianMs' ? 'Median' : 'p99']} />
                       <Area type="monotone" dataKey="latencyP99Ms" stroke="var(--neg)" strokeWidth={1.5} fill="none" dot={false} isAnimationActive={false} />
@@ -142,23 +153,23 @@ export default function NetworkPage() {
           <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col">
             <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Account Growth</h3>
             <div className="flex-1 min-h-0">
-              {hist.length < 2 ? (
+              {histAccounts.length < 2 ? (
                 <Empty label="Account history builds as snapshots accumulate" />
               ) : (
-                <ChartFrame title="Account Growth" className="h-full" yLabel="Accounts" legend={[{ label: 'Total', color: 'var(--accent)' }, { label: 'Active', color: 'var(--coin-1)' }]}>
+                <ChartFrame title="Account Growth" className="h-full" yLabel="Accounts" legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--pos)' }]}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={hist}>
+                    <AreaChart data={histAccounts}>
                       <defs>
                         <linearGradient id="totGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                          <stop offset="0%" stopColor="var(--role-content)" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="var(--role-content)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtDay} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
                       <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
                       <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [fmtInt(Number(v)), n === 'totalAccounts' ? 'Total' : 'Active']} />
-                      <Area type="monotone" dataKey="totalAccounts" stroke="var(--accent)" strokeWidth={2} fill="url(#totGrad)" dot={false} isAnimationActive={false} />
-                      <Area type="monotone" dataKey="activeAccounts" stroke="var(--coin-1)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
+                      <Area type="monotone" dataKey="totalAccounts" stroke="var(--role-content)" strokeWidth={2} fill="url(#totGrad)" dot={false} isAnimationActive={false} />
+                      <Area type="monotone" dataKey="activeAccounts" stroke="var(--pos)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </ChartFrame>
@@ -170,22 +181,22 @@ export default function NetworkPage() {
           <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col lg:col-span-2">
             <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Reward Pool</h3>
             <div className="flex-1 min-h-0">
-              {hist.length < 2 ? (
+              {histReward.length < 2 ? (
                 <Empty label="Reward-pool history builds as snapshots accumulate" />
               ) : (
                 <ChartFrame title="Reward Pool" className="h-full" yLabel="Pool">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={hist.map((p) => ({ ...p, poolUnits: p.rewardPool != null ? p.rewardPool / 1e9 : null }))}>
+                    <AreaChart data={histReward.map((p) => ({ ...p, poolUnits: p.rewardPool != null ? p.rewardPool / 1e9 : null }))}>
                       <defs>
                         <linearGradient id="poolGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--coin-2)" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="var(--coin-2)" stopOpacity={0} />
+                          <stop offset="0%" stopColor="var(--role-signal-info)" stopOpacity={0.22} />
+                          <stop offset="100%" stopColor="var(--role-signal-info)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtDay} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
                       <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
                       <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number) => [formatCompact(Number(v)), 'Reward Pool']} />
-                      <Area type="monotone" dataKey="poolUnits" stroke="var(--coin-2)" strokeWidth={2} fill="url(#poolGrad)" dot={false} isAnimationActive={false} />
+                      <Area type="monotone" dataKey="poolUnits" stroke="var(--role-signal-info)" strokeWidth={2} fill="url(#poolGrad)" dot={false} isAnimationActive={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </ChartFrame>

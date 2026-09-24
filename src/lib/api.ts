@@ -360,6 +360,8 @@ export interface PerformanceLive {
   sigAccept: number | null;
   sigRejectSig: number | null;
   sigRejectUnauth: number | null;
+  // Rolling ~60s of prior samples so a joining client can seed its chart.
+  recent?: Array<{ timestamp: number; latencyMedianMs: number | null; roundsPerSec: number | null; submissionsPerSec: number | null }>;
 }
 export interface PerformancePoint {
   timestamp: string;
