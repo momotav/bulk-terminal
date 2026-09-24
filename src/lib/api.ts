@@ -995,6 +995,20 @@ export const analytics = {
     }
   },
 
+  // Active-account history (BULK executor cached_accounts, recorded every 5min).
+  // Daily peak; the 2,000-scale figure that matches the Active Traders KPI.
+  async getActiveAccountsHistory(hours: number = 720): Promise<{ timestamp: string; active: number; total: number }[]> {
+    try {
+      const response = await request<{ data: { timestamp: string; active: number; total: number }[] }>(
+        `/api/analytics/active-accounts-history?hours=${hours}`
+      );
+      return response.data || [];
+    } catch (error) {
+      console.error('active-accounts-history error:', error);
+      return [];
+    }
+  },
+
   // Cumulative New Users
   async getCumulativeNewUsers(hours: number = 720): Promise<{ timestamp: string; newUsers: number; cumulative: number }[]> {
     try {
