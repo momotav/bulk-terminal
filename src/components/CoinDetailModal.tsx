@@ -136,14 +136,32 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   useEffect(() => {
     if (!symbol || chartView !== 'chart') return;
     let cancelled = false;
+    // Reset so we show a loading state (not the previous coin's candles or a
+    // stale "No candle data") while the new coin loads.
+    setCandles(null);
     setLoading(true);
-    const load = (silent: boolean) => {
+    // BULK's candle endpoint occasionally returns empty or errors on a coin
+    // swap (rate-limit / paged-envelope timing) — which flashed "No candle
+    // data" until a manual refresh. Retry a couple times before accepting empty.
+    const load = (attempt: number) => {
       analytics.getCandles(symbol, interval, 300)
-        .then((res) => { if (!cancelled) setCandles(res.candles); })
-        .catch(() => { if (!cancelled && !silent) setCandles([]); })
-        .finally(() => { if (!cancelled && !silent) setLoading(false); });
+        .then((res) => {
+          if (cancelled) return;
+          const c = res.candles || [];
+          if (c.length === 0 && attempt < 2) {
+            setTimeout(() => { if (!cancelled) load(attempt + 1); }, 700);
+            return;
+          }
+          setCandles(c);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (attempt < 2) setTimeout(() => { if (!cancelled) load(attempt + 1); }, 700);
+          else { setCandles([]); setLoading(false); }
+        });
     };
-    load(false);
+    load(0);
     return () => { cancelled = true; };
   }, [symbol, interval, chartView]);
 
@@ -204,10 +222,15 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         : true,
     });
     chartRef.current = chart;
+    // Price-axis precision scaled to the coin's price, so sub-cent coins (PUMP,
+    // FARTCOIN) don't render every axis label + the last-price tag as "0.00".
+    const px0 = ticker?.markPrice || ticker?.lastPrice || 1;
+    const prec = priceDecimals(px0);
     seriesRef.current = chart.addCandlestickSeries({
       upColor: pos, downColor: neg,
       borderUpColor: pos, borderDownColor: neg,
       wickUpColor: pos, wickDownColor: neg,
+      priceFormat: { type: 'price', precision: prec, minMove: Math.pow(10, -prec) },
     });
     const resize = () => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     const obs = new ResizeObserver(resize);
@@ -480,7 +503,22 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 }
 
 // Price to a fixed 2-decimal, comma-grouped string (85,952.00).
-const fmtPx = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Price with decimals that scale to magnitude — a fixed 2 decimals showed
+// sub-cent coins (PUMP, FARTCOIN) as "0.00". Big coins keep 2, small coins get
+// enough places to actually read the price.
+const priceDecimals = (n: number): number => {
+  const a = Math.abs(n);
+  if (a >= 1000) return 2;
+  if (a >= 1) return 2;
+  if (a >= 0.1) return 4;
+  if (a >= 0.001) return 5;
+  if (a >= 0.00001) return 7;
+  return 9;
+};
+const fmtPx = (n: number) => {
+  const d = priceDecimals(n);
+  return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
 // USD amount, compact like the reference: 92.91 / 2.50K / 1.39M.
 const fmtUsdShort = (n: number): string => {
   const abs = Math.abs(n);
