@@ -72,7 +72,13 @@ export function useTickers() {
           // Busiest market first — the ordering the table and strip both want.
           .sort((a: BulkTicker, b: BulkTicker) => b.quoteVolume - a.quoteVolume);
 
-        setTickers(rows);
+        // Guard against transient PARTIAL responses. The upstream ticker feed
+        // occasionally returns only a couple of markets for a poll; replacing a
+        // healthy full list with that made the Markets table flash down to "2
+        // active perps" for ~10s until the next poll recovered. If we already
+        // have a healthy set and this response is much smaller, keep the last
+        // known-good list instead of flickering.
+        setTickers((prev) => (prev.length >= 5 && rows.length < prev.length * 0.6 ? prev : rows));
         setLoading(false);
       } catch {
         // Silent. Markets are an enhancement to the dashboard, not a

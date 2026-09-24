@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   createChart, ColorType, type IChartApi, type ISeriesApi,
-  type CandlestickData, type UTCTimestamp, type WhitespaceData,
+  type CandlestickData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
+  type SeriesMarker,
 } from 'lightweight-charts';
 import { X } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
@@ -33,6 +34,16 @@ const INTERVALS: { label: string; value: string }[] = [
 const coinOf = (symbol: string) => symbol.replace(/-USD$/, '');
 const usd = (n: number) => `$${formatCompact(n)}`;
 
+// A trade or liquidation the user clicked, pinned onto the chart.
+interface FocusEvent {
+  kind: 'trade' | 'liq';
+  price: number;
+  ts: number; // ms
+  side: string;
+  size: number;
+  value: number;
+}
+
 export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null; onClose: () => void }) {
   const [interval, setIntervalValue] = useState('1h');
   const [chartView, setChartView] = useState<'chart' | 'depth' | 'margin'>('chart');
@@ -42,6 +53,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // Live mark price from the SSE stream — drives the header + order-book mid so
   // the numbers tick in real time (not only on the parent's slow ticker poll).
   const [livePrice, setLivePrice] = useState<number | null>(null);
+  // A row (trade/liquidation) the user clicked to pin onto the chart.
+  const [focusEvent, setFocusEvent] = useState<FocusEvent | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -54,6 +67,9 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   const liveBarRef = useRef<{ time: number; o: number; h: number; l: number; c: number } | null>(null);
   // Current interval's bucket length in seconds (read inside the SSE handler).
   const bucketSecRef = useRef(3600);
+  // Price line + marker for a pinned trade/liquidation, so we can clear it.
+  const focusLineRef = useRef<IPriceLine | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const symbol = ticker?.symbol ?? null;
 
@@ -211,6 +227,55 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       interval === '1d' ? 86400 : 3600;
   }, [interval]);
 
+  // Draw the pinned trade/liquidation on the chart: a dashed price line at its
+  // price + a marker at its bar. Cleared when focusEvent is null.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || chartView !== 'chart') return;
+    // Clear any previous line.
+    if (focusLineRef.current) { try { series.removePriceLine(focusLineRef.current); } catch { /* gone */ } focusLineRef.current = null; }
+    if (!focusEvent) { try { series.setMarkers([]); } catch { /* noop */ } return; }
+
+    const isBuy = /buy|long/i.test(focusEvent.side);
+    const color = focusEvent.kind === 'liq'
+      ? 'var(--neg)'
+      : (isBuy ? 'var(--pos)' : 'var(--neg)');
+    const resolved = (() => {
+      const probe = document.createElement('span');
+      probe.style.color = color; probe.style.display = 'none';
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).color; document.body.removeChild(probe);
+      return c || '#888';
+    })();
+    try {
+      focusLineRef.current = series.createPriceLine({
+        price: focusEvent.price,
+        color: resolved,
+        lineWidth: 1,
+        lineStyle: 2, // dashed
+        axisLabelVisible: true,
+        title: focusEvent.kind === 'liq' ? 'LIQ' : (isBuy ? 'BUY' : 'SELL'),
+      });
+      const bs = bucketSecRef.current;
+      const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
+      const marker: SeriesMarker<UTCTimestamp> = {
+        time: bucketStart as UTCTimestamp,
+        position: isBuy ? 'belowBar' : 'aboveBar',
+        color: resolved,
+        shape: isBuy ? 'arrowUp' : 'arrowDown',
+        text: focusEvent.kind === 'liq' ? 'LIQ' : `$${fmtUsdShort(focusEvent.value)}`,
+      };
+      series.setMarkers([marker]);
+    } catch { /* out-of-range time/price — ignore */ }
+  }, [focusEvent, chartView, plotted]);
+
+  // Pin a row and jump to the chart.
+  const focusRow = (e: FocusEvent) => {
+    setChartView('chart');
+    setFocusEvent(e);
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (typeof document === 'undefined' || !symbol || !ticker) return null;
 
   const up = ticker.priceChangePercent >= 0;
@@ -225,7 +290,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
       <div className="flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
-        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
             <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--role-line-subtle)] lg:border-b-0 lg:border-r">
@@ -284,6 +349,18 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" />
+                {focusEvent && (
+                  <button
+                    onClick={() => setFocusEvent(null)}
+                    className="absolute left-3 top-2 z-10 flex items-center gap-1.5 rounded-md border border-[var(--role-line)] bg-[var(--role-surface)]/90 px-2 py-1 text-[11px] font-medium text-[var(--role-content)] backdrop-blur-sm"
+                  >
+                    <span style={{ color: /buy|long/i.test(focusEvent.side) && focusEvent.kind !== 'liq' ? 'var(--pos)' : 'var(--neg)' }}>
+                      {focusEvent.kind === 'liq' ? 'LIQ' : (/buy|long/i.test(focusEvent.side) ? 'BUY' : 'SELL')}
+                    </span>
+                    ${fmtPx(focusEvent.price)} · {focusEvent.size.toFixed(4)} · ${fmtUsdShort(focusEvent.value)}
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
                 {loading && plotted.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--role-content-subtle)]">Loading chart…</div>
                 )}
@@ -320,8 +397,8 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           </div>
 
           {/* ---- Bottom feeds ---- */}
-          <RecentTrades symbol={symbol} up={up} />
-          <LiquidationFeed symbol={symbol} />
+          <RecentTrades symbol={symbol} up={up} onPin={focusRow} />
+          <LiquidationFeed symbol={symbol} onPin={focusRow} />
         </div>
       </div>
     </div>,
@@ -524,7 +601,7 @@ function LimitToggle({ value, onChange }: { value: number; onChange: (n: number)
 
 // Recent trade tape for the market — header stats (last price, buy/sell split,
 // VWAP) plus a live table. Buyer/seller are derived from the taker's side.
-function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
+function RecentTrades({ symbol, up, onPin }: { symbol: string; up: boolean; onPin: (e: FocusEvent) => void }) {
   const [trades, setTrades] = useState<MarketTrade[] | null>(null);
   const [limit, setLimit] = useState(25);
   useEffect(() => {
@@ -598,7 +675,11 @@ function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
               const seller = buy ? (t.maker ?? '') : t.taker;
               const col = buy ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
               return (
-                <tr key={i} className="border-t border-[var(--role-line-subtle)]">
+                <tr
+                  key={i}
+                  onClick={() => onPin({ kind: 'trade', price: t.price, ts: t.timestamp, side: t.side, size: t.size, value: t.value })}
+                  className="cursor-pointer border-t border-[var(--role-line-subtle)] transition-colors hover:bg-[var(--bg-secondary-20)]"
+                >
                   <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{new Date(t.timestamp).toLocaleTimeString('en-US', { hour12: false })}</td>
                   <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{buy ? 'BUY' : 'SELL'}</span></td>
                   <td className="py-1.5 pr-3 text-right font-medium" style={{ color: col }}>${fmtPx(t.price)}</td>
@@ -617,7 +698,7 @@ function RecentTrades({ symbol, up }: { symbol: string; up: boolean }) {
 }
 
 // Recent liquidation events for the market.
-function LiquidationFeed({ symbol }: { symbol: string }) {
+function LiquidationFeed({ symbol, onPin }: { symbol: string; onPin: (e: FocusEvent) => void }) {
   const [liqs, setLiqs] = useState<MarketLiquidation[] | null>(null);
   const [limit, setLimit] = useState(25);
   useEffect(() => {
@@ -659,7 +740,11 @@ function LiquidationFeed({ symbol }: { symbol: string }) {
               const long = isLong(l.side);
               const col = long ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
               return (
-                <tr key={i} className="border-t border-[var(--role-line-subtle)]">
+                <tr
+                  key={i}
+                  onClick={() => onPin({ kind: 'liq', price: l.price, ts: l.timestamp, side: l.side, size: l.size, value: l.value })}
+                  className="cursor-pointer border-t border-[var(--role-line-subtle)] transition-colors hover:bg-[var(--bg-secondary-20)]"
+                >
                   <td className="py-1.5 pr-3 text-[var(--role-content-subtle)]">{l.wallet ? formatAddress(l.wallet) : '—'}</td>
                   <td className="py-1.5 pr-3"><span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: col, borderColor: col }}>{long ? 'LONG LIQ' : 'SHORT LIQ'}</span></td>
                   <td className="py-1.5 pr-3 text-right text-[var(--role-content)]">${fmtUsdShort(l.value)}</td>
