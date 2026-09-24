@@ -433,23 +433,24 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'chart' && (
               <>
                 <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
-                {/* Floating badge — B/S for a trade, LIQ for a liquidation. */}
+                {/* Floating B/S badge on the candle — buy/long = green B,
+                    sell/short = red S — for BOTH trades and liquidations. The
+                    LIQ label rides the price line (axis) for liquidations. */}
                 {focusEvent && markerPos && (() => {
                   const isLiq = focusEvent.kind === 'liq';
                   const isBuy = /buy|long/i.test(focusEvent.side);
-                  const color = isLiq ? 'var(--neg)' : (isBuy ? 'var(--pos)' : 'var(--neg)');
-                  const label = isLiq ? 'LIQ' : (isBuy ? 'B' : 'S');
-                  const verb = isLiq ? 'Liquidation' : (isBuy ? 'Buy' : 'Sell');
+                  const color = isBuy ? 'var(--pos)' : 'var(--neg)';
+                  const verb = isLiq ? (isBuy ? 'Long liquidation' : 'Short liquidation') : (isBuy ? 'Buy' : 'Sell');
                   return (
                     <div
                       className="group absolute z-20"
                       style={{ left: markerPos.x, top: markerPos.y, transform: 'translate(-50%, -180%)' }}
                     >
                       <div
-                        className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 px-1.5 text-[11px] font-bold text-white shadow-md"
+                        className="flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold text-white shadow-md"
                         style={{ background: color, borderColor: 'var(--role-surface)' }}
                       >
-                        {label}
+                        {isBuy ? 'B' : 'S'}
                       </div>
                       <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--role-content)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                         {verb} at ${fmtPx(focusEvent.price)}
