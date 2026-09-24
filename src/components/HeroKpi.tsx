@@ -70,13 +70,15 @@ export function HeroKpi({
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}
-        <div className="mt-2.5 flex items-center gap-2 text-[11px]">
+        {/* Change % + sub. Stack on narrow cards (mobile) so the long L/H line
+            never collides with the % or wraps mid-value; inline on wider ones. */}
+        <div className="mt-2.5 flex flex-col gap-0.5 text-[11px] sm:flex-row sm:items-center sm:gap-2">
           {changePct != null && Number.isFinite(changePct) && (
             <span className={cn('font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
             </span>
           )}
-          {sub != null && <span className="text-[var(--role-content-subtle)]">{sub}</span>}
+          {sub != null && <span className="whitespace-nowrap text-[var(--role-content-subtle)]">{sub}</span>}
         </div>
       </div>
 
