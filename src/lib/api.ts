@@ -341,6 +341,36 @@ export interface OrderbookStats {
   imbalance: number; // [-1, +1]
 }
 
+// Live sequencer performance from /api/analytics/performance.
+export interface PerformanceLive {
+  timestamp: number;
+  latencyMedianMs: number | null;
+  latencyP99Ms: number | null;
+  latencyMaxMs: number | null;
+  latencyMeanMs: number | null;
+  roundHeight: number | null;
+  roundsPerSec: number | null;
+  submissionsTotal: number | null;
+  submissionsPerSec: number | null;
+  activeAccounts: number | null;
+  totalAccounts: number | null;
+  rewardPool: number | null;
+  workerSaturation: number | null;
+  queueDepth: number | null;
+  sigAccept: number | null;
+  sigRejectSig: number | null;
+  sigRejectUnauth: number | null;
+}
+export interface PerformancePoint {
+  timestamp: string;
+  latencyMedianMs: number | null;
+  latencyP99Ms: number | null;
+  roundHeight: number | null;
+  rewardPool: number | null;
+  activeAccounts: number | null;
+  totalAccounts: number | null;
+}
+
 // One recent trade in a market's tape (/api/analytics/market-trades/:coin).
 // `side` is the taker's side; buyer/seller are derived from it + taker/maker.
 export interface MarketTrade {
@@ -993,6 +1023,20 @@ export const analytics = {
       console.error('DAU error:', error);
       return [];
     }
+  },
+
+  // Live BULK sequencer performance (consensus latency, rounds/sec, accounts,
+  // reward pool, node health) from /metrics.
+  async getPerformance(): Promise<PerformanceLive | null> {
+    try {
+      return await request<PerformanceLive>('/api/analytics/performance');
+    } catch { return null; }
+  },
+  async getPerformanceHistory(hours: number = 168): Promise<PerformancePoint[]> {
+    try {
+      const r = await request<{ data: PerformancePoint[] }>(`/api/analytics/performance-history?hours=${hours}`);
+      return r.data || [];
+    } catch { return []; }
   },
 
   // Active-account history (BULK executor cached_accounts, recorded every 5min).

@@ -104,7 +104,7 @@ export default function AnalyticsLayout({
                   `}
                 >
                   <Icon size={18} className={isActive ? 'text-[var(--accent)]' : ''} />
-                  {!collapsed && <span>{item.name}</span>}
+                  {!collapsed && <span className="font-sans font-medium">{item.name}</span>}
                 </Link>
               );
             })}
@@ -143,7 +143,7 @@ export default function AnalyticsLayout({
                   `}
                 >
                   <Icon size={14} />
-                  <span>{item.name}</span>
+                  <span className="font-sans font-medium">{item.name}</span>
                 </Link>
               );
             })}
