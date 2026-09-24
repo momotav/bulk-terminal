@@ -659,6 +659,10 @@ export default function AnalyticsPage() {
   const [oiChartData, setOiChartData] = useState<ChartData[]>([]);
   const [fundingChartData, setFundingChartData] = useState<ChartData[]>([]);
   const [liveOI, setLiveOI] = useState<number>(0); // Live OI from BULK API for stats card
+  // Rolling-24h active traders (all observable actions), from the exchange-stats
+  // KPI — a real trailing 24h window, NOT the partial calendar-day figure the
+  // per-coin daily breakdown gives for "today".
+  const [activeTraders24h, setActiveTraders24h] = useState<number | null>(null);
   // Per-card KPI toggle: each card independently shows all-time or rolling 24h.
   const [kpiModes, setKpiModes] = useState<{ trades: 'total' | '24h'; volume: 'total' | '24h'; traders: 'total' | '24h' }>(
     { trades: 'total', volume: 'total', traders: 'total' },
@@ -757,8 +761,20 @@ export default function AnalyticsPage() {
         console.error('Failed to fetch live OI:', error);
       }
     };
-    
+
+    // Rolling-24h active traders for the KPI's 24h mode.
+    const fetchActive24h = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
+        const res = await fetch(`${API_URL}${withNetwork('/api/analytics/exchange-stats')}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (typeof d?.activeTraders === 'number') setActiveTraders24h(d.activeTraders);
+      } catch { /* non-blocking */ }
+    };
+
     fetchLiveOI();
+    fetchActive24h();
     const interval = setInterval(fetchLiveOI, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [network]);
@@ -1346,11 +1362,13 @@ export default function AnalyticsPage() {
           <HeroKpi
             label={kpiModes.traders === 'total' ? 'Unique Traders · All-time' : 'Active Traders · 24h'}
             loading={stats == null}
-            rawValue={kpiModes.traders === 'total' ? (stats?.uniqueTraders ?? 0) : Math.round(last(dailyTraders))}
+            // 24h uses the rolling-24h KPI (all observable actions: makers +
+            // takers + liquidations + ADL), not the partial calendar-day figure.
+            rawValue={kpiModes.traders === 'total' ? (stats?.uniqueTraders ?? 0) : (activeTraders24h ?? Math.round(last(dailyTraders)))}
             format={fmtCount}
             series={dailyTraders}
             changePct={pctChange(dailyTraders)}
-            sub={kpiModes.traders === 'total' ? `${fmtCount(Math.round(last(dailyTraders)))} in 24h` : `${fmtCount(stats?.uniqueTraders ?? 0)} all-time`}
+            sub={kpiModes.traders === 'total' ? `${fmtCount(activeTraders24h ?? Math.round(last(dailyTraders)))} in 24h` : `${fmtCount(stats?.uniqueTraders ?? 0)} all-time`}
             mode={kpiModes.traders}
             onToggle={(m) => setKpiMode('traders', m)}
             onClick={() => scrollToChart('kpi-traders')}
