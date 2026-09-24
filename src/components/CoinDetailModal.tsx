@@ -347,10 +347,15 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
         const bucketStart = Math.floor(Math.floor(focusEvent.ts / 1000) / bs) * bs;
         const x = chart.timeScale().timeToCoordinate(bucketStart as UTCTimestamp);
         const y = series.priceToCoordinate(focusEvent.price);
-        if (x != null && y != null) {
+        // Hide the badge when the marker scrolls outside the plot area, so it
+        // never spills past the chart edge into the order book column. The 14px
+        // margin covers the badge's half-width so it vanishes before it clips.
+        const w = wrapRef.current?.clientWidth ?? 0;
+        const h = wrapRef.current?.clientHeight ?? 0;
+        if (x != null && y != null && x >= 14 && x <= w - 14 && y >= 0 && y <= h) {
           if (Math.abs(x - last.x) > 0.5 || Math.abs(y - last.y) > 0.5) { last.x = x; last.y = y; setMarkerPos({ x, y }); }
         } else {
-          setMarkerPos(null);
+          if (last.x !== -1) { last.x = -1; last.y = -1; setMarkerPos(null); }
         }
       }
       raf = requestAnimationFrame(tick);
