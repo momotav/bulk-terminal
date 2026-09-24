@@ -561,6 +561,24 @@ const ChartCard = ({
 );
 
 
+// Daily Active Users, using BULK's real active-account figure (executor
+// cached_accounts, ~2,000) where we've recorded it, and the fill-based daily
+// unique count for days before that recording started. Per day, the recorded
+// active-accounts value wins; older days keep the fill-based number so the
+// chart stays continuous instead of dropping to a single point.
+async function fetchDailyActiveUsers(hours: number): Promise<{ timestamp: string; dau: number }[]> {
+  const [fill, accounts] = await Promise.all([
+    analytics.getDailyActiveUsers(hours).catch(() => []),
+    analytics.getActiveAccountsHistory(hours).catch(() => []),
+  ]);
+  const byDay = new Map<string, number>();
+  for (const r of fill) byDay.set(r.timestamp, r.dau);
+  for (const r of accounts) if (r.active > 0) byDay.set(r.timestamp, r.active); // real number wins
+  return Array.from(byDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([timestamp, dau]) => ({ timestamp, dau }));
+}
+
 export default function AnalyticsPage() {
   // Per-chart timeframes - default to 24h since BULK just launched
   // Active network — added to the mount-fetch deps below so switching
@@ -948,7 +966,7 @@ export default function AnalyticsPage() {
     const fetchData = async () => {
       setChartLoading(prev => ({ ...prev, dau: true }));
       try {
-        const data = await analytics.getDailyActiveUsers(dauHours);
+        const data = await fetchDailyActiveUsers(dauHours);
         setDauData(data);
         setDauRange({ start: 0, end: 100 });
       } catch (error) {
@@ -996,7 +1014,7 @@ export default function AnalyticsPage() {
           analytics.getOIChart(oiHours),
           analytics.getFundingChart(fundingHours),
           analytics.getUniqueTradersByCoin(uniqueTradersHours),
-          analytics.getDailyActiveUsers(dauHours),
+          fetchDailyActiveUsers(dauHours),
           analytics.getCumulativeNewUsers(newUsersHours),
         ]);
 
