@@ -77,9 +77,10 @@ export function HeroKpi({
           </div>
         )}
         {/* Change % + sub always share ONE row (never stack): the % stays a
-            fixed chip and the sub truncates if space is tight, so both read on
-            the same line at the same height on every card. */}
-        <div className="mt-1 flex min-w-0 flex-row items-center gap-2 text-[11px]">
+            fixed chip and the sub truncates if space is tight. items-baseline so
+            the two texts sit on the SAME baseline — the taller ▲/▼ glyph on the
+            % span would otherwise offset it vertically from the sub text. */}
+        <div className="mt-1 flex min-w-0 flex-row items-baseline gap-2 text-[11px]">
           {changePct != null && Number.isFinite(changePct) && (
             <span className={cn('shrink-0 font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
