@@ -13,6 +13,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { HeroKpi } from '@/components/HeroKpi';
 import { ChartFrame } from '@/components/ChartFrame';
 import { ResizableChart } from '@/components/ResizableChart';
+import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { InteractiveRangeSlider, sliceByRange } from '@/components/InteractiveRangeSlider';
 import { analytics, formatCompact, type PerformanceLive, type PerformancePoint } from '@/lib/api';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -123,11 +124,12 @@ export default function NetworkPage() {
         </div>
 
         {/* Charts — each resizable (drag the bottom-right corner) with a timeline
-            brush below to pick an exact window. */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            brush below to pick an exact window. The top two share a row and
+            trade width; the reward pool spans full width. */}
+        <div className="space-y-4">
+          <ResizableChartRow storageKey="net-charts" defaultHeight={300}>
           {/* Consensus latency over time */}
           <TimelineChart
-            storageKey="net-latency"
             title="Consensus Latency"
             full={histLatency}
             emptyLabel="Latency history builds as snapshots accumulate"
@@ -135,8 +137,6 @@ export default function NetworkPage() {
             legend={[{ label: 'Median', color: 'var(--pos)' }, { label: 'p99', color: 'var(--neg)' }]}
             sliderColor="var(--pos)"
             sliderKeys={['latencyMedianMs']}
-            axis={axis}
-            isMobile={isMobile}
           >
             {(data, fmtAxis) => (
               <AreaChart data={data}>
@@ -157,7 +157,6 @@ export default function NetworkPage() {
 
           {/* Account growth */}
           <TimelineChart
-            storageKey="net-accounts"
             title="Account Growth"
             full={histAccounts}
             emptyLabel="Account history builds as snapshots accumulate"
@@ -165,8 +164,6 @@ export default function NetworkPage() {
             legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--pos)' }]}
             sliderColor="var(--role-content)"
             sliderKeys={['totalAccounts']}
-            axis={axis}
-            isMobile={isMobile}
           >
             {(data, fmtAxis) => (
               <AreaChart data={data}>
@@ -184,19 +181,17 @@ export default function NetworkPage() {
               </AreaChart>
             )}
           </TimelineChart>
+          </ResizableChartRow>
 
-          {/* Reward pool */}
-          <div className="lg:col-span-2">
+          {/* Reward pool — full width, resizable on both axes */}
+          <ResizableChart storageKey="net-reward" defaultHeight={300}>
             <TimelineChart
-              storageKey="net-reward"
               title="Reward Pool"
               full={histReward}
               emptyLabel="Reward-pool history builds as snapshots accumulate"
               yLabel="Pool"
               sliderColor="var(--role-signal-info)"
               sliderKeys={['rewardPool']}
-              axis={axis}
-              isMobile={isMobile}
             >
               {(data, fmtAxis) => (
                 <AreaChart data={data.map((p) => ({ ...p, poolUnits: p.rewardPool != null ? p.rewardPool / 1e9 : null }))}>
@@ -213,21 +208,23 @@ export default function NetworkPage() {
                 </AreaChart>
               )}
             </TimelineChart>
-          </div>
+          </ResizableChart>
         </div>
       </main>
     </div>
   );
 }
 
-// One resizable time-series card with a timeline brush under it. The brush
-// picks an index window of the full history; the chart re-renders on the sliced
-// data. `children` is a render prop that draws the recharts chart for the given
-// (sliced) data and axis formatter.
+// One time-series card with a timeline brush under it. The brush picks an index
+// window of the full history; the chart re-renders on the sliced data. The card
+// reads its body height from the `--chart-h` CSS variable, so it can be dropped
+// straight into a ResizableChartRow (two-up, share width) or a ResizableChart
+// (single, full-width) — matching the resize behaviour of the other pages.
+// `children` is a render prop that draws the recharts chart for the given
+// (sliced) data and axis formatter. `isDragging` is injected by ResizableChartRow.
 function TimelineChart({
-  storageKey, title, full, emptyLabel, yLabel, legend, sliderColor, sliderKeys, axis, isMobile, children,
+  title, full, emptyLabel, yLabel, legend, sliderColor, sliderKeys, sliderType = 'area', children, isDragging,
 }: {
-  storageKey: string;
   title: string;
   full: PerformancePoint[];
   emptyLabel: string;
@@ -235,9 +232,9 @@ function TimelineChart({
   legend?: { label: string; color: string }[];
   sliderColor: string;
   sliderKeys: string[];
-  axis: { fill: string; fontSize: number };
-  isMobile: boolean;
+  sliderType?: 'area' | 'line';
   children: (data: PerformancePoint[], fmtAxis: (ts: string) => string) => React.ReactElement;
+  isDragging?: boolean;
 }) {
   const [range, setRange] = useState<[number, number]>([0, 100]);
   const sliced = useMemo(() => sliceByRange(full, range[0], range[1]), [full, range]);
@@ -254,33 +251,31 @@ function TimelineChart({
   };
 
   return (
-    <ResizableChart storageKey={storageKey} defaultHeight={300}>
-      <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
-        <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">{title}</h3>
-        <div className="h-[var(--chart-h,300px)]">
-          {full.length < 2 ? (
-            <Empty label={emptyLabel} />
-          ) : (
-            <ChartFrame title={title} className="h-full" yLabel={yLabel} legend={legend}>
-              <ResponsiveContainer width="100%" height="100%">
-                {children(sliced, fmtAxis)}
-              </ResponsiveContainer>
-            </ChartFrame>
-          )}
-        </div>
-        {full.length >= 2 && (
-          <InteractiveRangeSlider
-            data={full}
-            chartType="area"
-            color={sliderColor}
-            dataKeys={sliderKeys}
-            rangeStart={range[0]}
-            rangeEnd={range[1]}
-            onRangeChange={(s, e) => setRange([s, e])}
-          />
+    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
+      <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">{title}</h3>
+      <div className={`h-[var(--chart-h,300px)] transition-[filter] duration-150 ${isDragging ? 'blur-[1.5px]' : ''}`}>
+        {full.length < 2 ? (
+          <Empty label={emptyLabel} />
+        ) : (
+          <ChartFrame title={title} className="h-full" yLabel={yLabel} legend={legend}>
+            <ResponsiveContainer width="100%" height="100%">
+              {children(sliced, fmtAxis)}
+            </ResponsiveContainer>
+          </ChartFrame>
         )}
       </div>
-    </ResizableChart>
+      {full.length >= 2 && (
+        <InteractiveRangeSlider
+          data={full}
+          chartType={sliderType}
+          color={sliderColor}
+          dataKeys={sliderKeys}
+          rangeStart={range[0]}
+          rangeEnd={range[1]}
+          onRangeChange={(s, e) => setRange([s, e])}
+        />
+      )}
+    </div>
   );
 }
 
