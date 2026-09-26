@@ -13,6 +13,7 @@ import { Coins, Users, Percent, TrendingUp, ArrowUpRight, ArrowDownRight, Drople
 import { formatCompact, formatNumber } from '@/lib/api';
 import { ChartFrame } from '@/components/ChartFrame';
 import { ResizableChart } from '@/components/ResizableChart';
+import { InteractiveRangeSlider, sliceByRange } from '@/components/InteractiveRangeSlider';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 type Range = '7d' | '30d' | 'all';
@@ -129,6 +130,11 @@ export default function StakingPage() {
     return out;
   }, [mergedNative, mergedLiquid]);
 
+  // Timeline brush for the TVL Over Time chart (reset when the range toggle flips).
+  const [tvlBrush, setTvlBrush] = useState<[number, number]>([0, 100]);
+  useEffect(() => { setTvlBrush([0, 100]); }, [range]);
+  const combinedTvlSliced = useMemo(() => sliceByRange(combinedTvl, tvlBrush[0], tvlBrush[1]), [combinedTvl, tvlBrush]);
+
   const net = (native?.activating ?? 0) - (native?.deactivating ?? 0);
 
   return (
@@ -182,7 +188,7 @@ export default function StakingPage() {
             <ChartFrame title="TVL Over Time" className="h-full" yLabel="SOL"
               legend={[{ label: 'Native', color: 'var(--accent)' }, { label: 'Liquid', color: 'var(--shade-1)' }]}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={combinedTvl} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
+                <AreaChart data={combinedTvlSliced} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                   <defs>
                     <linearGradient id="gradNative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0} /></linearGradient>
                     <linearGradient id="gradLiquid" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--shade-1)" stopOpacity={0.3} /><stop offset="100%" stopColor="var(--shade-1)" stopOpacity={0} /></linearGradient>
@@ -205,6 +211,18 @@ export default function StakingPage() {
             </div>
           )}
         </div>
+        {combinedTvl.length > 1 && (
+          <InteractiveRangeSlider
+            data={combinedTvl}
+            chartType="area"
+            color="var(--accent)"
+            dataKeys={['native', 'liquid']}
+            colors={{ native: 'var(--accent)', liquid: 'var(--shade-1)' }}
+            rangeStart={tvlBrush[0]}
+            rangeEnd={tvlBrush[1]}
+            onRangeChange={(s, e) => setTvlBrush([s, e])}
+          />
+        )}
         <p className="text-[10px] text-[var(--text-tertiary)] mt-2 leading-relaxed">
           Pre-launch native stake from Stakewiz per-epoch data; liquid backing before deploy is real
           BulkSOL supply × exchange rate interpolated from 1.00 at launch to the current live rate (est., &lt;1% error).

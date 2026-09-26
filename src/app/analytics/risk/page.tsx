@@ -10,6 +10,7 @@ import { TrendingUp, Activity, Gauge } from 'lucide-react';
 import { CoinSelector } from '@/components/CoinSelector';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { ChartFrame } from '@/components/ChartFrame';
+import { InteractiveRangeSlider, sliceByRange } from '@/components/InteractiveRangeSlider';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { CoinPicker } from '@/components/CoinPicker';
@@ -349,6 +350,32 @@ export default function RiskPage() {
   const [fairSpreadSymbol, setFairSpreadSymbol] = useState('BTC-USD');
   const [fairSpreadData, setFairSpreadData] = useState<{ timestamp: string; markPrice: number; fairPrice: number; spreadBps: number }[]>([]);
 
+  // Timeline brushes — pick an exact window within the coarse preset range.
+  // Reset when the preset (hours) or the selected coin(s) change so the brush
+  // never points at a window that no longer exists.
+  const [volBrush, setVolBrush] = useState<[number, number]>([0, 100]);
+  useEffect(() => { setVolBrush([0, 100]); }, [volatilityHours]);
+  const [fairSpreadBrush, setFairSpreadBrush] = useState<[number, number]>([0, 100]);
+  useEffect(() => { setFairSpreadBrush([0, 100]); }, [fairSpreadHours, fairSpreadSymbol]);
+
+  // Volatility rows normalized to {timestamp, <coin>: bps, …} for the chart and
+  // the brush preview; sliced to the brush window for the visible chart.
+  const volChartData = useMemo(() => volatilityData.map(row => {
+    const anyRow = row as any;
+    const dict = (anyRow.coins && typeof anyRow.coins === 'object')
+      ? anyRow.coins as Record<string, number>
+      : adaptLegacyRow(anyRow).coins;
+    const out: Record<string, unknown> = { timestamp: row.timestamp };
+    for (const coin of volatilityCoins) {
+      if (coin === OTHER_KEY) continue;
+      if (typeof dict[coin] === 'number') out[coin] = dict[coin] * 100;
+    }
+    return out;
+  }), [volatilityData, volatilityCoins]);
+  const volSliced = useMemo(() => sliceByRange(volChartData, volBrush[0], volBrush[1]), [volChartData, volBrush]);
+  const fairSpreadSliced = useMemo(() => sliceByRange(fairSpreadData, fairSpreadBrush[0], fairSpreadBrush[1]), [fairSpreadData, fairSpreadBrush]);
+  const volLineCoins = volatilityCoins.filter(c => c !== OTHER_KEY);
+
   // Fetch regime data (live)
   useEffect(() => {
     const fetchRegime = async () => {
@@ -640,7 +667,7 @@ export default function RiskPage() {
                   <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <ChartFrame title="Fair vs Mark Spread" className="h-full" yLabel="Spread (bps)" legend={[{ label: 'Positive', color: 'var(--pos)' }, { label: 'Negative', color: 'var(--neg)' }]}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={fairSpreadData}>
+                      <AreaChart data={fairSpreadSliced}>
                         <defs>
                           <linearGradient id="spreadGradientPos" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.3}/>
@@ -673,8 +700,8 @@ export default function RiskPage() {
                           type="monotone"
                           dataKey="spreadBps"
                           name="Spread (bps)"
-                          stroke={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'var(--pos)' : 'var(--neg)'}
-                          fill={fairSpreadData[fairSpreadData.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
+                          stroke={fairSpreadSliced[fairSpreadSliced.length - 1]?.spreadBps >= 0 ? 'var(--pos)' : 'var(--neg)'}
+                          fill={fairSpreadSliced[fairSpreadSliced.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
                           strokeWidth={2}
                         />
                       </AreaChart>
@@ -685,6 +712,17 @@ export default function RiskPage() {
                   <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No spread data yet. Data will appear as it&apos;s collected.</p>
                   </div>
+                )}
+                {fairSpreadData.length > 1 && (
+                  <InteractiveRangeSlider
+                    data={fairSpreadData}
+                    chartType="area"
+                    color="var(--accent)"
+                    dataKeys={['spreadBps']}
+                    rangeStart={fairSpreadBrush[0]}
+                    rangeEnd={fairSpreadBrush[1]}
+                    onRangeChange={(s, e) => setFairSpreadBrush([s, e])}
+                  />
                 )}
               </div>
 
@@ -720,22 +758,7 @@ export default function RiskPage() {
                   <div className="flex-1 min-h-0 relative" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <ChartFrame title="Volatility" className="h-full" yLabel="Volatility (bps)" legend={volatilityCoins.filter(c => c !== OTHER_KEY).map(c => ({ label: c, color: getCoinColor(c) }))}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={volatilityData.map(row => {
-                        // Normalize to {timestamp, coin1, coin2, ...} shape.
-                        // Backend returns both legacy top-level keys AND a `coins`
-                        // dict — prefer the dict if present, otherwise adapt.
-                        const anyRow = row as any;
-                        const dict = (anyRow.coins && typeof anyRow.coins === 'object')
-                          ? anyRow.coins as Record<string, number>
-                          : adaptLegacyRow(anyRow).coins;
-                        const out: Record<string, unknown> = { timestamp: row.timestamp };
-                        for (const coin of volatilityCoins) {
-                          if (coin === OTHER_KEY) continue;
-                          // regime_vol is percent-scaled; ×100 → basis points.
-                          if (typeof dict[coin] === 'number') out[coin] = dict[coin] * 100;
-                        }
-                        return out;
-                      })}>
+                      <LineChart data={volSliced}>
                         <XAxis
                           dataKey="timestamp"
                           tickFormatter={(ts) => formatDateForChart(ts, volatilityHours)}
@@ -773,6 +796,18 @@ export default function RiskPage() {
                   <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--text-tertiary)]" style={{ minHeight: 'var(--chart-h, 250px)' }}>
                     <p className="text-sm">No volatility data yet. Data will appear as it&apos;s collected.</p>
                   </div>
+                )}
+                {volChartData.length > 1 && (
+                  <InteractiveRangeSlider
+                    data={volChartData}
+                    chartType="line"
+                    color={volLineCoins[0] ? getCoinColor(volLineCoins[0]) : 'var(--accent)'}
+                    dataKeys={volLineCoins}
+                    colors={Object.fromEntries(volLineCoins.map(c => [c, getCoinColor(c)]))}
+                    rangeStart={volBrush[0]}
+                    rangeEnd={volBrush[1]}
+                    onRangeChange={(s, e) => setVolBrush([s, e])}
+                  />
                 )}
               </div>
             </ResizableChartRow>

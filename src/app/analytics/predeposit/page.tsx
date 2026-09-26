@@ -11,6 +11,7 @@ import { Landmark, TrendingUp, TrendingDown, Wallet, Users, Loader2 } from 'luci
 import { formatCompact, formatAddress } from '@/lib/api';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { ChartFrame } from '@/components/ChartFrame';
+import { InteractiveRangeSlider, sliceByRange } from '@/components/InteractiveRangeSlider';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -254,11 +255,16 @@ export default function PreDepositPage() {
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
-  const tvlSliced = (() => {
+  // Coarse window from the preset toggle …
+  const tvlWindow = (() => {
     if (range === 'all') return tvl;
     const days = range === '7d' ? 7 : 30;
     return tvl.slice(-days);
   })();
+  // … then a fine timeline brush over that window (reset when the toggle flips).
+  const [tvlBrush, setTvlBrush] = useState<[number, number]>([0, 100]);
+  useEffect(() => { setTvlBrush([0, 100]); }, [range]);
+  const tvlSliced = sliceByRange(tvlWindow, tvlBrush[0], tvlBrush[1]);
 
   return (
     <main className="flex-1 w-full px-4 sm:px-6 py-6 space-y-5">
@@ -357,6 +363,17 @@ export default function PreDepositPage() {
             </ChartFrame>
           )}
         </div>
+        {tvlWindow.length > 1 && (
+          <InteractiveRangeSlider
+            data={tvlWindow}
+            chartType="area"
+            color="var(--accent)"
+            dataKeys={['liveBalance']}
+            rangeStart={tvlBrush[0]}
+            rangeEnd={tvlBrush[1]}
+            onRangeChange={(s, e) => setTvlBrush([s, e])}
+          />
+        )}
       </div>
 
       {/* Wallet concentration — top 1/10/100 share. The decentralization

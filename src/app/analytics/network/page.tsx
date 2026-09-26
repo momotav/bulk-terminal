@@ -13,21 +13,12 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { HeroKpi } from '@/components/HeroKpi';
 import { ChartFrame } from '@/components/ChartFrame';
 import { ResizableChart } from '@/components/ResizableChart';
-import { InteractiveRangeSlider } from '@/components/InteractiveRangeSlider';
+import { InteractiveRangeSlider, sliceByRange } from '@/components/InteractiveRangeSlider';
 import { analytics, formatCompact, type PerformanceLive, type PerformancePoint } from '@/lib/api';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 const fmtMs = (n: number) => `${n.toFixed(2)} ms`;
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
-
-// Take an index-window [start%, end%] of a history array, always keeping at
-// least two points so the chart never collapses to a single dot.
-function sliceByRange<T>(arr: T[], start: number, end: number): T[] {
-  if (arr.length < 2) return arr;
-  const s = Math.max(0, Math.floor((start / 100) * arr.length));
-  const e = Math.min(arr.length, Math.ceil((end / 100) * arr.length));
-  return arr.slice(s, Math.max(s + 2, e));
-}
 
 export default function NetworkPage() {
   const isMobile = useIsMobile();

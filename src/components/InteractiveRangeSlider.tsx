@@ -14,6 +14,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/api';
 
+// Take an index-window [start%, end%] of a series, always keeping at least two
+// points so a chart never collapses to a single dot. Pair this with the slider:
+// the slider reports [start, end] percentages, this slices the data to them.
+export function sliceByRange<T>(arr: T[], start: number, end: number): T[] {
+  if (arr.length < 2) return arr;
+  const s = Math.max(0, Math.floor((start / 100) * arr.length));
+  const e = Math.min(arr.length, Math.ceil((end / 100) * arr.length));
+  return arr.slice(s, Math.max(s + 2, e));
+}
+
 export const InteractiveRangeSlider = ({
   data,
   color = 'var(--accent)',
