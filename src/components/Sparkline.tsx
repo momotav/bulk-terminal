@@ -56,7 +56,11 @@ export function Sparkline({ data, width: fixedWidth, height = 44, color = 'var(-
     if (pts.length < 2) return { line: '', area: '', ok: false, end: null as null | [number, number] };
     const min = Math.min(...pts);
     const max = Math.max(...pts);
-    const span = max - min || 1;
+    const range = max - min;
+    // A flat / near-flat series (constant latency, rounds) would pin the line to
+    // the bottom (norm = 0), leaving it hard to see. Centre it instead.
+    const flat = range === 0 || range < Math.abs(max) * 1e-4;
+    const span = flat ? 1 : range;
     // Insets so the peak/trough AND the end-dot halo (r≈4) always sit fully
     // inside the SVG — the KPI card clips overflow, so a dot flush to the edge
     // got half-cut on narrow (mobile) cards. Reserve room on the right for the
@@ -66,7 +70,8 @@ export function Sparkline({ data, width: fixedWidth, height = 44, color = 'var(-
     const h = height - padY * 2;
     const w = Math.max(1, width - padR);
     const step = w / (pts.length - 1);
-    const xy = pts.map((v, i) => [i * step, padY + h - ((v - min) / span) * h] as const);
+    const norm = (v: number) => (flat ? 0.5 : (v - min) / span);
+    const xy = pts.map((v, i) => [i * step, padY + h - norm(v) * h] as const);
     const line = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
     const area = `${line} L${w.toFixed(1)},${height} L0,${height} Z`;
     const last = xy[xy.length - 1];

@@ -70,9 +70,10 @@ export function HeroKpi({
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}
-        {/* Change % + sub. Stack on narrow cards (mobile) so the long L/H line
-            never collides with the % or wraps mid-value; inline on wider ones. */}
-        <div className="mt-2.5 flex flex-col gap-0.5 text-[11px] sm:flex-row sm:items-center sm:gap-2">
+        {/* Change % + sub, kept close under the number (and above the sparkline
+            backdrop). Stack on narrow cards so the long L/H line never collides
+            with the % or wraps mid-value; inline on wider ones. */}
+        <div className="mt-1 flex flex-col gap-0.5 text-[11px] sm:flex-row sm:items-center sm:gap-2">
           {changePct != null && Number.isFinite(changePct) && (
             <span className={cn('font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%

@@ -12,13 +12,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { HeroKpi } from '@/components/HeroKpi';
 import { ChartFrame } from '@/components/ChartFrame';
+import { ResizableChart } from '@/components/ResizableChart';
+import { InteractiveRangeSlider } from '@/components/InteractiveRangeSlider';
 import { analytics, formatCompact, type PerformanceLive, type PerformancePoint } from '@/lib/api';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 const fmtMs = (n: number) => `${n.toFixed(2)} ms`;
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
-// reward_pool_balance is a Solana lamport-scale integer; show it in whole units.
-const fmtPool = (n: number) => `${formatCompact(n / 1e9)}`;
+
+// Take an index-window [start%, end%] of a history array, always keeping at
+// least two points so the chart never collapses to a single dot.
+function sliceByRange<T>(arr: T[], start: number, end: number): T[] {
+  if (arr.length < 2) return arr;
+  const s = Math.max(0, Math.floor((start / 100) * arr.length));
+  const e = Math.min(arr.length, Math.ceil((end / 100) * arr.length));
+  return arr.slice(s, Math.max(s + 2, e));
+}
 
 export default function NetworkPage() {
   const isMobile = useIsMobile();
@@ -38,8 +47,22 @@ export default function NetworkPage() {
   // Sparkline series (last 40 hourly points) for the KPI cards.
   const spark = useMemo(() => {
     const tail = hist.slice(-40);
+    // Rounds/sec has no stored column — derive it from the round-height delta
+    // between consecutive snapshots so its KPI shows a real trend, not latency.
+    const rounds: number[] = [];
+    for (let i = 1; i < tail.length; i++) {
+      const a = tail[i - 1], b = tail[i];
+      if (a.roundHeight != null && b.roundHeight != null) {
+        const dt = (new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) / 1000;
+        if (dt > 0) {
+          const r = (b.roundHeight - a.roundHeight) / dt;
+          if (r >= 0 && Number.isFinite(r)) rounds.push(r);
+        }
+      }
+    }
     return {
       latency: tail.map((p) => p.latencyMedianMs ?? 0).filter((v) => v > 0),
+      rounds,
       active: tail.map((p) => p.activeAccounts ?? 0).filter((v) => v > 0),
       total: tail.map((p) => p.totalAccounts ?? 0).filter((v) => v > 0),
       reward: tail.map((p) => (p.rewardPool ?? 0) / 1e9).filter((v) => v > 0),
@@ -51,17 +74,6 @@ export default function NetworkPage() {
   const histLatency = useMemo(() => hist.filter((p) => p.latencyMedianMs != null), [hist]);
   const histAccounts = useMemo(() => hist.filter((p) => p.totalAccounts != null || p.activeAccounts != null), [hist]);
   const histReward = useMemo(() => hist.filter((p) => p.rewardPool != null), [hist]);
-
-  // Axis label: show the time when the data spans < ~36h (so a single day of
-  // hourly buckets reads "18:00, 19:00…" not "Sep 24, Sep 24…"); the date once
-  // it spans multiple days.
-  const spanHours = hist.length >= 2 ? (new Date(hist[hist.length - 1].timestamp).getTime() - new Date(hist[0].timestamp).getTime()) / 3.6e6 : 0;
-  const fmtAxis = (ts: string) => {
-    const d = new Date(ts);
-    return spanHours < 36
-      ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   const axis = { fill: 'var(--text-secondary)', fontSize: isMobile ? 10 : 12 };
   const healthy = live?.workerSaturation != null && live.workerSaturation < 0.8 && (live.queueDepth ?? 0) < 100;
@@ -95,7 +107,7 @@ export default function NetworkPage() {
             loading={live == null}
             rawValue={live?.roundsPerSec ?? 0}
             format={(n) => n.toFixed(0)}
-            series={spark.latency}
+            series={spark.rounds}
             color="var(--accent)"
             sub={live?.roundHeight != null ? `round ${fmtInt(live.roundHeight)}` : undefined}
           />
@@ -119,93 +131,165 @@ export default function NetworkPage() {
           />
         </div>
 
-        {/* Charts */}
+        {/* Charts — each resizable (drag the bottom-right corner) with a timeline
+            brush below to pick an exact window. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Consensus latency over time */}
-          <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col">
-            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Consensus Latency</h3>
-            <div className="flex-1 min-h-0">
-              {histLatency.length < 2 ? (
-                <Empty label="Latency history builds as snapshots accumulate" />
-              ) : (
-                <ChartFrame title="Consensus Latency" className="h-full" yLabel="ms" legend={[{ label: 'Median', color: 'var(--pos)' }, { label: 'p99', color: 'var(--neg)' }]}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={histLatency}>
-                      <defs>
-                        <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
-                      <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 32 : 44} domain={['auto', 'auto']} />
-                      <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [`${Number(v).toFixed(2)} ms`, n === 'latencyMedianMs' ? 'Median' : 'p99']} />
-                      <Area type="monotone" dataKey="latencyP99Ms" stroke="var(--neg)" strokeWidth={1.5} fill="none" dot={false} isAnimationActive={false} />
-                      <Area type="monotone" dataKey="latencyMedianMs" stroke="var(--pos)" strokeWidth={2} fill="url(#latGrad)" dot={false} isAnimationActive={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </ChartFrame>
-              )}
-            </div>
-          </div>
+          <TimelineChart
+            storageKey="net-latency"
+            title="Consensus Latency"
+            full={histLatency}
+            emptyLabel="Latency history builds as snapshots accumulate"
+            yLabel="ms"
+            legend={[{ label: 'Median', color: 'var(--pos)' }, { label: 'p99', color: 'var(--neg)' }]}
+            sliderColor="var(--pos)"
+            sliderKeys={['latencyMedianMs']}
+            axis={axis}
+            isMobile={isMobile}
+          >
+            {(data, fmtAxis) => (
+              <AreaChart data={data}>
+                <defs>
+                  <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 32 : 44} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [`${Number(v).toFixed(2)} ms`, n === 'latencyMedianMs' ? 'Median' : 'p99']} />
+                <Area type="monotone" dataKey="latencyP99Ms" stroke="var(--neg)" strokeWidth={1.5} fill="none" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="latencyMedianMs" stroke="var(--pos)" strokeWidth={2} fill="url(#latGrad)" dot={false} isAnimationActive={false} />
+              </AreaChart>
+            )}
+          </TimelineChart>
 
           {/* Account growth */}
-          <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col">
-            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Account Growth</h3>
-            <div className="flex-1 min-h-0">
-              {histAccounts.length < 2 ? (
-                <Empty label="Account history builds as snapshots accumulate" />
-              ) : (
-                <ChartFrame title="Account Growth" className="h-full" yLabel="Accounts" legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--pos)' }]}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={histAccounts}>
-                      <defs>
-                        <linearGradient id="totGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--role-content)" stopOpacity={0.18} />
-                          <stop offset="100%" stopColor="var(--role-content)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
-                      <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
-                      <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [fmtInt(Number(v)), n === 'totalAccounts' ? 'Total' : 'Active']} />
-                      <Area type="monotone" dataKey="totalAccounts" stroke="var(--role-content)" strokeWidth={2} fill="url(#totGrad)" dot={false} isAnimationActive={false} />
-                      <Area type="monotone" dataKey="activeAccounts" stroke="var(--pos)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </ChartFrame>
-              )}
-            </div>
-          </div>
+          <TimelineChart
+            storageKey="net-accounts"
+            title="Account Growth"
+            full={histAccounts}
+            emptyLabel="Account history builds as snapshots accumulate"
+            yLabel="Accounts"
+            legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--pos)' }]}
+            sliderColor="var(--role-content)"
+            sliderKeys={['totalAccounts']}
+            axis={axis}
+            isMobile={isMobile}
+          >
+            {(data, fmtAxis) => (
+              <AreaChart data={data}>
+                <defs>
+                  <linearGradient id="totGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--role-content)" stopOpacity={0.18} />
+                    <stop offset="100%" stopColor="var(--role-content)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [fmtInt(Number(v)), n === 'totalAccounts' ? 'Total' : 'Active']} />
+                <Area type="monotone" dataKey="totalAccounts" stroke="var(--role-content)" strokeWidth={2} fill="url(#totGrad)" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="activeAccounts" stroke="var(--pos)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
+              </AreaChart>
+            )}
+          </TimelineChart>
 
           {/* Reward pool */}
-          <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[360px] flex flex-col lg:col-span-2">
-            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Reward Pool</h3>
-            <div className="flex-1 min-h-0">
-              {histReward.length < 2 ? (
-                <Empty label="Reward-pool history builds as snapshots accumulate" />
-              ) : (
-                <ChartFrame title="Reward Pool" className="h-full" yLabel="Pool">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={histReward.map((p) => ({ ...p, poolUnits: p.rewardPool != null ? p.rewardPool / 1e9 : null }))}>
-                      <defs>
-                        <linearGradient id="poolGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--role-signal-info)" stopOpacity={0.22} />
-                          <stop offset="100%" stopColor="var(--role-signal-info)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
-                      <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
-                      <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number) => [formatCompact(Number(v)), 'Reward Pool']} />
-                      <Area type="monotone" dataKey="poolUnits" stroke="var(--role-signal-info)" strokeWidth={2} fill="url(#poolGrad)" dot={false} isAnimationActive={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </ChartFrame>
+          <div className="lg:col-span-2">
+            <TimelineChart
+              storageKey="net-reward"
+              title="Reward Pool"
+              full={histReward}
+              emptyLabel="Reward-pool history builds as snapshots accumulate"
+              yLabel="Pool"
+              sliderColor="var(--role-signal-info)"
+              sliderKeys={['rewardPool']}
+              axis={axis}
+              isMobile={isMobile}
+            >
+              {(data, fmtAxis) => (
+                <AreaChart data={data.map((p) => ({ ...p, poolUnits: p.rewardPool != null ? p.rewardPool / 1e9 : null }))}>
+                  <defs>
+                    <linearGradient id="poolGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--role-signal-info)" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="var(--role-signal-info)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
+                  <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number) => [formatCompact(Number(v)), 'Reward Pool']} />
+                  <Area type="monotone" dataKey="poolUnits" stroke="var(--role-signal-info)" strokeWidth={2} fill="url(#poolGrad)" dot={false} isAnimationActive={false} />
+                </AreaChart>
               )}
-            </div>
+            </TimelineChart>
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+// One resizable time-series card with a timeline brush under it. The brush
+// picks an index window of the full history; the chart re-renders on the sliced
+// data. `children` is a render prop that draws the recharts chart for the given
+// (sliced) data and axis formatter.
+function TimelineChart({
+  storageKey, title, full, emptyLabel, yLabel, legend, sliderColor, sliderKeys, axis, isMobile, children,
+}: {
+  storageKey: string;
+  title: string;
+  full: PerformancePoint[];
+  emptyLabel: string;
+  yLabel: string;
+  legend?: { label: string; color: string }[];
+  sliderColor: string;
+  sliderKeys: string[];
+  axis: { fill: string; fontSize: number };
+  isMobile: boolean;
+  children: (data: PerformancePoint[], fmtAxis: (ts: string) => string) => React.ReactElement;
+}) {
+  const [range, setRange] = useState<[number, number]>([0, 100]);
+  const sliced = useMemo(() => sliceByRange(full, range[0], range[1]), [full, range]);
+
+  // Axis label: time when the *visible* window spans < ~36h, date otherwise.
+  const spanHours = sliced.length >= 2
+    ? (new Date(sliced[sliced.length - 1].timestamp).getTime() - new Date(sliced[0].timestamp).getTime()) / 3.6e6
+    : 0;
+  const fmtAxis = (ts: string) => {
+    const d = new Date(ts);
+    return spanHours < 36
+      ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <ResizableChart storageKey={storageKey} defaultHeight={300}>
+      <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
+        <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">{title}</h3>
+        <div className="h-[var(--chart-h,300px)]">
+          {full.length < 2 ? (
+            <Empty label={emptyLabel} />
+          ) : (
+            <ChartFrame title={title} className="h-full" yLabel={yLabel} legend={legend}>
+              <ResponsiveContainer width="100%" height="100%">
+                {children(sliced, fmtAxis)}
+              </ResponsiveContainer>
+            </ChartFrame>
+          )}
+        </div>
+        {full.length >= 2 && (
+          <InteractiveRangeSlider
+            data={full}
+            chartType="area"
+            color={sliderColor}
+            dataKeys={sliderKeys}
+            rangeStart={range[0]}
+            rangeEnd={range[1]}
+            onRangeChange={(s, e) => setRange([s, e])}
+          />
+        )}
+      </div>
+    </ResizableChart>
   );
 }
 
