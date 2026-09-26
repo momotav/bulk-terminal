@@ -86,7 +86,7 @@ export default function NetworkPage() {
         {/* KPI row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <HeroKpi
-            label="Consensus Latency · median"
+            label="Consensus Latency"
             loading={live == null}
             rawValue={live?.latencyMedianMs ?? 0}
             format={fmtMs}

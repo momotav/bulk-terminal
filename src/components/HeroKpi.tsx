@@ -62,15 +62,17 @@ export function HeroKpi({
         </div>
       )}
       <div className="relative z-10 pr-16">
-        {/* Fixed two-line height so a long label that wraps (e.g. "Consensus
-            Latency · median") and a short one-line label both reserve the same
-            space — the number and sub-line then start at the same Y on every
-            card, so the secondary text is level across the whole KPI row. */}
-        <div className="flex h-[30px] items-start gap-1.5 overflow-hidden text-[11px] font-medium leading-[15px] text-[var(--role-content-subtle)]">{label}</div>
+        {/* Label is kept to a single line (truncated if long) so the number sits
+            tight beneath it AND starts at the same Y on every card — the label
+            never wraps to push the number/sub-line down on some cards but not
+            others, so the secondary text stays level across the whole KPI row. */}
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">
+          <span className="truncate">{label}</span>
+        </div>
         {loading ? (
-          <div className="mt-1 h-[32px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
+          <div className="mt-1.5 h-[32px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
         ) : (
-          <div className="mt-1 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
+          <div className="mt-1.5 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}
