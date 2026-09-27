@@ -98,10 +98,10 @@ export function useTickers() {
 }
 
 // Open interest arrives denominated in the base coin. Multiplying by mark
-// price gives the USD notional. BULK reports ONE-SIDED OI, so we ×2 for the
-// two-sided (long+short) total that every OI figure on the site shows.
+// price gives the USD notional. BULK now reports the full OI directly
+// (confirmed by the BULK dev 2026-09-27), so we display it as-is — no ×2.
 export function openInterestUsd(t: BulkTicker): number {
-  return t.openInterest * (t.markPrice || t.lastPrice) * 2;
+  return t.openInterest * (t.markPrice || t.lastPrice);
 }
 
 // Price formatting has to span BTC at ~66,000 and FARTCOIN at fractions of

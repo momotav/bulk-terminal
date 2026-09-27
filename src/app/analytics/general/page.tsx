@@ -517,8 +517,9 @@ export default function AnalyticsPage() {
             totalOI += oi * mark;
           }
         }
-        // BULK reports one-sided OI; ×2 for the two-sided (long+short) total.
-        setLiveOI(totalOI * 2);
+        // BULK now reports the full OI directly (confirmed by the BULK dev
+        // 2026-09-27), so we display it as-is — no more ×2 two-sided adjustment.
+        setLiveOI(totalOI);
       } catch (error) {
         console.error('Failed to fetch live OI:', error);
       }

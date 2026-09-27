@@ -91,8 +91,9 @@ export function ExchangeHealthStats() {
           
           setStats({
             volume24h,
-            // BULK reports one-sided OI; ×2 for the two-sided (long+short) total.
-            openInterest: openInterest * 2,
+            // BULK now reports the full OI directly (confirmed by the BULK dev
+            // 2026-09-27) — display it as-is, no more ×2 two-sided adjustment.
+            openInterest,
             activeTraders: 0, // Not available from BULK API directly
             liquidations24h: 0,
             timestamp: bulkData.timestamp || Date.now(),
