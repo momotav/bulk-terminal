@@ -86,10 +86,6 @@
      shades, coins, info) — it never touches the shell. */
   --p-bg: 20 19 16;          /* #141310 page */
   --p-surface: 27 26 19;     /* #1B1A13 panels / charts / cards */
-  /* Vertical surface gradient (top→bottom) layered on cards/panels/charts for
-     a touch of depth. Dark: #2C2B21 (top) → #1B1A13 (bottom = --p-surface). */
-  --surface-grad-top: 44 43 33;     /* #2C2B21 */
-  --surface-grad-bottom: 27 26 19;  /* #1B1A13 */
   --p-inset: 18 17 15;       /* #12110F recessed wells inside a panel (gauges) */
   --p-raise: 84 74 76;       /* #544A4C hover / secondary */
   --p-text: 255 254 239;     /* #FFFEEF primary text */
@@ -119,9 +115,6 @@
   /* ─── LAYER 2 · ROLES (palette-agnostic API — prefer these) ─── */
   --role-background: rgb(var(--p-bg));
   --role-surface: rgb(var(--p-surface));
-  /* Resolved once here; the stop tokens are overridden per theme (light below),
-     and var() substitution re-resolves this on each element per active theme. */
-  --surface-gradient: linear-gradient(180deg, rgb(var(--surface-grad-top)) 0%, rgb(var(--surface-grad-bottom)) 100%);
   --role-surface-raised: rgb(var(--p-raise) / 0.2);
   --role-content: rgb(var(--p-text));
   --role-content-muted: rgb(var(--p-text2));
@@ -285,9 +278,6 @@
 .light, [data-theme="light"] {
   --p-bg: 237 236 227;       /* #EDECE3 page */
   --p-surface: 249 248 237;  /* #F9F8ED panels */
-  /* Light surface gradient: #F9F8ED (top = --p-surface) → #FAF7D2 (bottom). */
-  --surface-grad-top: 249 248 237;    /* #F9F8ED */
-  --surface-grad-bottom: 250 247 210; /* #FAF7D2 */
   --p-inset: 228 227 216;    /* #E4E3D8 recessed wells (a shade below the light page) */
   --p-raise: 198 182 186;    /* #C6B6BA hover / secondary */
   --p-text: 27 26 20;        /* #1B1A14 primary text */
@@ -377,9 +367,6 @@
      is defined entirely by the 1px line around it. */
   .glass-card {
     background-color: var(--bg-muted);
-    /* Subtle top→bottom depth gradient over the flat fill (the flat color
-       stays for the smooth theme-switch transition + any transparency). */
-    background-image: var(--surface-gradient);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     @apply overflow-hidden;
@@ -666,7 +653,6 @@
   /* Stats card styles like BULK testnet */
   .stat-card {
     background-color: var(--bg-muted);
-    background-image: var(--surface-gradient);
     border: 1px solid var(--border-color);
     @apply rounded-lg px-4 py-3;
     transition: background-color 0.3s ease, border-color 0.3s ease;
@@ -1057,17 +1043,7 @@ html.light .trade-cta {
 .stat-card-interactive:hover {
   transform: translateY(-2px);
   border-color: var(--role-content-subtle);
-  /* Brighten (dark) / deepen (light) on hover by layering a faint text-tinted
-     wash OVER the surface gradient, so the hover feedback survives the gradient
-     that now covers the flat background-color. */
-  background-image: linear-gradient(0deg, rgb(var(--p-text) / 0.07), rgb(var(--p-text) / 0.07)), var(--surface-gradient);
-}
-
-/* Inline surface cards (charts / panels / info blocks that use
-   `bg-[var(--role-surface)]`) get the same top→bottom depth gradient. Sets
-   background-image only, so the utility's background-color stays underneath. */
-.bg-\[var\(--role-surface\)\] {
-  background-image: var(--surface-gradient);
+  background-color: color-mix(in srgb, var(--role-surface) 92%, var(--role-content));
 }
 
 @media (prefers-reduced-motion: reduce) {
