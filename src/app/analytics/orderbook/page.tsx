@@ -1311,6 +1311,15 @@ export default function OrderBookPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const lastFetchedCoinRef = useRef<Market | null>(null);
 
+  // Deep-link support for the ⌘K command palette, which links markets here as
+  // /analytics/orderbook?coin=SYMBOL. Read it client-side on mount (no
+  // useSearchParams, so the static route needs no Suspense boundary) and
+  // preselect the coin when it looks like a valid market symbol.
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('coin');
+    if (c && /^[A-Z0-9]+-USD$/.test(c)) setCoin(c as Market);
+  }, []);
+
   const fetchBook = useCallback(async (target: Market, resetLoading: boolean) => {
     if (resetLoading) setInitialLoading(true);
     try {

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { User, LogOut, Menu, X, ChevronDown, Wallet, Users, Mail } from 'lucide-react';
+import { User, LogOut, Menu, X, ChevronDown, Wallet, Users, Mail, Search } from 'lucide-react';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
 import { useStore } from '@/store';
 import { userApi } from '@/lib/api';
@@ -252,6 +252,19 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Global search — opens the ⌘K command palette (search pages,
+                markets, wallets from anywhere). Full pill on sm+, icon on mobile. */}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event('bulkstats:open-command'))}
+              aria-label="Search (⌘K)"
+              className="flex items-center gap-2 rounded border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary-20)] hover:text-[var(--text-primary)]"
+            >
+              <Search className="h-4 w-4" />
+              <span className="hidden text-sm text-[var(--text-tertiary)] sm:inline">Search</span>
+              <kbd className="hidden rounded border border-[var(--border-color)] px-1.5 py-0.5 text-[10px] font-medium sm:inline">⌘K</kbd>
+            </button>
+
             {/* Theme Toggle - hidden on mobile */}
             <div className="hidden sm:block">
               <AppearanceMenu />

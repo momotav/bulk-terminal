@@ -5,6 +5,7 @@ import './globals.css';
 import { PrivyProvider } from '@/components/PrivyProvider';
 import { Header } from '@/components/Header';
 import { DevnetBanner } from '@/components/DevnetBanner';
+import { CommandPalette } from '@/components/CommandPalette';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -77,6 +78,7 @@ export default function RootLayout({
         <PrivyProvider>
           <div className="min-h-screen flex flex-col">
             <Header />
+            <CommandPalette />
             <DevnetBanner />
             <main className="flex-1">
               {children}
