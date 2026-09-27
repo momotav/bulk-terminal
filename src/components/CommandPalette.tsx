@@ -14,20 +14,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, CornerDownLeft } from 'lucide-react';
+import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, BarChart3, CornerDownLeft } from 'lucide-react';
 import { userApi, formatAddress, formatCompact, cn, type UserSearchResult } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
+// Top-level destinations — plain names, no "Analytics · " prefix.
 const PAGES: { label: string; href: string; hint?: string }[] = [
   { label: 'Dashboard', href: '/', hint: 'Overview' },
-  { label: 'Analytics · General', href: '/analytics/general', hint: 'Volume · OI · Funding' },
-  { label: 'Analytics · Liquidations', href: '/analytics/liquidations' },
-  { label: 'Analytics · Risk', href: '/analytics/risk', hint: 'Spread · Volatility · Margin' },
-  { label: 'Analytics · Staking', href: '/analytics/staking' },
-  { label: 'Analytics · Pre-Deposit', href: '/analytics/predeposit' },
-  { label: 'Analytics · Network', href: '/analytics/network', hint: 'Sequencer performance' },
+  { label: 'Analytics', href: '/analytics/general', hint: 'Volume · OI · Funding · Trades' },
+  { label: 'Liquidations', href: '/analytics/liquidations' },
+  { label: 'Risk', href: '/analytics/risk', hint: 'Spread · Volatility · Margin' },
+  { label: 'Staking', href: '/analytics/staking' },
+  { label: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Network', href: '/analytics/network', hint: 'Sequencer performance' },
   { label: 'Order Book', href: '/analytics/orderbook', hint: 'Depth · Slippage' },
   { label: 'Leaderboard', href: '/leaderboard' },
   { label: 'Whale Tracker', href: '/whales' },
@@ -36,10 +37,60 @@ const PAGES: { label: string; href: string; hint?: string }[] = [
   { label: 'Profile', href: '/profile' },
 ];
 
+// Individual charts & tools, searchable by name (each jumps to the page it
+// lives on). Names match the on-page headings.
+const CHARTS: { label: string; href: string; on: string }[] = [
+  // Analytics (general)
+  { label: 'Total Volume', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Open Interest', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Funding Rate', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Number of Trades', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Auto-Deleveraging (ADL)', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Daily Active Users', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Cumulative New Users', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Unique Traders by Coin', on: 'Analytics', href: '/analytics/general' },
+  { label: 'Protocol Revenue', on: 'Analytics', href: '/analytics/general' },
+  // Liquidations
+  { label: 'Total Liquidations', on: 'Liquidations', href: '/analytics/liquidations' },
+  { label: 'Liquidation Heatmap', on: 'Liquidations', href: '/analytics/liquidations' },
+  // Risk
+  { label: 'Market Regime', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Fair vs Mark Spread', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Volatility History', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Volatility Heatmap', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Correlation Matrix', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Margin Surface', on: 'Risk', href: '/analytics/risk' },
+  { label: 'Portfolio Margin', on: 'Risk', href: '/analytics/risk' },
+  // Staking
+  { label: 'TVL Over Time', on: 'Staking', href: '/analytics/staking' },
+  { label: 'Native vs Liquid Share', on: 'Staking', href: '/analytics/staking' },
+  { label: 'Validator Distribution', on: 'Staking', href: '/analytics/staking' },
+  { label: 'Wallet Distribution', on: 'Staking', href: '/analytics/staking' },
+  { label: 'Stakes vs Unstakes', on: 'Staking', href: '/analytics/staking' },
+  // Pre-Deposit
+  { label: 'TVL History', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Daily Deposits / Withdrawals', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'New Depositors per Day', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Net Flow per Day', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Withdrawal Rate', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Deposit Size Trend', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Cohort Analysis', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Gini Coefficient', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  { label: 'Deposit Heatmap', on: 'Pre-Deposit', href: '/analytics/predeposit' },
+  // Network
+  { label: 'Consensus Latency', on: 'Network', href: '/analytics/network' },
+  { label: 'Account Growth', on: 'Network', href: '/analytics/network' },
+  { label: 'Reward Pool', on: 'Network', href: '/analytics/network' },
+  // Order Book
+  { label: 'Order Book Depth', on: 'Order Book', href: '/analytics/orderbook' },
+  { label: 'Slippage & Impact', on: 'Order Book', href: '/analytics/orderbook' },
+];
+
 type Market = { symbol: string; lastPrice: number; changePct: number };
 
 type Row =
   | { kind: 'page'; key: string; label: string; sub?: string; href: string }
+  | { kind: 'chart'; key: string; label: string; sub?: string; href: string }
   | { kind: 'market'; key: string; label: string; sub?: string; symbol: string }
   | { kind: 'wallet'; key: string; label: string; sub?: string; address: string; avatar?: string };
 
@@ -133,10 +184,13 @@ export function CommandPalette() {
     const pages = (q
       ? PAGES.filter((p) => p.label.toLowerCase().includes(q) || p.hint?.toLowerCase().includes(q) || p.href.includes(q))
       : PAGES
-    ).slice(0, q ? 6 : PAGES.length);
+    ).slice(0, q ? 5 : PAGES.length);
     for (const p of pages) out.push({ kind: 'page', key: `p:${p.href}`, label: p.label, sub: p.hint, href: p.href });
 
     if (q) {
+      const ch = CHARTS.filter((c) => c.label.toLowerCase().includes(q) || c.on.toLowerCase().includes(q)).slice(0, 8);
+      for (const c of ch) out.push({ kind: 'chart', key: `c:${c.label}`, label: c.label, sub: `Chart · ${c.on}`, href: c.href });
+
       const mk = markets.filter((m) => m.symbol.toLowerCase().includes(q)).slice(0, 6);
       for (const m of mk) {
         out.push({ kind: 'market', key: `m:${m.symbol}`, label: m.symbol, sub: `$${formatCompact(m.lastPrice)} · ${m.changePct >= 0 ? '+' : ''}${m.changePct.toFixed(2)}%`, symbol: m.symbol });
@@ -158,7 +212,7 @@ export function CommandPalette() {
 
   const go = useCallback((row: Row) => {
     setOpen(false);
-    if (row.kind === 'page') router.push(row.href);
+    if (row.kind === 'page' || row.kind === 'chart') router.push(row.href);
     else if (row.kind === 'market') router.push(`/analytics/orderbook?coin=${encodeURIComponent(row.symbol)}`);
     else router.push(`/whales/${row.address}`);
   }, [router]);
@@ -179,7 +233,7 @@ export function CommandPalette() {
 
   // Section boundaries for headers (first row of each kind gets a label).
   const firstOf = (kind: Row['kind']) => rows.findIndex((r) => r.kind === kind);
-  const firstPage = firstOf('page'), firstMarket = firstOf('market'), firstWallet = firstOf('wallet');
+  const firstPage = firstOf('page'), firstChart = firstOf('chart'), firstMarket = firstOf('market'), firstWallet = firstOf('wallet');
 
   return (
     <div
@@ -213,6 +267,7 @@ export function CommandPalette() {
             rows.map((row, i) => (
               <div key={row.key}>
                 {i === firstPage && <SectionLabel>Pages</SectionLabel>}
+                {i === firstChart && <SectionLabel>Charts &amp; Tools</SectionLabel>}
                 {i === firstMarket && <SectionLabel>Markets</SectionLabel>}
                 {i === firstWallet && <SectionLabel>Wallets</SectionLabel>}
                 <button
@@ -266,5 +321,6 @@ function RowIcon({ row }: { row: Row }) {
       : <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--role-content-subtle)]')}><WalletIcon className="h-3.5 w-3.5" /></span>;
   }
   if (row.kind === 'market') return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--pos)]')}><TrendingUp className="h-3.5 w-3.5" /></span>;
+  if (row.kind === 'chart') return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--accent)]')}><BarChart3 className="h-3.5 w-3.5" /></span>;
   return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--role-content-subtle)]')}><LayoutGrid className="h-3.5 w-3.5" /></span>;
 }
