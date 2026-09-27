@@ -74,7 +74,7 @@ export function HeroKpi({
         {loading ? (
           <div className="mt-1.5 h-[32px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
         ) : (
-          <div className={cn('mt-1.5 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]', hasToggle && 'pr-16')}>
+          <div className={cn('mt-1.5 text-[32px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]', hasToggle && 'pr-16')}>
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}

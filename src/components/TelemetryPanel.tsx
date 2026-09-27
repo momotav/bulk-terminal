@@ -94,7 +94,7 @@ export function TelemetryPanel() {
       {/* Headline value */}
       <div className="px-4 pt-3">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]" style={{ color: active.color }}>
+          <span className="text-[32px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]" style={{ color: active.color }}>
             <AnimatedNumber value={value} format={(n) => fmtRate(n, active.unit)} />
           </span>
           <span className="text-sm font-medium text-[var(--role-content-subtle)]">{active.unit}</span>
