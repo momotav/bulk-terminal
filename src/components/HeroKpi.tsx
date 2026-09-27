@@ -43,6 +43,7 @@ export function HeroKpi({
   mode, onToggle,
 }: HeroKpiProps) {
   const clickable = !!onClick;
+  const hasToggle = !!(mode && onToggle);
   return (
     <div
       role={clickable ? 'button' : undefined}
@@ -61,32 +62,34 @@ export function HeroKpi({
           <Sparkline data={series} color={color} height={86} className="h-full w-full" />
         </div>
       )}
-      <div className="relative z-10 pr-16">
-        {/* Label is kept to a single line (truncated if long) so the number sits
-            tight beneath it AND starts at the same Y on every card — the label
-            never wraps to push the number/sub-line down on some cards but not
-            others, so the secondary text stays level across the whole KPI row. */}
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]">
+      <div className="relative z-10">
+        {/* Only reserve room on the right for the toggle when there IS one —
+            otherwise the sub-line loses ~64px for nothing and gets truncated on
+            narrow (phone) cards. The reserve sits on the label/number rows,
+            which the top-right toggle overlaps; the sub-row (below it) is free
+            to use the card's full width. */}
+        <div className={cn('flex items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-subtle)]', hasToggle && 'pr-16')}>
           <span className="truncate">{label}</span>
         </div>
         {loading ? (
           <div className="mt-1.5 h-[32px] w-28 animate-pulse rounded bg-[var(--role-surface-raised)]" />
         ) : (
-          <div className="mt-1.5 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]">
+          <div className={cn('mt-1.5 text-[32px] font-bold font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)]', hasToggle && 'pr-16')}>
             <AnimatedNumber value={rawValue} format={format} />
           </div>
         )}
-        {/* Change % + sub always share ONE row (never stack): the % stays a
-            fixed chip and the sub truncates if space is tight. items-baseline so
-            the two texts sit on the SAME baseline — the taller ▲/▼ glyph on the
-            % span would otherwise offset it vertically from the sub text. */}
-        <div className="mt-1 flex min-w-0 flex-row items-baseline gap-2 text-[11px]">
+        {/* Change % + sub share ONE row when it fits (desktop) and the sub wraps
+            to its own full-width line when the card is too narrow (phone) — so
+            the full L/H text is always visible, never truncated. items-baseline
+            so the two texts sit on the SAME baseline (the taller ▲/▼ glyph would
+            otherwise offset the % span vertically from the sub text). */}
+        <div className="mt-1 flex flex-row flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
           {changePct != null && Number.isFinite(changePct) && (
             <span className={cn('shrink-0 font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
             </span>
           )}
-          {sub != null && <span className="truncate text-[var(--role-content-subtle)]">{sub}</span>}
+          {sub != null && <span className="whitespace-nowrap text-[var(--role-content-subtle)]">{sub}</span>}
         </div>
       </div>
 
