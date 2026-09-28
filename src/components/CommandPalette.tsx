@@ -221,9 +221,18 @@ export function CommandPalette() {
 
   const go = useCallback((row: Row) => {
     setOpen(false);
-    if (row.kind === 'page' || row.kind === 'chart') router.push(row.href);
-    else if (row.kind === 'market') router.push(`/analytics/orderbook?coin=${encodeURIComponent(row.symbol)}`);
-    else router.push(`/whales/${row.address}`);
+    if (row.kind === 'chart') {
+      // Navigate to the page (with ?focus= for deep-link/reload) AND fire an
+      // event so ChartFocuser smooth-scrolls to the chart in same-session nav.
+      router.push(`${row.href}?focus=${encodeURIComponent(row.label)}`);
+      window.dispatchEvent(new CustomEvent('bulkstats:focus-chart', { detail: { title: row.label } }));
+    } else if (row.kind === 'page') {
+      router.push(row.href);
+    } else if (row.kind === 'market') {
+      router.push(`/analytics/orderbook?coin=${encodeURIComponent(row.symbol)}`);
+    } else {
+      router.push(`/whales/${row.address}`);
+    }
   }, [router]);
 
   const onInputKey = (e: React.KeyboardEvent) => {

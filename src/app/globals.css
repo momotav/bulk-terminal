@@ -992,6 +992,16 @@ html.light .trade-cta {
   .animate-modal-backdrop, .animate-modal-panel { animation: none; }
 }
 
+/* Brief accent ring when the command palette scrolls to a chart, so the eye
+   lands on the right panel after the smooth scroll. */
+@keyframes chart-focus-flash {
+  0%   { box-shadow: 0 0 0 0 rgb(var(--accent-rgb) / 0); }
+  25%  { box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.7); }
+  100% { box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0); }
+}
+.chart-focus-flash { animation: chart-focus-flash 1.6s var(--ease-out) both; border-radius: var(--radius-md); }
+@media (prefers-reduced-motion: reduce) { .chart-focus-flash { animation: none; } }
+
 /* Order-book row value change flash + smooth depth-bar width. */
 @keyframes ob-flash-up { 0% { background-color: rgb(var(--pos-rgb) / 0.18); } 100% { background-color: transparent; } }
 @keyframes ob-flash-down { 0% { background-color: rgb(var(--neg-rgb) / 0.18); } 100% { background-color: transparent; } }

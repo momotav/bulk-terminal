@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ChartFocuser } from '@/components/ChartFocuser';
 
 const menuItems = [
   {
@@ -67,6 +68,8 @@ export default function AnalyticsLayout({
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Smooth-scrolls to a chart when the command palette asks for one. */}
+      <ChartFocuser />
       {/* Desktop Sidebar */}
       <aside className={`hidden md:block flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)] transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-56'}`}>
         <div className="sticky top-14 pt-6 pb-4">
