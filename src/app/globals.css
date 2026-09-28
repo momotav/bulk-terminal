@@ -115,6 +115,11 @@
   /* ─── LAYER 2 · ROLES (palette-agnostic API — prefer these) ─── */
   --role-background: rgb(var(--p-bg));
   --role-surface: rgb(var(--p-surface));
+  /* Subtle top→bottom depth on cards/panels/charts: the surface colour at the
+     top fading to the page background at the bottom. Built from the existing
+     per-theme primitives, so it resolves correctly in dark (#1B1A13→#141310)
+     and light (#F9F8ED→#EDECE3) with no extra tokens. */
+  --surface-gradient: linear-gradient(180deg, rgb(var(--p-surface)) 0%, rgb(var(--p-bg)) 100%);
   --role-surface-raised: rgb(var(--p-raise) / 0.2);
   --role-content: rgb(var(--p-text));
   --role-content-muted: rgb(var(--p-text2));
@@ -367,6 +372,9 @@
      is defined entirely by the 1px line around it. */
   .glass-card {
     background-color: var(--bg-muted);
+    /* Subtle surface→page-bg depth gradient over the flat fill (flat colour
+       stays for the theme-switch transition + any transparency). */
+    background-image: var(--surface-gradient);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     @apply overflow-hidden;
@@ -653,6 +661,7 @@
   /* Stats card styles like BULK testnet */
   .stat-card {
     background-color: var(--bg-muted);
+    background-image: var(--surface-gradient);
     border: 1px solid var(--border-color);
     @apply rounded-lg px-4 py-3;
     transition: background-color 0.3s ease, border-color 0.3s ease;
@@ -1053,7 +1062,16 @@ html.light .trade-cta {
 .stat-card-interactive:hover {
   transform: translateY(-2px);
   border-color: var(--role-content-subtle);
-  background-color: color-mix(in srgb, var(--role-surface) 92%, var(--role-content));
+  /* Brighten on hover by layering a faint text-tinted wash OVER the surface
+     gradient, so the hover feedback survives the gradient background. */
+  background-image: linear-gradient(0deg, rgb(var(--p-text) / 0.05), rgb(var(--p-text) / 0.05)), var(--surface-gradient);
+}
+
+/* Inline surface cards (charts / panels that use `bg-[var(--role-surface)]`)
+   get the same depth gradient — background-image only, so the utility's
+   background-color stays underneath. */
+.bg-\[var\(--role-surface\)\] {
+  background-image: var(--surface-gradient);
 }
 
 @media (prefers-reduced-motion: reduce) {

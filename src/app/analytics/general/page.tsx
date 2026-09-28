@@ -90,7 +90,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   };
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
+    <div className="bg-[var(--bg-overlay)] backdrop-blur-md border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-[var(--text-secondary)] mb-2 border-b border-[var(--border-color)] pb-2">{formattedDate}</p>
       {payload.map((entry: any, i: number) => {
         // Detect "count" vs "USD" series. Named specials (newUsers, cumulative,
@@ -135,7 +135,7 @@ const UserStatsTooltip = ({ active, payload, label }: any) => {
   };
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
+    <div className="bg-[var(--bg-overlay)] backdrop-blur-md border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-[var(--text-secondary)] mb-2 border-b border-[var(--border-color)] pb-2">{formattedDate}</p>
       {payload.map((entry: any, i: number) => (
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
@@ -156,7 +156,7 @@ const FundingTooltip = ({ active, payload, label }: any) => {
   const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
+    <div className="bg-[var(--bg-overlay)] backdrop-blur-md border border-[var(--border-color)] rounded-lg p-3 shadow-xl min-w-[160px]">
       <p className="text-xs text-[var(--text-secondary)] mb-2 border-b border-[var(--border-color)] pb-2">{formattedDate}</p>
       {payload.filter((e: any) => e.value !== null).map((entry: any, i: number) => (
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
