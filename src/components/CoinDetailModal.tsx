@@ -10,10 +10,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  createChart, ColorType, type IChartApi, type ISeriesApi,
-  type CandlestickData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
+  createChart, ColorType, PriceScaleMode, LineStyle, type IChartApi, type ISeriesApi,
+  type CandlestickData, type LineData, type UTCTimestamp, type WhitespaceData, type IPriceLine,
 } from 'lightweight-charts';
-import { X } from 'lucide-react';
+import { X, Maximize2, Minimize2, LineChart as LineChartIcon } from 'lucide-react';
 import { analytics, cn, formatCompact, formatAddress, marketStreamUrl, type Candle, type OrderbookSnapshot, type MarketTrade, type MarketLiquidation } from '@/lib/api';
 import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
@@ -60,6 +60,14 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
   // Pixel position of the floating B/S badge (trades only; liquidations use just
   // the price line + right-axis label).
   const [markerPos, setMarkerPos] = useState<{ x: number; y: number } | null>(null);
+  // --- TradingView-style chart tools ---
+  // OHLC readout: the bar under the crosshair (or the latest bar when idle).
+  const [ohlc, setOhlc] = useState<{ o: number; h: number; l: number; c: number } | null>(null);
+  const [logScale, setLogScale] = useState(false);   // log vs linear price axis
+  const [fullscreen, setFullscreen] = useState(false); // expand the modal panel
+  const [showMA, setShowMA] = useState(false);        // moving-average overlays
+  const ma7Ref = useRef<ISeriesApi<'Line'> | null>(null);
+  const ma25Ref = useRef<ISeriesApi<'Line'> | null>(null);
   // Live pixel position of the pinned marker (DOM overlay, so we can place it
   // exactly on the price and float it above the candle, unlike native markers).
 
@@ -251,11 +259,50 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       wickUpColor: pos, wickDownColor: neg,
       priceFormat: { type: 'price', precision: prec, minMove: Math.pow(10, -prec) },
     });
+    // OHLC readout — update from the bar under the crosshair on hover, and fall
+    // back to the latest bar when the pointer leaves the chart.
+    const candleSeries = seriesRef.current;
+    chart.subscribeCrosshairMove((param) => {
+      const bar = candleSeries ? param.seriesData.get(candleSeries) as CandlestickData | undefined : undefined;
+      if (bar && bar.open != null) setOhlc({ o: bar.open, h: bar.high, l: bar.low, c: bar.close });
+      else setOhlc(null); // null → header shows the latest bar
+    });
+
     const resize = () => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     const obs = new ResizeObserver(resize);
     obs.observe(container);
-    return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
+    return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; ma7Ref.current = null; ma25Ref.current = null; };
   }, [symbol, chartView, isMobile]);
+
+  // Log vs linear price axis.
+  useEffect(() => {
+    if (chartView !== 'chart') return;
+    chartRef.current?.priceScale('right').applyOptions({ mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal });
+  }, [logScale, chartView]);
+
+  // Moving-average overlays (SMA 7 & 25) — lazily created, fed from the candles,
+  // and cleared when toggled off. A classic, low-noise indicator pair.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || chartView !== 'chart') return;
+    const clear = (ref: React.MutableRefObject<ISeriesApi<'Line'> | null>) => {
+      if (ref.current) { try { chart.removeSeries(ref.current); } catch { /* gone */ } ref.current = null; }
+    };
+    if (!showMA) { clear(ma7Ref); clear(ma25Ref); return; }
+    const sma = (period: number): LineData[] => {
+      const out: LineData[] = [];
+      for (let i = period - 1; i < plotted.length; i++) {
+        let sum = 0;
+        for (let j = i - period + 1; j <= i; j++) sum += plotted[j].c;
+        out.push({ time: Math.floor(plotted[i].t / 1000) as UTCTimestamp, value: sum / period });
+      }
+      return out;
+    };
+    if (!ma7Ref.current) ma7Ref.current = chart.addLineSeries({ color: 'rgba(240, 185, 11, 0.9)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    if (!ma25Ref.current) ma25Ref.current = chart.addLineSeries({ color: 'rgba(129, 140, 248, 0.9)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    ma7Ref.current.setData(sma(7));
+    ma25Ref.current.setData(sma(25));
+  }, [showMA, plotted, chartView]);
 
   // Push candle data whenever it changes (or when returning to the Chart view).
   useEffect(() => {
@@ -380,11 +427,19 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
 
   return createPortal(
     <div
-      className="animate-modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-3 backdrop-blur-md sm:p-6"
+      className={cn(
+        'animate-modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-md',
+        fullscreen ? 'p-0' : 'p-3 sm:p-6',
+      )}
       onMouseDown={(e) => { backdropDown.current = e.target === e.currentTarget; }}
       onMouseUp={(e) => { if (backdropDown.current && e.target === e.currentTarget) onClose(); backdropDown.current = false; }}
     >
-      <div className="animate-modal-panel flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl">
+      <div className={cn(
+        'animate-modal-panel flex flex-col overflow-hidden border border-[var(--role-line)] bg-[var(--role-surface)] shadow-2xl',
+        fullscreen
+          ? 'h-full max-h-none w-full max-w-none rounded-none'
+          : 'h-full max-h-[92vh] w-full max-w-[1400px] rounded-[var(--radius-lg)]',
+      )}>
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar">
           <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* ---- Left: header stats + candlestick chart ---- */}
@@ -430,6 +485,37 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
               ))}
             </div>
             <div className="flex shrink-0 items-center gap-3 text-sm font-semibold">
+              {/* Chart tools (chart view only): indicators, log scale, fullscreen. */}
+              {chartView === 'chart' && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setShowMA((s) => !s)}
+                    title="Moving averages (SMA 7 · 25)"
+                    aria-pressed={showMA}
+                    className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold transition-colors',
+                      showMA ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+                  >
+                    <LineChartIcon className="h-3.5 w-3.5" /> MA
+                  </button>
+                  <button
+                    onClick={() => setLogScale((s) => !s)}
+                    title="Logarithmic price scale"
+                    aria-pressed={logScale}
+                    className={cn('flex h-7 items-center rounded-md px-2 text-[11px] font-semibold transition-colors',
+                      logScale ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+                  >
+                    log
+                  </button>
+                  <button
+                    onClick={() => setFullscreen((s) => !s)}
+                    title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--role-content-subtle)] transition-colors hover:bg-[var(--bg-secondary-20)] hover:text-[var(--role-content)]"
+                  >
+                    {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  </button>
+                  <span className="mx-1 h-4 w-px bg-[var(--role-line)]" />
+                </div>
+              )}
               {(['chart', 'depth', 'margin'] as const).map((v) => (
                 <button
                   key={v}
@@ -446,6 +532,26 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
           <div className="relative min-h-[360px] flex-1 px-2 pb-2 lg:min-h-0">
             {chartView === 'chart' && (
               <>
+                {/* OHLC readout — the bar under the crosshair, or the latest bar
+                    when idle. Sits over the top-left of the chart like TradingView. */}
+                {(() => {
+                  const last = plotted[plotted.length - 1];
+                  const bar = ohlc ?? (last ? { o: last.o, h: last.h, l: last.l, c: last.c } : null);
+                  if (!bar) return null;
+                  const up = bar.c >= bar.o;
+                  const col = up ? 'text-[var(--pos)]' : 'text-[var(--neg)]';
+                  const chg = bar.o ? ((bar.c - bar.o) / bar.o) * 100 : 0;
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: priceDecimals(last?.c || 1) });
+                  return (
+                    <div className="pointer-events-none absolute left-3 top-2 z-20 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-medium tabular-nums">
+                      <span className="text-[var(--role-content-subtle)]">O <span className={col}>{fmt(bar.o)}</span></span>
+                      <span className="text-[var(--role-content-subtle)]">H <span className={col}>{fmt(bar.h)}</span></span>
+                      <span className="text-[var(--role-content-subtle)]">L <span className={col}>{fmt(bar.l)}</span></span>
+                      <span className="text-[var(--role-content-subtle)]">C <span className={col}>{fmt(bar.c)}</span></span>
+                      <span className={col}>{up ? '+' : ''}{chg.toFixed(2)}%</span>
+                    </div>
+                  );
+                })()}
                 <div ref={wrapRef} className="h-full w-full" style={{ touchAction: 'pan-y' }} />
                 {/* Floating B/S badge on the candle — buy/long = green B,
                     sell/short = red S — for BOTH trades and liquidations. The
