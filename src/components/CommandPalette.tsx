@@ -20,21 +20,22 @@ import { withNetwork } from '@/lib/network';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
-// Top-level destinations — plain names, no "Analytics · " prefix.
-const PAGES: { label: string; href: string; hint?: string }[] = [
-  { label: 'Dashboard', href: '/', hint: 'Overview' },
-  { label: 'Analytics', href: '/analytics/general', hint: 'Volume · OI · Funding · Trades' },
-  { label: 'Liquidations', href: '/analytics/liquidations' },
-  { label: 'Risk', href: '/analytics/risk', hint: 'Spread · Volatility · Margin' },
-  { label: 'Staking', href: '/analytics/staking' },
-  { label: 'Pre-Deposit', href: '/analytics/predeposit' },
-  { label: 'Network', href: '/analytics/network', hint: 'Sequencer performance' },
-  { label: 'Order Book', href: '/analytics/orderbook', hint: 'Depth · Slippage' },
-  { label: 'Leaderboard', href: '/leaderboard' },
-  { label: 'Whale Tracker', href: '/whales' },
-  { label: 'Explorer', href: '/explorer' },
-  { label: 'Following', href: '/following' },
-  { label: 'Profile', href: '/profile' },
+// Top-level destinations — plain names, no "Analytics · " prefix. Every page
+// carries a one-line description (shown as the sub-line, ASXN-style).
+const PAGES: { label: string; href: string; hint: string }[] = [
+  { label: 'Dashboard', href: '/', hint: 'Key BULK exchange metrics at a glance' },
+  { label: 'Analytics', href: '/analytics/general', hint: 'Volume, open interest, funding and trades over time' },
+  { label: 'Liquidations', href: '/analytics/liquidations', hint: 'Forced closes by market, side and size' },
+  { label: 'Risk', href: '/analytics/risk', hint: 'Fair-vs-mark spread, volatility and margin surface' },
+  { label: 'Staking', href: '/analytics/staking', hint: 'BulkSOL TVL, validators and stake flows' },
+  { label: 'Pre-Deposit', href: '/analytics/predeposit', hint: 'Vault TVL, depositors and deposit flows' },
+  { label: 'Network', href: '/analytics/network', hint: 'Sequencer latency, throughput and account growth' },
+  { label: 'Order Book', href: '/analytics/orderbook', hint: 'Live depth, slippage and price-impact tools' },
+  { label: 'Leaderboard', href: '/leaderboard', hint: 'Top traders by PnL, volume and activity' },
+  { label: 'Whale Tracker', href: '/whales', hint: 'Largest accounts and their live positions' },
+  { label: 'Explorer', href: '/explorer', hint: 'Blocks, transactions and live network throughput' },
+  { label: 'Following', href: '/following', hint: 'Wallets you follow and their recent moves' },
+  { label: 'Profile', href: '/profile', hint: 'Your claimed wallet and account settings' },
 ];
 
 // Individual charts & tools, searchable by name (each jumps to the page it
@@ -178,8 +179,16 @@ export function CommandPalette() {
 
   // Build the flat, ordered result set from the current query.
   const rows = useMemo<Row[]>(() => {
-    const q = query.trim().toLowerCase();
+    const raw = query.trim();
+    const q = raw.toLowerCase();
     const out: Row[] = [];
+
+    // A pasted wallet address (Solana base58, or 0x-hex) jumps straight to its
+    // whale page — shown first so Enter goes right there.
+    const looksLikeAddress = /^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(raw);
+    if (looksLikeAddress) {
+      out.push({ kind: 'wallet', key: `addr:${raw}`, label: 'Open wallet', sub: formatAddress(raw), address: raw });
+    }
 
     const pages = (q
       ? PAGES.filter((p) => p.label.toLowerCase().includes(q) || p.hint?.toLowerCase().includes(q) || p.href.includes(q))
@@ -250,7 +259,7 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActive(0); }}
             onKeyDown={onInputKey}
-            placeholder="Search pages, markets, wallets or @username…"
+            placeholder="Search — pages, charts, markets, wallets…"
             className="w-full bg-transparent py-3.5 text-sm text-[var(--role-content)] placeholder-[var(--role-content-subtle)] focus:outline-none"
           />
           {searching && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--role-content-subtle)]" />}
@@ -301,6 +310,7 @@ export function CommandPalette() {
           <span className="flex items-center gap-2">
             <span><kbd className="rounded border border-[var(--role-line)] px-1">↑</kbd> <kbd className="rounded border border-[var(--role-line)] px-1">↓</kbd> navigate</span>
             <span><kbd className="rounded border border-[var(--role-line)] px-1">↵</kbd> open</span>
+            <span className="hidden sm:inline">paste an address for a wallet</span>
           </span>
           <span>{isMac ? '⌘' : 'Ctrl'} K</span>
         </div>
