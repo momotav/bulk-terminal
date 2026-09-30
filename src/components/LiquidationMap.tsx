@@ -182,11 +182,15 @@ function Heatmap({ grid, pB, tB, pMin, pMax, peak, fmtVal, fmtPrice }: {
   grid: number[][]; pB: number; tB: number; pMin: number; pMax: number; peak: number;
   fmtVal: (n: number) => string; fmtPrice: (n: number) => string;
 }) {
-  // Inferno-ish ramp: dark → purple → orange → yellow, by intensity.
+  // Inferno-ish ramp: near-black base → purple → orange → yellow, by intensity.
+  // Zero cells get the darkest base (not transparent), so the grid reads as a
+  // continuous heat FIELD like HyperDash rather than scattered dots. A small
+  // floor lifts any non-zero cell above the base so single events still show.
+  const BASE = 'rgb(12,9,24)';
   const color = (v: number) => {
-    if (v <= 0) return 'transparent';
-    const t = Math.min(1, Math.log1p(v) / Math.log1p(peak || 1));
-    const stops = [[10, 8, 30], [80, 18, 90], [190, 55, 60], [245, 140, 40], [250, 230, 130]];
+    if (v <= 0) return BASE;
+    const t = 0.12 + 0.88 * Math.min(1, Math.log1p(v) / Math.log1p(peak || 1));
+    const stops = [[26, 16, 48], [80, 18, 90], [190, 55, 60], [245, 140, 40], [250, 230, 130]];
     const seg = Math.min(stops.length - 2, Math.floor(t * (stops.length - 1)));
     const f = t * (stops.length - 1) - seg;
     const [a, b] = [stops[seg], stops[seg + 1]];
@@ -199,7 +203,8 @@ function Heatmap({ grid, pB, tB, pMin, pMax, peak, fmtVal, fmtPrice }: {
       <div className="flex w-11 flex-col justify-between py-0.5 pr-1 text-right text-[9px] text-[var(--role-content-subtle)]">
         <span>{fmtPrice(pMax)}</span><span>{fmtPrice((pMax + pMin) / 2)}</span><span>{fmtPrice(pMin)}</span>
       </div>
-      <div className="grid flex-1 gap-px overflow-hidden rounded" style={{ gridTemplateRows: `repeat(${pB}, 1fr)`, gridTemplateColumns: `repeat(${tB}, 1fr)` }}>
+      {/* Solid field: no gaps, dark base fill. */}
+      <div className="grid flex-1 overflow-hidden rounded" style={{ gridTemplateRows: `repeat(${pB}, 1fr)`, gridTemplateColumns: `repeat(${tB}, 1fr)`, background: BASE }}>
         {/* rows top(high price)→bottom(low price) */}
         {Array.from({ length: pB }, (_, r) => pB - 1 - r).flatMap((pi) =>
           Array.from({ length: tB }, (_, ti) => (
