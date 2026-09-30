@@ -44,8 +44,10 @@ export function TodayPanel() {
   }, [network]);
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr] gap-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="flex h-full flex-col gap-3">
+      {/* Two metric cards — a fixed height, a little under half the hero, so the
+          revenue card fills the rest and nothing grows unbounded. */}
+      <div className="grid grid-cols-2 gap-3 flex-none h-[150px] lg:h-[190px]">
         <MetricMiniCard
           label="Open Interest"
           value={stats?.openInterest ?? null}
@@ -61,7 +63,9 @@ export function TodayPanel() {
           color="var(--pos)"
         />
       </div>
-      <RevenueCard />
+      <div className="min-h-0 flex-1">
+        <RevenueCard />
+      </div>
     </div>
   );
 }
@@ -73,10 +77,10 @@ function MetricMiniCard({ label, value, format, spark, color }: {
   const change = spark?.changePct ?? null;
   const gid = `grad-${label.replace(/\s+/g, '')}`;
   return (
-    <div className="glass-card flex flex-col p-4">
-      <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
+    <div className="glass-card flex h-full flex-col overflow-hidden p-4">
+      <div className="truncate text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-[22px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[26px]">
+        <span className="text-[22px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[24px]">
           {value == null ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={value} format={format} />}
         </span>
         {change != null && Number.isFinite(change) && (
@@ -85,7 +89,7 @@ function MetricMiniCard({ label, value, format, spark, color }: {
           </span>
         )}
       </div>
-      <div className="mt-2 h-[64px] flex-1">
+      <div className="mt-2 min-h-0 flex-1">
         {data.length >= 2 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
@@ -133,7 +137,7 @@ function RevenueCard() {
   const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
   return (
-    <div className="glass-card flex flex-col p-4">
+    <div className="glass-card flex h-full flex-col overflow-hidden p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">Revenue</div>
