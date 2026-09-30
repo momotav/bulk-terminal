@@ -55,7 +55,7 @@ export default function HomePage() {
       {/* Markets + telemetry — the markets table narrowed to 8/12 with the
           network telemetry graphed in the freed 4/12: a tabbed live chart
           of TPS / APS instead of plain KPI text. Stacks below lg. */}
-      <SectionLabel className="mt-8">Markets</SectionLabel>
+      <SectionLabel className="mt-2">Markets</SectionLabel>
       <section aria-label="Markets" className="mt-2">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="h-[480px] lg:col-span-8">
@@ -74,7 +74,7 @@ export default function HomePage() {
           panels ran on BULK's official indexer leaderboard, disabled when
           the trading competition ended. These two run on our OWN collected
           data and work today.) */}
-      <SectionLabel className="mt-8">Activity</SectionLabel>
+      <SectionLabel className="mt-2">Activity</SectionLabel>
       <section aria-label="Market activity" className="mt-2">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="h-[420px] sm:h-[480px] lg:col-span-8">
