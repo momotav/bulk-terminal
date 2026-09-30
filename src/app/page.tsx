@@ -34,23 +34,12 @@ export default function HomePage() {
           running full width across the very top, under the nav. */}
       <MarketTicker tickers={tickers} loading={tickersLoading} />
 
-      {/* Page header — a calm sentence-case heading. Search lives in the top-nav
-          ⌘K command palette (wallets, markets, pages), so no separate field
-          here. */}
-      <header className="mt-4">
-        <h1 className="font-sans text-2xl font-semibold leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
-          Overview
-        </h1>
-        <p className="mt-1.5 text-[13px] text-[var(--role-content-muted)]">
-          Real-time analytics for BULK Exchange
-        </p>
-      </header>
-
-      {/* TODAY — the exchange at a glance. A lead Volume hero (big number over a
-          full history bar chart, with timeframe pills) beside the three
-          remaining KPIs stacked in the right third. ASXN/Hyperliquid-style
-          asymmetric hero. Stacks to a single column below lg. */}
-      <SectionLabel className="mt-6">Today</SectionLabel>
+      {/* OVERVIEW — the exchange at a glance. A lead Volume hero (big number over
+          a full history bar chart, with timeframe pills) beside the metric +
+          revenue panel. A slim eyebrow label (with a hairline rule) heads it
+          instead of a big title, so there's no dead space up top. Search lives
+          in the top-nav ⌘K palette. */}
+      <SectionLabel className="mt-4">Overview</SectionLabel>
       <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
         {/* Left: Total Volume hero. Right: two metric cards + a wide Revenue
             card, ASXN-style. */}
@@ -99,12 +88,15 @@ export default function HomePage() {
   );
 }
 
-// Quiet eyebrow label that segments the page into scannable chapters
-// (Today / Markets / Activity) — the editorial rhythm ASXN uses.
+// Quiet eyebrow label + hairline rule that segments the page into scannable
+// chapters (Overview / Markets / Activity) — the editorial rhythm ASXN uses.
 function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <h2 className={cn('text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--role-content-subtle)]', className)}>
-      {children}
-    </h2>
+    <div className={cn('flex items-center gap-3', className)}>
+      <h2 className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--role-content-subtle)]">
+        {children}
+      </h2>
+      <span className="h-px flex-1 bg-[var(--role-line)]" aria-hidden />
+    </div>
   );
 }
