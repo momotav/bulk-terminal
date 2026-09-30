@@ -45,7 +45,7 @@ const formatCount = (num: number | undefined | null): string => {
   return num.toLocaleString();
 };
 
-export function ExchangeHealthStats() {
+export function ExchangeHealthStats({ keys }: { keys?: SparkKey[] } = {}) {
   const { network } = useCurrentNetwork();
   const [stats, setStats] = useState<ExchangeStats | null>(null);
   const [sparks, setSparks] = useState<Sparklines | null>(null);
@@ -143,9 +143,12 @@ export function ExchangeHealthStats() {
     { label: '24h Liquidations', raw: stats?.liquidations24h ?? 0, format: formatNumber, spark: 'liquidations24h' },
   ];
 
+  // Optionally render only a subset (e.g. the 3 cards beside the volume hero).
+  const shown = keys ? cards.filter((c) => keys.includes(c.spark)) : cards;
+
   return (
     <>
-      {cards.map((c) => {
+      {shown.map((c) => {
         const sp = sparks?.[c.spark];
         const series = sp?.series ?? [];
         const range =

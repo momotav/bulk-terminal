@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2 } from 'lucide-react';
 import { ExchangeHealthStats } from '@/components/ExchangeHealth';
+import { VolumeHero } from '@/components/VolumeHero';
 import { TelemetryPanel } from '@/components/TelemetryPanel';
 import { RecentActivity } from '@/components/RecentActivity';
 import { MarketTicker } from '@/components/MarketTicker';
@@ -218,17 +219,25 @@ export default function HomePage() {
       </form>
       </header>
 
-      {/* KPI card row — the four exchange stats, one calm flat row. Network
-          throughput now lives in its own live-chart panel below, beside the
-          Markets table. */}
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ExchangeHealthStats />
+      {/* TODAY — the exchange at a glance. A lead Volume hero (big number over a
+          full history bar chart, with timeframe pills) beside the three
+          remaining KPIs stacked in the right third. ASXN/Hyperliquid-style
+          asymmetric hero. Stacks to a single column below lg. */}
+      <SectionLabel className="mt-6">Today</SectionLabel>
+      <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="lg:col-span-2 min-h-[300px] lg:min-h-[420px]">
+          <VolumeHero />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:grid-rows-3">
+          <ExchangeHealthStats keys={['openInterest', 'activeTraders', 'liquidations24h']} />
+        </div>
       </div>
 
       {/* Markets + telemetry — the markets table narrowed to 8/12 with the
           network telemetry graphed in the freed 4/12: a tabbed live chart
           of TPS / APS instead of plain KPI text. Stacks below lg. */}
-      <section aria-label="Markets" className="mt-6">
+      <SectionLabel className="mt-8">Markets</SectionLabel>
+      <section aria-label="Markets" className="mt-2">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="h-[480px] lg:col-span-8">
             <MarketsTable tickers={tickers} loading={tickersLoading} />
@@ -246,7 +255,8 @@ export default function HomePage() {
           panels ran on BULK's official indexer leaderboard, disabled when
           the trading competition ended. These two run on our OWN collected
           data and work today.) */}
-      <section aria-label="Market activity" className="mt-4">
+      <SectionLabel className="mt-8">Activity</SectionLabel>
+      <section aria-label="Market activity" className="mt-2">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="h-[420px] sm:h-[480px] lg:col-span-8">
             <RecentActivity />
@@ -257,5 +267,15 @@ export default function HomePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+// Quiet eyebrow label that segments the page into scannable chapters
+// (Today / Markets / Activity) — the editorial rhythm ASXN uses.
+function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <h2 className={cn('text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--role-content-subtle)]', className)}>
+      {children}
+    </h2>
   );
 }
