@@ -130,35 +130,32 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
 
   return (
     <div className={embedded ? 'flex h-full flex-col' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
-      {/* Header: coin picker (standalone) + mode / granularity / denom toggles */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {!embedded && <h3 className="text-base font-semibold text-[var(--text-primary)]">Liquidations</h3>}
-          {/* Coin picker only when standalone; embedded is locked to the modal's coin. */}
-          {!lockedCoin && (
-            <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
-              {COINS.map((c) => (
-                <button key={c} onClick={() => setCoin(c)}
-                  className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
-                    coin === c ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Seg options={[['profile', 'Profile'], ['heatmap', 'Heatmap']]} value={mode} onChange={(v) => setMode(v as any)} />
-          <Seg options={[['fine', 'Fine'], ['medium', 'Medium'], ['coarse', 'Coarse']]} value={gran} onChange={(v) => setGran(v as any)} />
-          <Seg options={[['coin', coin], ['usd', 'USD']]} value={denom} onChange={(v) => setDenom(v as any)} />
-        </div>
+      {/* Toolbar — one clean row: controls left, live price right. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        {!embedded && <h3 className="mr-1 text-base font-semibold text-[var(--text-primary)]">Liquidations</h3>}
+        {!lockedCoin && (
+          <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
+            {COINS.map((c) => (
+              <button key={c} onClick={() => setCoin(c)}
+                className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+                  coin === c ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+        <Seg options={[['profile', 'Profile'], ['heatmap', 'Heatmap']]} value={mode} onChange={(v) => setMode(v as any)} />
+        <Seg options={[['fine', 'Fine'], ['medium', 'Medium'], ['coarse', 'Coarse']]} value={gran} onChange={(v) => setGran(v as any)} />
+        <Seg options={[['coin', coin], ['usd', 'USD']]} value={denom} onChange={(v) => setDenom(v as any)} />
+        {price > 0 && (
+          <span className="ml-auto text-[11px] text-[var(--role-content-subtle)]">Live <span className="font-semibold text-[var(--role-content)]">{fmtPrice(price)}</span></span>
+        )}
       </div>
 
-      {/* Legend + live price */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+      {/* Legend chips */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
         <Legend color={LONG} label={`Long liq · ${fmtVal(totalLong)}`} />
         <Legend color={SHORT} label={`Short liq · ${fmtVal(totalShort)}`} />
-        {price > 0 && <span className="ml-auto text-[var(--role-content-subtle)]">Live <span className="font-semibold text-[var(--role-content)]">{fmtPrice(price)}</span></span>}
       </div>
 
       {/* Body */}
@@ -289,8 +286,9 @@ function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price,
     const draw = () => {
       const ctx = canvas.getContext('2d'); if (!ctx) return;
       const w = container.clientWidth, h = container.clientHeight;
+      // Transparent background so the card surface shows through — matches the
+      // default chart. Only cells with liquidations are painted.
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = BASE; ctx.fillRect(0, 0, w, h);
       const ts = chart.timeScale();
       const bs = Math.max(1, ts.options().barSpacing || 6);
       // Small gap so cells read as discrete squares, not merged vertical bars.
