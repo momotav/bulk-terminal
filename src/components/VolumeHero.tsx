@@ -194,15 +194,15 @@ export function VolumeHero() {
               />
               {chartType === 'bar' && STACK.map((coin, i, arr) => (
                 <Bar key={coin} yAxisId="left" dataKey={coin} name={coin === OTHER_KEY ? 'Other' : coin} stackId="v" fill={getCoinColor(coin)} maxBarSize={48}
-                  radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined} isAnimationActive={false} />
+                  radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               ))}
               {chartType === 'line' && (
-                <Line yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               )}
               {chartType === 'area' && (
-                <Area yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} fill="url(#volHeroArea)" dot={false} isAnimationActive={false} />
+                <Area yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} fill="url(#volHeroArea)" dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               )}
-              <Line yAxisId="right" type="monotone" dataKey="Cumulative" name="Cumulative" stroke={CUMULATIVE_COLOR} strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line yAxisId="right" type="monotone" dataKey="Cumulative" name="Cumulative" stroke={CUMULATIVE_COLOR} strokeWidth={2} dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
             </ComposedChart>
           </ResponsiveContainer>
         )}
