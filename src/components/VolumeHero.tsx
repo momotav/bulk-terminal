@@ -105,8 +105,9 @@ export function VolumeHero() {
 
   return (
     <div className="glass-card flex h-full flex-col p-4 sm:p-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      {/* Header — stacks on mobile so the toolbar drops to its own row below the
+          number (it can't fit beside the wide 24h/Total toggle on a phone). */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <div className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)]/50 p-0.5 text-[11px] font-medium">
             {(['24h', 'all'] as const).map((m) => (
@@ -125,15 +126,16 @@ export function VolumeHero() {
               {!headlineReady ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={headlineValue} format={fmtUsd} />}
             </span>
             {headlineMode === '24h' && changePct != null && Number.isFinite(changePct) && (
-              <span className={cn('text-[13px] font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
+              <span className={cn('whitespace-nowrap text-[13px] font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
                 {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
               </span>
             )}
             {headlineMode === 'all' && <span className="text-[13px] font-medium text-[var(--role-content-subtle)]">all-time</span>}
           </div>
         </div>
-        {/* Toolbar: chart-type group + timeframe group, side by side (ASXN). */}
-        <div className="flex shrink-0 items-center gap-2">
+        {/* Toolbar: chart-type group + timeframe group, side by side (ASXN).
+            On mobile it sits on its own row below the number and wraps if tight. */}
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <div className="flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
             {([
               { key: 'bar', Icon: BarChart3, label: 'Bars' },
