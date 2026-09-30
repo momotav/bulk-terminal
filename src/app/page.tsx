@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2 } from 'lucide-react';
-import { ExchangeHealthStats } from '@/components/ExchangeHealth';
 import { VolumeHero } from '@/components/VolumeHero';
+import { TodayPanel } from '@/components/TodayPanel';
 import { TelemetryPanel } from '@/components/TelemetryPanel';
 import { RecentActivity } from '@/components/RecentActivity';
 import { MarketTicker } from '@/components/MarketTicker';
@@ -224,12 +224,14 @@ export default function HomePage() {
           remaining KPIs stacked in the right third. ASXN/Hyperliquid-style
           asymmetric hero. Stacks to a single column below lg. */}
       <SectionLabel className="mt-6">Today</SectionLabel>
-      <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div className="lg:col-span-2 min-h-[300px] lg:min-h-[420px]">
+      <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Left: Total Volume hero. Right: two metric cards + a wide Revenue
+            card, ASXN-style. */}
+        <div className="min-h-[320px] lg:min-h-[440px]">
           <VolumeHero />
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:grid-rows-3">
-          <ExchangeHealthStats keys={['openInterest', 'activeTraders', 'liquidations24h']} />
+        <div className="min-h-[320px] lg:min-h-[440px]">
+          <TodayPanel />
         </div>
       </div>
 
