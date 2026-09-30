@@ -7,7 +7,8 @@
 // rides a right axis and carries over from all-time (never resets to 0).
 
 import { useEffect, useMemo, useState } from 'react';
-import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Area, Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { BarChart3, Activity, TrendingUp } from 'lucide-react';
 import { AnimatedNumber } from './AnimatedNumber';
 import { CoinSelector } from './CoinSelector';
 import { analytics, cn, formatCompact, type ChartData } from '@/lib/api';
@@ -47,6 +48,8 @@ export function VolumeHero() {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
   const [hours, setHours] = useState(24);
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
+  const [headlineMode, setHeadlineMode] = useState<'24h' | 'all'>('24h');
   const [coins, setCoins] = useState<string[]>([...DEFAULT_ENABLED]);
   const [rows, setRows] = useState<ChartData[]>([]);
   const [allTime, setAllTime] = useState<ChartData[]>([]);
@@ -123,6 +126,14 @@ export function VolumeHero() {
 
   const series = useMemo(() => orderedSeriesFor(coins), [coins]);
 
+  // All-time total volume across every market (headline's "All-time" mode).
+  const allTimeTotal = useMemo(
+    () => allTime.reduce((s, p) => s + (typeof p.total === 'number' ? p.total : 0), 0),
+    [allTime],
+  );
+  const headlineValue = headlineMode === 'all' ? allTimeTotal : (vol24h ?? 0);
+  const headlineReady = headlineMode === 'all' ? allTime.length > 0 : vol24h != null;
+
   const changePct = useMemo(() => {
     if (data.length < 2) return null;
     const prev = data[data.length - 2].total;
@@ -146,32 +157,70 @@ export function VolumeHero() {
 
   return (
     <div className="glass-card flex h-full flex-col p-4 sm:p-5">
-      {/* Header: headline number + change, timeframe pills. */}
+      {/* Header: headline number (24h ↔ all-time toggle) + change; on the right,
+          the chart-type switcher (bar/line/area) and the timeframe pills. */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">24h Volume</div>
+          {/* Label doubles as the 24h / All-time toggle. */}
+          <div className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)]/50 p-0.5 text-[11px] font-medium">
+            {(['24h', 'all'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setHeadlineMode(m)}
+                className={cn('rounded px-1.5 py-0.5 transition-colors',
+                  headlineMode === m ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+              >
+                {m === '24h' ? '24h Volume' : 'Total Volume'}
+              </button>
+            ))}
+          </div>
           <div className="mt-1 flex items-baseline gap-2.5">
             <span className="text-[34px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[40px]">
-              {vol24h == null ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={vol24h} format={fmtUsd} />}
+              {!headlineReady ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={headlineValue} format={fmtUsd} />}
             </span>
-            {changePct != null && Number.isFinite(changePct) && (
+            {headlineMode === '24h' && changePct != null && Number.isFinite(changePct) && (
               <span className={cn('text-[13px] font-semibold tabular-nums', changePct >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
                 {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
               </span>
             )}
+            {headlineMode === 'all' && (
+              <span className="text-[13px] font-medium text-[var(--role-content-subtle)]">all-time</span>
+            )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
-          {RANGES.map((r) => (
-            <button
-              key={r.label}
-              onClick={() => setHours(r.hours)}
-              className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
-                hours === r.hours ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
-            >
-              {r.label}
-            </button>
-          ))}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {/* Chart-type switcher */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
+            {([
+              { key: 'bar', Icon: BarChart3, label: 'Bars' },
+              { key: 'line', Icon: Activity, label: 'Line' },
+              { key: 'area', Icon: TrendingUp, label: 'Area' },
+            ] as const).map(({ key, Icon, label }) => (
+              <button
+                key={key}
+                onClick={() => setChartType(key)}
+                title={label}
+                aria-pressed={chartType === key}
+                className={cn('flex h-6 w-6 items-center justify-center rounded-md transition-colors',
+                  chartType === key ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
+          {/* Timeframe pills */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
+            {RANGES.map((r) => (
+              <button
+                key={r.label}
+                onClick={() => setHours(r.hours)}
+                className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+                  hours === r.hours ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -203,10 +252,24 @@ export function VolumeHero() {
                 labelFormatter={(t) => fmtLabel(t as string)}
                 formatter={(v: number, n: string) => [`$${formatCompact(Number(v))}`, n === 'Cumulative' ? 'Cumulative' : n]}
               />
-              {series.map((coin, i, arr) => (
+              <defs>
+                <linearGradient id="volHeroArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              {/* Primary series — bars stack per coin; line/area draw the combined
+                  total (which respects the coin selection). */}
+              {chartType === 'bar' && series.map((coin, i, arr) => (
                 <Bar key={coin} yAxisId="left" dataKey={coin} name={coin} stackId="v" fill={getCoinColor(coin)} maxBarSize={48}
                   radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined} isAnimationActive={false} />
               ))}
+              {chartType === 'line' && (
+                <Line yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} dot={false} isAnimationActive={false} />
+              )}
+              {chartType === 'area' && (
+                <Area yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} fill="url(#volHeroArea)" dot={false} isAnimationActive={false} />
+              )}
               <Line yAxisId="right" type="monotone" dataKey="Cumulative" name="Cumulative" stroke={CUMULATIVE_COLOR} strokeWidth={2} dot={false} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
