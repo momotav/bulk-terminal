@@ -21,7 +21,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 const COINS = ['BTC', 'ETH', 'SOL', 'HYPE', 'PUMP', 'ZEC'];
-const GRAN = { fine: 120, medium: 60, coarse: 30 } as const;
+const GRAN = { fine: 140, medium: 80, coarse: 40 } as const;
 type Gran = keyof typeof GRAN;
 
 interface LiqEvent { side: string; price: number; size: number; value: number; timestamp: number | string; }
@@ -99,7 +99,9 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
     let pMin = Math.min(...lows), pMax = Math.max(...highs);
     if (!(pMax > pMin)) return null;
     const pad = (pMax - pMin) * 0.04; pMin -= pad; pMax += pad; // breathing room
-    const pRows = Math.min(nBuckets, 60);
+    // More rows → smaller, squarer cells (drawn with a gap so they read as a
+    // grid, not tall bars). Fine/Medium/Coarse still scale the resolution.
+    const pRows = Math.min(nBuckets, 140);
     const tCols = candles.length;
     const t0 = candles[0].t;
     const dur = candles[1].t - candles[0].t || 3.6e6;
@@ -291,6 +293,8 @@ function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price,
       ctx.fillStyle = BASE; ctx.fillRect(0, 0, w, h);
       const ts = chart.timeScale();
       const bs = Math.max(1, ts.options().barSpacing || 6);
+      // Small gap so cells read as discrete squares, not merged vertical bars.
+      const gap = bs > 4 ? 1 : 0;
       for (let ti = 0; ti < tCols; ti++) {
         const x = ts.timeToCoordinate(times[ti]); if (x == null) continue;
         for (let pi = 0; pi < pRows; pi++) {
@@ -299,8 +303,9 @@ function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price,
           const pBot = pMax - ((pi + 1) / pRows) * (pMax - pMin);
           const yTop = series.priceToCoordinate(pTop), yBot = series.priceToCoordinate(pBot);
           if (yTop == null || yBot == null) continue;
+          const cellH = Math.abs(yBot - yTop);
           ctx.fillStyle = heatColor(v, peak);
-          ctx.fillRect(x - bs / 2, Math.min(yTop, yBot), bs, Math.abs(yBot - yTop) + 1);
+          ctx.fillRect(x - bs / 2 + gap, Math.min(yTop, yBot) + gap, Math.max(1, bs - gap * 2), Math.max(1, cellH - gap));
         }
       }
     };
