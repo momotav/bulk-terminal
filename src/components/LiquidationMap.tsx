@@ -12,7 +12,7 @@
 // All bucketing is client-side from one events payload.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Area, Bar, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createChart, ColorType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
@@ -125,8 +125,6 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
 
   const fmtVal = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
   const fmtPrice = (n: number) => `$${formatCompact(n)}`;
-  const totalLong = useMemo(() => events.filter((e) => /long/i.test(e.side)).reduce((s, e) => s + val(e), 0), [events, denom]);
-  const totalShort = useMemo(() => events.filter((e) => !/long/i.test(e.side)).reduce((s, e) => s + val(e), 0), [events, denom]);
 
   return (
     <div className={embedded ? 'flex h-full flex-col' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
@@ -137,7 +135,7 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
           <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
             {COINS.map((c) => (
               <button key={c} onClick={() => setCoin(c)}
-                className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+                className={cn('rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
                   coin === c ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
                 {c}
               </button>
@@ -148,14 +146,8 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
         <Seg options={[['fine', 'Fine'], ['medium', 'Medium'], ['coarse', 'Coarse']]} value={gran} onChange={(v) => setGran(v as any)} />
         <Seg options={[['coin', coin], ['usd', 'USD']]} value={denom} onChange={(v) => setDenom(v as any)} />
         {price > 0 && (
-          <span className="ml-auto text-[11px] text-[var(--role-content-subtle)]">Live <span className="font-semibold text-[var(--role-content)]">{fmtPrice(price)}</span></span>
+          <span className="ml-auto text-xs text-[var(--role-content-subtle)]">Live <span className="font-semibold text-[var(--role-content)]">{fmtPrice(price)}</span></span>
         )}
-      </div>
-
-      {/* Legend chips */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-        <Legend color={LONG} label={`Long liq · ${fmtVal(totalLong)}`} />
-        <Legend color={SHORT} label={`Short liq · ${fmtVal(totalShort)}`} />
       </div>
 
       {/* Body */}
@@ -167,28 +159,19 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
         ) : mode === 'profile' ? (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={profile} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-              <defs>
-                <linearGradient id="liqCumL" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={LONG} stopOpacity={0.16} /><stop offset="100%" stopColor={LONG} stopOpacity={0} /></linearGradient>
-                <linearGradient id="liqCumS" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={SHORT} stopOpacity={0.16} /><stop offset="100%" stopColor={SHORT} stopOpacity={0} /></linearGradient>
-              </defs>
               <XAxis dataKey="price" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtPrice}
                 tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false} minTickGap={40} />
               <YAxis yAxisId="l" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
                 width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
               <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
                 width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
-              {/* Red (long) / green (short) background tint split at the live price. */}
-              {price > profile[0]?.price && <ReferenceArea yAxisId="l" x1={profile[0].price} x2={price} fill={LONG} fillOpacity={0.06} strokeOpacity={0} />}
-              {price < profile[profile.length - 1]?.price && <ReferenceArea yAxisId="l" x1={price} x2={profile[profile.length - 1].price} fill={SHORT} fillOpacity={0.06} strokeOpacity={0} />}
-              <Tooltip contentStyle={{ background: 'var(--bg-overlay)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }}
-                labelFormatter={(p) => fmtPrice(Number(p))}
-                formatter={(v: number, n: string) => [denom === 'usd' ? `$${formatCompact(Number(v))}` : `${formatCompact(Number(v))} ${coin}`,
-                  ({ long: 'Long liq', short: 'Short liq', cumLong: 'Cumulative long', cumShort: 'Cumulative short' } as any)[n] || n]} />
-              {/* Cumulative curves with faint area fill (behind the bars). */}
-              <Area yAxisId="r" type="monotone" dataKey="cumLong" stroke={LONG} strokeWidth={1.5} fill="url(#liqCumL)" dot={false} isAnimationActive={false} />
-              <Area yAxisId="r" type="monotone" dataKey="cumShort" stroke={SHORT} strokeWidth={1.5} fill="url(#liqCumS)" dot={false} isAnimationActive={false} />
+              <Tooltip cursor={{ stroke: 'var(--role-line)' }} content={(props: any) => <ProfileTip {...props} denom={denom} coin={coin} />} />
+              {/* Per-price liquidation bars (long red / short green). */}
               <Bar yAxisId="l" dataKey="long" fill={LONG} isAnimationActive={false} />
               <Bar yAxisId="l" dataKey="short" fill={SHORT} isAnimationActive={false} />
+              {/* Cumulative curves — clean lines, no heavy fill. */}
+              <Line yAxisId="r" type="monotone" dataKey="cumLong" stroke={LONG} strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line yAxisId="r" type="monotone" dataKey="cumShort" stroke={SHORT} strokeWidth={2} dot={false} isAnimationActive={false} />
               {price > 0 && <ReferenceLine yAxisId="l" x={price} stroke="var(--role-content)" strokeDasharray="4 4" strokeOpacity={0.7}
                 label={{ value: `Current: ${fmtPrice(price)}`, position: 'insideBottom', fill: 'var(--role-content)', fontSize: 10 }} />}
             </ComposedChart>
@@ -269,7 +252,7 @@ function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price,
     series.setData(candles.map((c) => ({ time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c })));
     chart.timeScale().fitContent();
     if (price > 0) {
-      try { series.createPriceLine({ price, color: priceLineCol, lineWidth: 1, lineStyle: 2, axisLabelVisible: true }); } catch { /* ok */ }
+      try { series.createPriceLine({ price, color: priceLineCol, lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Live' }); } catch { /* ok */ }
     }
 
     const times = candles.map((c) => Math.floor(c.t / 1000) as UTCTimestamp);
@@ -389,7 +372,7 @@ function Seg({ options, value, onChange }: { options: [string, string][]; value:
     <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
       {options.map(([v, label]) => (
         <button key={v} onClick={() => onChange(v)}
-          className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+          className={cn('rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
             value === v ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
           {label}
         </button>
@@ -398,11 +381,33 @@ function Seg({ options, value, onChange }: { options: [string, string][]; value:
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+// Profile tooltip — shows the price and ONLY the non-zero side (never "Short 0").
+function ProfileTip({ active, payload, label, denom, coin }: any) {
+  if (!active || !payload?.length) return null;
+  const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
+  const get = (k: string) => Number(payload.find((p: any) => p.dataKey === k)?.value) || 0;
+  const long = get('long'), short = get('short'), cumL = get('cumLong'), cumS = get('cumShort');
+  const isLong = long > 0 || (long === 0 && short === 0 && cumL >= cumS);
+  const rows: [string, number, string][] = [];
+  if (long > 0) rows.push(['Long liq', long, LONG]);
+  if (short > 0) rows.push(['Short liq', short, SHORT]);
+  const cum: [string, number, string] | null = isLong && cumL > 0 ? ['Cumulative long', cumL, LONG] : (!isLong && cumS > 0 ? ['Cumulative short', cumS, SHORT] : null);
+  if (rows.length === 0 && !cum) return null;
   return (
-    <span className="flex items-center gap-1.5 text-[var(--role-content-subtle)]">
-      <span className="h-2.5 w-2.5 rounded-sm" style={{ background: color }} />{label}
-    </span>
+    <div className="rounded-lg border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-md">
+      <div className="mb-1 text-[var(--role-content-subtle)]">${formatCompact(Number(label))}</div>
+      {rows.map(([n, v, c]) => (
+        <div key={n} className="flex items-center justify-between gap-4">
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: c }} />{n}</span>
+          <span className="font-semibold" style={{ color: c }}>{fmt(v)}</span>
+        </div>
+      ))}
+      {cum && (
+        <div className="mt-0.5 flex items-center justify-between gap-4 text-[var(--role-content-subtle)]">
+          <span>{cum[0]}</span><span className="font-medium text-[var(--role-content)]">{fmt(cum[1])}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
