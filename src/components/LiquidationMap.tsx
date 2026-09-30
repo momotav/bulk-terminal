@@ -11,8 +11,9 @@
 // Plus Fine/Medium/Coarse price granularity and a Coin/USD denomination toggle.
 // All bucketing is client-side from one events payload.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { createChart, ColorType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -210,53 +211,110 @@ function heatColor(v: number, peak: number) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-function HeatmapCandles({ grid, pRows, tCols, pMin, pMax, peak, candles, price, fmtVal, fmtPrice }: {
-  grid: number[][]; pRows: number; tCols: number; pMin: number; pMax: number; peak: number;
-  candles: Candle[]; price: number; fmtVal: (n: number) => string; fmtPrice: (n: number) => string;
+function HeatmapCandles({ grid, pRows, pMin, pMax, peak, candles, price }: {
+  grid: number[][]; pRows: number; pMin: number; pMax: number; peak: number;
+  candles: Candle[]; price: number; fmtVal?: (n: number) => string; fmtPrice?: (n: number) => string;
 }) {
-  // Logical coordinate space; SVG stretches to fill (cells become wide, like HD).
-  const W = tCols, H = 1000;
-  const y = (p: number) => (1 - (p - pMin) / (pMax - pMin)) * H;
-  const rowH = H / pRows;
-  const green = 'var(--pos)', red = 'var(--neg)';
-  const bodyW = 0.62, halfB = bodyW / 2;
+  // Interactive: candles rendered by lightweight-charts (pan / zoom / scale like
+  // the default chart), with the liquidation heat field drawn on a canvas BEHIND
+  // the transparent chart and re-aligned via the chart's coordinate API on every
+  // range change / resize.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const priceLabels = [pMax, pMin + (pMax - pMin) * 0.75, (pMax + pMin) / 2, pMin + (pMax - pMin) * 0.25, pMin];
+  useEffect(() => {
+    const container = wrapRef.current, canvas = canvasRef.current;
+    if (!container || !canvas || candles.length < 2) return;
+
+    // Resolve CSS-var colours to canonical rgb() for the canvas library.
+    const cssVar = (expr: string, fb: string) => {
+      const s = document.createElement('span'); s.style.color = expr; s.style.display = 'none';
+      document.body.appendChild(s); const c = getComputedStyle(s).color; document.body.removeChild(s);
+      return c || fb;
+    };
+    const pos = cssVar('var(--pos)', 'rgb(33,192,122)');
+    const neg = cssVar('var(--neg)', 'rgb(229,72,77)');
+    const text = cssVar('var(--role-content-subtle)', 'rgb(138,138,138)');
+    const border = cssVar('var(--role-line)', 'rgba(128,118,120,0.24)');
+    const priceLineCol = cssVar('var(--role-content)', 'rgb(230,230,230)');
+
+    const chart = createChart(container, {
+      width: container.clientWidth || 600,
+      height: container.clientHeight || 360,
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      rightPriceScale: { borderColor: border },
+      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+      crosshair: { mode: 0 },
+    });
+    const series = chart.addCandlestickSeries({
+      upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg,
+    });
+    series.setData(candles.map((c) => ({ time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c })));
+    chart.timeScale().fitContent();
+    if (price > 0) {
+      try { series.createPriceLine({ price, color: priceLineCol, lineWidth: 1, lineStyle: 2, axisLabelVisible: true }); } catch { /* ok */ }
+    }
+
+    const times = candles.map((c) => Math.floor(c.t / 1000) as UTCTimestamp);
+    const tCols = candles.length;
+
+    const sizeCanvas = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = container.clientWidth, h = container.clientHeight;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      const ctx = canvas.getContext('2d'); if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const draw = () => {
+      const ctx = canvas.getContext('2d'); if (!ctx) return;
+      const w = container.clientWidth, h = container.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = BASE; ctx.fillRect(0, 0, w, h);
+      const ts = chart.timeScale();
+      const bs = Math.max(1, ts.options().barSpacing || 6);
+      for (let ti = 0; ti < tCols; ti++) {
+        const x = ts.timeToCoordinate(times[ti]); if (x == null) continue;
+        for (let pi = 0; pi < pRows; pi++) {
+          const v = grid[pi][ti]; if (v <= 0) continue;
+          const pTop = pMax - (pi / pRows) * (pMax - pMin);
+          const pBot = pMax - ((pi + 1) / pRows) * (pMax - pMin);
+          const yTop = series.priceToCoordinate(pTop), yBot = series.priceToCoordinate(pBot);
+          if (yTop == null || yBot == null) continue;
+          ctx.fillStyle = heatColor(v, peak);
+          ctx.fillRect(x - bs / 2, Math.min(yTop, yBot), bs, Math.abs(yBot - yTop) + 1);
+        }
+      }
+    };
+    let raf = 0;
+    const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+
+    sizeCanvas(); redraw();
+    const t1 = window.setTimeout(redraw, 60);
+    const t2 = window.setTimeout(redraw, 260);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
+    const ro = new ResizeObserver(() => { chart.applyOptions({ width: container.clientWidth, height: container.clientHeight }); sizeCanvas(); redraw(); });
+    ro.observe(container);
+    // Price-axis drags / wheel don't fire the range event — redraw on interaction.
+    const onInteract = () => redraw();
+    container.addEventListener('wheel', onInteract, { passive: true });
+    container.addEventListener('pointermove', onInteract);
+    container.addEventListener('pointerup', onInteract);
+
+    return () => {
+      clearTimeout(t1); clearTimeout(t2); cancelAnimationFrame(raf); ro.disconnect();
+      container.removeEventListener('wheel', onInteract);
+      container.removeEventListener('pointermove', onInteract);
+      container.removeEventListener('pointerup', onInteract);
+      chart.remove();
+    };
+  }, [candles, grid, pRows, pMin, pMax, peak, price]);
 
   return (
-    <div className="flex h-full">
-      <div className="relative min-w-0 flex-1 overflow-hidden rounded" style={{ background: BASE }}>
-        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-          {/* Heat field */}
-          {grid.flatMap((rowArr, pi) =>
-            rowArr.map((v, ti) => v > 0 ? (
-              <rect key={`h${pi}-${ti}`} x={ti} y={pi * rowH} width={1} height={rowH} fill={heatColor(v, peak)} shapeRendering="crispEdges" />
-            ) : null),
-          )}
-          {/* Candles */}
-          {candles.map((c, i) => {
-            const up = c.c >= c.o;
-            const col = up ? green : red;
-            const cx = i + 0.5;
-            const yO = y(c.o), yC = y(c.c);
-            const top = Math.min(yO, yC), h = Math.max(1, Math.abs(yO - yC));
-            return (
-              <g key={`c${i}`}>
-                <line x1={cx} x2={cx} y1={y(c.h)} y2={y(c.l)} stroke={col} strokeWidth={0.09} vectorEffect="non-scaling-stroke" />
-                <rect x={cx - halfB} y={top} width={bodyW} height={h} fill={col} />
-              </g>
-            );
-          })}
-          {/* Live price line */}
-          {price > pMin && price < pMax && (
-            <line x1={0} x2={W} y1={y(price)} y2={y(price)} stroke="var(--role-content)" strokeWidth={1} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" opacity={0.6} />
-          )}
-        </svg>
-      </div>
-      {/* Price axis */}
-      <div className="flex w-12 shrink-0 flex-col justify-between py-0.5 pl-1 text-left text-[9px] tabular-nums text-[var(--role-content-subtle)]">
-        {priceLabels.map((p, i) => <span key={i}>{fmtPrice(p)}</span>)}
-      </div>
+    <div className="relative h-full w-full">
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-0" />
+      <div ref={wrapRef} className="absolute inset-0 z-10" />
     </div>
   );
 }
