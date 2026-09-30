@@ -45,9 +45,9 @@ export function TodayPanel() {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      {/* Two metric cards — a fixed height, a little under half the hero, so the
-          revenue card fills the rest and nothing grows unbounded. */}
-      <div className="grid grid-cols-2 gap-3 flex-none h-[150px] lg:h-[190px]">
+      {/* Two metric cards — a compact fixed height (shorter than before), with a
+          same-size chart backdrop; the revenue card fills the rest. */}
+      <div className="grid grid-cols-2 gap-3 flex-none h-[140px] lg:h-[158px]">
         <MetricMiniCard
           label="Open Interest"
           value={stats?.openInterest ?? null}
@@ -81,7 +81,9 @@ function MetricMiniCard({ label, value, format, spark, color }: {
     // pinned to the card's lower edge (absolute, so it can't grow the card).
     <div className="glass-card relative flex h-full flex-col overflow-hidden p-4">
       {data.length >= 2 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[54%] opacity-95">
+        // Fixed-height chart backdrop, so shrinking the card doesn't shrink the
+        // chart. Animates on mount / data change for a smooth feel.
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[92px] opacity-95">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
               <defs>
@@ -91,7 +93,7 @@ function MetricMiniCard({ label, value, format, spark, color }: {
                 </linearGradient>
               </defs>
               <YAxis hide domain={['dataMin', 'dataMax']} />
-              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive={false} />
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive animationDuration={700} animationEasing="ease-out" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -137,8 +139,8 @@ function RevenueCard() {
     return () => { cancelled = true; };
   }, [network]);
 
-  // Constant stats from the full history: cumulative = current running total;
-  // daily avg = cumulative / actual days elapsed (one daily bucket ≈ one day).
+  // Constant stats from the FULL history (identical on every timeframe):
+  // cumulative = current running total; daily avg = cumulative / days elapsed.
   const cumulative = allRows.length ? allRows[allRows.length - 1].cumulativeRevenue : 0;
   const totalDays = allRows.length || 1;
   const dailyAvg = cumulative / totalDays;
@@ -148,6 +150,8 @@ function RevenueCard() {
     () => (days === Infinity ? allRows : allRows.slice(-days)).map((r) => ({ t: r.timestamp, v: Math.max(0, r.periodRevenue || 0) })),
     [allRows, days],
   );
+  // The headline number DOES change with the timeframe: revenue over the window.
+  const windowRevenue = useMemo(() => bars.reduce((s, b) => s + b.v, 0), [bars]);
   const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
@@ -156,11 +160,11 @@ function RevenueCard() {
         <div>
           <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">Revenue</div>
           <div className="mt-1 text-[26px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[30px]">
-            {allRows.length === 0 ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={cumulative} format={fmtUsd} />}
+            {allRows.length === 0 ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={windowRevenue} format={fmtUsd} />}
           </div>
           <div className="mt-2 flex gap-5">
-            <SubStat label="Annualized" value={fmtUsd(annualized)} />
-            <SubStat label="Daily Avg" value={fmtUsd(dailyAvg)} />
+            <SubStat label="Annualized" value={annualized} format={fmtUsd} />
+            <SubStat label="Daily Avg" value={dailyAvg} format={fmtUsd} />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
@@ -181,7 +185,7 @@ function RevenueCard() {
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--role-content-subtle)]">No revenue data yet.</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={bars} margin={{ top: 6, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
+            <BarChart data={bars} margin={{ top: 6, right: 4, bottom: 0, left: 0 }} barCategoryGap="8%">
               <XAxis dataKey="t" tickFormatter={fmtAxis} tick={{ fill: 'var(--role-content-subtle)', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={40} />
               <YAxis tick={{ fill: 'var(--role-content-subtle)', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => `$${formatCompact(Number(v))}`} />
               <Tooltip
@@ -190,7 +194,7 @@ function RevenueCard() {
                 labelFormatter={(t) => new Date(t as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 formatter={(v: number) => [`$${formatCompact(Number(v))}`, 'Revenue']}
               />
-              <Bar dataKey="v" fill="var(--pos)" radius={[2, 2, 0, 0]} maxBarSize={30} isAnimationActive={false} />
+              <Bar dataKey="v" fill="var(--pos)" radius={[2, 2, 0, 0]} maxBarSize={90} isAnimationActive animationDuration={700} animationEasing="ease-out" />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -199,11 +203,13 @@ function RevenueCard() {
   );
 }
 
-function SubStat({ label, value }: { label: string; value: string }) {
+function SubStat({ label, value, format }: { label: string; value: number; format: (n: number) => string }) {
   return (
     <div>
       <div className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">{label}</div>
-      <div className="mt-0.5 text-sm font-medium tabular-nums text-[var(--role-content)]">{value}</div>
+      <div className="mt-0.5 text-sm font-medium tabular-nums text-[var(--role-content)]">
+        <AnimatedNumber value={value} format={format} />
+      </div>
     </div>
   );
 }
