@@ -77,25 +77,16 @@ function MetricMiniCard({ label, value, format, spark, color }: {
   const change = spark?.changePct ?? null;
   const gid = `grad-${label.replace(/\s+/g, '')}`;
   return (
-    <div className="glass-card flex h-full flex-col overflow-hidden p-4">
-      <div className="truncate text-[11px] font-medium text-[var(--role-content-subtle)]">{label}</div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-[22px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[24px]">
-          {value == null ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={value} format={format} />}
-        </span>
-        {change != null && Number.isFinite(change) && (
-          <span className={cn('text-[12px] font-semibold tabular-nums', change >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
-            {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
-          </span>
-        )}
-      </div>
-      <div className="mt-2 min-h-0 flex-1">
-        {data.length >= 2 && (
+    // ASXN-style: big number + change over a full-bleed area chart backdrop
+    // pinned to the card's lower edge (absolute, so it can't grow the card).
+    <div className="glass-card relative flex h-full flex-col overflow-hidden p-4">
+      {data.length >= 2 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[54%] opacity-95">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+            <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+                  <stop offset="0%" stopColor={color} stopOpacity={0.3} />
                   <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -103,38 +94,61 @@ function MetricMiniCard({ label, value, format, spark, color }: {
               <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+      )}
+      <div className="relative z-10">
+        <div className="truncate text-[12px] font-medium text-[var(--role-content-subtle)]">{label}</div>
+        <div className="mt-1.5 text-[28px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[32px]">
+          {value == null ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={value} format={format} />}
+        </div>
+        {change != null && Number.isFinite(change) && (
+          <div className="mt-1.5 text-[12px] tabular-nums">
+            <span className="text-[var(--role-content-subtle)]">24h </span>
+            <span className={cn('font-semibold', change >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
+              {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+            </span>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-const REV_RANGES: { label: string; hours: number }[] = [
-  { label: '7D', hours: 168 },
-  { label: '1M', hours: 720 },
-  { label: '3M', hours: 2160 },
-  { label: 'ALL', hours: 8760 * 3 },
+const REV_RANGES: { label: string; days: number }[] = [
+  { label: '7D', days: 7 },
+  { label: '1M', days: 30 },
+  { label: '3M', days: 90 },
+  { label: 'ALL', days: Infinity },
 ];
 
 function RevenueCard() {
   const { network } = useCurrentNetwork();
-  const [hours, setHours] = useState(720);
-  const [rows, setRows] = useState<{ timestamp: string; periodRevenue: number; cumulativeRevenue: number }[]>([]);
+  const [days, setDays] = useState(30);
+  // Fetch the full daily revenue history ONCE. The headline stats (cumulative,
+  // daily-avg, annualized) are derived from ALL of it — so they're identical on
+  // every timeframe — and the timeframe pills only slice the bar window.
+  const [allRows, setAllRows] = useState<{ timestamp: string; periodRevenue: number; cumulativeRevenue: number }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    analytics.getProtocolRevenueChart(hours)
-      .then((d) => { if (!cancelled) setRows(Array.isArray(d?.data) ? d.data : []); })
-      .catch(() => { if (!cancelled) setRows([]); });
+    analytics.getProtocolRevenueChart(8760 * 3) // ALL → daily buckets
+      .then((d) => { if (!cancelled) setAllRows(Array.isArray(d?.data) ? d.data : []); })
+      .catch(() => { if (!cancelled) setAllRows([]); });
     return () => { cancelled = true; };
-  }, [hours, network]);
+  }, [network]);
 
-  const bars = useMemo(() => rows.map((r) => ({ t: r.timestamp, v: Math.max(0, r.periodRevenue || 0) })), [rows]);
-  const cumulative = rows.length ? rows[rows.length - 1].cumulativeRevenue : 0;
-  const days = rows.length || 1;
-  const dailyAvg = cumulative / days;
+  // Constant stats from the full history: cumulative = current running total;
+  // daily avg = cumulative / actual days elapsed (one daily bucket ≈ one day).
+  const cumulative = allRows.length ? allRows[allRows.length - 1].cumulativeRevenue : 0;
+  const totalDays = allRows.length || 1;
+  const dailyAvg = cumulative / totalDays;
   const annualized = dailyAvg * 365;
-  const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+
+  const bars = useMemo(
+    () => (days === Infinity ? allRows : allRows.slice(-days)).map((r) => ({ t: r.timestamp, v: Math.max(0, r.periodRevenue || 0) })),
+    [allRows, days],
+  );
+  const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
     <div className="glass-card flex h-full flex-col overflow-hidden p-4">
@@ -142,7 +156,7 @@ function RevenueCard() {
         <div>
           <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">Revenue</div>
           <div className="mt-1 text-[26px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[30px]">
-            {rows.length === 0 ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={cumulative} format={fmtUsd} />}
+            {allRows.length === 0 ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={cumulative} format={fmtUsd} />}
           </div>
           <div className="mt-2 flex gap-5">
             <SubStat label="Annualized" value={fmtUsd(annualized)} />
@@ -153,9 +167,9 @@ function RevenueCard() {
           {REV_RANGES.map((r) => (
             <button
               key={r.label}
-              onClick={() => setHours(r.hours)}
+              onClick={() => setDays(r.days)}
               className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
-                hours === r.hours ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+                days === r.days ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
             >
               {r.label}
             </button>
