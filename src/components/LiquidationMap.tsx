@@ -12,7 +12,7 @@
 // All bucketing is client-side from one events payload.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createChart, ColorType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
@@ -103,7 +103,10 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
     const tCols = candles.length;
     const t0 = candles[0].t;
     const dur = candles[1].t - candles[0].t || 3.6e6;
-    const grid: number[][] = Array.from({ length: pRows }, () => Array(tCols).fill(0));
+    // Per-cell long/short so the hover tooltip can show the side + value; colour
+    // uses the total (l + s).
+    const gridL: number[][] = Array.from({ length: pRows }, () => Array(tCols).fill(0));
+    const gridS: number[][] = Array.from({ length: pRows }, () => Array(tCols).fill(0));
     let peak = 0;
     for (const e of events) {
       const ts = Number(e.timestamp);
@@ -111,10 +114,11 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
       if (ti < 0 || ti >= tCols) continue; // event outside the candle window
       let pi = Math.floor(((pMax - e.price) / (pMax - pMin)) * pRows); // row 0 = top (high price)
       if (pi < 0) pi = 0; if (pi >= pRows) pi = pRows - 1;
-      grid[pi][ti] += val(e);
-      if (grid[pi][ti] > peak) peak = grid[pi][ti];
+      if (/long/i.test(e.side)) gridL[pi][ti] += val(e); else gridS[pi][ti] += val(e);
+      const tot = gridL[pi][ti] + gridS[pi][ti];
+      if (tot > peak) peak = tot;
     }
-    return { grid, pRows, tCols, pMin, pMax, peak };
+    return { gridL, gridS, pRows, tCols, pMin, pMax, peak, candleT: candles.map((c) => c.t), dur };
   }, [candles, events, nBuckets, denom]);
 
   const fmtVal = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
@@ -164,26 +168,34 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
         ) : mode === 'profile' ? (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={profile} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+              <defs>
+                <linearGradient id="liqCumL" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={LONG} stopOpacity={0.16} /><stop offset="100%" stopColor={LONG} stopOpacity={0} /></linearGradient>
+                <linearGradient id="liqCumS" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={SHORT} stopOpacity={0.16} /><stop offset="100%" stopColor={SHORT} stopOpacity={0} /></linearGradient>
+              </defs>
               <XAxis dataKey="price" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtPrice}
                 tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false} minTickGap={40} />
               <YAxis yAxisId="l" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
                 width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
               <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
                 width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
+              {/* Red (long) / green (short) background tint split at the live price. */}
+              {price > profile[0]?.price && <ReferenceArea yAxisId="l" x1={profile[0].price} x2={price} fill={LONG} fillOpacity={0.06} strokeOpacity={0} />}
+              {price < profile[profile.length - 1]?.price && <ReferenceArea yAxisId="l" x1={price} x2={profile[profile.length - 1].price} fill={SHORT} fillOpacity={0.06} strokeOpacity={0} />}
               <Tooltip contentStyle={{ background: 'var(--bg-overlay)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }}
                 labelFormatter={(p) => fmtPrice(Number(p))}
                 formatter={(v: number, n: string) => [denom === 'usd' ? `$${formatCompact(Number(v))}` : `${formatCompact(Number(v))} ${coin}`,
                   ({ long: 'Long liq', short: 'Short liq', cumLong: 'Cumulative long', cumShort: 'Cumulative short' } as any)[n] || n]} />
+              {/* Cumulative curves with faint area fill (behind the bars). */}
+              <Area yAxisId="r" type="monotone" dataKey="cumLong" stroke={LONG} strokeWidth={1.5} fill="url(#liqCumL)" dot={false} isAnimationActive={false} />
+              <Area yAxisId="r" type="monotone" dataKey="cumShort" stroke={SHORT} strokeWidth={1.5} fill="url(#liqCumS)" dot={false} isAnimationActive={false} />
               <Bar yAxisId="l" dataKey="long" fill={LONG} isAnimationActive={false} />
               <Bar yAxisId="l" dataKey="short" fill={SHORT} isAnimationActive={false} />
-              <Line yAxisId="r" type="monotone" dataKey="cumLong" stroke={LONG} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line yAxisId="r" type="monotone" dataKey="cumShort" stroke={SHORT} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              {price > 0 && <ReferenceLine yAxisId="l" x={price} stroke="var(--role-content)" strokeDasharray="4 4"
-                label={{ value: fmtPrice(price), position: 'top', fill: 'var(--role-content)', fontSize: 10 }} />}
+              {price > 0 && <ReferenceLine yAxisId="l" x={price} stroke="var(--role-content)" strokeDasharray="4 4" strokeOpacity={0.7}
+                label={{ value: `Current: ${fmtPrice(price)}`, position: 'insideBottom', fill: 'var(--role-content)', fontSize: 10 }} />}
             </ComposedChart>
           </ResponsiveContainer>
         ) : heat ? (
-          <HeatmapCandles {...heat} candles={candles} price={price} fmtVal={fmtVal} fmtPrice={fmtPrice} />
+          <HeatmapCandles {...heat} candles={candles} price={price} denomCoin={coin} denom={denom} fmtVal={fmtVal} fmtPrice={fmtPrice} />
         ) : (
           <Center>Loading price data for the heatmap…</Center>
         )}
@@ -211,22 +223,27 @@ function heatColor(v: number, peak: number) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-function HeatmapCandles({ grid, pRows, pMin, pMax, peak, candles, price }: {
-  grid: number[][]; pRows: number; pMin: number; pMax: number; peak: number;
-  candles: Candle[]; price: number; fmtVal?: (n: number) => string; fmtPrice?: (n: number) => string;
+interface Tip { left: number; top: number; timeLabel: string; priceLabel: string; long: number; short: number; }
+
+function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price, candleT, dur, denom, denomCoin }: {
+  gridL: number[][]; gridS: number[][]; pRows: number; pMin: number; pMax: number; peak: number;
+  candles: Candle[]; price: number; candleT: number[]; dur: number; denom: 'coin' | 'usd'; denomCoin: string;
+  fmtVal?: (n: number) => string; fmtPrice?: (n: number) => string;
 }) {
-  // Interactive: candles rendered by lightweight-charts (pan / zoom / scale like
-  // the default chart), with the liquidation heat field drawn on a canvas BEHIND
-  // the transparent chart and re-aligned via the chart's coordinate API on every
-  // range change / resize.
+  // Interactive: candles via lightweight-charts (pan/zoom/scale), heat field on a
+  // canvas BEHIND the transparent chart, re-aligned on every range change; a
+  // hover tooltip reads the cell under the cursor via the chart's coordinate API;
+  // a vertical colour-scale legend sits alongside.
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${denomCoin}`);
+  const fmtP = (n: number) => `$${formatCompact(n)}`;
 
   useEffect(() => {
     const container = wrapRef.current, canvas = canvasRef.current;
     if (!container || !canvas || candles.length < 2) return;
 
-    // Resolve CSS-var colours to canonical rgb() for the canvas library.
     const cssVar = (expr: string, fb: string) => {
       const s = document.createElement('span'); s.style.color = expr; s.style.display = 'none';
       document.body.appendChild(s); const c = getComputedStyle(s).color; document.body.removeChild(s);
@@ -277,7 +294,7 @@ function HeatmapCandles({ grid, pRows, pMin, pMax, peak, candles, price }: {
       for (let ti = 0; ti < tCols; ti++) {
         const x = ts.timeToCoordinate(times[ti]); if (x == null) continue;
         for (let pi = 0; pi < pRows; pi++) {
-          const v = grid[pi][ti]; if (v <= 0) continue;
+          const v = gridL[pi][ti] + gridS[pi][ti]; if (v <= 0) continue;
           const pTop = pMax - (pi / pRows) * (pMax - pMin);
           const pBot = pMax - ((pi + 1) / pRows) * (pMax - pMin);
           const yTop = series.priceToCoordinate(pTop), yBot = series.priceToCoordinate(pBot);
@@ -290,31 +307,76 @@ function HeatmapCandles({ grid, pRows, pMin, pMax, peak, candles, price }: {
     let raf = 0;
     const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
 
+    // Hover → find the cell under the cursor and show its long/short liq.
+    const onMove = (e: PointerEvent) => {
+      redraw();
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left, yPx = e.clientY - rect.top;
+      const p = series.coordinateToPrice(yPx);
+      const logical = chart.timeScale().coordinateToLogical(x);
+      if (p == null || logical == null) { setTip(null); return; }
+      const ti = Math.round(logical);
+      if (ti < 0 || ti >= tCols) { setTip(null); return; }
+      let pi = Math.floor(((pMax - p) / (pMax - pMin)) * pRows);
+      if (pi < 0 || pi >= pRows) { setTip(null); return; }
+      const l = gridL[pi][ti], s = gridS[pi][ti];
+      if (l + s <= 0) { setTip(null); return; }
+      const d = new Date(candleT[ti]);
+      setTip({
+        left: x, top: yPx,
+        timeLabel: d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+        priceLabel: fmtP(p), long: l, short: s,
+      });
+    };
+    const onLeave = () => setTip(null);
+
     sizeCanvas(); redraw();
     const t1 = window.setTimeout(redraw, 60);
     const t2 = window.setTimeout(redraw, 260);
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
     const ro = new ResizeObserver(() => { chart.applyOptions({ width: container.clientWidth, height: container.clientHeight }); sizeCanvas(); redraw(); });
     ro.observe(container);
-    // Price-axis drags / wheel don't fire the range event — redraw on interaction.
-    const onInteract = () => redraw();
-    container.addEventListener('wheel', onInteract, { passive: true });
-    container.addEventListener('pointermove', onInteract);
-    container.addEventListener('pointerup', onInteract);
+    container.addEventListener('wheel', redraw, { passive: true });
+    container.addEventListener('pointermove', onMove);
+    container.addEventListener('pointerup', redraw);
+    container.addEventListener('pointerleave', onLeave);
 
     return () => {
       clearTimeout(t1); clearTimeout(t2); cancelAnimationFrame(raf); ro.disconnect();
-      container.removeEventListener('wheel', onInteract);
-      container.removeEventListener('pointermove', onInteract);
-      container.removeEventListener('pointerup', onInteract);
+      container.removeEventListener('wheel', redraw);
+      container.removeEventListener('pointermove', onMove);
+      container.removeEventListener('pointerup', redraw);
+      container.removeEventListener('pointerleave', onLeave);
       chart.remove();
     };
-  }, [candles, grid, pRows, pMin, pMax, peak, price]);
+  }, [gridL, gridS, pRows, pMin, pMax, peak, price, candles, candleT, denom, denomCoin]);
 
+  // Legend gradient (matches the heat ramp).
+  const legendStops = [250, 200, 150, 100, 60, 30, 0].map((v) => heatColor((v / 250) * peak, peak));
   return (
-    <div className="relative h-full w-full">
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-0" />
-      <div ref={wrapRef} className="absolute inset-0 z-10" />
+    <div className="flex h-full w-full gap-2">
+      {/* Colour-scale legend */}
+      <div className="flex w-14 shrink-0 flex-col items-start justify-between py-0.5 text-[9px] tabular-nums text-[var(--role-content-subtle)]">
+        <span>{fmt(peak)}</span>
+        <div className="my-1 w-3 flex-1 rounded-sm" style={{ background: `linear-gradient(to bottom, ${legendStops.join(',')})` }} />
+        <span>{denom === 'usd' ? '$0' : `0 ${denomCoin}`}</span>
+      </div>
+      {/* Chart + heat + tooltip */}
+      <div className="relative min-w-0 flex-1">
+        <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-0" />
+        <div ref={wrapRef} className="absolute inset-0 z-10" />
+        {tip && (
+          <div
+            className="pointer-events-none absolute z-20 rounded-lg border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-md"
+            style={{ left: Math.min(tip.left + 12, (wrapRef.current?.clientWidth || 300) - 150), top: Math.max(4, tip.top - 60) }}
+          >
+            <div className="mb-1 text-[var(--role-content-subtle)]">{tip.timeLabel}</div>
+            <div className="flex items-center justify-between gap-4"><span className="text-[var(--role-content-subtle)]">Price</span><span className="font-semibold text-[var(--role-content)]">{tip.priceLabel}</span></div>
+            {tip.long > 0 && <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--neg)' }} />Long liq</span><span className="font-semibold text-[var(--neg)]">{fmt(tip.long)}</span></div>}
+            {tip.short > 0 && <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--pos)' }} />Short liq</span><span className="font-semibold text-[var(--pos)]">{fmt(tip.short)}</span></div>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
