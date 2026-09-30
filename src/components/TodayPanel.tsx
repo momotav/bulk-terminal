@@ -44,9 +44,10 @@ export function TodayPanel() {
   }, [network]);
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      {/* Two metric cards — a compact fixed height (shorter than before), with a
-          same-size chart backdrop; the revenue card fills the rest. */}
+    // Natural height on mobile (so the revenue chart has room); fills the grid
+    // cell to match the hero on lg.
+    <div className="flex flex-col gap-3 lg:h-full">
+      {/* Two metric cards — a compact fixed height, same-size chart backdrop. */}
       <div className="grid grid-cols-2 gap-3 flex-none h-[140px] lg:h-[158px]">
         <MetricMiniCard
           label="Open Interest"
@@ -63,7 +64,7 @@ export function TodayPanel() {
           color="var(--pos)"
         />
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="flex flex-col lg:min-h-0 lg:flex-1">
         <RevenueCard />
       </div>
     </div>
@@ -155,7 +156,7 @@ function RevenueCard() {
   const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
-    <div className="glass-card flex h-full flex-col overflow-hidden p-4">
+    <div className="glass-card flex flex-col overflow-hidden p-4 lg:h-full">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[11px] font-medium text-[var(--role-content-subtle)]">Revenue</div>
@@ -180,7 +181,9 @@ function RevenueCard() {
           ))}
         </div>
       </div>
-      <div className="mt-3 min-h-0 flex-1">
+      {/* min-height guarantees the chart shows on mobile (natural card height);
+          flex-1 lets it grow to fill the card on lg. */}
+      <div className="mt-3 h-[150px] flex-none lg:h-auto lg:min-h-0 lg:flex-1">
         {bars.length < 1 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--role-content-subtle)]">No revenue data yet.</div>
         ) : (

@@ -42,11 +42,12 @@ export default function HomePage() {
       <SectionLabel className="mt-4">Overview</SectionLabel>
       <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
         {/* Left: Total Volume hero. Right: two metric cards + a wide Revenue
-            card, ASXN-style. */}
-        <div className="min-h-[320px] lg:min-h-[440px]">
+            card, ASXN-style. On mobile the right panel grows naturally (so the
+            revenue chart has room); on lg it matches the hero height. */}
+        <div className="min-h-[360px] lg:min-h-[440px]">
           <VolumeHero />
         </div>
-        <div className="min-h-[320px] lg:min-h-[440px]">
+        <div className="lg:min-h-[440px]">
           <TodayPanel />
         </div>
       </div>
