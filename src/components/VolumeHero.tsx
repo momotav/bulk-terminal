@@ -12,11 +12,13 @@ import { analytics, cn, formatCompact, type ChartData } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
+// 1D is hourly (rich ~24 bars); longer ranges are daily buckets that fill in as
+// history accumulates. Same data source as the Analytics volume chart.
 const RANGES: { label: string; hours: number }[] = [
-  { label: '7D', hours: 168 },
+  { label: '1D', hours: 24 },
+  { label: '1W', hours: 168 },
   { label: '1M', hours: 720 },
   { label: '3M', hours: 2160 },
-  { label: '1Y', hours: 8760 },
   { label: 'ALL', hours: 8760 * 3 },
 ];
 
@@ -27,7 +29,7 @@ const fmtUsd = (n: number): string => `$${formatCompact(n)}`;
 export function VolumeHero() {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
-  const [hours, setHours] = useState(720);
+  const [hours, setHours] = useState(24);
   const [rows, setRows] = useState<ChartData[]>([]);
   const [vol24h, setVol24h] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +51,9 @@ export function VolumeHero() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    analytics.getVolumeChart(hours)
+    // Same source as the Analytics volume chart: hourly buckets for ≤24h, daily
+    // beyond — so 1D is rich and consistent with what /analytics shows.
+    analytics.getVolumeFromBulkAPI(hours)
       .then((d) => { if (!cancelled) setRows(Array.isArray(d) ? d : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -69,7 +73,19 @@ export function VolumeHero() {
     return ((bars[bars.length - 1].total - prev) / prev) * 100;
   }, [bars]);
 
-  const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Hourly buckets (1D) → show the time; daily buckets → show the date.
+  const fmtAxis = (ts: string) => {
+    const d = new Date(ts);
+    return hours <= 24
+      ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const fmtLabel = (ts: string) => {
+    const d = new Date(ts);
+    return hours <= 24
+      ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   return (
     <div className="glass-card flex h-full flex-col p-4 sm:p-5">
@@ -124,7 +140,7 @@ export function VolumeHero() {
               <Tooltip
                 cursor={{ fill: 'var(--role-surface-raised)', opacity: 0.4 }}
                 contentStyle={{ background: 'var(--bg-overlay)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }}
-                labelFormatter={(t) => new Date(t as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                labelFormatter={(t) => fmtLabel(t as string)}
                 formatter={(v: number) => [`$${formatCompact(Number(v))}`, 'Volume']}
               />
               <Bar dataKey="total" fill="url(#volHeroGrad)" radius={[2, 2, 0, 0]} maxBarSize={48} isAnimationActive={false} />
