@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { cn, formatCompact } from '@/lib/api';
+import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -37,6 +37,7 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
   const [denom, setDenom] = useState<'coin' | 'usd'>('usd');
   const [events, setEvents] = useState<LiqEvent[]>([]);
   const [price, setPrice] = useState(0);
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +52,15 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
       })
       .catch(() => { if (!cancelled) setEvents([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [coin, network]);
+
+  // Candles for the heatmap overlay — same coin, aligned by time & price.
+  useEffect(() => {
+    let cancelled = false;
+    analytics.getCandles(coin, '1h', 180)
+      .then((r) => { if (!cancelled) setCandles(Array.isArray(r?.candles) ? r.candles : []); })
+      .catch(() => { if (!cancelled) setCandles([]); });
     return () => { cancelled = true; };
   }, [coin, network]);
 
@@ -80,25 +90,31 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
     return buckets;
   }, [events, nBuckets, denom, price]);
 
-  // ---- Heatmap: time × price grid ----
+  // ---- Heatmap over candles: columns = candles (shared time axis), rows =
+  // price buckets across the candle price range (shared price axis). ----
   const heat = useMemo(() => {
-    if (events.length === 0) return null;
-    const prices = events.map((e) => e.price);
-    const times = events.map((e) => Number(e.timestamp));
-    const pMin = Math.min(...prices), pMax = Math.max(...prices);
-    const tMin = Math.min(...times), tMax = Math.max(...times);
-    if (!(pMax > pMin) || !(tMax > tMin)) return null;
-    const pB = Math.min(nBuckets, 40), tB = isMobile ? 24 : 48;
-    const grid: number[][] = Array.from({ length: pB }, () => Array(tB).fill(0));
+    if (candles.length < 2) return null;
+    const lows = candles.map((c) => c.l), highs = candles.map((c) => c.h);
+    let pMin = Math.min(...lows), pMax = Math.max(...highs);
+    if (!(pMax > pMin)) return null;
+    const pad = (pMax - pMin) * 0.04; pMin -= pad; pMax += pad; // breathing room
+    const pRows = Math.min(nBuckets, 60);
+    const tCols = candles.length;
+    const t0 = candles[0].t;
+    const dur = candles[1].t - candles[0].t || 3.6e6;
+    const grid: number[][] = Array.from({ length: pRows }, () => Array(tCols).fill(0));
     let peak = 0;
     for (const e of events) {
-      let pi = Math.floor(((e.price - pMin) / (pMax - pMin)) * pB); if (pi >= pB) pi = pB - 1; if (pi < 0) pi = 0;
-      let ti = Math.floor(((Number(e.timestamp) - tMin) / (tMax - tMin)) * tB); if (ti >= tB) ti = tB - 1; if (ti < 0) ti = 0;
+      const ts = Number(e.timestamp);
+      let ti = Math.floor((ts - t0) / dur);
+      if (ti < 0 || ti >= tCols) continue; // event outside the candle window
+      let pi = Math.floor(((pMax - e.price) / (pMax - pMin)) * pRows); // row 0 = top (high price)
+      if (pi < 0) pi = 0; if (pi >= pRows) pi = pRows - 1;
       grid[pi][ti] += val(e);
       if (grid[pi][ti] > peak) peak = grid[pi][ti];
     }
-    return { grid, pB, tB, pMin, pMax, tMin, tMax, peak };
-  }, [events, nBuckets, denom, isMobile]);
+    return { grid, pRows, tCols, pMin, pMax, peak };
+  }, [candles, events, nBuckets, denom]);
 
   const fmtVal = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
   const fmtPrice = (n: number) => `$${formatCompact(n)}`;
@@ -166,9 +182,9 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
             </ComposedChart>
           </ResponsiveContainer>
         ) : heat ? (
-          <Heatmap {...heat} fmtVal={fmtVal} fmtPrice={fmtPrice} />
+          <HeatmapCandles {...heat} candles={candles} price={price} fmtVal={fmtVal} fmtPrice={fmtPrice} />
         ) : (
-          <Center>Not enough data for a heatmap yet.</Center>
+          <Center>Loading price data for the heatmap…</Center>
         )}
       </div>
       <p className="mt-2 text-[10px] leading-relaxed text-[var(--role-content-subtle)]">
@@ -178,40 +194,68 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
   );
 }
 
-function Heatmap({ grid, pB, tB, pMin, pMax, peak, fmtVal, fmtPrice }: {
-  grid: number[][]; pB: number; tB: number; pMin: number; pMax: number; peak: number;
-  fmtVal: (n: number) => string; fmtPrice: (n: number) => string;
+// Combined liquidation heatmap + candlesticks (HyperDash-style): the heat FIELD
+// is the background, the coin's real candles are drawn on top, both sharing the
+// price (Y) and time (X) axes. Rendered as one SVG stretched to the container
+// (preserveAspectRatio none), with the price axis alongside.
+const BASE = 'rgb(12,9,24)';
+function heatColor(v: number, peak: number) {
+  if (v <= 0) return BASE;
+  const t = 0.12 + 0.88 * Math.min(1, Math.log1p(v) / Math.log1p(peak || 1));
+  const stops = [[26, 16, 48], [80, 18, 90], [190, 55, 60], [245, 140, 40], [250, 230, 130]];
+  const seg = Math.min(stops.length - 2, Math.floor(t * (stops.length - 1)));
+  const f = t * (stops.length - 1) - seg;
+  const [a, b] = [stops[seg], stops[seg + 1]];
+  const c = a.map((x, i) => Math.round(x + (b[i] - x) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function HeatmapCandles({ grid, pRows, tCols, pMin, pMax, peak, candles, price, fmtVal, fmtPrice }: {
+  grid: number[][]; pRows: number; tCols: number; pMin: number; pMax: number; peak: number;
+  candles: Candle[]; price: number; fmtVal: (n: number) => string; fmtPrice: (n: number) => string;
 }) {
-  // Inferno-ish ramp: near-black base → purple → orange → yellow, by intensity.
-  // Zero cells get the darkest base (not transparent), so the grid reads as a
-  // continuous heat FIELD like HyperDash rather than scattered dots. A small
-  // floor lifts any non-zero cell above the base so single events still show.
-  const BASE = 'rgb(12,9,24)';
-  const color = (v: number) => {
-    if (v <= 0) return BASE;
-    const t = 0.12 + 0.88 * Math.min(1, Math.log1p(v) / Math.log1p(peak || 1));
-    const stops = [[26, 16, 48], [80, 18, 90], [190, 55, 60], [245, 140, 40], [250, 230, 130]];
-    const seg = Math.min(stops.length - 2, Math.floor(t * (stops.length - 1)));
-    const f = t * (stops.length - 1) - seg;
-    const [a, b] = [stops[seg], stops[seg + 1]];
-    const c = a.map((x, i) => Math.round(x + (b[i] - x) * f));
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
-  };
+  // Logical coordinate space; SVG stretches to fill (cells become wide, like HD).
+  const W = tCols, H = 1000;
+  const y = (p: number) => (1 - (p - pMin) / (pMax - pMin)) * H;
+  const rowH = H / pRows;
+  const green = 'var(--pos)', red = 'var(--neg)';
+  const bodyW = 0.62, halfB = bodyW / 2;
+
+  const priceLabels = [pMax, pMin + (pMax - pMin) * 0.75, (pMax + pMin) / 2, pMin + (pMax - pMin) * 0.25, pMin];
+
   return (
     <div className="flex h-full">
-      {/* price axis */}
-      <div className="flex w-11 flex-col justify-between py-0.5 pr-1 text-right text-[9px] text-[var(--role-content-subtle)]">
-        <span>{fmtPrice(pMax)}</span><span>{fmtPrice((pMax + pMin) / 2)}</span><span>{fmtPrice(pMin)}</span>
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded" style={{ background: BASE }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+          {/* Heat field */}
+          {grid.flatMap((rowArr, pi) =>
+            rowArr.map((v, ti) => v > 0 ? (
+              <rect key={`h${pi}-${ti}`} x={ti} y={pi * rowH} width={1} height={rowH} fill={heatColor(v, peak)} shapeRendering="crispEdges" />
+            ) : null),
+          )}
+          {/* Candles */}
+          {candles.map((c, i) => {
+            const up = c.c >= c.o;
+            const col = up ? green : red;
+            const cx = i + 0.5;
+            const yO = y(c.o), yC = y(c.c);
+            const top = Math.min(yO, yC), h = Math.max(1, Math.abs(yO - yC));
+            return (
+              <g key={`c${i}`}>
+                <line x1={cx} x2={cx} y1={y(c.h)} y2={y(c.l)} stroke={col} strokeWidth={0.09} vectorEffect="non-scaling-stroke" />
+                <rect x={cx - halfB} y={top} width={bodyW} height={h} fill={col} />
+              </g>
+            );
+          })}
+          {/* Live price line */}
+          {price > pMin && price < pMax && (
+            <line x1={0} x2={W} y1={y(price)} y2={y(price)} stroke="var(--role-content)" strokeWidth={1} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" opacity={0.6} />
+          )}
+        </svg>
       </div>
-      {/* Solid field: no gaps, dark base fill. */}
-      <div className="grid flex-1 overflow-hidden rounded" style={{ gridTemplateRows: `repeat(${pB}, 1fr)`, gridTemplateColumns: `repeat(${tB}, 1fr)`, background: BASE }}>
-        {/* rows top(high price)→bottom(low price) */}
-        {Array.from({ length: pB }, (_, r) => pB - 1 - r).flatMap((pi) =>
-          Array.from({ length: tB }, (_, ti) => (
-            <div key={`${pi}-${ti}`} title={grid[pi][ti] > 0 ? fmtVal(grid[pi][ti]) : ''}
-              style={{ background: color(grid[pi][ti]) }} className="min-h-0 min-w-0" />
-          )),
-        )}
+      {/* Price axis */}
+      <div className="flex w-12 shrink-0 flex-col justify-between py-0.5 pl-1 text-left text-[9px] tabular-nums text-[var(--role-content-subtle)]">
+        {priceLabels.map((p, i) => <span key={i}>{fmtPrice(p)}</span>)}
       </div>
     </div>
   );
