@@ -105,9 +105,10 @@ export function VolumeHero() {
 
   return (
     <div className="glass-card flex h-full flex-col p-4 sm:p-5">
-      {/* Header — stacks on mobile so the toolbar drops to its own row below the
-          number (it can't fit beside the wide 24h/Total toggle on a phone). */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+      {/* Header — label/number on the left, controls top-right. On mobile the
+          controls stack vertically (timeframe pills on top, chart-type icons
+          below); side by side from sm up. */}
+      <div className="flex flex-row items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="inline-flex items-center gap-0.5 rounded-md bg-[var(--role-surface-raised)]/50 p-0.5 text-[11px] font-medium">
             {(['24h', 'all'] as const).map((m) => (
@@ -133,9 +134,10 @@ export function VolumeHero() {
             {headlineMode === 'all' && <span className="text-[13px] font-medium text-[var(--role-content-subtle)]">all-time</span>}
           </div>
         </div>
-        {/* Toolbar: chart-type group + timeframe group, side by side (ASXN).
-            On mobile it sits on its own row below the number and wraps if tight. */}
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        {/* Toolbar. JSX order is chart-type then timeframe. On mobile we
+            flex-col-reverse so the timeframe pills land ON TOP and the chart-type
+            icons sit under them; from sm up it's the normal side-by-side row. */}
+        <div className="flex flex-col-reverse items-end gap-1.5 shrink-0 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
             {([
               { key: 'bar', Icon: BarChart3, label: 'Bars' },
