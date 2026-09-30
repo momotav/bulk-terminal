@@ -27,10 +27,11 @@ interface LiqEvent { side: string; price: number; size: number; value: number; t
 const LONG = 'var(--neg)';   // long liquidations = red (forced sells)
 const SHORT = 'var(--pos)';  // short liquidations = green (forced buys)
 
-export function LiquidationMap() {
+export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; embedded?: boolean } = {}) {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
-  const [coin, setCoin] = useState('BTC');
+  const [coin, setCoin] = useState(lockedCoin ?? 'BTC');
+  useEffect(() => { if (lockedCoin) setCoin(lockedCoin); }, [lockedCoin]);
   const [mode, setMode] = useState<'profile' | 'heatmap'>('profile');
   const [gran, setGran] = useState<Gran>('medium');
   const [denom, setDenom] = useState<'coin' | 'usd'>('usd');
@@ -105,20 +106,23 @@ export function LiquidationMap() {
   const totalShort = useMemo(() => events.filter((e) => !/long/i.test(e.side)).reduce((s, e) => s + val(e), 0), [events, denom]);
 
   return (
-    <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
-      {/* Header: coin picker + mode / granularity / denom toggles */}
+    <div className={embedded ? 'flex h-full flex-col' : 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4'}>
+      {/* Header: coin picker (standalone) + mode / granularity / denom toggles */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">Liquidations</h3>
-          <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
-            {COINS.map((c) => (
-              <button key={c} onClick={() => setCoin(c)}
-                className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
-                  coin === c ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
-                {c}
-              </button>
-            ))}
-          </div>
+          {!embedded && <h3 className="text-base font-semibold text-[var(--text-primary)]">Liquidations</h3>}
+          {/* Coin picker only when standalone; embedded is locked to the modal's coin. */}
+          {!lockedCoin && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-[var(--bg-muted)] p-0.5">
+              {COINS.map((c) => (
+                <button key={c} onClick={() => setCoin(c)}
+                  className={cn('rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+                    coin === c ? 'bg-[var(--role-surface)] text-[var(--role-content)] shadow-sm' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Seg options={[['profile', 'Profile'], ['heatmap', 'Heatmap']]} value={mode} onChange={(v) => setMode(v as any)} />
@@ -135,7 +139,7 @@ export function LiquidationMap() {
       </div>
 
       {/* Body */}
-      <div className="mt-3 h-[360px]">
+      <div className={cn('mt-3', embedded ? 'min-h-0 flex-1' : 'h-[360px]')}>
         {loading && events.length === 0 ? (
           <Center>Loading…</Center>
         ) : events.length === 0 ? (

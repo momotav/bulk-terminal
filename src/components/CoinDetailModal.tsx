@@ -19,6 +19,7 @@ import { type BulkTicker, openInterestUsd } from '@/hooks/useTickers';
 import { clampWicks } from '@/lib/candles';
 import { CoinIcon } from '@/components/CoinIcon';
 import { MarginSurface } from '@/components/MarginSurface';
+import { LiquidationMap } from '@/components/LiquidationMap';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { Area, AreaChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 
@@ -47,7 +48,7 @@ interface FocusEvent {
 export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null; onClose: () => void }) {
   const isMobile = useIsMobile();
   const [interval, setIntervalValue] = useState('1h');
-  const [chartView, setChartView] = useState<'chart' | 'depth' | 'margin'>('chart');
+  const [chartView, setChartView] = useState<'chart' | 'depth' | 'margin' | 'liqs'>('chart');
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [book, setBook] = useState<OrderbookSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -516,13 +517,13 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
                   <span className="mx-1 h-4 w-px bg-[var(--role-line)]" />
                 </div>
               )}
-              {(['chart', 'depth', 'margin'] as const).map((v) => (
+              {([['chart', 'Chart'], ['depth', 'Depth'], ['margin', 'Margin'], ['liqs', 'Liqs']] as const).map(([v, label]) => (
                 <button
                   key={v}
                   onClick={() => setChartView(v)}
-                  className={cn('capitalize transition-colors', chartView === v ? 'text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
+                  className={cn('transition-colors', chartView === v ? 'text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]')}
                 >
-                  {v}
+                  {label}
                 </button>
               ))}
             </div>
@@ -605,6 +606,11 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
             {chartView === 'margin' && (
               <div className="h-[440px] w-full overflow-hidden lg:h-full">
                 <MarginSurface coin={coinOf(symbol)} embedded />
+              </div>
+            )}
+            {chartView === 'liqs' && (
+              <div className="h-[440px] w-full overflow-hidden px-2 lg:h-full">
+                <LiquidationMap lockedCoin={coinOf(symbol)} embedded />
               </div>
             )}
           </div>
