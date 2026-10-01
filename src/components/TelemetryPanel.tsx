@@ -104,16 +104,10 @@ export function TelemetryPanel() {
         )}
       </div>
 
-      {/* Rolling chart — a faint dot-grid texture fills the empty space so a
-          near-flat metric (e.g. steady latency) doesn't read as a blank panel. */}
-      <div
-        className="relative min-h-0 flex-1 px-1 pb-1 pt-2"
-        style={{
-          backgroundImage: 'radial-gradient(rgb(var(--p-text) / 0.14) 1px, transparent 1.3px)',
-          backgroundSize: '12px 12px',
-          backgroundPosition: '-1px -1px',
-        }}
-      >
+      {/* Rolling chart — the area UNDER the line carries a tinted dot texture
+          (over a colour gradient) so a near-flat metric doesn't read as a blank
+          panel, while the empty space above the line stays clean. */}
+      <div className="relative min-h-0 flex-1 px-1 pb-1 pt-2">
         {chartData.length < 2 ? (
           <div className="flex h-full items-center justify-center text-[11px] text-[var(--role-content-subtle)]">Sampling…</div>
         ) : (
@@ -121,12 +115,20 @@ export function TelemetryPanel() {
             <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
               <defs>
                 <linearGradient id="telGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={active.color} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={active.color} stopOpacity={0} />
+                  <stop offset="0%" stopColor={active.color} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={active.color} stopOpacity={0.04} />
                 </linearGradient>
+                {/* Dot texture, tinted to the active metric, clipped to the
+                    area fill so it only shows beneath the line. */}
+                <pattern id="telDots" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="translate(0.5 0.5)">
+                  <circle cx="1" cy="1" r="1" fill={active.color} fillOpacity={0.32} />
+                </pattern>
               </defs>
               <YAxis hide domain={['dataMin', 'dataMax']} />
-              <Area type="monotone" dataKey="v" stroke={active.color} strokeWidth={2} fill="url(#telGrad)" isAnimationActive={false} dot={false} />
+              {/* Colour gradient first, dot texture layered on top, both under
+                  the same line (stroke lives on the textured layer). */}
+              <Area type="monotone" dataKey="v" stroke="none" fill="url(#telGrad)" isAnimationActive={false} dot={false} />
+              <Area type="monotone" dataKey="v" stroke={active.color} strokeWidth={2} fill="url(#telDots)" isAnimationActive={false} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         )}

@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Hash, Activity, Zap, ChevronRight, Layers } from 'lucide-react';
-import { BarChart, Bar, ResponsiveContainer, YAxis, Cell } from 'recharts';
+import { Hash, Activity, Zap, ChevronRight, Layers, Info } from 'lucide-react';
+import { BarChart, Bar, ResponsiveContainer, YAxis, Cell, Area, AreaChart, Tooltip } from 'recharts';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import { StatCard } from '@/components/StatCard';
 import { explorer, formatCompact, type ExplorerBlock } from '@/lib/api';
 
 // How many blocks to show in the list. Backend buffer caps at 1000,
@@ -155,6 +154,18 @@ export default function ExplorerPage() {
     };
   }, [blocks]);
 
+  // Rolling history of blocks/sec across polls — gives the KPI card a live
+  // sparkline backdrop (the raw metric is a single scalar each tick).
+  const bpsHistRef = useRef<number[]>([]);
+  const [bpsHist, setBpsHist] = useState<number[]>([]);
+  useEffect(() => {
+    if (stats.blocksPerSec > 0) {
+      const next = [...bpsHistRef.current, stats.blocksPerSec].slice(-44);
+      bpsHistRef.current = next;
+      setBpsHist(next);
+    }
+  }, [stats.blocksPerSec]);
+
   // Oldest → newest so the chart reads left-to-right as time advances.
   const chartData = useMemo(
     () => blocks.slice(0, CHART_LIMIT).reverse().map(b => ({
@@ -167,22 +178,6 @@ export default function ExplorerPage() {
 
   const metricLabel = metric === 'txCount' ? 'Txs' : 'Actions';
 
-  const liveBadge = !loading && blocks.length > 0 && (
-    <span className="flex items-center gap-1.5">
-      <span className="relative flex h-1.5 w-1.5">
-        <span
-          className="live-halo absolute inline-flex h-full w-full rounded-full"
-          style={{ backgroundColor: 'var(--role-signal-positive)' }}
-        />
-        <span
-          className="live-core relative inline-flex h-1.5 w-1.5 rounded-full"
-          style={{ backgroundColor: 'var(--role-signal-positive)' }}
-        />
-      </span>
-      <span className="text-[11px] font-medium text-[var(--role-content-muted)]">Live</span>
-    </span>
-  );
-
   return (
     <main className="responsive-container py-6 space-y-4">
       {/* Header — serif page title, matching the analytics routes. */}
@@ -193,7 +188,6 @@ export default function ExplorerPage() {
             Live block stream from BULK&apos;s network - last {BLOCK_LIMIT} blocks.
           </p>
         </div>
-        {liveBadge}
       </div>
 
       {error && blocks.length === 0 && (
@@ -202,31 +196,63 @@ export default function ExplorerPage() {
         </div>
       )}
 
-      {/* KPI strip — live network stats derived from the visible window. */}
+      {/* KPI strip — same card language as the dashboard (big number over a
+          full-bleed area backdrop). */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Latest round" value={<AnimatedNumber value={stats.latestRound} format={(n) => Math.round(n).toLocaleString()} />} />
-        <StatCard label="Blocks / sec" value={<AnimatedNumber value={stats.blocksPerSec} format={(n) => n.toFixed(1)} />} sub="rolling, this window" />
-        <StatCard label="Avg txs / block" value={<AnimatedNumber value={stats.avgTxs} format={(n) => n.toFixed(2)} />} />
-        <StatCard label="Actions" value={<AnimatedNumber value={stats.totalActions} format={(n) => formatCompact(Math.round(n))} />} sub={`last ${blocks.length || BLOCK_LIMIT} blocks`} />
+        <ExplorerKpi
+          label="Latest round"
+          value={<AnimatedNumber value={stats.latestRound} format={(n) => Math.round(n).toLocaleString()} />}
+          color="var(--role-signal-info)"
+        />
+        <ExplorerKpi
+          label="Blocks / sec"
+          value={<AnimatedNumber value={stats.blocksPerSec} format={(n) => n.toFixed(1)} />}
+          sub="rolling, this window"
+          spark={bpsHist}
+          color="var(--accent)"
+        />
+        <ExplorerKpi
+          label="Avg txs / block"
+          value={<AnimatedNumber value={stats.avgTxs} format={(n) => n.toFixed(2)} />}
+          spark={chartData.map((d) => d.txCount)}
+          color="var(--pos)"
+        />
+        <ExplorerKpi
+          label="Actions"
+          value={<AnimatedNumber value={stats.totalActions} format={(n) => formatCompact(Math.round(n))} />}
+          sub={`last ${blocks.length || BLOCK_LIMIT} blocks`}
+          spark={chartData.map((d) => d.actionCount)}
+          color="var(--role-signal-info)"
+        />
       </div>
 
       {/* Block activity — live histogram of txs / actions per block. */}
       <section className="glass-card">
         <div className="panel-header">
           <h2 className="panel-title t-h2">Block activity</h2>
-          <div className="toggle-group shrink-0">
-            {(['actionCount', 'txCount'] as Metric[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMetric(m)}
-                className={`toggle-btn ${metric === m ? 'active' : ''}`}
-              >
-                {m === 'txCount' ? 'Txs' : 'Actions'}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* The orientation hint lives behind an info affordance instead of a
+                permanent footer caption. */}
+            <span className="group relative inline-flex">
+              <Info className="h-3.5 w-3.5 cursor-help text-[var(--role-content-subtle)] transition-colors hover:text-[var(--role-content-muted)]" />
+              <span className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 hidden whitespace-nowrap rounded-md border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] text-[var(--role-content-muted)] shadow-lg backdrop-blur-sm group-hover:block">
+                {metricLabel} per block · newest on the right
+              </span>
+            </span>
+            <div className="toggle-group">
+              {(['actionCount', 'txCount'] as Metric[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMetric(m)}
+                  className={`toggle-btn ${metric === m ? 'active' : ''}`}
+                >
+                  {m === 'txCount' ? 'Txs' : 'Actions'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="h-32 px-2 py-3">
+        <div className="h-40 px-2 pb-2 pt-3">
           {chartData.length < 2 ? (
             <div className="flex h-full items-center justify-center text-[11px] text-[var(--role-content-subtle)]">
               Collecting blocks…
@@ -234,24 +260,29 @@ export default function ExplorerPage() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={2}>
+                <defs>
+                  <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={barColor} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={barColor} stopOpacity={0.35} />
+                  </linearGradient>
+                </defs>
                 <YAxis hide domain={[0, 'dataMax']} />
+                <Tooltip
+                  cursor={{ fill: 'var(--role-surface-raised)', opacity: 0.5 }}
+                  content={<ActivityTooltip metricLabel={metricLabel} metric={metric} />}
+                />
                 <Bar dataKey={metric} radius={[2, 2, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d, i) => (
                     <Cell
                       key={i}
-                      fill={barColor}
-                      fillOpacity={d[metric] > 0 ? (i === chartData.length - 1 ? 1 : 0.55) : 0.12}
+                      fill={d[metric] > 0 ? 'url(#barGrad)' : barColor}
+                      fillOpacity={d[metric] > 0 ? (i === chartData.length - 1 ? 1 : 0.72) : 0.1}
                     />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
-        <div className="border-t border-[var(--role-line)] px-4 py-2">
-          <p className="text-[11px] text-[var(--role-content-subtle)]">
-            {metricLabel} per block · newest on the right
-          </p>
         </div>
       </section>
 
@@ -262,7 +293,6 @@ export default function ExplorerPage() {
             <Layers className="h-3.5 w-3.5 text-[var(--role-content-subtle)]" />
             Recent blocks
           </h2>
-          {liveBadge}
         </div>
 
         {/* Column header */}
@@ -374,5 +404,58 @@ export default function ExplorerPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// KPI card matching the dashboard's MetricMiniCard: big number over a
+// full-bleed area backdrop pinned to the card's lower edge. The backdrop only
+// draws when there's a ≥2-point series; otherwise the number sits alone.
+function ExplorerKpi({ label, value, spark, color, sub }: {
+  label: string; value: React.ReactNode; spark?: number[]; color: string; sub?: string;
+}) {
+  const data = (spark ?? []).map((v, i) => ({ i, v }));
+  const gid = `ekpi-${label.replace(/[^a-z]/gi, '')}`;
+  return (
+    <div className="glass-card relative flex h-[118px] flex-col overflow-hidden p-4 sm:h-[128px]">
+      {data.length >= 2 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[62px] opacity-90">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <YAxis hide domain={['dataMin', 'dataMax']} />
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      <div className="relative z-10">
+        <div className="truncate text-[12px] font-medium text-[var(--role-content-subtle)]">{label}</div>
+        <div className="mt-1.5 text-[26px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[30px]">
+          {value}
+        </div>
+        {sub && <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)]">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Hover tooltip for the activity histogram — round + the active metric.
+function ActivityTooltip({ active, payload, metricLabel, metric }: {
+  active?: boolean; payload?: Array<{ payload: { round: number; txCount: number; actionCount: number } }>; metricLabel?: string; metric?: Metric;
+}) {
+  if (!active || !payload || !payload.length || !metric) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-md border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-sm">
+      <div className="font-mono tabular-nums text-[var(--role-content-muted)]">Round {Number(d.round).toLocaleString()}</div>
+      <div className="mt-0.5 tabular-nums text-[var(--role-content)]">
+        {metricLabel}: <span className="font-medium">{d[metric]}</span>
+      </div>
+    </div>
   );
 }
