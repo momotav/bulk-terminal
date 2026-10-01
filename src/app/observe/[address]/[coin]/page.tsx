@@ -15,13 +15,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Check, Copy, Share2, TrendingUp, TrendingDown, Loader2,
-  ArrowUpRight, ArrowDownRight, Flag, Plus, Minus, CircleDot, ExternalLink,
+  ArrowLeft, Check, Share2, TrendingUp, TrendingDown, Loader2,
+  ArrowUpRight, ArrowDownRight, Flag, Plus, Minus, CircleDot, ExternalLink, ChevronDown,
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill } from '@/lib/api';
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
+import { ResizableChart } from '@/components/ResizableChart';
 import { getCoinColor } from '@/lib/coins';
 
 export default function ObserveTradePage() {
@@ -34,6 +35,7 @@ export default function ObserveTradePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [lifecycleOpen, setLifecycleOpen] = useState(true);
 
   // Resolve the full symbol ("BTC" → "BTC-USD") from the wallet's own fills so
   // we never guess a quote the market doesn't use.
@@ -210,21 +212,12 @@ export default function ObserveTradePage() {
         )}
       </div>
 
-      {/* Journey + price */}
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <section className="lg:col-span-3">
-          <SectionLabel>PnL journey</SectionLabel>
-          <div className="rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2 pt-3">
-            <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} height={300} />
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
-            Realized steps are booked at each reduce/close; the open leg is marked against hourly closes in between. Dots mark every fill.
-          </p>
-        </section>
-
-        <section className="lg:col-span-2">
-          <SectionLabel>Price &amp; fills</SectionLabel>
-          <div className="h-[300px] rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2 sm:h-[342px]">
+      {/* Price & fills — the hero chart (biggest). Drag the bottom-right grip
+          to resize; double-click it to reset. */}
+      <section className="mt-6">
+        <SectionLabel>Price &amp; fills</SectionLabel>
+        <ResizableChart storageKey={`observe-price-${coin}`} defaultHeight={460}>
+          <div className="h-[var(--chart-h,460px)] rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2">
             <TradeCandlePanel
               symbol={symbol}
               side={life.side}
@@ -243,26 +236,52 @@ export default function ObserveTradePage() {
               }}
             />
           </div>
-        </section>
-      </div>
+        </ResizableChart>
+      </section>
 
-      {/* Event rail */}
+      {/* PnL journey — also resizable. */}
       <section className="mt-6">
-        <SectionLabel>Lifecycle</SectionLabel>
-        <ol className="overflow-hidden rounded-xl border border-[var(--role-line)]">
-          {life.events.map((e, i) => (
-            <EventRow key={`${e.t}-${i}`} e={e} coin={coin} first={i === 0} last={i === life.events.length - 1} />
-          ))}
-          {life.isOpen && (
-            <li className="flex items-center gap-3 border-t border-[var(--role-line-subtle)] bg-[var(--role-surface)] px-4 py-3">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)]/15 text-[var(--accent-text)]">
-                <CircleDot className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-sm text-[var(--role-content)]">Still open — tracking live</span>
-              <span className="ml-auto text-xs tabular-nums text-[var(--role-content-subtle)]">now</span>
-            </li>
-          )}
-        </ol>
+        <SectionLabel>PnL journey</SectionLabel>
+        <ResizableChart storageKey={`observe-journey-${coin}`} defaultHeight={300}>
+          <div className="h-[var(--chart-h,300px)] rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2 pt-3">
+            <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} />
+          </div>
+        </ResizableChart>
+        <p className="mt-2 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
+          Realized steps are booked at each reduce/close; the open leg is marked against hourly closes in between. Dots mark every fill.
+        </p>
+      </section>
+
+      {/* Lifecycle — collapsible header, resizable scroll list. */}
+      <section className="mt-6">
+        <button
+          type="button"
+          onClick={() => setLifecycleOpen((o) => !o)}
+          className="mb-2 flex w-full items-center gap-3 text-left"
+        >
+          <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">Lifecycle</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-[var(--role-content-subtle)] transition-transform ${lifecycleOpen ? '' : '-rotate-90'}`} />
+          <span className="h-px flex-1 bg-[var(--role-line)]" />
+          <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">{life.events.length} events</span>
+        </button>
+        {lifecycleOpen && (
+          <ResizableChart storageKey={`observe-lifecycle-${coin}`} defaultHeight={360}>
+            <ol className="h-[var(--chart-h,360px)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--role-line)]">
+              {life.events.map((e, i) => (
+                <EventRow key={`${e.t}-${i}`} e={e} coin={coin} first={i === 0} last={i === life.events.length - 1} />
+              ))}
+              {life.isOpen && (
+                <li className="flex items-center gap-3 border-t border-[var(--role-line-subtle)] bg-[var(--role-surface)] px-4 py-3">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)]/15 text-[var(--accent-text)]">
+                    <CircleDot className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-sm text-[var(--role-content)]">Still open — tracking live</span>
+                  <span className="ml-auto text-xs tabular-nums text-[var(--role-content-subtle)]">now</span>
+                </li>
+              )}
+            </ol>
+          </ResizableChart>
+        )}
       </section>
 
       {/* Honest scope note */}

@@ -45,11 +45,9 @@ const fmtTime = (ms: number): string =>
 export function TradeJourneyChart({
   curve,
   markers = [],
-  height = 300,
 }: {
   curve: JourneyPoint[];
   markers?: JourneyMarker[];
-  height?: number;
 }) {
   // Zero-split gradient offset: the fraction of the vertical range that sits
   // above zero. recharts paints the gradient top→bottom, so everything above
@@ -66,14 +64,14 @@ export function TradeJourneyChart({
 
   if (curve.length < 2) {
     return (
-      <div className="flex items-center justify-center text-[12px] text-[var(--role-content-subtle)]" style={{ height }}>
+      <div className="flex h-full min-h-[160px] items-center justify-center text-[12px] text-[var(--role-content-subtle)]">
         Not enough price history to chart this trade.
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={curve} margin={{ top: 12, right: 12, bottom: 4, left: 4 }}>
         <defs>
           <linearGradient id="journeyFill" x1="0" y1="0" x2="0" y2="1">
