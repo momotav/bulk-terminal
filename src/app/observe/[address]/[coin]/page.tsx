@@ -14,15 +14,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  ArrowLeft, Check, Share2, TrendingUp, TrendingDown, Loader2,
-  ArrowUpRight, ArrowDownRight, Flag, Plus, Minus, CircleDot, ExternalLink, ChevronDown,
-} from 'lucide-react';
+import { ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill } from '@/lib/api';
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
-import { ResizableChart } from '@/components/ResizableChart';
 import { getCoinColor } from '@/lib/coins';
 
 export default function ObserveTradePage() {
@@ -35,7 +31,6 @@ export default function ObserveTradePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [lifecycleOpen, setLifecycleOpen] = useState(true);
 
   // Resolve the full symbol ("BTC" → "BTC-USD") from the wallet's own fills so
   // we never guess a quote the market doesn't use.
@@ -166,147 +161,133 @@ export default function ObserveTradePage() {
 
   return (
     <Shell>
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href={`/whales/${address}`} className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--role-content-subtle)] transition-colors hover:text-[var(--role-content)]">
+      {/* Top bar — terminal status line */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--role-line)] pb-3 font-mono">
+        <Link href={`/whales/${address}`} className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-[var(--role-content-subtle)] transition-colors hover:text-[var(--role-content)]">
           <ArrowLeft className="h-3.5 w-3.5" /> Wallet
         </Link>
         <span className="text-[var(--role-line)]">/</span>
         <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: coinColor }} />
-          <span className="font-sans text-lg font-medium">{coin}</span>
+          <span className="h-2 w-2 rounded-full" style={{ background: coinColor }} />
+          <span className="text-sm font-semibold tracking-wide text-[var(--role-content)]">{coin}</span>
         </span>
-        <SidePill side={life.side} />
-        <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${life.isOpen ? 'bg-[var(--accent)]/15 text-[var(--accent-text)]' : 'bg-[var(--bg-muted)] text-[var(--role-content-subtle)]'}`}>
-          {life.isOpen ? 'OPEN' : 'CLOSED'}
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>
+          {life.side}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <span className={`text-[11px] uppercase tracking-wider ${life.isOpen ? 'text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)]'}`}>
+          {life.isOpen ? '● open' : 'closed'}
+        </span>
+        <div className="ml-auto flex items-center gap-3">
           <Link href={`/whales/${address}`} className="hidden items-center gap-1 text-[11px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)] sm:inline-flex">
             {formatAddress(address)} <ExternalLink className="h-3 w-3" />
           </Link>
           <button
             onClick={share}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-1.5 text-xs font-medium text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
+            className="inline-flex items-center gap-1.5 border border-[var(--role-line)] px-2.5 py-1 text-[11px] uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
           >
             {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Share2 className="h-3.5 w-3.5" /> Share</>}
           </button>
         </div>
       </div>
 
-      {/* Hero PnL */}
-      <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-3">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">
-            {life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}
-          </p>
-          <p className="font-sans text-[44px] font-medium leading-none tracking-tight tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
-            {isUp ? '+' : '−'}${formatNumber(Math.abs(life.finalPnl), 2)}
-          </p>
+      {/* Terminal grid — big chart left, data readout right. */}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {/* LEFT: price (big) + journey */}
+        <div className="flex min-w-0 flex-col gap-3">
+          <TermPanel title="Price & Fills">
+            <div className="h-[380px] p-1.5 sm:h-[460px] lg:h-[560px]">
+              <TradeCandlePanel
+                symbol={symbol}
+                side={life.side}
+                avgEntry={life.avgEntry}
+                liqPrice={livePos?.liquidationPrice}
+                markPrice={markPrice}
+                events={life.events}
+                openedAt={life.openedAt}
+                closedAt={life.closedAt}
+                isOpen={life.isOpen}
+                onCandles={(cs) => {
+                  if (cs.length && candleCache.get(symbol)?.length !== cs.length) {
+                    candleCache.set(symbol, cs);
+                    setCandleTick((n) => n + 1);
+                  }
+                }}
+              />
+            </div>
+          </TermPanel>
+
+          <TermPanel title="PnL Journey">
+            <div className="h-[240px] p-1.5 pt-2">
+              <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} />
+            </div>
+          </TermPanel>
         </div>
-        {roi != null && Number.isFinite(roi) && (
-          <HeroStat label="Return" value={`${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`} tone={roi >= 0 ? 'pos' : 'neg'} />
-        )}
-        <HeroStat label="Peak" value={`+$${formatCompact(Math.max(0, life.peakPnl))}`} tone="pos" />
-        <HeroStat label="Drawdown" value={`-$${formatCompact(Math.abs(Math.min(0, life.troughPnl)))}`} tone="neg" />
-        <HeroStat label="Held" value={isFallback ? 'live' : formatDuration(heldMs)} />
-      </div>
 
-      {/* Stat strip */}
-      <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--role-line)] bg-[var(--role-line-subtle)] sm:grid-cols-4 lg:grid-cols-6">
-        <Cell label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
-        <Cell label={life.isOpen ? 'Mark' : 'Last'} value={markPrice ? `$${formatNumber(markPrice, markPrice < 10 ? 4 : 2)}` : '—'} />
-        <Cell label="Peak Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
-        <Cell label="Peak Notional" value={`$${formatCompact(notionalPeak)}`} />
-        {life.isOpen && livePos ? (
-          <>
-            <Cell label="Leverage" value={livePos.leverage > 0 ? `${livePos.leverage}×` : '—'} />
-            <Cell label="Liq. Price" value={livePos.liquidationPrice > 0 ? `$${formatNumber(livePos.liquidationPrice, 2)}` : '—'} valueClass="text-[var(--neg)]" />
-          </>
-        ) : (
-          <>
-            <Cell label="Realized" value={`${life.realizedTotal >= 0 ? '+' : '−'}$${formatNumber(Math.abs(life.realizedTotal), 2)}`} valueClass={life.realizedTotal >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]'} />
-            <Cell label="Fills" value={String(life.events.length)} />
-          </>
-        )}
-      </div>
+        {/* RIGHT: position readout + lifecycle */}
+        <div className="flex min-w-0 flex-col gap-3">
+          <TermPanel title="Position">
+            <div className="p-3">
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">
+                {life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}
+              </div>
+              <div className="mt-1 flex items-end gap-2">
+                <span className="font-mono text-[30px] font-semibold leading-none tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
+                  {isUp ? '+' : '−'}${formatNumber(Math.abs(life.finalPnl), 2)}
+                </span>
+                {roi != null && Number.isFinite(roi) && (
+                  <span className="pb-0.5 font-mono text-[12px] tabular-nums" style={{ color: roi >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+                    {roi >= 0 ? '+' : ''}{roi.toFixed(1)}%
+                  </span>
+                )}
+              </div>
 
-      {/* Price & fills — the hero chart (biggest). Drag the bottom-right grip
-          to resize; double-click it to reset. */}
-      <section className="mt-6">
-        <SectionLabel>Price &amp; fills</SectionLabel>
-        <ResizableChart storageKey={`observe-price-${coin}`} defaultHeight={460}>
-          <div className="h-[var(--chart-h,460px)] rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2">
-            <TradeCandlePanel
-              symbol={symbol}
-              side={life.side}
-              avgEntry={life.avgEntry}
-              liqPrice={livePos?.liquidationPrice}
-              markPrice={markPrice}
-              events={life.events}
-              openedAt={life.openedAt}
-              closedAt={life.closedAt}
-              isOpen={life.isOpen}
-              onCandles={(cs) => {
-                if (cs.length && candleCache.get(symbol)?.length !== cs.length) {
-                  candleCache.set(symbol, cs);
-                  setCandleTick((n) => n + 1);
-                }
-              }}
-            />
-          </div>
-        </ResizableChart>
-      </section>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <MiniStat label="Peak" value={`+$${formatCompact(Math.max(0, life.peakPnl))}`} tone="pos" />
+                <MiniStat label="Draw" value={`-$${formatCompact(Math.abs(Math.min(0, life.troughPnl)))}`} tone="neg" />
+                <MiniStat label="Held" value={isFallback ? 'live' : formatDuration(heldMs)} />
+              </div>
 
-      {/* PnL journey — also resizable. */}
-      <section className="mt-6">
-        <SectionLabel>PnL journey</SectionLabel>
-        <ResizableChart storageKey={`observe-journey-${coin}`} defaultHeight={300}>
-          <div className="h-[var(--chart-h,300px)] rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-2 pt-3">
-            <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} />
-          </div>
-        </ResizableChart>
-        <p className="mt-2 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
-          Realized steps are booked at each reduce/close; the open leg is marked against hourly closes in between. Dots mark every fill.
-        </p>
-      </section>
+              <div className="mt-3 border-t border-[var(--role-line)]">
+                <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
+                <DataRow label={life.isOpen ? 'Mark' : 'Last'} value={markPrice ? `$${formatNumber(markPrice, markPrice < 10 ? 4 : 2)}` : '—'} />
+                <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
+                <DataRow label="Notional" value={`$${formatCompact(notionalPeak)}`} />
+                {life.isOpen && livePos ? (
+                  <>
+                    <DataRow label="Leverage" value={livePos.leverage > 0 ? `${livePos.leverage}×` : '—'} />
+                    <DataRow label="Liq." value={livePos.liquidationPrice > 0 ? `$${formatNumber(livePos.liquidationPrice, 2)}` : '—'} valueClass="text-[var(--neg)]" />
+                  </>
+                ) : (
+                  <>
+                    <DataRow label="Realized" value={`${life.realizedTotal >= 0 ? '+' : '−'}$${formatNumber(Math.abs(life.realizedTotal), 2)}`} valueClass={life.realizedTotal >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]'} />
+                    <DataRow label="Fills" value={String(life.events.length)} />
+                  </>
+                )}
+              </div>
+            </div>
+          </TermPanel>
 
-      {/* Lifecycle — collapsible header, resizable scroll list. */}
-      <section className="mt-6">
-        <button
-          type="button"
-          onClick={() => setLifecycleOpen((o) => !o)}
-          className="mb-2 flex w-full items-center gap-3 text-left"
-        >
-          <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">Lifecycle</span>
-          <ChevronDown className={`h-3.5 w-3.5 text-[var(--role-content-subtle)] transition-transform ${lifecycleOpen ? '' : '-rotate-90'}`} />
-          <span className="h-px flex-1 bg-[var(--role-line)]" />
-          <span className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">{life.events.length} events</span>
-        </button>
-        {lifecycleOpen && (
-          <ResizableChart storageKey={`observe-lifecycle-${coin}`} defaultHeight={360}>
-            <ol className="h-[var(--chart-h,360px)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--role-line)]">
+          <TermPanel title="Lifecycle" right={`${life.events.length}`}>
+            <ol className="max-h-[320px] overflow-y-auto overscroll-contain lg:max-h-[380px]">
               {isFallback && (
-                <li className="bg-[var(--role-surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--role-content-subtle)]">
-                  Per-fill history isn&apos;t available for this position right now (it opened beyond BULK&apos;s
-                  fill window, or the feed is rate-limited) — showing the live position marked to market.
+                <li className="border-b border-[var(--role-line-subtle)] px-3 py-2.5 font-mono text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
+                  Per-fill history unavailable (opened beyond BULK&apos;s window, or rate-limited) — live position marked to market.
                 </li>
               )}
               {life.events.map((e, i) => (
-                <EventRow key={`${e.t}-${i}`} e={e} coin={coin} first={i === 0 && !isFallback} last={i === life.events.length - 1} />
+                <TermEventRow key={`${e.t}-${i}`} e={e} coin={coin} />
               ))}
               {life.isOpen && (
-                <li className="flex items-center gap-3 border-t border-[var(--role-line-subtle)] bg-[var(--role-surface)] px-4 py-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)]/15 text-[var(--accent-text)]">
-                    <CircleDot className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="text-sm text-[var(--role-content)]">Still open — tracking live</span>
-                  <span className="ml-auto text-xs tabular-nums text-[var(--role-content-subtle)]">now</span>
+                <li className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-3 py-2 font-mono text-[11px]">
+                  <CircleDot className="h-3 w-3 text-[var(--accent-text)]" />
+                  <span className="text-[var(--role-content)]">tracking live</span>
+                  <span className="ml-auto tabular-nums text-[var(--role-content-subtle)]">now</span>
                 </li>
               )}
             </ol>
-          </ResizableChart>
-        )}
-      </section>
+          </TermPanel>
+        </div>
+      </div>
 
       {/* Honest scope note */}
       <p className="mt-6 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
@@ -368,80 +349,59 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">{children}</div>;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+// A bordered terminal panel with a mono uppercase title bar.
+function TermPanel({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="mb-2 flex items-center gap-3">
-      <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">{children}</h2>
-      <span className="h-px flex-1 bg-[var(--role-line)]" />
+    <section className="overflow-hidden rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)]">
+      <header className="flex items-center gap-2 border-b border-[var(--role-line)] px-3 py-1.5">
+        <span className="h-1.5 w-1.5 rounded-[1px]" style={{ background: 'var(--accent)' }} />
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">{title}</span>
+        {right != null && <span className="ml-auto font-mono text-[11px] tabular-nums text-[var(--role-content-subtle)]">{right}</span>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+// LABEL ............ value row for the position readout.
+function DataRow({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 font-mono text-[12px] last:border-b-0">
+      <span className="uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</span>
+      <span className={`tabular-nums ${valueClass ?? 'text-[var(--role-content)]'}`}>{value}</span>
     </div>
   );
 }
 
-function SidePill({ side }: { side: 'long' | 'short' }) {
-  const long = side === 'long';
+function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide"
-      style={{ background: long ? 'rgb(var(--pos-rgb,33 192 122)/0.15)' : 'rgb(var(--neg-rgb,229 72 77)/0.15)', color: long ? 'var(--pos)' : 'var(--neg)' }}
-    >
-      {long ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {side}
-    </span>
-  );
-}
-
-function HeroStat({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">{label}</p>
-      <p className="mt-0.5 font-sans text-xl font-medium tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
+    <div className="rounded border border-[var(--role-line-subtle)] px-2 py-1.5">
+      <div className="font-mono text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</div>
+      <div className="mt-0.5 font-mono text-[12px] font-semibold tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
         {value}
-      </p>
+      </div>
     </div>
   );
 }
 
-function Cell({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="bg-[var(--role-surface)] px-3 py-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)]">{label}</p>
-      <p className={`mt-0.5 text-sm font-medium tabular-nums ${valueClass ?? 'text-[var(--role-content)]'}`}>{value}</p>
-    </div>
-  );
-}
-
-function EventRow({ e, coin, first, last }: { e: TradeEventPoint; coin: string; first: boolean; last: boolean }) {
-  const icon =
-    e.action === 'open' ? <Flag className="h-3.5 w-3.5" /> :
-    e.action === 'add' ? <Plus className="h-3.5 w-3.5" /> :
-    e.action === 'reduce' ? <Minus className="h-3.5 w-3.5" /> :
-    e.action === 'flip' ? (e.positionAfter > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />) :
-    <CircleDot className="h-3.5 w-3.5" />;
+// Compact one-line terminal event row: time · action · size @ price · realized.
+function TermEventRow({ e, coin }: { e: TradeEventPoint; coin: string }) {
+  const time = new Date(e.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const building = e.action === 'open' || e.action === 'add';
-  const tint = building ? 'var(--accent-text)' : (e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)');
-  const bg = building ? 'bg-[var(--accent)]/15' : (e.realizedDelta >= 0 ? 'bg-[var(--pos)]/12' : 'bg-[var(--neg)]/12');
   return (
-    <li className={`flex items-center gap-3 bg-[var(--role-surface)] px-4 py-3 ${first ? '' : 'border-t border-[var(--role-line-subtle)]'}`}>
-      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${bg}`} style={{ color: tint }}>
-        {icon}
+    <li className="flex items-center gap-2 border-b border-[var(--role-line-subtle)] px-3 py-1.5 font-mono text-[11px] last:border-b-0">
+      <span className="shrink-0 tabular-nums text-[var(--role-content-subtle)]">{time}</span>
+      <span className="shrink-0 uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--role-content)' }}>
+        {e.actionLabel}
       </span>
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-[var(--role-content)]">{e.actionLabel}</p>
-        <p className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">
-          {formatNumber(Math.abs(e.sizeDelta), 4)} {coin} @ ${formatNumber(e.price, e.price < 10 ? 4 : 2)}
-          {' · '}net {formatNumber(Math.abs(e.positionAfter), 4)}
-        </p>
-      </div>
-      <div className="ml-auto text-right">
-        {Math.abs(e.realizedDelta) > 1e-6 && (
-          <p className="text-sm font-medium tabular-nums" style={{ color: e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-            {e.realizedDelta >= 0 ? '+' : '−'}${formatNumber(Math.abs(e.realizedDelta), 2)}
-          </p>
-        )}
-        <p className="text-[11px] tabular-nums text-[var(--role-content-subtle)]">
-          {new Date(e.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-        </p>
-      </div>
+      <span className="truncate tabular-nums text-[var(--role-content-subtle)]">
+        {formatNumber(Math.abs(e.sizeDelta), 4)} @ {formatNumber(e.price, e.price < 10 ? 4 : 2)}
+      </span>
+      {Math.abs(e.realizedDelta) > 1e-6 && (
+        <span className="ml-auto shrink-0 tabular-nums" style={{ color: e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+          {e.realizedDelta >= 0 ? '+' : '−'}${formatNumber(Math.abs(e.realizedDelta), 2)}
+        </span>
+      )}
     </li>
   );
 }
