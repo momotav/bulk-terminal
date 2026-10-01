@@ -61,7 +61,7 @@ export function TodayPanel() {
           value={stats?.activeTraders ?? null}
           format={fmtCount}
           spark={sparks?.activeTraders}
-          color="var(--pos)"
+          color="var(--accent)"
         />
       </div>
       <div className="flex flex-col lg:min-h-0 lg:flex-1">
@@ -197,7 +197,7 @@ function RevenueCard() {
                 labelFormatter={(t) => new Date(t as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 formatter={(v: number) => [`$${formatCompact(Number(v))}`, 'Revenue']}
               />
-              <Bar dataKey="v" fill="var(--pos)" radius={[2, 2, 0, 0]} maxBarSize={90} isAnimationActive animationDuration={700} animationEasing="ease-out" />
+              <Bar dataKey="v" fill="var(--accent)" radius={[2, 2, 0, 0]} maxBarSize={90} isAnimationActive animationDuration={700} animationEasing="ease-out" />
             </BarChart>
           </ResponsiveContainer>
         )}

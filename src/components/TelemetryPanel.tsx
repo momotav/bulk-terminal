@@ -17,7 +17,7 @@ type Metric = 'latency' | 'rounds' | 'subs';
 // Colors chosen to contrast on BOTH the light (cream) and dark themes — the
 // gold/coin palette blended into the light background.
 const METRICS: { key: Metric; label: string; unit: string; color: string; pick: (p: PerformanceLive) => number }[] = [
-  { key: 'latency', label: 'Latency', unit: 'ms', color: 'var(--pos)', pick: (p) => p.latencyMedianMs ?? 0 },
+  { key: 'latency', label: 'Latency', unit: 'ms', color: 'var(--accent)', pick: (p) => p.latencyMedianMs ?? 0 },
   { key: 'rounds', label: 'Rounds/s', unit: '/s', color: 'var(--role-content)', pick: (p) => p.roundsPerSec ?? 0 },
   { key: 'subs', label: 'Orders/s', unit: '/s', color: 'var(--role-signal-info)', pick: (p) => p.submissionsPerSec ?? 0 },
 ];

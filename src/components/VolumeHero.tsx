@@ -182,8 +182,8 @@ export function VolumeHero() {
             <ComposedChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 0 }} barCategoryGap="18%">
               <defs>
                 <linearGradient id="volHeroArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="var(--role-line-subtle)" strokeOpacity={0.5} />
@@ -201,10 +201,10 @@ export function VolumeHero() {
                   radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               ))}
               {chartType === 'line' && (
-                <Line yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
+                <Line yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               )}
               {chartType === 'area' && (
-                <Area yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--pos)" strokeWidth={2} fill="url(#volHeroArea)" dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
+                <Area yAxisId="left" type="monotone" dataKey="total" name="Volume" stroke="var(--accent)" strokeWidth={2} fill="url(#volHeroArea)" dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               )}
               <Line yAxisId="right" type="monotone" dataKey="Cumulative" name="Cumulative" stroke={CUMULATIVE_COLOR} strokeWidth={2} dot={false} isAnimationActive animationDuration={600} animationEasing="ease-out" />
             </ComposedChart>

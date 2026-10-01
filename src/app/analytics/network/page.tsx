@@ -91,7 +91,7 @@ export default function NetworkPage() {
             rawValue={live?.latencyMedianMs ?? 0}
             format={fmtMs}
             series={spark.latency}
-            color="var(--pos)"
+            color="var(--accent)"
             sub={live?.latencyP99Ms != null ? `p99 ${live.latencyP99Ms.toFixed(2)} ms` : undefined}
           />
           <HeroKpi
@@ -134,23 +134,23 @@ export default function NetworkPage() {
             full={histLatency}
             emptyLabel="Latency history builds as snapshots accumulate"
             yLabel="ms"
-            legend={[{ label: 'Median', color: 'var(--pos)' }, { label: 'p99', color: 'var(--neg)' }]}
-            sliderColor="var(--pos)"
+            legend={[{ label: 'Median', color: 'var(--accent)' }, { label: 'p99', color: 'var(--neg)' }]}
+            sliderColor="var(--accent)"
             sliderKeys={['latencyMedianMs']}
           >
             {(data, fmtAxis) => (
               <AreaChart data={data}>
                 <defs>
                   <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="var(--pos)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="timestamp" tickFormatter={fmtAxis} tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} minTickGap={isMobile ? 40 : 60} />
                 <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 32 : 44} domain={['auto', 'auto']} />
                 <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [`${Number(v).toFixed(2)} ms`, n === 'latencyMedianMs' ? 'Median' : 'p99']} />
                 <Area type="monotone" dataKey="latencyP99Ms" stroke="var(--neg)" strokeWidth={1.5} fill="none" dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="latencyMedianMs" stroke="var(--pos)" strokeWidth={2} fill="url(#latGrad)" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="latencyMedianMs" stroke="var(--accent)" strokeWidth={2} fill="url(#latGrad)" dot={false} isAnimationActive={false} />
               </AreaChart>
             )}
           </TimelineChart>
@@ -161,7 +161,7 @@ export default function NetworkPage() {
             full={histAccounts}
             emptyLabel="Account history builds as snapshots accumulate"
             yLabel="Accounts"
-            legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--pos)' }]}
+            legend={[{ label: 'Total', color: 'var(--role-content)' }, { label: 'Active', color: 'var(--accent)' }]}
             sliderColor="var(--role-content)"
             sliderKeys={['totalAccounts']}
           >
@@ -177,7 +177,7 @@ export default function NetworkPage() {
                 <YAxis tick={axis} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} domain={['auto', 'auto']} />
                 <Tooltip contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 11 }} labelFormatter={(t) => new Date(t as string).toLocaleString()} formatter={(v: number, n: string) => [fmtInt(Number(v)), n === 'totalAccounts' ? 'Total' : 'Active']} />
                 <Area type="monotone" dataKey="totalAccounts" stroke="var(--role-content)" strokeWidth={2} fill="url(#totGrad)" dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="activeAccounts" stroke="var(--pos)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="activeAccounts" stroke="var(--accent)" strokeWidth={2} fill="none" dot={false} isAnimationActive={false} />
               </AreaChart>
             )}
           </TimelineChart>

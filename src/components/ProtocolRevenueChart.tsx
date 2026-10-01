@@ -10,11 +10,13 @@ import {
 } from 'recharts';
 import { ChartFrame } from '@/components/ChartFrame';
 
+// Non-directional revenue series — no green (that reads as "profit"). Brand
+// gold leads; the cumulative line is neutral ink so it reads over the bars.
 const COLORS = {
-  protocol: 'var(--pos)',
+  protocol: 'var(--accent)',
   maker: 'var(--coin-1)',
-  taker: 'var(--neg)',
-  cumulative: 'var(--accent)',
+  taker: 'var(--role-signal-info)',
+  cumulative: 'var(--role-content)',
 };
 
 const timeRanges = [

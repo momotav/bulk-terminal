@@ -294,7 +294,7 @@ export default function PreDepositPage() {
       {/* KPI band — Current TVL is the hero. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <KpiCard label="Current TVL" value={kpis ? fmtUsd(kpis.liveTvl) : '-'} color="var(--accent)" hero loading={loading} />
-        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '-'} color="var(--pos)" loading={loading} />
+        <KpiCard label="Total Deposited" value={kpis ? fmtUsd(kpis.totalDeposited) : '-'} color="var(--accent)" loading={loading} />
         <KpiCard label="Total Withdrawn" value={kpis ? fmtUsd(kpis.totalWithdrawn) : '-'} color="var(--neg)" loading={loading} />
         <KpiCard label="Unique Depositors" value={kpis ? kpis.uniqueDepositors.toLocaleString() : '-'} color="var(--shade-2)" loading={loading} icon={Users} />
       </div>
@@ -602,7 +602,7 @@ export default function PreDepositPage() {
                 <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} width={40} />
                 <Tooltip cursor={{ fill: "var(--text-primary)", opacity: 0.06 }} contentStyle={tooltipStyle}
                   formatter={(v: number) => [v, 'Depositors']} />
-                <Bar dataKey="count" fill="var(--pos)" name="Depositors" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="count" fill="var(--accent)" name="Depositors" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
             </ChartFrame>
