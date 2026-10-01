@@ -4,9 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hash, Activity, Zap, ChevronRight, Info } from 'lucide-react';
-import { BarChart, Bar, ResponsiveContainer, YAxis, Cell, Area, AreaChart, Tooltip } from 'recharts';
-import { AnimatedNumber } from '@/components/AnimatedNumber';
+import { BarChart, Bar, ResponsiveContainer, YAxis, Cell, Tooltip } from 'recharts';
+import { HeroKpi, pctChange } from '@/components/HeroKpi';
 import { explorer, formatCompact, type ExplorerBlock } from '@/lib/api';
+
+// Module-scope formatters — stable identity so HeroKpi's AnimatedNumber keys
+// its motion correctly across re-renders.
+const fmtRound = (n: number) => Math.round(n).toLocaleString();
+const fmtBps = (n: number) => n.toFixed(1);
+const fmtAvg = (n: number) => n.toFixed(2);
+const fmtActions = (n: number) => formatCompact(Math.round(n));
+
+type ActivityDatum = { round: number; txCount: number; actionCount: number };
 
 // How many blocks to show in the list. Backend buffer caps at 1000,
 // frontend caps the visible list at 50 — shorter feels snappier and
@@ -201,7 +210,7 @@ export default function ExplorerPage() {
   }, [blocks]);
 
   // Oldest → newest so the chart reads left-to-right as time advances.
-  const chartData = useMemo(
+  const chartData = useMemo<ActivityDatum[]>(
     () => blocks.slice(0, CHART_LIMIT).reverse().map(b => ({
       round: b.round,
       txCount: b.txCount,
@@ -209,6 +218,47 @@ export default function ExplorerPage() {
     })),
     [blocks],
   );
+
+  // The activity window turns over completely each poll (blocks are ~7ms
+  // apart), so swapping the data makes the bars snap. Instead we ease the
+  // rendered bar HEIGHTS toward the new values with a short rAF tween, so each
+  // poll reads as the bars settling smoothly rather than a hard cut.
+  const [displayData, setDisplayData] = useState<ActivityDatum[]>([]);
+  const displayRef = useRef<ActivityDatum[]>([]);
+  const targetRef = useRef<ActivityDatum[]>([]);
+  const tweenRaf = useRef<number | null>(null);
+  useEffect(() => {
+    targetRef.current = chartData;
+    if (chartData.length === 0) { displayRef.current = []; setDisplayData([]); return; }
+    // Snap (no tween) when the number of bars changes — first fill / resize.
+    if (displayRef.current.length !== chartData.length) {
+      displayRef.current = chartData;
+      setDisplayData(chartData);
+      return;
+    }
+    const step = () => {
+      const prev = displayRef.current;
+      const target = targetRef.current;
+      if (prev.length !== target.length) { displayRef.current = target; setDisplayData(target); return; }
+      let settled = true;
+      const next = prev.map((d, i) => {
+        const t = target[i];
+        if (Math.abs(t.txCount - d.txCount) > 0.3 || Math.abs(t.actionCount - d.actionCount) > 0.3) settled = false;
+        return {
+          round: t.round,
+          txCount: d.txCount + (t.txCount - d.txCount) * 0.2,
+          actionCount: d.actionCount + (t.actionCount - d.actionCount) * 0.2,
+        };
+      });
+      if (settled) { displayRef.current = target; setDisplayData(target); return; }
+      displayRef.current = next;
+      setDisplayData(next);
+      tweenRaf.current = requestAnimationFrame(step);
+    };
+    if (tweenRaf.current) cancelAnimationFrame(tweenRaf.current);
+    tweenRaf.current = requestAnimationFrame(step);
+    return () => { if (tweenRaf.current) cancelAnimationFrame(tweenRaf.current); };
+  }, [chartData]);
 
   const metricLabel = metric === 'txCount' ? 'Txs' : 'Actions';
 
@@ -230,33 +280,42 @@ export default function ExplorerPage() {
         </div>
       )}
 
-      {/* KPI strip — same card language as the dashboard (big number over a
-          full-bleed area backdrop). */}
+      {/* KPI strip — the shared HeroKpi card + Sparkline, identical to the
+          analytics General / dashboard / pre-deposit / staking strips. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ExplorerKpi
+        <HeroKpi
           label="Latest round"
-          value={<AnimatedNumber value={stats.latestRound} format={(n) => Math.round(n).toLocaleString()} />}
+          rawValue={stats.latestRound}
+          format={fmtRound}
+          series={[]}
+          sub="live"
           color="var(--role-signal-info)"
-          big
         />
-        <ExplorerKpi
+        <HeroKpi
           label="Blocks / sec"
-          value={<AnimatedNumber value={stats.blocksPerSec} format={(n) => n.toFixed(1)} />}
-          sub="rolling, this window"
-          spark={bpsHist}
+          rawValue={stats.blocksPerSec}
+          format={fmtBps}
+          series={bpsHist}
+          changePct={pctChange(bpsHist)}
+          sub="rolling"
           color="var(--accent)"
         />
-        <ExplorerKpi
+        <HeroKpi
           label="Avg txs / block"
-          value={<AnimatedNumber value={stats.avgTxs} format={(n) => n.toFixed(2)} />}
-          spark={chartData.map((d) => d.txCount)}
+          rawValue={stats.avgTxs}
+          format={fmtAvg}
+          series={chartData.map((d) => d.txCount)}
+          changePct={pctChange(chartData.map((d) => d.txCount))}
+          sub="per block"
           color="var(--pos)"
         />
-        <ExplorerKpi
+        <HeroKpi
           label="Actions"
-          value={<AnimatedNumber value={stats.totalActions} format={(n) => formatCompact(Math.round(n))} />}
+          rawValue={stats.totalActions}
+          format={fmtActions}
+          series={chartData.map((d) => d.actionCount)}
+          changePct={pctChange(chartData.map((d) => d.actionCount))}
           sub={`last ${blocks.length || BLOCK_LIMIT} blocks`}
-          spark={chartData.map((d) => d.actionCount)}
           color="var(--role-signal-info)"
         />
       </div>
@@ -294,7 +353,9 @@ export default function ExplorerPage() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={2}>
+              {/* Heights are eased client-side (displayData), so recharts' own
+                  animation stays off — it would re-grow bars from zero each poll. */}
+              <BarChart data={displayData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={2}>
                 <defs>
                   <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={barColor} stopOpacity={0.95} />
@@ -307,11 +368,11 @@ export default function ExplorerPage() {
                   content={<ActivityTooltip metricLabel={metricLabel} metric={metric} />}
                 />
                 <Bar dataKey={metric} radius={[2, 2, 0, 0]} isAnimationActive={false}>
-                  {chartData.map((d, i) => (
+                  {displayData.map((d, i) => (
                     <Cell
                       key={i}
-                      fill={d[metric] > 0 ? 'url(#barGrad)' : barColor}
-                      fillOpacity={d[metric] > 0 ? (i === chartData.length - 1 ? 1 : 0.72) : 0.1}
+                      fill={d[metric] > 0.01 ? 'url(#barGrad)' : barColor}
+                      fillOpacity={d[metric] > 0.01 ? (i === displayData.length - 1 ? 1 : 0.72) : 0.1}
                     />
                   ))}
                 </Bar>
@@ -440,46 +501,6 @@ export default function ExplorerPage() {
   );
 }
 
-// KPI card matching the dashboard's MetricMiniCard: big number over a
-// full-bleed area backdrop pinned to the card's lower edge. The backdrop only
-// draws when there's a ≥2-point series; otherwise the number sits alone.
-function ExplorerKpi({ label, value, spark, color, sub, big }: {
-  label: string; value: React.ReactNode; spark?: number[]; color: string; sub?: string;
-  /** No sparkline → give the number more room (e.g. Latest round). */
-  big?: boolean;
-}) {
-  const data = (spark ?? []).map((v, i) => ({ i, v }));
-  const gid = `ekpi-${label.replace(/[^a-z]/gi, '')}`;
-  return (
-    <div className={`glass-card relative flex h-[118px] flex-col overflow-hidden p-4 sm:h-[128px] ${big ? 'justify-center' : ''}`}>
-      {data.length >= 2 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[62px] opacity-90">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <YAxis hide domain={['dataMin', 'dataMax']} />
-              {/* Smooth path morph as a new sample appends each poll. */}
-              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive animationDuration={450} animationEasing="ease-out" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      <div className="relative z-10">
-        <div className="truncate text-[12px] font-medium text-[var(--role-content-subtle)]">{label}</div>
-        <div className={`mt-1.5 font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] ${big ? 'text-[34px] sm:text-[44px]' : 'text-[26px] sm:text-[30px]'}`}>
-          {value}
-        </div>
-        {sub && <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)]">{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
 // Hover tooltip for the activity histogram — round + the active metric.
 function ActivityTooltip({ active, payload, metricLabel, metric }: {
   active?: boolean; payload?: Array<{ payload: { round: number; txCount: number; actionCount: number } }>; metricLabel?: string; metric?: Metric;
@@ -490,7 +511,7 @@ function ActivityTooltip({ active, payload, metricLabel, metric }: {
     <div className="rounded-md border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-sm">
       <div className="font-mono tabular-nums text-[var(--role-content-muted)]">Round {Number(d.round).toLocaleString()}</div>
       <div className="mt-0.5 tabular-nums text-[var(--role-content)]">
-        {metricLabel}: <span className="font-medium">{d[metric]}</span>
+        {metricLabel}: <span className="font-medium">{Math.round(d[metric])}</span>
       </div>
     </div>
   );
