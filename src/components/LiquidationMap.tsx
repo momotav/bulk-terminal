@@ -374,17 +374,21 @@ function ProfileChart({ profile, price, denom, coin }: {
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [range, setRange] = useState<[number, number] | null>(null);
   const [tip, setTip] = useState<PTip | null>(null);
   const dragRef = useRef<{ x: number; range: [number, number] } | null>(null);
+  // Displayed range (animated) and the target it eases toward — refs so zoom
+  // glides frame-by-frame without a React re-render per step (the "slideshow").
+  const curRef = useRef<[number, number] | null>(null);
+  const targetRef = useRef<[number, number] | null>(null);
 
   const fullMin = profile.length ? profile[0].price : 0;
   const fullMax = profile.length ? profile[profile.length - 1].price : 1;
-  useEffect(() => { setRange(profile.length ? [fullMin, fullMax] : null); }, [fullMin, fullMax, profile.length]);
 
   useEffect(() => {
     const container = wrapRef.current, canvas = canvasRef.current;
-    if (!container || !canvas || !range || profile.length === 0) return;
+    if (!container || !canvas || profile.length === 0) return;
+    curRef.current = [fullMin, fullMax];
+    targetRef.current = [fullMin, fullMax];
     const cssVar = (expr: string, fb: string) => {
       const s = document.createElement('span'); s.style.color = expr; s.style.display = 'none';
       document.body.appendChild(s); const c = getComputedStyle(s).color; document.body.removeChild(s); return c || fb;
@@ -411,7 +415,8 @@ function ProfileChart({ profile, price, denom, coin }: {
       const w = container.clientWidth, h = container.clientHeight;
       const plotW = w - padL - padR, plotH = h - padT - padB;
       ctx.clearRect(0, 0, w, h);
-      const [vMin, vMax] = range;
+      const cr = curRef.current; if (!cr) return;
+      const [vMin, vMax] = cr;
       const xOf = (p: number) => padL + ((p - vMin) / (vMax - vMin)) * plotW;
       // Visible buckets + scales.
       const vis = profile.filter((b) => b.price >= vMin && b.price <= vMax);
@@ -469,25 +474,42 @@ function ProfileChart({ profile, price, denom, coin }: {
         ctx.fillText(label, Math.min(Math.max(x, padL + tw / 2), w - padR - tw / 2), baseY + 10);
       }
     };
-    let raf = 0; const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
-    sizeCanvas(); redraw();
-    const ro = new ResizeObserver(() => { sizeCanvas(); redraw(); }); ro.observe(container);
+    // Animation: ease the displayed range toward the target each frame so zoom
+    // glides instead of snapping. One rAF loop; stops when settled.
+    let raf = 0;
+    const EASE = 0.22;
+    const tick = () => {
+      const cur = curRef.current!, tgt = targetRef.current!;
+      const dMin = tgt[0] - cur[0], dMax = tgt[1] - cur[1];
+      const span = Math.max(1e-9, cur[1] - cur[0]);
+      if (Math.abs(dMin) / span < 0.0006 && Math.abs(dMax) / span < 0.0006) {
+        curRef.current = [tgt[0], tgt[1]]; draw(); raf = 0; return;
+      }
+      curRef.current = [cur[0] + dMin * EASE, cur[1] + dMax * EASE];
+      draw();
+      raf = requestAnimationFrame(tick);
+    };
+    const animate = () => { if (!raf) raf = requestAnimationFrame(tick); };
 
-    // Wheel = zoom around cursor; drag = pan.
+    sizeCanvas(); draw();
+    const ro = new ResizeObserver(() => { sizeCanvas(); draw(); }); ro.observe(container);
+
+    // Wheel = smooth zoom toward a target range (eased by the loop).
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = container.getBoundingClientRect();
       const plotW = container.clientWidth - padL - padR;
       const frac = Math.min(1, Math.max(0, (e.clientX - rect.left - padL) / plotW));
-      const [vMin, vMax] = range; const span = vMax - vMin;
-      const cursor = vMin + frac * span;
-      const factor = e.deltaY > 0 ? 1.12 : 0.89;
-      let nMin = cursor - (cursor - vMin) * factor;
-      let nMax = cursor + (vMax - cursor) * factor;
+      const [tMin, tMax] = targetRef.current!; const span = tMax - tMin;
+      const cursor = tMin + frac * span;
+      const factor = e.deltaY > 0 ? 1.18 : 0.82;
+      let nMin = cursor - (cursor - tMin) * factor;
+      let nMax = cursor + (tMax - cursor) * factor;
       nMin = Math.max(fullMin, nMin); nMax = Math.min(fullMax, nMax);
-      if (nMax - nMin > (fullMax - fullMin) * 0.02) setRange([nMin, nMax]);
+      if (nMax - nMin > (fullMax - fullMin) * 0.02) { targetRef.current = [nMin, nMax]; animate(); }
     };
-    const onDown = (e: PointerEvent) => { dragRef.current = { x: e.clientX, range: [...range] as [number, number] }; };
+    // Drag = pan, applied directly (1:1) for responsiveness.
+    const onDown = (e: PointerEvent) => { dragRef.current = { x: e.clientX, range: [...(curRef.current as [number, number])] }; };
     const onMove = (e: PointerEvent) => {
       if (dragRef.current) {
         const plotW = container.clientWidth - padL - padR;
@@ -496,14 +518,14 @@ function ProfileChart({ profile, price, denom, coin }: {
         let nMin = sMin - dx, nMax = sMax - dx;
         if (nMin < fullMin) { nMax += fullMin - nMin; nMin = fullMin; }
         if (nMax > fullMax) { nMin -= nMax - fullMax; nMax = fullMax; }
-        setRange([Math.max(fullMin, nMin), Math.min(fullMax, nMax)]);
+        curRef.current = [Math.max(fullMin, nMin), Math.min(fullMax, nMax)];
+        targetRef.current = curRef.current;
+        draw();
         return;
       }
-      // Hover tooltip.
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left; const plotW = container.clientWidth - padL - padR;
-      const [vMin, vMax] = range; const p = vMin + ((x - padL) / plotW) * (vMax - vMin);
-      // nearest bucket
+      const [vMin, vMax] = curRef.current!; const p = vMin + ((x - padL) / plotW) * (vMax - vMin);
       let best: PBucket | null = null, bd = Infinity;
       for (const b of profile) { const d = Math.abs(b.price - p); if (d < bd) { bd = d; best = b; } }
       if (!best || (best.long <= 0 && best.short <= 0)) { setTip(null); return; }
@@ -512,11 +534,13 @@ function ProfileChart({ profile, price, denom, coin }: {
     };
     const onUp = () => { dragRef.current = null; };
     const onLeave = () => { dragRef.current = null; setTip(null); };
+    const onDbl = () => { targetRef.current = [fullMin, fullMax]; animate(); }; // reset zoom
     container.addEventListener('wheel', onWheel, { passive: false });
     container.addEventListener('pointerdown', onDown);
     container.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     container.addEventListener('pointerleave', onLeave);
+    container.addEventListener('dblclick', onDbl);
     return () => {
       cancelAnimationFrame(raf); ro.disconnect();
       container.removeEventListener('wheel', onWheel);
@@ -524,8 +548,9 @@ function ProfileChart({ profile, price, denom, coin }: {
       container.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       container.removeEventListener('pointerleave', onLeave);
+      container.removeEventListener('dblclick', onDbl);
     };
-  }, [profile, range, price, denom, coin, fullMin, fullMax]);
+  }, [profile, price, denom, coin, fullMin, fullMax]);
 
   const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
   return (
