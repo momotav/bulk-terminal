@@ -12,8 +12,7 @@
 // All bucketing is client-side from one events payload.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { createChart, ColorType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import { createChart, ColorType, type UTCTimestamp } from 'lightweight-charts';
 import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -157,25 +156,7 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
         ) : events.length === 0 ? (
           <Center>No liquidations recorded for {coin} yet.</Center>
         ) : mode === 'profile' ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={profile} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-              <XAxis dataKey="price" type="number" domain={['dataMin', 'dataMax']} tickFormatter={fmtPrice}
-                tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false} minTickGap={40} />
-              <YAxis yAxisId="l" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
-                width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
-              <YAxis yAxisId="r" orientation="right" tick={{ fill: 'var(--role-content-subtle)', fontSize: isMobile ? 9 : 11 }} axisLine={false} tickLine={false}
-                width={isMobile ? 40 : 52} tickFormatter={(v) => formatCompact(Number(v))} />
-              <Tooltip cursor={{ stroke: 'var(--role-line)' }} content={(props: any) => <ProfileTip {...props} denom={denom} coin={coin} />} />
-              {/* Per-price liquidation bars (long red / short green). */}
-              <Bar yAxisId="l" dataKey="long" fill={LONG} isAnimationActive={false} />
-              <Bar yAxisId="l" dataKey="short" fill={SHORT} isAnimationActive={false} />
-              {/* Cumulative curves — clean lines, no heavy fill. */}
-              <Line yAxisId="r" type="monotone" dataKey="cumLong" stroke={LONG} strokeWidth={2} dot={false} isAnimationActive={false} />
-              <Line yAxisId="r" type="monotone" dataKey="cumShort" stroke={SHORT} strokeWidth={2} dot={false} isAnimationActive={false} />
-              {price > 0 && <ReferenceLine yAxisId="l" x={price} stroke="var(--role-content)" strokeDasharray="4 4" strokeOpacity={0.7}
-                label={{ value: `Current: ${fmtPrice(price)}`, position: 'insideBottom', fill: 'var(--role-content)', fontSize: 10 }} />}
-            </ComposedChart>
-          </ResponsiveContainer>
+          <ProfileChart profile={profile} price={price} denom={denom} coin={coin} />
         ) : heat ? (
           <HeatmapCandles {...heat} candles={candles} price={price} denomCoin={coin} denom={denom} fmtVal={fmtVal} fmtPrice={fmtPrice} />
         ) : (
@@ -381,30 +362,186 @@ function Seg({ options, value, onChange }: { options: [string, string][]; value:
   );
 }
 
-// Profile tooltip — shows the price and ONLY the non-zero side (never "Short 0").
-function ProfileTip({ active, payload, label, denom, coin }: any) {
-  if (!active || !payload?.length) return null;
+interface PBucket { price: number; long: number; short: number; cumLong: number; cumShort: number; }
+interface PTip { left: number; top: number; priceLabel: string; side: 'long' | 'short'; notional: number; cumulative: number; }
+
+// ProfileChart — custom canvas liquidation profile (HyperDash-style): per-price
+// notional bars (long red left / short green right), cumulative curves with
+// faint area fills emanating from the live price, and a current-price marker.
+// Zoomable: wheel zooms the price axis around the cursor, drag pans.
+function ProfileChart({ profile, price, denom, coin }: {
+  profile: PBucket[]; price: number; denom: 'coin' | 'usd'; coin: string;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [range, setRange] = useState<[number, number] | null>(null);
+  const [tip, setTip] = useState<PTip | null>(null);
+  const dragRef = useRef<{ x: number; range: [number, number] } | null>(null);
+
+  const fullMin = profile.length ? profile[0].price : 0;
+  const fullMax = profile.length ? profile[profile.length - 1].price : 1;
+  useEffect(() => { setRange(profile.length ? [fullMin, fullMax] : null); }, [fullMin, fullMax, profile.length]);
+
+  useEffect(() => {
+    const container = wrapRef.current, canvas = canvasRef.current;
+    if (!container || !canvas || !range || profile.length === 0) return;
+    const cssVar = (expr: string, fb: string) => {
+      const s = document.createElement('span'); s.style.color = expr; s.style.display = 'none';
+      document.body.appendChild(s); const c = getComputedStyle(s).color; document.body.removeChild(s); return c || fb;
+    };
+    const red = cssVar('var(--neg)', 'rgb(229,72,77)');
+    const green = cssVar('var(--pos)', 'rgb(33,192,122)');
+    const axis = cssVar('var(--role-content-subtle)', 'rgb(138,138,138)');
+    const line = cssVar('var(--role-line-subtle)', 'rgba(128,118,120,0.14)');
+    const fg = cssVar('var(--role-content)', 'rgb(230,230,230)');
+    const rgba = (rgb: string, a: number) => rgb.replace('rgb(', 'rgba(').replace(')', `,${a})`);
+    const padL = 54, padR = 54, padB = 22, padT = 8;
+    const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
+    const fmtP = (n: number) => `$${formatCompact(n)}`;
+
+    const sizeCanvas = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = container.clientWidth, h = container.clientHeight;
+      canvas.width = Math.max(1, Math.round(w * dpr)); canvas.height = Math.max(1, Math.round(h * dpr));
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      const ctx = canvas.getContext('2d'); if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const draw = () => {
+      const ctx = canvas.getContext('2d'); if (!ctx) return;
+      const w = container.clientWidth, h = container.clientHeight;
+      const plotW = w - padL - padR, plotH = h - padT - padB;
+      ctx.clearRect(0, 0, w, h);
+      const [vMin, vMax] = range;
+      const xOf = (p: number) => padL + ((p - vMin) / (vMax - vMin)) * plotW;
+      // Visible buckets + scales.
+      const vis = profile.filter((b) => b.price >= vMin && b.price <= vMax);
+      let maxN = 0, maxC = 0;
+      for (const b of vis) { maxN = Math.max(maxN, b.long, b.short); maxC = Math.max(maxC, b.cumLong, b.cumShort); }
+      maxN = maxN || 1; maxC = maxC || 1;
+      const yN = (v: number) => padT + plotH - (v / maxN) * plotH;
+      const yC = (v: number) => padT + plotH - (v / maxC) * plotH;
+      const baseY = padT + plotH;
+      // Grid lines.
+      ctx.strokeStyle = line; ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) { const y = padT + (plotH * i) / 4; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke(); }
+      // Cumulative area fills (faint) + curves. Longs left of price, shorts right.
+      const drawCurve = (key: 'cumLong' | 'cumShort', col: string, side: 'l' | 'r') => {
+        const pts = vis.filter((b) => side === 'l' ? b.price <= price : b.price >= price);
+        if (pts.length < 2) return;
+        // area
+        ctx.beginPath(); ctx.moveTo(xOf(pts[0].price), baseY);
+        for (const b of pts) ctx.lineTo(xOf(b.price), yC(b[key]));
+        ctx.lineTo(xOf(pts[pts.length - 1].price), baseY); ctx.closePath();
+        ctx.fillStyle = rgba(col, 0.1); ctx.fill();
+        // line
+        ctx.beginPath(); ctx.moveTo(xOf(pts[0].price), yC(pts[0][key]));
+        for (const b of pts) ctx.lineTo(xOf(b.price), yC(b[key]));
+        ctx.strokeStyle = col; ctx.lineWidth = 1.75; ctx.lineJoin = 'round'; ctx.stroke();
+      };
+      drawCurve('cumLong', red, 'l');
+      drawCurve('cumShort', green, 'r');
+      // Bars.
+      const bw = Math.max(1, Math.min(6, (plotW / Math.max(1, vis.length)) * 0.6));
+      for (const b of vis) {
+        if (b.long > 0) { ctx.fillStyle = red; const x = xOf(b.price); ctx.fillRect(x - bw / 2, yN(b.long), bw, baseY - yN(b.long)); }
+        if (b.short > 0) { ctx.fillStyle = green; const x = xOf(b.price); ctx.fillRect(x - bw / 2, yN(b.short), bw, baseY - yN(b.short)); }
+      }
+      // Current price line + pill.
+      if (price >= vMin && price <= vMax) {
+        const x = xOf(price);
+        ctx.strokeStyle = fg; ctx.globalAlpha = 0.6; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, baseY); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      }
+      // Axes labels.
+      ctx.fillStyle = axis; ctx.font = '10px system-ui'; ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) { const v = (maxN * (4 - i)) / 4; ctx.fillText(formatCompact(v), padL - 4, padT + (plotH * i) / 4); }
+      ctx.textAlign = 'left';
+      for (let i = 0; i <= 4; i++) { const v = (maxC * (4 - i)) / 4; ctx.fillText(formatCompact(v), w - padR + 4, padT + (plotH * i) / 4); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (let i = 0; i <= 4; i++) { const p = vMin + ((vMax - vMin) * i) / 4; ctx.fillText(fmtP(p), padL + (plotW * i) / 4, baseY + 5); }
+      // Current pill label.
+      if (price >= vMin && price <= vMax) {
+        const x = xOf(price); const label = `Current: ${fmtP(price)}`; ctx.font = '600 10px system-ui';
+        const tw = ctx.measureText(label).width + 10; ctx.fillStyle = fg;
+        ctx.fillRect(Math.min(Math.max(x - tw / 2, padL), w - padR - tw), baseY + 3, tw, 15);
+        ctx.fillStyle = cssVar('var(--role-surface)', '#111'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, Math.min(Math.max(x, padL + tw / 2), w - padR - tw / 2), baseY + 10);
+      }
+    };
+    let raf = 0; const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+    sizeCanvas(); redraw();
+    const ro = new ResizeObserver(() => { sizeCanvas(); redraw(); }); ro.observe(container);
+
+    // Wheel = zoom around cursor; drag = pan.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const plotW = container.clientWidth - padL - padR;
+      const frac = Math.min(1, Math.max(0, (e.clientX - rect.left - padL) / plotW));
+      const [vMin, vMax] = range; const span = vMax - vMin;
+      const cursor = vMin + frac * span;
+      const factor = e.deltaY > 0 ? 1.12 : 0.89;
+      let nMin = cursor - (cursor - vMin) * factor;
+      let nMax = cursor + (vMax - cursor) * factor;
+      nMin = Math.max(fullMin, nMin); nMax = Math.min(fullMax, nMax);
+      if (nMax - nMin > (fullMax - fullMin) * 0.02) setRange([nMin, nMax]);
+    };
+    const onDown = (e: PointerEvent) => { dragRef.current = { x: e.clientX, range: [...range] as [number, number] }; };
+    const onMove = (e: PointerEvent) => {
+      if (dragRef.current) {
+        const plotW = container.clientWidth - padL - padR;
+        const [sMin, sMax] = dragRef.current.range; const span = sMax - sMin;
+        const dx = ((e.clientX - dragRef.current.x) / plotW) * span;
+        let nMin = sMin - dx, nMax = sMax - dx;
+        if (nMin < fullMin) { nMax += fullMin - nMin; nMin = fullMin; }
+        if (nMax > fullMax) { nMin -= nMax - fullMax; nMax = fullMax; }
+        setRange([Math.max(fullMin, nMin), Math.min(fullMax, nMax)]);
+        return;
+      }
+      // Hover tooltip.
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left; const plotW = container.clientWidth - padL - padR;
+      const [vMin, vMax] = range; const p = vMin + ((x - padL) / plotW) * (vMax - vMin);
+      // nearest bucket
+      let best: PBucket | null = null, bd = Infinity;
+      for (const b of profile) { const d = Math.abs(b.price - p); if (d < bd) { bd = d; best = b; } }
+      if (!best || (best.long <= 0 && best.short <= 0)) { setTip(null); return; }
+      const side: 'long' | 'short' = best.long >= best.short ? 'long' : 'short';
+      setTip({ left: x, top: e.clientY - rect.top, priceLabel: fmtP(best.price), side, notional: side === 'long' ? best.long : best.short, cumulative: side === 'long' ? best.cumLong : best.cumShort });
+    };
+    const onUp = () => { dragRef.current = null; };
+    const onLeave = () => { dragRef.current = null; setTip(null); };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('pointerdown', onDown);
+    container.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    container.addEventListener('pointerleave', onLeave);
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect();
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('pointerdown', onDown);
+      container.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      container.removeEventListener('pointerleave', onLeave);
+    };
+  }, [profile, range, price, denom, coin, fullMin, fullMax]);
+
   const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
-  const get = (k: string) => Number(payload.find((p: any) => p.dataKey === k)?.value) || 0;
-  const long = get('long'), short = get('short'), cumL = get('cumLong'), cumS = get('cumShort');
-  const isLong = long > 0 || (long === 0 && short === 0 && cumL >= cumS);
-  const rows: [string, number, string][] = [];
-  if (long > 0) rows.push(['Long liq', long, LONG]);
-  if (short > 0) rows.push(['Short liq', short, SHORT]);
-  const cum: [string, number, string] | null = isLong && cumL > 0 ? ['Cumulative long', cumL, LONG] : (!isLong && cumS > 0 ? ['Cumulative short', cumS, SHORT] : null);
-  if (rows.length === 0 && !cum) return null;
   return (
-    <div className="rounded-lg border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-md">
-      <div className="mb-1 text-[var(--role-content-subtle)]">${formatCompact(Number(label))}</div>
-      {rows.map(([n, v, c]) => (
-        <div key={n} className="flex items-center justify-between gap-4">
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: c }} />{n}</span>
-          <span className="font-semibold" style={{ color: c }}>{fmt(v)}</span>
-        </div>
-      ))}
-      {cum && (
-        <div className="mt-0.5 flex items-center justify-between gap-4 text-[var(--role-content-subtle)]">
-          <span>{cum[0]}</span><span className="font-medium text-[var(--role-content)]">{fmt(cum[1])}</span>
+    <div ref={wrapRef} className="relative h-full w-full cursor-crosshair select-none" style={{ touchAction: 'none' }}>
+      <canvas ref={canvasRef} className="absolute inset-0" />
+      {tip && (
+        <div className="pointer-events-none absolute z-20 rounded-lg border border-[var(--role-line)] bg-[var(--bg-overlay)] px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur-md"
+          style={{ left: Math.min(tip.left + 12, (wrapRef.current?.clientWidth || 300) - 150), top: Math.max(4, tip.top - 58) }}>
+          <div className="mb-1 text-[var(--role-content-subtle)]">{tip.priceLabel}</div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: tip.side === 'long' ? LONG : SHORT }} />{tip.side === 'long' ? 'Long liq' : 'Short liq'}</span>
+            <span className="font-semibold" style={{ color: tip.side === 'long' ? LONG : SHORT }}>{fmt(tip.notional)}</span>
+          </div>
+          <div className="mt-0.5 flex items-center justify-between gap-4 text-[var(--role-content-subtle)]">
+            <span>Cumulative</span><span className="font-medium text-[var(--role-content)]">{fmt(tip.cumulative)}</span>
+          </div>
         </div>
       )}
     </div>
