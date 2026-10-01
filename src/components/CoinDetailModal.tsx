@@ -609,7 +609,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
               </div>
             )}
             {chartView === 'liqs' && (
-              <div className="h-[440px] w-full overflow-hidden px-2 lg:h-full">
+              <div className="-mt-1 h-[440px] w-full overflow-hidden px-2 lg:h-full">
                 <LiquidationMap lockedCoin={coinOf(symbol)} embedded />
               </div>
             )}

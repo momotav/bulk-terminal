@@ -397,7 +397,7 @@ function ProfileChart({ profile, price, denom, coin }: {
     const green = cssVar('var(--pos)', 'rgb(33,192,122)');
     const axis = cssVar('var(--role-content-subtle)', 'rgb(138,138,138)');
     const line = cssVar('var(--role-line-subtle)', 'rgba(128,118,120,0.14)');
-    const fg = cssVar('var(--role-content)', 'rgb(230,230,230)');
+    const accent = cssVar('var(--accent)', 'rgb(240,185,11)'); // current-price marker
     const rgba = (rgb: string, a: number) => rgb.replace('rgb(', 'rgba(').replace(')', `,${a})`);
     const padL = 54, padR = 54, padB = 22, padT = 8;
     const fmt = (n: number) => (denom === 'usd' ? `$${formatCompact(n)}` : `${formatCompact(n)} ${coin}`);
@@ -451,10 +451,10 @@ function ProfileChart({ profile, price, denom, coin }: {
         if (b.long > 0) { ctx.fillStyle = red; const x = xOf(b.price); ctx.fillRect(x - bw / 2, yN(b.long), bw, baseY - yN(b.long)); }
         if (b.short > 0) { ctx.fillStyle = green; const x = xOf(b.price); ctx.fillRect(x - bw / 2, yN(b.short), bw, baseY - yN(b.short)); }
       }
-      // Current price line + pill.
+      // Current price line + pill (accent, not white).
       if (price >= vMin && price <= vMax) {
         const x = xOf(price);
-        ctx.strokeStyle = fg; ctx.globalAlpha = 0.6; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+        ctx.strokeStyle = accent; ctx.globalAlpha = 0.85; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, baseY); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
       }
       // Axes labels.
@@ -465,12 +465,12 @@ function ProfileChart({ profile, price, denom, coin }: {
       for (let i = 0; i <= 4; i++) { const v = (maxC * (4 - i)) / 4; ctx.fillText(formatCompact(v), w - padR + 4, padT + (plotH * i) / 4); }
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       for (let i = 0; i <= 4; i++) { const p = vMin + ((vMax - vMin) * i) / 4; ctx.fillText(fmtP(p), padL + (plotW * i) / 4, baseY + 5); }
-      // Current pill label.
+      // Current pill label (accent background, dark text).
       if (price >= vMin && price <= vMax) {
         const x = xOf(price); const label = `Current: ${fmtP(price)}`; ctx.font = '600 10px system-ui';
-        const tw = ctx.measureText(label).width + 10; ctx.fillStyle = fg;
+        const tw = ctx.measureText(label).width + 10; ctx.fillStyle = accent;
         ctx.fillRect(Math.min(Math.max(x - tw / 2, padL), w - padR - tw), baseY + 3, tw, 15);
-        ctx.fillStyle = cssVar('var(--role-surface)', '#111'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = cssVar('var(--accent-text)', '#1a1a1a'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(label, Math.min(Math.max(x, padL + tw / 2), w - padR - tw / 2), baseY + 10);
       }
     };
