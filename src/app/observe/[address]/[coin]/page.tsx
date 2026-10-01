@@ -45,7 +45,10 @@ export default function ObserveTradePage() {
     setError(null);
     Promise.all([
       wallet.getWallet(address).catch(() => null),
-      wallet.getFills(address, { limit: 2000 }).then((r) => r.fills).catch(() => [] as WalletFill[]),
+      // Server-side symbol filter — an active wallet's per-coin fills get pushed
+      // out of an unfiltered recent window by other markets, so ask BULK for
+      // this coin's fills directly (the backend proxies BULK's symbol filter).
+      wallet.getFills(address, { symbol: `${coin}-USD`, limit: 1000 }).then((r) => r.fills).catch(() => [] as WalletFill[]),
     ])
       .then(([wd, fl]) => {
         if (cancelled) return;
@@ -80,11 +83,23 @@ export default function ObserveTradePage() {
   const [candleTick, setCandleTick] = useState(0);
 
   const life = useMemo<TradeLifecycle | null>(() => {
-    if (!coinFills.length) return null;
+    const candles = candleCache.get(symbol) ?? [];
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
-    return buildTradeLifecycle(coinFills, candleCache.get(symbol) ?? [], { markPrice });
-  }, [coinFills, symbol, markPrice, candleTick]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (coinFills.length) {
+      const l = buildTradeLifecycle(coinFills, candles, { markPrice });
+      if (l) return l;
+    }
+    // Fills unavailable (aged out of BULK's window, or a transient 429) but the
+    // wallet DOES have a live position here — reconstruct what we can from the
+    // live snapshot so an open trade never reads as "not found". The journey is
+    // marked-to-market against candles (constant size/entry); there are no
+    // per-fill events, so the lifecycle rail is empty.
+    if (livePos && Math.abs(livePos.size) > 1e-9) {
+      return liveFallbackLifecycle(symbol, livePos, candles, markPrice);
+    }
+    return null;
+  }, [coinFills, symbol, markPrice, candleTick, livePos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const journeyMarkers = useMemo<JourneyMarker[]>(() => {
     if (!life || !life.pnlCurve.length) return [];
@@ -136,6 +151,9 @@ export default function ObserveTradePage() {
   const isUp = life.finalPnl >= 0;
   const notionalPeak = life.peakSize * life.avgEntry;
   const roi = notionalPeak > 0 ? (life.finalPnl / (livePos?.leverage ? notionalPeak / livePos.leverage : notionalPeak)) * 100 : null;
+  // Fallback = live position with no fill history; we don't know when it opened,
+  // so "Held" is unknown and the lifecycle rail is empty.
+  const isFallback = life.events.length === 0;
   const heldMs = (life.closedAt ?? Date.now()) - life.openedAt;
 
   const share = async () => {
@@ -190,7 +208,7 @@ export default function ObserveTradePage() {
         )}
         <HeroStat label="Peak" value={`+$${formatCompact(Math.max(0, life.peakPnl))}`} tone="pos" />
         <HeroStat label="Drawdown" value={`-$${formatCompact(Math.abs(Math.min(0, life.troughPnl)))}`} tone="neg" />
-        <HeroStat label="Held" value={formatDuration(heldMs)} />
+        <HeroStat label="Held" value={isFallback ? 'live' : formatDuration(heldMs)} />
       </div>
 
       {/* Stat strip */}
@@ -267,8 +285,14 @@ export default function ObserveTradePage() {
         {lifecycleOpen && (
           <ResizableChart storageKey={`observe-lifecycle-${coin}`} defaultHeight={360}>
             <ol className="h-[var(--chart-h,360px)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--role-line)]">
+              {isFallback && (
+                <li className="bg-[var(--role-surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--role-content-subtle)]">
+                  Per-fill history isn&apos;t available for this position right now (it opened beyond BULK&apos;s
+                  fill window, or the feed is rate-limited) — showing the live position marked to market.
+                </li>
+              )}
               {life.events.map((e, i) => (
-                <EventRow key={`${e.t}-${i}`} e={e} coin={coin} first={i === 0} last={i === life.events.length - 1} />
+                <EventRow key={`${e.t}-${i}`} e={e} coin={coin} first={i === 0 && !isFallback} last={i === life.events.length - 1} />
               ))}
               {life.isOpen && (
                 <li className="flex items-center gap-3 border-t border-[var(--role-line-subtle)] bg-[var(--role-surface)] px-4 py-3">
@@ -296,6 +320,49 @@ export default function ObserveTradePage() {
 // Module-scope cache so the candle panel and the journey builder share one
 // candle fetch per symbol without prop-drilling a fetch up the tree.
 const candleCache = new Map<string, { t: number; o: number; h: number; l: number; c: number }[]>();
+
+type LivePos = NonNullable<NonNullable<WalletData['live']>['positions']>[number];
+
+// Fallback lifecycle for a LIVE position whose fills we couldn't load (aged out
+// of BULK's window, or a transient 429). We can't reconstruct per-fill events,
+// but the live snapshot gives us side/size/entry — enough to show the position
+// and mark its unrealized PnL to market against the candle closes.
+function liveFallbackLifecycle(
+  symbol: string,
+  pos: LivePos,
+  candles: { t: number; o: number; h: number; l: number; c: number }[],
+  markPrice: number | null,
+): TradeLifecycle {
+  const size = pos.size; // signed: + long, − short
+  const entry = pos.price;
+  const side: 'long' | 'short' = size > 0 ? 'long' : 'short';
+  const now = Date.now();
+  const mark = markPrice && markPrice > 0 ? markPrice : entry;
+  const valid = candles.filter((c) => Number.isFinite(c.c) && c.c > 0);
+  const openedAt = valid.length ? valid[0].t : now - 24 * 3_600_000;
+  const curve = valid.map((c) => ({ t: c.t, realized: 0, pnl: size * (c.c - entry), price: c.c }));
+  curve.push({ t: now, realized: 0, pnl: size * (mark - entry), price: mark });
+  let peak = -Infinity;
+  let trough = Infinity;
+  for (const p of curve) { if (p.pnl > peak) peak = p.pnl; if (p.pnl < trough) trough = p.pnl; }
+  return {
+    symbol,
+    side,
+    openedAt,
+    closedAt: null,
+    isOpen: true,
+    openPrice: entry,
+    avgEntry: entry,
+    peakSize: Math.abs(size),
+    currentSize: size,
+    events: [],
+    pnlCurve: curve,
+    realizedTotal: pos.realizedPnl ?? 0,
+    peakPnl: peak,
+    troughPnl: trough,
+    finalPnl: curve.length ? curve[curve.length - 1].pnl : (pos.unrealizedPnl ?? 0),
+  };
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">{children}</div>;
