@@ -14,7 +14,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink,
+  CandlestickChart, Activity, Wallet, ListOrdered, Flag, Plus, Minus, ArrowUpRight, ArrowDownRight, type LucideIcon,
+} from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill } from '@/lib/api';
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
@@ -150,6 +153,8 @@ export default function ObserveTradePage() {
   // so "Held" is unknown and the lifecycle rail is empty.
   const isFallback = life.events.length === 0;
   const heldMs = (life.closedAt ?? Date.now()) - life.openedAt;
+  // For a closed trade show the exit price (last fill), not the live mark.
+  const lastPrice = life.isOpen ? markPrice : (life.events.length ? life.events[life.events.length - 1].price : markPrice);
 
   const share = async () => {
     try {
@@ -162,16 +167,16 @@ export default function ObserveTradePage() {
   return (
     <Shell>
       {/* Top bar — terminal status line */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--role-line)] pb-3 font-mono">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--role-line)] pb-3">
         <Link href={`/whales/${address}`} className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-[var(--role-content-subtle)] transition-colors hover:text-[var(--role-content)]">
           <ArrowLeft className="h-3.5 w-3.5" /> Wallet
         </Link>
         <span className="text-[var(--role-line)]">/</span>
         <span className="inline-flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: coinColor }} />
-          <span className="text-sm font-semibold tracking-wide text-[var(--role-content)]">{coin}</span>
+          <span className="text-sm font-medium tracking-wide text-[var(--role-content)]">{coin}</span>
         </span>
-        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>
+        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>
           {life.side}
         </span>
         <span className={`text-[11px] uppercase tracking-wider ${life.isOpen ? 'text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)]'}`}>
@@ -194,7 +199,7 @@ export default function ObserveTradePage() {
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* LEFT: price (big) + journey */}
         <div className="flex min-w-0 flex-col gap-3">
-          <TermPanel title="Price & Fills">
+          <TermPanel title="Price & Fills" icon={CandlestickChart}>
             <div className="h-[380px] p-1.5 sm:h-[460px] lg:h-[560px]">
               <TradeCandlePanel
                 symbol={symbol}
@@ -216,7 +221,7 @@ export default function ObserveTradePage() {
             </div>
           </TermPanel>
 
-          <TermPanel title="PnL Journey">
+          <TermPanel title="PnL Journey" icon={Activity}>
             <div className="h-[240px] p-1.5 pt-2">
               <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} />
             </div>
@@ -225,17 +230,17 @@ export default function ObserveTradePage() {
 
         {/* RIGHT: position readout + lifecycle */}
         <div className="flex min-w-0 flex-col gap-3">
-          <TermPanel title="Position">
+          <TermPanel title="Position" icon={Wallet}>
             <div className="p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">
+              <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">
                 {life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}
               </div>
               <div className="mt-1 flex items-end gap-2">
-                <span className="font-mono text-[30px] font-semibold leading-none tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
+                <span className="text-[32px] font-medium leading-none tracking-tight tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
                   {isUp ? '+' : '−'}${formatNumber(Math.abs(life.finalPnl), 2)}
                 </span>
                 {roi != null && Number.isFinite(roi) && (
-                  <span className="pb-0.5 font-mono text-[12px] tabular-nums" style={{ color: roi >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+                  <span className="pb-0.5 text-[12px] font-medium tabular-nums" style={{ color: roi >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
                     {roi >= 0 ? '+' : ''}{roi.toFixed(1)}%
                   </span>
                 )}
@@ -249,7 +254,7 @@ export default function ObserveTradePage() {
 
               <div className="mt-3 border-t border-[var(--role-line)]">
                 <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
-                <DataRow label={life.isOpen ? 'Mark' : 'Last'} value={markPrice ? `$${formatNumber(markPrice, markPrice < 10 ? 4 : 2)}` : '—'} />
+                <DataRow label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? `$${formatNumber(lastPrice, lastPrice < 10 ? 4 : 2)}` : '—'} />
                 <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
                 <DataRow label="Notional" value={`$${formatCompact(notionalPeak)}`} />
                 {life.isOpen && livePos ? (
@@ -267,10 +272,10 @@ export default function ObserveTradePage() {
             </div>
           </TermPanel>
 
-          <TermPanel title="Lifecycle" right={`${life.events.length}`}>
+          <TermPanel title="Lifecycle" icon={ListOrdered} right={`${life.events.length}`}>
             <ol className="max-h-[320px] overflow-y-auto overscroll-contain lg:max-h-[380px]">
               {isFallback && (
-                <li className="border-b border-[var(--role-line-subtle)] px-3 py-2.5 font-mono text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
+                <li className="border-b border-[var(--role-line-subtle)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
                   Per-fill history unavailable (opened beyond BULK&apos;s window, or rate-limited) — live position marked to market.
                 </li>
               )}
@@ -278,9 +283,9 @@ export default function ObserveTradePage() {
                 <TermEventRow key={`${e.t}-${i}`} e={e} coin={coin} />
               ))}
               {life.isOpen && (
-                <li className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-3 py-2 font-mono text-[11px]">
-                  <CircleDot className="h-3 w-3 text-[var(--accent-text)]" />
-                  <span className="text-[var(--role-content)]">tracking live</span>
+                <li className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-3 py-2 text-[11px]">
+                  <CircleDot className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  <span className="font-medium text-[var(--role-content)]">tracking live</span>
                   <span className="ml-auto tabular-nums text-[var(--role-content-subtle)]">now</span>
                 </li>
               )}
@@ -349,14 +354,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>;
 }
 
-// A bordered terminal panel with a mono uppercase title bar.
-function TermPanel({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+// A bordered terminal panel with an icon + uppercase title bar (BULK font).
+function TermPanel({ title, icon: Icon, right, children }: { title: string; icon: LucideIcon; right?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="overflow-hidden rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)]">
-      <header className="flex items-center gap-2 border-b border-[var(--role-line)] px-3 py-1.5">
-        <span className="h-1.5 w-1.5 rounded-[1px]" style={{ background: 'var(--accent)' }} />
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">{title}</span>
-        {right != null && <span className="ml-auto font-mono text-[11px] tabular-nums text-[var(--role-content-subtle)]">{right}</span>}
+      <header className="flex items-center gap-2 border-b border-[var(--role-line)] px-3 py-2">
+        <Icon className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">{title}</span>
+        {right != null && <span className="ml-auto text-[11px] font-medium tabular-nums text-[var(--role-content-subtle)]">{right}</span>}
       </header>
       {children}
     </section>
@@ -366,9 +371,9 @@ function TermPanel({ title, right, children }: { title: string; right?: React.Re
 // LABEL ............ value row for the position readout.
 function DataRow({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 font-mono text-[12px] last:border-b-0">
-      <span className="uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</span>
-      <span className={`tabular-nums ${valueClass ?? 'text-[var(--role-content)]'}`}>{value}</span>
+    <div className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 text-[12px] last:border-b-0">
+      <span className="font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</span>
+      <span className={`font-medium tabular-nums ${valueClass ?? 'text-[var(--role-content)]'}`}>{value}</span>
     </div>
   );
 }
@@ -376,29 +381,43 @@ function DataRow({ label, value, valueClass }: { label: string; value: string; v
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
   return (
     <div className="rounded border border-[var(--role-line-subtle)] px-2 py-1.5">
-      <div className="font-mono text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</div>
-      <div className="mt-0.5 font-mono text-[12px] font-semibold tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
+      <div className="text-[9px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</div>
+      <div className="mt-0.5 text-[13px] font-medium tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
         {value}
       </div>
     </div>
   );
 }
 
-// Compact one-line terminal event row: time · action · size @ price · realized.
+// Small round action icon for a lifecycle event.
+function eventIcon(e: TradeEventPoint) {
+  if (e.action === 'open') return Flag;
+  if (e.action === 'add') return Plus;
+  if (e.action === 'reduce') return Minus;
+  if (e.action === 'flip') return e.positionAfter > 0 ? ArrowUpRight : ArrowDownRight;
+  return CircleDot; // close
+}
+
+// Compact one-line event row: icon · time · action · size @ price · realized.
 function TermEventRow({ e, coin }: { e: TradeEventPoint; coin: string }) {
   const time = new Date(e.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const building = e.action === 'open' || e.action === 'add';
+  const tint = building ? 'var(--accent-text)' : (e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)');
+  const Icon = eventIcon(e);
   return (
-    <li className="flex items-center gap-2 border-b border-[var(--role-line-subtle)] px-3 py-1.5 font-mono text-[11px] last:border-b-0">
+    <li className="flex items-center gap-2 border-b border-[var(--role-line-subtle)] px-3 py-2 text-[11px] last:border-b-0">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, currentColor 14%, transparent)', color: tint }}>
+        <Icon className="h-3 w-3" />
+      </span>
       <span className="shrink-0 tabular-nums text-[var(--role-content-subtle)]">{time}</span>
-      <span className="shrink-0 uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--role-content)' }}>
+      <span className="shrink-0 font-medium uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--role-content)' }}>
         {e.actionLabel}
       </span>
       <span className="truncate tabular-nums text-[var(--role-content-subtle)]">
         {formatNumber(Math.abs(e.sizeDelta), 4)} @ {formatNumber(e.price, e.price < 10 ? 4 : 2)}
       </span>
       {Math.abs(e.realizedDelta) > 1e-6 && (
-        <span className="ml-auto shrink-0 tabular-nums" style={{ color: e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+        <span className="ml-auto shrink-0 font-medium tabular-nums" style={{ color: e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
           {e.realizedDelta >= 0 ? '+' : '−'}${formatNumber(Math.abs(e.realizedDelta), 2)}
         </span>
       )}

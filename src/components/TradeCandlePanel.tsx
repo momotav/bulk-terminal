@@ -87,6 +87,11 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   const iv = userInterval ?? interval ?? pickInterval(openedAt, endT);
 
   const [candles, setCandles] = useState<Candle[] | null>(null);
+  // The interval the current `candles` were actually fetched with. The chart
+  // keys off THIS, not the pending `iv`, so changing timeframe rebuilds the
+  // chart exactly once (when the new candles land) — not twice (old candles +
+  // new interval, which snapped markers to the last bar and jumped the zoom).
+  const [loadedIv, setLoadedIv] = useState<string>(iv);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replaying, setReplaying] = useState(false);
@@ -114,7 +119,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const end = (isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000)) + barSeconds(iv) * 4000;
     analytics
       .getCandles(symbol, iv, CANDLE_LIMIT, { endTime: end })
-      .then((res) => { if (!cancelled) { setCandles(res.candles); onCandles?.(res.candles); } })
+      .then((res) => { if (!cancelled) { setCandles(res.candles); setLoadedIv(iv); onCandles?.(res.candles); } })
       .catch(() => { if (!cancelled) setError('Could not load price chart'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -209,7 +214,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     });
 
     // Focus the initial view on the trade (≥45 bars), everything else pannable.
-    const bsec = barSeconds(iv);
+    const bsec = barSeconds(loadedIv);
     try {
       const endSec = Math.floor(endT / 1000) + bsec * 4;
       const fromSec = Math.min(Math.floor(openedAt / 1000) - bsec * 8, endSec - bsec * 45);
@@ -255,7 +260,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     // Live candle extension (gated off during replay).
     let es: EventSource | null = null;
     if (isOpen) {
-      const bucket = barSeconds(iv);
+      const bucket = barSeconds(loadedIv);
       es = new EventSource(marketStreamUrl(symbol));
       es.onmessage = (ev) => {
         if (replayingRef.current) return;
@@ -290,7 +295,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [plotted, candles, events, avgEntry, liqPrice, markPrice, side, isOpen, symbol, iv]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plotted, candles, events, avgEntry, liqPrice, markPrice, side, isOpen, symbol, loadedIv]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- replay ---------------------------------------------------------------
   useEffect(() => {
@@ -304,7 +309,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       return;
     }
 
-    const bsec = barSeconds(iv);
+    const bsec = barSeconds(loadedIv);
     let idx = data.findIndex((c) => c.t >= openedAt);
     if (idx < 1) idx = Math.max(1, Math.floor(data.length * 0.3));
     // Fix the frame to the whole open→now span so revealed candles draw into it.
@@ -336,20 +341,20 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       if (replayTimerRef.current) { window.clearInterval(replayTimerRef.current); replayTimerRef.current = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [replaying, openedAt, iv]);
+  }, [replaying, openedAt, loadedIv]);
 
   const canReplay = plotted.length >= 3;
 
   return (
     <div className="flex h-full w-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-1 pb-1.5 font-mono">
+      <div className="flex items-center gap-1 px-1 pb-1.5">
         <div className="flex items-center gap-0.5">
           {INTERVALS.map(([id, label]) => (
             <button
               key={id}
               onClick={() => { setReplaying(false); setUserInterval(id); }}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors ${
+              className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase transition-colors ${
                 iv === id ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]'
               }`}
             >
@@ -362,9 +367,9 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
           onClick={() => canReplay && setReplaying((r) => !r)}
           disabled={!canReplay}
           title={replaying ? 'Pause replay' : 'Replay from open'}
-          className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--role-line)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)] disabled:opacity-40"
+          className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--role-line)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)] disabled:opacity-40"
         >
-          {replaying ? <><Pause className="h-3 w-3" /> Pause</> : <><Play className="h-3 w-3" /> Replay</>}
+          {replaying ? <><Pause className="h-3.5 w-3.5" /> Pause</> : <><Play className="h-3.5 w-3.5" /> Replay</>}
         </button>
       </div>
 
