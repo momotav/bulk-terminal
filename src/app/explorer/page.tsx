@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Hash, Activity, Zap, ChevronRight, Layers, Info } from 'lucide-react';
+import { Hash, Activity, Zap, ChevronRight, Info } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, YAxis, Cell, Area, AreaChart, Tooltip } from 'recharts';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { explorer, formatCompact, type ExplorerBlock } from '@/lib/api';
@@ -26,7 +26,24 @@ const POLL_INTERVAL_MS = 2_000;
 // into normal styling.
 const FLASH_DURATION_MS = 1500;
 
+// Table feed accumulates across polls (deduped by round) so rows persist and
+// animate instead of the whole list being replaced every tick.
+const FEED_CAP = 100;
+// Points kept in the blocks/sec sparkline, and where it's cached so a
+// returning visitor sees a populated chart on first paint.
+const SPARK_CAP = 44;
+const BPS_CACHE_KEY = 'bulkstats:explorer:bps';
+
 type Metric = 'txCount' | 'actionCount';
+
+// Blocks/sec from a CONTIGUOUS window (one poll's consecutive blocks). Never
+// compute this from the accumulated feed — its between-poll gaps would deflate
+// the rate badly.
+function computeBps(bs: ExplorerBlock[]): number {
+  if (bs.length < 2) return 0;
+  const span = (bs[0].timestampNs - bs[bs.length - 1].timestampNs) / 1e9;
+  return span > 0 ? (bs.length - 1) / span : 0;
+}
 
 function shortHash(hash: string): string {
   if (!hash || hash.length <= 12) return hash;
@@ -68,7 +85,11 @@ function usePaletteColor(cssVar: string, fallback: string): string {
 }
 
 export default function ExplorerPage() {
+  // `blocks` = the latest poll's contiguous window (drives stats + charts).
+  // `feed`   = accumulated, deduped stream (drives the table) so rows persist
+  //            across polls and can animate instead of being wholesale replaced.
   const [blocks, setBlocks] = useState<ExplorerBlock[]>([]);
+  const [feed, setFeed] = useState<ExplorerBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>('actionCount');
@@ -78,6 +99,17 @@ export default function ExplorerPage() {
   // visible (and stay calm). A ref because mutations needn't re-render.
   const seenRoundsRef = useRef<Set<number>>(new Set());
   const [flashingRounds, setFlashingRounds] = useState<Set<number>>(new Set());
+
+  // Blocks/sec sparkline history — seeded from localStorage so a returning
+  // visitor sees a filled chart on first paint, and pushed on EVERY poll (not
+  // only when the value changes) so it never freezes once the rate settles.
+  const [bpsHist, setBpsHist] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const arr = JSON.parse(window.localStorage.getItem(BPS_CACHE_KEY) || '[]');
+      return Array.isArray(arr) ? arr.filter((n: unknown) => typeof n === 'number' && n > 0).slice(-SPARK_CAP) : [];
+    } catch { return []; }
+  });
 
   const barColor = usePaletteColor('--accent', '#FFB457');
 
@@ -89,10 +121,8 @@ export default function ExplorerPage() {
         const res = await explorer.getRecentBlocks(BLOCK_LIMIT);
         if (cancelled) return;
 
-        // Identify rounds we haven't seen before — those are the "new
-        // arrivals" that should flash. On first load EVERY block is new,
-        // but we don't want a wall of flashes, so the initial batch just
-        // seeds `seenRounds` and only subsequent arrivals flash.
+        // Rounds we haven't seen before flash on arrival. First load seeds the
+        // set without flashing so there's no opening wall of flashes.
         const isFirstLoad = seenRoundsRef.current.size === 0;
         const newRounds = new Set<number>();
         for (const b of res.blocks) {
@@ -103,17 +133,38 @@ export default function ExplorerPage() {
         }
 
         setBlocks(res.blocks);
+
+        // Accumulate the table feed: merge with what's shown, dedupe by round,
+        // newest-first, cap. Unchanged rows keep their identity → they animate
+        // to new positions rather than the list rebuilding from scratch.
+        setFeed((prev) => {
+          const map = new Map<number, ExplorerBlock>();
+          for (const b of prev) map.set(b.round, b);
+          for (const b of res.blocks) map.set(b.round, b);
+          return [...map.values()].sort((a, b) => b.round - a.round).slice(0, FEED_CAP);
+        });
+
+        // One blocks/sec sample per poll → the sparkline always advances.
+        const bps = computeBps(res.blocks);
+        if (bps > 0) {
+          setBpsHist((h) => {
+            const next = [...h, bps].slice(-SPARK_CAP);
+            try { window.localStorage.setItem(BPS_CACHE_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
+            return next;
+          });
+        }
+
         setLoading(false);
         setError(null);
 
         if (newRounds.size > 0) {
-          setFlashingRounds(prev => {
+          setFlashingRounds((prev) => {
             const next = new Set(prev);
             for (const r of newRounds) next.add(r);
             return next;
           });
           window.setTimeout(() => {
-            setFlashingRounds(prev => {
+            setFlashingRounds((prev) => {
               const next = new Set(prev);
               for (const r of newRounds) next.delete(r);
               return next;
@@ -134,37 +185,20 @@ export default function ExplorerPage() {
     };
   }, []);
 
-  // Derived live stats for the KPI strip + activity chart. All computed
-  // from the visible window so they stay in lockstep with the table.
+  // Stats + activity chart from the latest contiguous poll window.
   const stats = useMemo(() => {
     if (blocks.length === 0) {
       return { latestRound: 0, blocksPerSec: 0, avgTxs: 0, totalActions: 0 };
     }
     const totalTxs = blocks.reduce((s, b) => s + b.txCount, 0);
     const totalActions = blocks.reduce((s, b) => s + b.actionCount, 0);
-    const newest = blocks[0].timestampNs;
-    const oldest = blocks[blocks.length - 1].timestampNs;
-    const spanSec = newest && oldest ? (newest - oldest) / 1e9 : 0;
-    const blocksPerSec = spanSec > 0 ? (blocks.length - 1) / spanSec : 0;
     return {
       latestRound: blocks[0].round,
-      blocksPerSec,
+      blocksPerSec: computeBps(blocks),
       avgTxs: totalTxs / blocks.length,
       totalActions,
     };
   }, [blocks]);
-
-  // Rolling history of blocks/sec across polls — gives the KPI card a live
-  // sparkline backdrop (the raw metric is a single scalar each tick).
-  const bpsHistRef = useRef<number[]>([]);
-  const [bpsHist, setBpsHist] = useState<number[]>([]);
-  useEffect(() => {
-    if (stats.blocksPerSec > 0) {
-      const next = [...bpsHistRef.current, stats.blocksPerSec].slice(-44);
-      bpsHistRef.current = next;
-      setBpsHist(next);
-    }
-  }, [stats.blocksPerSec]);
 
   // Oldest → newest so the chart reads left-to-right as time advances.
   const chartData = useMemo(
@@ -190,7 +224,7 @@ export default function ExplorerPage() {
         </div>
       </div>
 
-      {error && blocks.length === 0 && (
+      {error && feed.length === 0 && (
         <div className="rounded-[var(--radius-md)] border border-[rgb(var(--neg-rgb)/0.3)] bg-[rgb(var(--neg-rgb)/0.1)] px-4 py-3 text-sm text-[var(--role-signal-negative)]">
           {error}
         </div>
@@ -203,6 +237,7 @@ export default function ExplorerPage() {
           label="Latest round"
           value={<AnimatedNumber value={stats.latestRound} format={(n) => Math.round(n).toLocaleString()} />}
           color="var(--role-signal-info)"
+          big
         />
         <ExplorerKpi
           label="Blocks / sec"
@@ -289,10 +324,7 @@ export default function ExplorerPage() {
       {/* Recent blocks — the live streaming table. */}
       <section className="glass-card">
         <div className="panel-header">
-          <h2 className="panel-title t-h2 flex items-center gap-2">
-            <Layers className="h-3.5 w-3.5 text-[var(--role-content-subtle)]" />
-            Recent blocks
-          </h2>
+          <h2 className="panel-title t-h2">Recent blocks</h2>
         </div>
 
         {/* Column header */}
@@ -304,55 +336,55 @@ export default function ExplorerPage() {
           <span className="t-label text-right">Age</span>
         </div>
 
-        {loading && blocks.length === 0 ? (
+        {loading && feed.length === 0 ? (
           <div className="px-4 py-14 text-center text-[var(--role-content-subtle)]">
             <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-[var(--role-line)] border-t-[var(--role-chrome)]" />
             <p className="text-sm">Loading blocks…</p>
           </div>
-        ) : blocks.length === 0 ? (
+        ) : feed.length === 0 ? (
           <div className="px-4 py-14 text-center text-sm text-[var(--role-content-subtle)]">
             No blocks yet. The explorer connects on backend boot and fills as new blocks stream in.
           </div>
         ) : (
-          // AnimatePresence with `initial={false}` suppresses the first-load
-          // wall of fades; freshly-added rows then fade in (opacity only — no
-          // layout/slide, since rows turn over almost entirely each poll). The
-          // arrival colour flash rides an overlay so the resting fill stays
-          // exactly the panel background. Rows that fall off the bottom just
-          // unmount (no exit animation).
-          <AnimatePresence initial={false}>
-            {blocks.map((b) => {
-              const isFlashing = flashingRounds.has(b.round);
-              return (
-                <motion.div
-                  key={b.blockhash || b.round}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                  // Opaque resting fill == the panel's own background, held as a
-                  // live var so it re-tints with the palette and never bakes a
-                  // hex — rows stay invisible against the panel in every theme.
-                  // (No layout/slide: with near-total row turnover each poll the
-                  // push-down reorder isn't worth the churn.)
-                  style={{ backgroundColor: 'var(--bg-muted)' }}
-                  className="relative border-b border-[var(--role-line-subtle)] last:border-b-0"
-                >
-                  {/* Arrival flash — a positive-tinted overlay that fades out,
-                      leaving the resting fill exactly var(--bg-muted). */}
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                      backgroundColor: 'rgb(var(--pos-rgb) / 0.12)',
-                      opacity: isFlashing ? 1 : 0,
-                      transition: 'opacity 1.2s ease',
-                    }}
-                  />
-                  <Link
-                    href={`/explorer/block/${b.blockhash}`}
-                    prefetch={false}
-                    className="group relative z-[1] grid grid-cols-[110px_1fr_72px_84px_112px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--role-surface-raised)]"
+          // The list lives in its OWN scroll container with a fixed max height,
+          // so the feed turning over every poll can never move the PAGE scroll
+          // position (the old full-rebuild bug that snapped you to the top).
+          // The feed is accumulated + deduped by round, so already-shown rows
+          // keep their identity (stable keys) and DON'T re-animate; only the
+          // newly-arrived blocks slide+fade in at the top. `initial={false}`
+          // suppresses the first-load wall. No `layout` animation — with near-
+          // total turnover each poll it would fling surviving rows across the
+          // list; a simple enter animation reads like a proper activity feed.
+          <div className="max-h-[60vh] overflow-y-auto overscroll-contain" style={{ overflowAnchor: 'none' }}>
+            <AnimatePresence initial={false}>
+              {feed.map((b) => {
+                const isFlashing = flashingRounds.has(b.round);
+                return (
+                  <motion.div
+                    key={b.blockhash || b.round}
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    // Opaque resting fill == the panel's own background, held as a
+                    // live var so it re-tints with the palette and never bakes a hex.
+                    style={{ backgroundColor: 'var(--bg-muted)' }}
+                    className="relative border-b border-[var(--role-line-subtle)] last:border-b-0"
                   >
+                    {/* Arrival flash — a positive-tinted overlay that fades out. */}
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        backgroundColor: 'rgb(var(--pos-rgb) / 0.12)',
+                        opacity: isFlashing ? 1 : 0,
+                        transition: 'opacity 1.2s ease',
+                      }}
+                    />
+                    <Link
+                      href={`/explorer/block/${b.blockhash}`}
+                      prefetch={false}
+                      className="group relative z-[1] grid grid-cols-[110px_1fr_72px_84px_112px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--role-surface-raised)]"
+                    >
                     <div className="font-mono text-sm tabular-nums text-[var(--role-chrome)]">
                       {b.round.toLocaleString()}
                     </div>
@@ -374,11 +406,12 @@ export default function ExplorerPage() {
                       {relativeTime(b.timestampNs)}
                       <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                     </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
         )}
       </section>
 
@@ -410,13 +443,15 @@ export default function ExplorerPage() {
 // KPI card matching the dashboard's MetricMiniCard: big number over a
 // full-bleed area backdrop pinned to the card's lower edge. The backdrop only
 // draws when there's a ≥2-point series; otherwise the number sits alone.
-function ExplorerKpi({ label, value, spark, color, sub }: {
+function ExplorerKpi({ label, value, spark, color, sub, big }: {
   label: string; value: React.ReactNode; spark?: number[]; color: string; sub?: string;
+  /** No sparkline → give the number more room (e.g. Latest round). */
+  big?: boolean;
 }) {
   const data = (spark ?? []).map((v, i) => ({ i, v }));
   const gid = `ekpi-${label.replace(/[^a-z]/gi, '')}`;
   return (
-    <div className="glass-card relative flex h-[118px] flex-col overflow-hidden p-4 sm:h-[128px]">
+    <div className={`glass-card relative flex h-[118px] flex-col overflow-hidden p-4 sm:h-[128px] ${big ? 'justify-center' : ''}`}>
       {data.length >= 2 && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[62px] opacity-90">
           <ResponsiveContainer width="100%" height="100%">
@@ -428,14 +463,15 @@ function ExplorerKpi({ label, value, spark, color, sub }: {
                 </linearGradient>
               </defs>
               <YAxis hide domain={['dataMin', 'dataMax']} />
-              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive={false} />
+              {/* Smooth path morph as a new sample appends each poll. */}
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive animationDuration={450} animationEasing="ease-out" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       )}
       <div className="relative z-10">
         <div className="truncate text-[12px] font-medium text-[var(--role-content-subtle)]">{label}</div>
-        <div className="mt-1.5 text-[26px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[30px]">
+        <div className={`mt-1.5 font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] ${big ? 'text-[34px] sm:text-[44px]' : 'text-[26px] sm:text-[30px]'}`}>
           {value}
         </div>
         {sub && <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)]">{sub}</div>}
