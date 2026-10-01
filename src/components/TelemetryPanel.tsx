@@ -109,8 +109,9 @@ export function TelemetryPanel() {
       <div
         className="relative min-h-0 flex-1 px-1 pb-1 pt-2"
         style={{
-          backgroundImage: 'radial-gradient(rgb(var(--p-text) / 0.05) 0.6px, transparent 0.6px)',
-          backgroundSize: '13px 13px',
+          backgroundImage: 'radial-gradient(rgb(var(--p-text) / 0.14) 1px, transparent 1.3px)',
+          backgroundSize: '12px 12px',
+          backgroundPosition: '-1px -1px',
         }}
       >
         {chartData.length < 2 ? (
