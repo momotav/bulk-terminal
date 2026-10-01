@@ -104,8 +104,15 @@ export function TelemetryPanel() {
         )}
       </div>
 
-      {/* Rolling chart */}
-      <div className="min-h-0 flex-1 px-1 pb-1 pt-2">
+      {/* Rolling chart — a faint dot-grid texture fills the empty space so a
+          near-flat metric (e.g. steady latency) doesn't read as a blank panel. */}
+      <div
+        className="relative min-h-0 flex-1 px-1 pb-1 pt-2"
+        style={{
+          backgroundImage: 'radial-gradient(rgb(var(--p-text) / 0.05) 0.6px, transparent 0.6px)',
+          backgroundSize: '13px 13px',
+        }}
+      >
         {chartData.length < 2 ? (
           <div className="flex h-full items-center justify-center text-[11px] text-[var(--role-content-subtle)]">Sampling…</div>
         ) : (
