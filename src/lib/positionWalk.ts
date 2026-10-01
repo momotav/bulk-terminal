@@ -257,6 +257,230 @@ export function symbolPositionTimeline(fills: WalletFill[]): Record<string, Posi
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Trade lifecycle reconstruction (powers the shareable /observe view).
+//
+// BULK has no per-trade id, no stored equity curve, and no projected TP/SL
+// feed in any endpoint we proxy. What it DOES give us is the wallet's fill
+// history + OHLC candles — and from just those two we can faithfully rebuild
+// a single position's whole life: when it opened, every add / reduce / flip,
+// when it closed, and — the headline — a continuous PnL-over-time curve
+// (realized steps booked at each reduce, plus unrealized marked against the
+// candle closes between fills). Everything below is derived, never invented.
+// ---------------------------------------------------------------------------
+
+/** Minimal OHLC shape — matches `Candle` from the API without importing it. */
+export interface OHLC { t: number; o: number; h: number; l: number; c: number; }
+
+/** One thing the trader did to the position, in order. */
+export interface TradeEventPoint {
+  t: number;
+  action: AnnotatedFill['action'];
+  actionLabel: string;
+  price: number;
+  /** Signed size change at this fill (+ buy, − sell). */
+  sizeDelta: number;
+  /** Signed net position immediately after this fill. */
+  positionAfter: number;
+  /** Realized PnL booked by this fill (0 for pure opens/adds). */
+  realizedDelta: number;
+}
+
+/** One sample on the trade's PnL journey (realized + unrealized at time t). */
+export interface PnlCurvePoint {
+  t: number;
+  /** Total PnL at t = realized booked so far + open-leg unrealized. */
+  pnl: number;
+  /** Cumulative realized component at t. */
+  realized: number;
+  /** Mark/close price used to value the open leg at t. */
+  price: number;
+}
+
+/** The full life of a single position instance of one symbol. */
+export interface TradeLifecycle {
+  symbol: string;
+  side: 'long' | 'short';
+  openedAt: number;
+  /** null while still open. */
+  closedAt: number | null;
+  isOpen: boolean;
+  /** Price of the fill that opened this instance. */
+  openPrice: number;
+  /** Size-weighted average entry across the whole life. */
+  avgEntry: number;
+  /** Largest |signed size| the position ever reached. */
+  peakSize: number;
+  /** Signed size right now (0 once closed). */
+  currentSize: number;
+  events: TradeEventPoint[];
+  pnlCurve: PnlCurvePoint[];
+  /** Cumulative realized PnL at the end of the life. */
+  realizedTotal: number;
+  peakPnl: number;
+  troughPnl: number;
+  /** PnL at the last sample (unrealized if open, realized if closed). */
+  finalPnl: number;
+}
+
+/** Replay the segment's fills up to and including time `uptoT`, returning the
+ *  position state at that moment. O(fills) per call — fine for the handful of
+ *  fills in one position instance against ~200 candle samples. */
+function replaySegment(seg: AnnotatedFill[], uptoT: number): { size: number; avgEntry: number; realized: number } {
+  let size = 0;
+  let avgEntry = 0;
+  let realized = 0;
+  for (const f of seg) {
+    if (f.timestamp > uptoT) break;
+    const delta = f.isBuy ? f.size : -f.size;
+    const before = size;
+    const after = before + delta;
+    const sameDir = Math.abs(before) < ZERO_EPS || Math.sign(before) === Math.sign(delta);
+    if (sameDir) {
+      const absAfter = Math.abs(after);
+      if (absAfter > ZERO_EPS) avgEntry = (Math.abs(before) * avgEntry + Math.abs(delta) * f.price) / absAfter;
+      size = after;
+    } else {
+      const closed = Math.min(Math.abs(before), Math.abs(delta));
+      realized += closed * (f.price - avgEntry) * Math.sign(before);
+      if (Math.abs(after) < ZERO_EPS) { size = 0; avgEntry = 0; }
+      else if (Math.sign(after) !== Math.sign(before)) { size = after; avgEntry = f.price; }
+      else size = after;
+    }
+  }
+  return { size, avgEntry, realized };
+}
+
+/**
+ * Reconstruct the most-recent position instance of a single symbol from the
+ * wallet's fills + candles. `fills` MUST be pre-filtered to one symbol. Returns
+ * null when the fetched fills don't contain the position's open (e.g. truncated
+ * at BULK's fill window) — we'd rather show nothing than a trade that starts
+ * mid-air.
+ */
+export function buildTradeLifecycle(
+  fills: WalletFill[],
+  candles: OHLC[],
+  opts: { markPrice?: number | null; now?: number } = {},
+): TradeLifecycle | null {
+  if (!fills || fills.length === 0) return null;
+  const annotated = annotateFills(fills); // sorted ascending, with actions
+
+  // The instance we care about starts at the LAST open/flip transition —
+  // that's "this position" as a trader means it. Anything before belongs to
+  // earlier, already-closed instances of the same market.
+  let startIdx = -1;
+  for (let i = annotated.length - 1; i >= 0; i--) {
+    if (annotated[i].action === 'open' || annotated[i].action === 'flip') { startIdx = i; break; }
+  }
+  if (startIdx === -1) return null;
+
+  const seg = annotated.slice(startIdx);
+  const side: 'long' | 'short' = seg[0].positionAfter > 0 ? 'long' : 'short';
+  const openedAt = seg[0].timestamp;
+  const openPrice = seg[0].price;
+
+  // Walk the segment once to produce the ordered event list and final state.
+  let size = 0;
+  let avgEntry = 0;
+  let realizedCum = 0;
+  let peakSize = 0;
+  let closedAt: number | null = null;
+  // Life-long size-weighted entry (never reset on close) — the "avg entry"
+  // a trader means for a finished trade that was added to several times.
+  let entryNotional = 0;
+  let entrySize = 0;
+  const events: TradeEventPoint[] = [];
+  for (let i = 0; i < seg.length; i++) {
+    const f = seg[i];
+    const delta = f.isBuy ? f.size : -f.size;
+    const before = size;
+    const after = before + delta;
+    const sameDir = Math.abs(before) < ZERO_EPS || Math.sign(before) === Math.sign(delta);
+    let realizedDelta = 0;
+    if (sameDir) {
+      const absAfter = Math.abs(after);
+      if (absAfter > ZERO_EPS) avgEntry = (Math.abs(before) * avgEntry + Math.abs(delta) * f.price) / absAfter;
+      size = after;
+      entryNotional += Math.abs(delta) * f.price;
+      entrySize += Math.abs(delta);
+    } else {
+      const closed = Math.min(Math.abs(before), Math.abs(delta));
+      realizedDelta = closed * (f.price - avgEntry) * Math.sign(before);
+      realizedCum += realizedDelta;
+      if (Math.abs(after) < ZERO_EPS) { size = 0; avgEntry = 0; }
+      else if (Math.sign(after) !== Math.sign(before)) {
+        // Flip: the leftover opens a fresh leg at this fill's price.
+        size = after; avgEntry = f.price;
+        entryNotional += Math.abs(after) * f.price;
+        entrySize += Math.abs(after);
+      }
+      else size = after;
+    }
+    if (Math.abs(size) > peakSize) peakSize = Math.abs(size);
+    events.push({ t: f.timestamp, action: f.action, actionLabel: f.actionLabel, price: f.price, sizeDelta: delta, positionAfter: after, realizedDelta });
+    if (i > 0 && Math.abs(size) < ZERO_EPS && closedAt === null) closedAt = f.timestamp;
+  }
+
+  const isOpen = Math.abs(size) >= ZERO_EPS;
+  const currentSize = isOpen ? size : 0;
+  const now = opts.now ?? Date.now();
+  const endT = isOpen ? now : (closedAt ?? seg[seg.length - 1].timestamp);
+
+  // --- PnL journey ---------------------------------------------------------
+  // Sample at every candle close inside the life window, plus every event
+  // time (so the realized steps land exactly), plus the endpoints. At each
+  // sample we replay fills to get (size, avgEntry, realized) and value the
+  // open leg at the price in effect then.
+  const inWin = candles.filter((c) => c.t >= openedAt - 1 && c.t <= endT + 1 && Number.isFinite(c.c) && c.c > 0);
+  const priceAt = (t: number, fallback: number): number => {
+    let p = fallback;
+    for (const c of inWin) { if (c.t <= t) p = c.c; else break; }
+    return p;
+  };
+  const sampleTimes = new Set<number>([openedAt, endT]);
+  for (const c of inWin) sampleTimes.add(c.t);
+  for (const e of events) sampleTimes.add(e.t);
+  const eventPriceByTime = new Map<number, number>();
+  for (const e of events) eventPriceByTime.set(e.t, e.price);
+
+  const pnlCurve: PnlCurvePoint[] = [...sampleTimes]
+    .filter((t) => t >= openedAt && t <= endT)
+    .sort((a, b) => a - b)
+    .map((t) => {
+      const st = replaySegment(seg, t);
+      // Prefer the exact fill price at an event time; otherwise the live mark
+      // at the very end (open trades), else the prevailing candle close.
+      let price = eventPriceByTime.get(t) ?? priceAt(t, openPrice);
+      if (isOpen && t === endT && opts.markPrice && opts.markPrice > 0) price = opts.markPrice;
+      const unreal = Math.abs(st.size) < ZERO_EPS ? 0 : st.size * (price - st.avgEntry);
+      return { t, realized: st.realized, pnl: st.realized + unreal, price };
+    });
+
+  let peakPnl = -Infinity;
+  let troughPnl = Infinity;
+  for (const p of pnlCurve) { if (p.pnl > peakPnl) peakPnl = p.pnl; if (p.pnl < troughPnl) troughPnl = p.pnl; }
+  if (!pnlCurve.length) { peakPnl = troughPnl = realizedCum; }
+
+  return {
+    symbol: fills[0].symbol,
+    side,
+    openedAt,
+    closedAt,
+    isOpen,
+    openPrice,
+    avgEntry: entrySize > ZERO_EPS ? entryNotional / entrySize : openPrice,
+    peakSize,
+    currentSize,
+    events,
+    pnlCurve,
+    realizedTotal: realizedCum,
+    peakPnl,
+    troughPnl,
+    finalPnl: pnlCurve.length ? pnlCurve[pnlCurve.length - 1].pnl : realizedCum,
+  };
+}
+
 /** A single point on the cumulative realized-PnL curve. */
 export interface RealizedPnlPoint {
   /** Unix ms of the fill that realized this PnL. */

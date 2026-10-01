@@ -1,0 +1,229 @@
+'use client';
+
+// ---------------------------------------------------------------------------
+// TradeCandlePanel — the price side of the /observe view.
+//
+// OHLC candles over the trade's life, with the average entry (side-coloured),
+// liquidation (live only) and live mark drawn as price lines, and every
+// lifecycle fill marked on the time axis (▲ buys below bars, ▼ sells above).
+// A lean sibling of PositionChartModal's chart: native markers instead of the
+// HTML-overlay B/S circles, since a full page doesn't need the streamer bling.
+// ---------------------------------------------------------------------------
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createChart, ColorType, IChartApi, ISeriesApi, LineStyle,
+  type CandlestickData, type UTCTimestamp, type SeriesMarker, type Time,
+} from 'lightweight-charts';
+import { Loader2 } from 'lucide-react';
+import { analytics, marketStreamUrl, type Candle } from '@/lib/api';
+import { clampWicks } from '@/lib/candles';
+import type { TradeEventPoint } from '@/lib/positionWalk';
+
+interface Props {
+  symbol: string;               // "BTC-USD"
+  side: 'long' | 'short';
+  avgEntry: number;
+  liqPrice?: number | null;     // live only
+  markPrice?: number | null;    // live snapshot; stream overrides
+  events: TradeEventPoint[];
+  openedAt: number;
+  closedAt: number | null;
+  isOpen: boolean;
+  interval?: string;
+  /** Reports the loaded candle set back to the parent so the PnL journey can
+   *  be marked against the same prices without a second fetch. */
+  onCandles?: (candles: Candle[]) => void;
+}
+
+const resolveColor = (expr: string, fallback: string): string => {
+  if (typeof document === 'undefined') return fallback;
+  const probe = document.createElement('span');
+  probe.style.color = expr;
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  document.body.removeChild(probe);
+  return resolved || fallback;
+};
+
+function pickInterval(openedAt: number, endT: number): string {
+  const hrs = (endT - openedAt) / 3_600_000;
+  if (hrs < 1) return '5m';
+  if (hrs < 6) return '15m';
+  if (hrs < 48) return '1h';
+  if (hrs < 240) return '4h';
+  return '1d';
+}
+
+export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, events, openedAt, closedAt, isOpen, interval, onCandles }: Props) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
+
+  const endT = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
+  const iv = interval ?? pickInterval(openedAt, endT);
+
+  const [candles, setCandles] = useState<Candle[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Pad the window so there's price context before entry and after exit.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const dur = Math.max(endT - openedAt, 30 * 60_000);
+    const pad = Math.max(dur * 0.25, 30 * 60_000);
+    analytics
+      .getCandles(symbol, iv, 300, { startTime: openedAt - pad, endTime: endT + pad })
+      .then((res) => { if (!cancelled) { setCandles(res.candles); onCandles?.(res.candles); } })
+      .catch(() => { if (!cancelled) setError('Could not load price chart'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, iv, openedAt, closedAt, isOpen]);
+
+  const plotted = useMemo(
+    () => clampWicks((candles ?? []).filter((c) =>
+      Number.isFinite(c.o) && c.o > 0 && Number.isFinite(c.h) && c.h > 0 &&
+      Number.isFinite(c.l) && c.l > 0 && Number.isFinite(c.c) && c.c > 0)),
+    [candles],
+  );
+
+  useEffect(() => {
+    if (!candles || !containerRef.current) return;
+    const container = containerRef.current;
+    if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; seriesRef.current = null; }
+
+    const isLight = typeof document !== 'undefined' &&
+      !document.documentElement.classList.contains('dark') &&
+      document.documentElement.getAttribute('data-theme') !== 'dark';
+    const grid = isLight ? 'rgba(115,106,108,0.12)' : 'rgba(84,74,76,0.14)';
+    const border = isLight ? 'rgba(115,106,108,0.35)' : 'rgba(84,74,76,0.35)';
+    const text = isLight ? '#736A6C' : '#807678';
+    const pos = resolveColor('var(--pos)', '#21C07A');
+    const neg = resolveColor('var(--neg)', '#E5484D');
+    const accent = resolveColor('var(--accent)', '#FFB457');
+
+    const chart = createChart(container, {
+      width: container.clientWidth || 800,
+      height: container.clientHeight || 360,
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+      grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+      crosshair: { mode: 0 },
+      rightPriceScale: { borderColor: border },
+      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+    });
+    chartRef.current = chart;
+
+    const series = chart.addCandlestickSeries({
+      upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg,
+    });
+    seriesRef.current = series;
+
+    const data: CandlestickData[] = plotted.map((c) => ({
+      time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c,
+    }));
+    series.setData(data);
+    if (plotted.length > 0) {
+      const lc = plotted[plotted.length - 1];
+      liveBarRef.current = { time: Math.floor(lc.t / 1000), open: lc.o, high: lc.h, low: lc.l, close: lc.c };
+    }
+
+    // Price lines: average entry (side-coloured), liq (live), mark (live).
+    series.createPriceLine({ price: avgEntry, color: side === 'long' ? pos : neg, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Entry' });
+    let markLine: ReturnType<typeof series.createPriceLine> | null = null;
+    if (isOpen && markPrice && markPrice > 0) {
+      markLine = series.createPriceLine({ price: markPrice, color: accent, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'Mark' });
+    }
+    if (isOpen && liqPrice && liqPrice > 0) {
+      series.createPriceLine({ price: liqPrice, color: neg, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Liq.' });
+    }
+
+    // Lifecycle markers, snapped to the nearest loaded bar so they always render.
+    const secs = plotted.map((c) => Math.floor(c.t / 1000));
+    const snap = (sec: number): number => {
+      if (!secs.length) return sec;
+      let best = secs[0]; let bd = Math.abs(best - sec);
+      for (const s of secs) { const d = Math.abs(s - sec); if (d < bd) { bd = d; best = s; } }
+      return best;
+    };
+    const markers: SeriesMarker<Time>[] = events.map((e) => {
+      const buy = e.sizeDelta > 0;
+      return {
+        time: snap(Math.floor(e.t / 1000)) as UTCTimestamp,
+        position: buy ? 'belowBar' : 'aboveBar',
+        color: buy ? pos : neg,
+        shape: buy ? 'arrowUp' : 'arrowDown',
+        text: e.actionLabel,
+      };
+    });
+    // Dedup markers that snapped onto the same bar (keep the last — the richer
+    // "close"/"reduce" over an earlier "add"), else lightweight-charts stacks them.
+    const byTime = new Map<number, SeriesMarker<Time>>();
+    for (const m of markers) byTime.set(m.time as number, m);
+    series.setMarkers([...byTime.values()].sort((a, b) => (a.time as number) - (b.time as number)));
+
+    chart.timeScale().fitContent();
+
+    const resize = () => {
+      if (!containerRef.current) return;
+      const w = containerRef.current.clientWidth; const h = containerRef.current.clientHeight;
+      if (w > 0 && h > 0) chart.applyOptions({ width: w, height: h });
+    };
+    const raf = requestAnimationFrame(resize);
+    const obs = new ResizeObserver(resize);
+    obs.observe(container);
+
+    // Live candle extension while the trade is open.
+    let es: EventSource | null = null;
+    if (isOpen) {
+      const bucket = iv === '5m' ? 300 : iv === '15m' ? 900 : iv === '1h' ? 3600 : iv === '4h' ? 14400 : iv === '1d' ? 86400 : 3600;
+      es = new EventSource(marketStreamUrl(symbol));
+      es.onmessage = (ev) => {
+        let msg: { price: number; kind: string; ts: number };
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        const price = Number(msg.price);
+        if (!(price > 0)) return;
+        const s = seriesRef.current; if (!s) return;
+        const tSec = Math.floor((msg.ts || Date.now()) / 1000);
+        const bStart = Math.floor(tSec / bucket) * bucket;
+        const bar = liveBarRef.current;
+        if (!bar || bStart > bar.time) {
+          const nb = { time: bStart, open: price, high: price, low: price, close: price };
+          liveBarRef.current = nb;
+          s.update({ time: nb.time as UTCTimestamp, open: nb.open, high: nb.high, low: nb.low, close: nb.close });
+        } else if (bStart === bar.time) {
+          bar.close = price; if (price > bar.high) bar.high = price; if (price < bar.low) bar.low = price;
+          s.update({ time: bar.time as UTCTimestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+        }
+        if (msg.kind === 'mark' && markLine) markLine.applyOptions({ price });
+      };
+      es.onerror = () => { /* EventSource auto-reconnects */ };
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      obs.disconnect();
+      if (es) es.close();
+      liveBarRef.current = null;
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, [plotted, candles, events, avgEntry, liqPrice, markPrice, side, isOpen, symbol, iv]);
+
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {(loading || error) && (
+        <div className="absolute inset-0 flex items-center justify-center gap-2 text-[12px] text-[var(--role-content-subtle)]">
+          {loading && !error && <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading price…</>}
+          {error && <span className="text-[var(--neg)]">{error}</span>}
+        </div>
+      )}
+    </div>
+  );
+}

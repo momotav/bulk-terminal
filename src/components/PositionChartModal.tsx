@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
-import { X, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { X, TrendingUp, TrendingDown, Loader2, Share2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills } from '@/lib/positionWalk';
 import { clampWicks } from '@/lib/candles';
@@ -852,13 +853,23 @@ export function PositionChartModal({ position, onClose }: Props) {
               )}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Open the full shareable trade-observer view for this position. */}
+            <Link
+              href={`/observe/${position.walletAddress}/${position.symbol.replace(/-USD$/, '')}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-bulk-green hover:text-[var(--text-primary)]"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Observe</span>
+            </Link>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Stat strip — different stats per kind:
