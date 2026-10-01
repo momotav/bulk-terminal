@@ -502,7 +502,8 @@ function ProfileChart({ profile, price, denom, coin }: {
       const frac = Math.min(1, Math.max(0, (e.clientX - rect.left - padL) / plotW));
       const [tMin, tMax] = targetRef.current!; const span = tMax - tMin;
       const cursor = tMin + frac * span;
-      const factor = e.deltaY > 0 ? 1.18 : 0.82;
+      // Gentler per-notch zoom (was 1.18 / 0.82) so trackpad scrolling isn't jumpy.
+      const factor = e.deltaY > 0 ? 1.07 : 0.935;
       let nMin = cursor - (cursor - tMin) * factor;
       let nMax = cursor + (tMax - cursor) * factor;
       nMin = Math.max(fullMin, nMin); nMax = Math.min(fullMax, nMax);
