@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink,
@@ -28,6 +28,13 @@ export default function ObserveTradePage() {
   const params = useParams<{ address: string; coin: string }>();
   const address = String(params.address || '');
   const coin = String(params.coin || '').toUpperCase().replace(/-USD$/, '');
+  // Optional ?from=<openMs>&to=<closeMs> pins ONE specific trade (one open→close
+  // instance) rather than the coin's whole position history. `from` alone pins a
+  // still-open trade; both pin a closed one.
+  const searchParams = useSearchParams();
+  const fromMs = Number(searchParams.get('from')) || 0;
+  const toMs = Number(searchParams.get('to')) || 0;
+  const pinned = fromMs > 0;
 
   const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [fills, setFills] = useState<WalletFill[] | null>(null);
@@ -68,6 +75,14 @@ export default function ObserveTradePage() {
     [fills, coin],
   );
 
+  // Restrict to the pinned trade's window (with a little slop on each edge) so
+  // we reconstruct exactly that one instance. Unpinned → the whole coin history,
+  // from which buildTradeLifecycle shows the most recent instance.
+  const tradeFills = useMemo(() => {
+    if (!pinned) return coinFills;
+    return coinFills.filter((f) => f.timestamp >= fromMs - 2000 && (toMs > 0 ? f.timestamp <= toMs + 2000 : true));
+  }, [coinFills, pinned, fromMs, toMs]);
+
   // Live position + mark (if this market is currently open in the wallet).
   const livePos = useMemo(
     () => walletData?.live?.positions.find((p) => p.symbol.replace(/-USD$/, '').toUpperCase() === coin) ?? null,
@@ -84,20 +99,21 @@ export default function ObserveTradePage() {
     const candles = candleCache.get(symbol) ?? [];
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
-    if (coinFills.length) {
-      const l = buildTradeLifecycle(coinFills, candles, { markPrice });
+    if (tradeFills.length) {
+      const l = buildTradeLifecycle(tradeFills, candles, { markPrice });
       if (l) return l;
     }
     // Fills unavailable (aged out of BULK's window, or a transient 429) but the
     // wallet DOES have a live position here — reconstruct what we can from the
     // live snapshot so an open trade never reads as "not found". The journey is
     // marked-to-market against candles (constant size/entry); there are no
-    // per-fill events, so the lifecycle rail is empty.
-    if (livePos && Math.abs(livePos.size) > 1e-9) {
+    // per-fill events, so the lifecycle rail is empty. Not for a pinned CLOSED
+    // trade (to set) — the live position is a DIFFERENT, later instance.
+    if (!toMs && livePos && Math.abs(livePos.size) > 1e-9) {
       return liveFallbackLifecycle(symbol, livePos, candles, markPrice);
     }
     return null;
-  }, [coinFills, symbol, markPrice, candleTick, livePos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tradeFills, symbol, markPrice, candleTick, livePos, toMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const journeyMarkers = useMemo<JourneyMarker[]>(() => {
     if (!life || !life.pnlCurve.length) return [];

@@ -854,9 +854,19 @@ export function PositionChartModal({ position, onClose }: Props) {
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {/* Open the full shareable trade-observer view for this position. */}
+            {/* Open the full shareable trade-observer view for THIS specific
+                position instance — carry its open (and close) time so the
+                observer reconstructs exactly this trade, not the coin's whole
+                position history. */}
             <Link
-              href={`/observe/${position.walletAddress}/${position.symbol.replace(/-USD$/, '')}`}
+              href={(() => {
+                const base = `/observe/${position.walletAddress}/${position.symbol.replace(/-USD$/, '')}`;
+                if (position.kind === 'closed') {
+                  return `${base}?from=${Math.floor(position.openedAt)}&to=${Math.floor(position.closedAt)}`;
+                }
+                const openMs = currentPositionFills[0]?.timestamp;
+                return openMs ? `${base}?from=${Math.floor(openMs)}` : base;
+              })()}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-bulk-green hover:text-[var(--text-primary)]"
             >
               <Share2 className="w-3.5 h-3.5" />
