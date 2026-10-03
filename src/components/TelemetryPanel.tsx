@@ -124,11 +124,22 @@ export function TelemetryPanel() {
                   <circle cx="1" cy="1" r="1" fill={active.color} fillOpacity={0.32} />
                 </pattern>
               </defs>
-              <YAxis hide domain={['dataMin', 'dataMax']} />
+              {/* Pad the domain so a FLAT series (e.g. steady 4.6ms latency)
+                  doesn't collapse min===max — which pinned the line and gave the
+                  area zero height (no fill/texture). The line then sits mid-card
+                  and the fill (anchored to a 0 baseline) always has body. */}
+              <YAxis
+                hide
+                domain={[
+                  (min: number) => min - Math.max(1, Math.abs(min) * 0.4),
+                  (max: number) => max + Math.max(1, Math.abs(max) * 0.4),
+                ]}
+              />
               {/* Colour gradient first, dot texture layered on top, both under
-                  the same line (stroke lives on the textured layer). */}
-              <Area type="monotone" dataKey="v" stroke="none" fill="url(#telGrad)" isAnimationActive={false} dot={false} />
-              <Area type="monotone" dataKey="v" stroke={active.color} strokeWidth={2} fill="url(#telDots)" isAnimationActive={false} dot={false} />
+                  the same line (stroke lives on the textured layer). baseValue=0
+                  so the fill spans from the line down past the visible bottom. */}
+              <Area type="monotone" dataKey="v" stroke="none" fill="url(#telGrad)" baseValue={0} isAnimationActive={false} dot={false} />
+              <Area type="monotone" dataKey="v" stroke={active.color} strokeWidth={2} fill="url(#telDots)" baseValue={0} isAnimationActive={false} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         )}
