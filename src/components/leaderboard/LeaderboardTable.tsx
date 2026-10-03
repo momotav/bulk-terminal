@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Trophy, Flame, Anchor, Activity } from 'lucide-react';
 import { leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
-import { useStore } from '@/store';
+import { useStore, type TimeFrame } from '@/store';
 import Link from 'next/link';
 
 type LeaderboardType = 'pnl' | 'liquidated' | 'whales' | 'active';
@@ -17,6 +17,14 @@ interface LeaderboardTableProps {
   // and share hairlines with its neighbours. Used on the dashboard,
   // where panels sit flush against each other.
   flush?: boolean;
+  // Optional CONTROLLED timeframe. When provided (with onTimeframeChange),
+  // the table uses these instead of the global store — lets a page keep its
+  // own timeframe (e.g. the full /leaderboard defaults to 7d) without changing
+  // the shared store default used elsewhere.
+  timeframe?: TimeFrame;
+  onTimeframeChange?: (tf: TimeFrame) => void;
+  // Hide the "View full leaderboard →" footer (redundant on the full page).
+  hideFullLink?: boolean;
 }
 
 // `accent` is the raw palette value — it drives the icon chip, the row
@@ -66,11 +74,17 @@ export function LeaderboardTable({
   limit = 10,
   showTimeframe = true,
   flush = false,
+  timeframe: timeframeProp,
+  onTimeframeChange,
+  hideFullLink = false,
 }: LeaderboardTableProps) {
   const { network } = useCurrentNetwork();
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const { timeframe, setTimeframe } = useStore();
+  const store = useStore();
+  // Controlled (page-local) when both props are given; else the shared store.
+  const timeframe = timeframeProp ?? store.timeframe;
+  const setTimeframe = onTimeframeChange ?? store.setTimeframe;
 
   const config = typeConfig[type];
 
@@ -238,7 +252,7 @@ export function LeaderboardTable({
         )}
       </div>
 
-      {data.length > 0 && (
+      {data.length > 0 && !hideFullLink && (
         <div className="border-t border-[var(--border-color)] px-4 py-2">
           <Link
             href={`/leaderboard?type=${type}`}

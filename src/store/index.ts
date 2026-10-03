@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type Theme = 'dark' | 'light';
-type TimeFrame = '24h' | '7d' | '30d' | 'all';
+export type TimeFrame = '24h' | '7d' | '30d' | 'all';
 
 export interface User {
   id: number;
