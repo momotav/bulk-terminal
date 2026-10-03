@@ -64,6 +64,10 @@ function niceTicks(lo: number, hi: number, count: number): number[] {
 
 function formatBps(bps: number | null | undefined): string {
   if (bps == null || !isFinite(bps)) return '-';
+  // BTC/ETH/SOL run an ultra-tight book where best bid touches best ask (spread
+  // ~1e-8), so a plain toFixed(2) prints "0.00" and reads as broken. Show the
+  // true magnitude: a real-but-sub-0.01bp spread as "<0.01", an exact zero as 0.
+  if (bps > 0 && bps < 0.005) return '<0.01';
   return bps.toFixed(2);
 }
 
@@ -669,11 +673,11 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
 // Size simulator — enter a clip, get the fill, slippage and all-in cost.
 // ----------------------------------------------------------------------------
 
-const SIM_PRESETS = [100_000, 1_000_000, 10_000_000];
+const SIM_PRESETS = [1_000, 10_000, 50_000, 100_000, 500_000, 1_000_000];
 
 function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
   const [side, setSide] = useState<Side>('buy');
-  const [notional, setNotional] = useState<number>(1_000_000);
+  const [notional, setNotional] = useState<number>(100_000);
 
   const levels = side === 'buy' ? book.asks : book.bids;
   const result = useMemo(
@@ -681,6 +685,29 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
     [levels, mid, side, notional]
   );
   const fullNotional = useMemo(() => levels.reduce((s, l) => s + l.px * l.sz, 0), [levels]);
+
+  // Decompose the all-in cost into the three real components a trader pays,
+  // the way the reference tool does: crossing the (half) spread, then walking
+  // deeper into the book (slippage), then the taker fee. slipBps from
+  // simulateOrder is avg-fill-vs-mid, which already contains the half-spread —
+  // so split it: the first halfSpread bps is "spread", the rest is "slippage".
+  const breakdown = useMemo(() => {
+    if (!result || result.slipBps == null) return null;
+    const notionalFilled = result.filledNotional;
+    const halfSpread = Math.max(0, (book.stats.spreadBps ?? 0) / 2);
+    const spreadBps = Math.min(result.slipBps, halfSpread);
+    const slipBps = Math.max(0, result.slipBps - spreadBps);
+    const feeBps = BULK_TAKER_BPS;
+    const toUsd = (bps: number) => (bps / 1e4) * notionalFilled;
+    const totalBps = spreadBps + slipBps + feeBps;
+    return {
+      spreadBps, slipBps, feeBps, totalBps,
+      spreadUsd: toUsd(spreadBps), slipUsd: toUsd(slipBps), feeUsd: toUsd(feeBps), totalUsd: toUsd(totalBps),
+      impactPct: result.slipBps / 100, // avg-fill vs mid, as a percent
+    };
+  }, [result, book.stats.spreadBps]);
+
+  const fmtUsdCost = (n: number) => (n > 0 && n < 0.005 ? '<$0.01' : `$${n.toFixed(2)}`);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
     <div className="flex items-baseline justify-between border-b border-[var(--role-line-subtle)] py-1.5 last:border-0">
@@ -715,6 +742,9 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
               onChange={(e) => setNotional(Math.max(0, Number(e.target.value) || 0))}
               className="w-full bg-transparent font-mono text-sm tabular-nums text-[var(--role-content)] outline-none"
             />
+            {mid != null && mid > 0 && (
+              <span className="shrink-0 font-mono text-[11px] text-[var(--role-content-subtle)]">≈ {formatSize(notional / mid)}</span>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {SIM_PRESETS.map((p) => (
@@ -724,15 +754,37 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
           </div>
         </div>
 
-        {/* Result */}
-        {result && result.avgFill != null ? (
-          <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] bg-[var(--role-background)]/30 px-3">
-            <Row label="Avg fill price" value={`$${formatPrice(result.avgFill)}`} />
-            <Row label="Slippage" value={`${formatBps(result.slipBps)} bps`} accent={result.slipBps && result.slipBps > 0 ? (side === 'buy' ? 'var(--neg)' : 'var(--pos)') : undefined} />
-            <Row label={`All-in (incl. ${BULK_TAKER_BPS} bps taker)`} value={`${formatBps(result.allInBps)} bps`} />
-            <Row label="Est. cost vs mid" value={result.slipBps != null ? formatUsd((result.allInBps! / 1e4) * result.filledNotional) : '-'} />
-            <Row label="Filled" value={`${formatUsd(result.filledNotional)} of ${formatUsd(fullNotional)}`} />
-          </div>
+        {/* You pay — headline + stacked breakdown bar */}
+        {result && result.avgFill != null && breakdown ? (
+          <>
+            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] bg-[var(--role-background)]/30 p-3">
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-[var(--role-content-subtle)]">You pay</div>
+              <div className="flex items-end gap-2">
+                <span className="font-mono text-2xl font-medium leading-none tabular-nums text-[var(--role-content)]">{fmtUsdCost(breakdown.totalUsd)}</span>
+                <span className="pb-0.5 font-mono text-[11px] tabular-nums text-[var(--role-content-subtle)]">{formatBps(breakdown.totalBps)} bps</span>
+              </div>
+              {/* Stacked bar: spread · slippage · fee */}
+              <div className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
+                {breakdown.totalBps > 0 && (<>
+                  <div style={{ width: `${(breakdown.spreadBps / breakdown.totalBps) * 100}%`, backgroundColor: 'var(--role-signal-info)' }} />
+                  <div style={{ width: `${(breakdown.slipBps / breakdown.totalBps) * 100}%`, backgroundColor: side === 'buy' ? 'var(--neg)' : 'var(--pos)' }} />
+                  <div style={{ width: `${(breakdown.feeBps / breakdown.totalBps) * 100}%`, backgroundColor: 'var(--accent)' }} />
+                </>)}
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                <Legend sw="var(--role-signal-info)" label="Spread" value={fmtUsdCost(breakdown.spreadUsd)} />
+                <Legend sw={side === 'buy' ? 'var(--neg)' : 'var(--pos)'} label="Slippage" value={fmtUsdCost(breakdown.slipUsd)} />
+                <Legend sw="var(--accent)" label={`Fee ${BULK_TAKER_BPS}bp`} value={fmtUsdCost(breakdown.feeUsd)} />
+              </div>
+            </div>
+
+            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] bg-[var(--role-background)]/30 px-3">
+              <Row label="Avg fill price" value={`$${formatPrice(result.avgFill)}`} />
+              <Row label="With fee" value={`$${formatPrice(side === 'buy' ? result.avgFill * (1 + BULK_TAKER_BPS / 1e4) : result.avgFill * (1 - BULK_TAKER_BPS / 1e4))}`} />
+              <Row label="Price impact" value={`${breakdown.impactPct < 0.001 ? '<0.001' : breakdown.impactPct.toFixed(3)}%`} accent={breakdown.impactPct > 0 ? (side === 'buy' ? 'var(--neg)' : 'var(--pos)') : undefined} />
+              <Row label="Filled" value={`${formatUsd(result.filledNotional)} of ${formatUsd(fullNotional)}`} />
+            </div>
+          </>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">Enter a size.</div>
         )}
@@ -743,6 +795,18 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Legend({ sw, label, value }: { sw: string; label: string; value: string }) {
+  return (
+    <div>
+      <div className="flex items-center justify-center gap-1">
+        <span className="h-1.5 w-1.5 rounded-[1px]" style={{ backgroundColor: sw }} />
+        <span className="text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">{label}</span>
+      </div>
+      <div className="mt-0.5 font-mono text-xs font-medium tabular-nums text-[var(--role-content)]">{value}</div>
     </div>
   );
 }
@@ -1409,7 +1473,7 @@ export default function OrderBookPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '-'} sub="Book midpoint" />
-        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
+        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? (stats.spreadAbs > 0 && stats.spreadAbs < 0.00005 ? '<$0.0001' : `$${stats.spreadAbs.toFixed(4)}`) : undefined} />
         <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '-'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
         <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '-'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
         <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="bid" />
