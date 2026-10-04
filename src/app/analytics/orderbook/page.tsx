@@ -101,10 +101,8 @@ function niceTicks(lo: number, hi: number, count: number): number[] {
 
 function formatBps(bps: number | null | undefined): string {
   if (bps == null || !isFinite(bps)) return '-';
-  // BTC/ETH/SOL run an ultra-tight book where best bid touches best ask (spread
-  // ~1e-8), so a plain toFixed(2) prints "0.00" and reads as broken. Show the
-  // true magnitude: a real-but-sub-0.01bp spread as "<0.01", an exact zero as 0.
-  if (bps > 0 && bps < 0.005) return '<0.01';
+  // BTC/ETH/SOL run an ultra-tight book (best bid touches best ask), so the
+  // spread genuinely rounds to 0.00 — that's real, not broken.
   return bps.toFixed(2);
 }
 
@@ -484,8 +482,10 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
                   );
                 }}
               />
-              <Bar dataKey="bid" fill={BID} fillOpacity={0.8} isAnimationActive={false} />
-              <Bar dataKey="ask" fill={ASK} fillOpacity={0.8} isAnimationActive={false} />
+              {/* A numeric X-axis gives bars no band width, so recharts draws
+                  them zero-width (invisible). Pin an explicit barSize. */}
+              <Bar dataKey="bid" fill={BID} fillOpacity={0.85} barSize={6} isAnimationActive={false} />
+              <Bar dataKey="ask" fill={ASK} fillOpacity={0.85} barSize={6} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -1523,7 +1523,7 @@ export default function OrderBookPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '-'} sub="Book midpoint" />
-        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? (stats.spreadAbs > 0 && stats.spreadAbs < 0.00005 ? '<$0.0001' : `$${stats.spreadAbs.toFixed(4)}`) : undefined} />
+        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
         <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '-'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
         <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '-'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
         <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="bid" />
