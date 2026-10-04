@@ -902,31 +902,23 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
     return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip };
   }, [book, mid, bandBp]);
 
-  // One side of a butterfly row. `align` sends the bar toward the center.
-  const slipBar = (r: SimResult, color: string, align: 'right' | 'left') => {
+  // Vertical scale for the elevator: furthest finite fill, padded. ∞ orders
+  // pin to the edge. Floor so a near-zero-slip book still spreads the dots out.
+  const maxScale = m ? Math.max(m.maxSlip * 1.18, 0.5) : 1;
+  // Place an order at a vertical % (0 = top, 100 = bottom). Mid is 50%.
+  // `exRank` staggers exhausted (∞) dots inward so several don't stack on the edge.
+  const yFor = (r: SimResult, dir: 'up' | 'down', exRank = 0): number => {
     const exhausted = r.bookExhausted || r.slipBps == null;
-    const pct = exhausted ? 100 : Math.min(100, ((r.slipBps as number) / (m?.maxSlip ?? 1)) * 100);
-    const val = exhausted ? '∞' : formatBps(r.slipBps);
-    const bar = (
-      <div className="h-full min-w-[2px] rounded-[2px]" style={{ width: `${Math.max(exhausted ? 100 : pct, r.slipBps ? 4 : 0)}%`, background: color, opacity: exhausted ? 0.35 : 0.9 }} />
-    );
-    return align === 'right' ? (
-      <div className="flex items-center gap-1.5">
-        <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums" style={{ color }}>{val}</span>
-        <div className="flex h-3 flex-1 items-center justify-end">{bar}</div>
-      </div>
-    ) : (
-      <div className="flex items-center gap-1.5">
-        <div className="flex h-3 flex-1 items-center justify-start">{bar}</div>
-        <span className="w-10 shrink-0 font-mono text-[11px] tabular-nums" style={{ color }}>{val}</span>
-      </div>
-    );
+    const frac = exhausted ? 1 : Math.min(1, (r.slipBps as number) / maxScale);
+    const base = dir === 'up' ? 50 - frac * 46 : 50 + frac * 46;
+    if (!exhausted) return base;
+    return dir === 'up' ? base + exRank * 6 : base - exRank * 6;
   };
 
   return (
     <div className="glass-card flex h-full flex-col">
       <div className="panel-header">
-        <h2 className="panel-title t-h2">Two-sided depth</h2>
+        <h2 className="panel-title t-h2">Depth elevator</h2>
         <div className="toggle-group">
           {DEPTH_BANDS.map((b) => (
             <button key={b} onClick={() => setBandBp(b)} className={cn('toggle-btn', bandBp === b && 'active')}>±{b}bp</button>
@@ -937,44 +929,74 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
       {!m ? (
         <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">No book.</div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
-          {/* ── Depth header: two side-tiles flanking a center imbalance pill ── */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] px-2.5 py-2" style={{ borderLeftColor: 'var(--pos)', borderLeftWidth: 2 }}>
-              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">Bids</div>
-              <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</div>
-            </div>
-            <div className="text-center">
-              <div className="font-mono text-sm font-medium tabular-nums text-[var(--role-content)]">{Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}</div>
-              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">{m.label}</div>
-            </div>
-            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] px-2.5 py-2 text-right" style={{ borderRightColor: 'var(--neg)', borderRightWidth: 2 }}>
-              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">Asks</div>
-              <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</div>
-            </div>
-          </div>
-          {/* imbalance meter */}
-          <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
-            <div style={{ width: `${m.bidShare * 100}%`, backgroundColor: 'var(--pos)', opacity: 0.8 }} />
-            <div style={{ width: `${(1 - m.bidShare) * 100}%`, backgroundColor: 'var(--neg)', opacity: 0.8 }} />
-          </div>
-          <div className="mt-1.5 text-center text-[10px] text-[var(--role-content-subtle)]">
-            <span className="font-medium text-[var(--role-content-muted)]">${formatCompact(m.both)}</span> liquidity within ±{bandBp}bp · spread{' '}
-            <span className="font-medium text-[var(--role-content-muted)]">{formatBps(stats.spreadBps)}bp</span>
+        <div className="flex min-h-0 flex-1 flex-col px-4 py-3">
+          {/* Compact depth / imbalance strip */}
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-mono font-medium tabular-nums" style={{ color: 'var(--pos)' }}>▲ ${formatCompact(m.bidDepth)}</span>
+            <span className="text-[var(--role-content-subtle)]">
+              {m.label} · <span className="font-medium text-[var(--role-content-muted)]">{Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}</span> · ${formatCompact(m.both)} ±{bandBp}bp
+            </span>
+            <span className="font-mono font-medium tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)} ▼</span>
           </div>
 
-          {/* ── Butterfly slippage: bars grow OUTWARD from the size in the center ── */}
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-0.5 text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
-            <span className="text-right">◄ Sell slip</span><span>Size</span><span>Buy slip ►</span>
-          </div>
-          <div className="mt-1 flex flex-col gap-1.5">
-            {m.ladder.map((r) => (
-              <div key={r.sz} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                {slipBar(r.bid, 'var(--pos)', 'right')}
-                <span className="w-14 text-center font-mono text-[11px] tabular-nums text-[var(--role-content-muted)]">${formatCompact(r.sz)}</span>
-                {slipBar(r.ask, 'var(--neg)', 'left')}
+          {/* ── The elevator: a central price axis. Buy orders climb up into the
+               asks (red), sell orders sink down into the bids (green); vertical
+               distance from mid = the average fill's slippage. ── */}
+          <div className="relative mt-2 min-h-[220px] flex-1">
+            {/* side depth gradients (opacity ∝ each side's share of the band) */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2" style={{ background: 'linear-gradient(to top, transparent, var(--neg))', opacity: 0.06 + (1 - m.bidShare) * 0.16 }} />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2" style={{ background: 'linear-gradient(to bottom, transparent, var(--pos))', opacity: 0.06 + m.bidShare * 0.16 }} />
+
+            {/* top / bottom edge labels */}
+            <div className="absolute left-0 right-0 top-0 flex justify-between text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
+              <span>Buy ↑ asks</span><span className="tabular-nums">+{maxScale.toFixed(1)}bp</span>
+            </div>
+            <div className="absolute left-0 right-0 bottom-0 flex justify-between text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
+              <span>Sell ↓ bids</span><span className="tabular-nums">−{maxScale.toFixed(1)}bp</span>
+            </div>
+
+            {/* central price axis */}
+            <div className="absolute bottom-5 top-5 left-1/2 w-px -translate-x-1/2 bg-[var(--role-line)]" />
+
+            {/* mid line */}
+            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-[var(--role-content-subtle)] opacity-40" style={{ borderTop: '1px dashed currentColor' }} />
+                <span className="whitespace-nowrap font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
+                  mid {stats.mid != null ? formatPrice(stats.mid) : '—'} · {formatBps(stats.spreadBps)}bp
+                </span>
+                <div className="h-px flex-1 bg-[var(--role-content-subtle)] opacity-40" style={{ borderTop: '1px dashed currentColor' }} />
               </div>
-            ))}
+            </div>
+
+            {/* order dots — buy above (right of axis), sell below (left of axis) */}
+            {m.ladder.map((r, i) => {
+              // rank among already-exhausted rows (sizes ascending) to stagger ∞ dots
+              const buyExRank = m.ladder.slice(0, i).filter((x) => x.ask.bookExhausted).length;
+              const sellExRank = m.ladder.slice(0, i).filter((x) => x.bid.bookExhausted).length;
+              const buyY = yFor(r.ask, 'up', buyExRank);
+              const sellY = yFor(r.bid, 'down', sellExRank);
+              const buyEx = r.ask.bookExhausted;
+              const sellEx = r.bid.bookExhausted;
+              return (
+                <div key={r.sz}>
+                  {/* BUY dot — right of axis */}
+                  <div className="absolute left-1/2 flex -translate-y-1/2 items-center gap-1.5" style={{ top: `${buyY}%` }}>
+                    <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: 'var(--neg)', opacity: buyEx ? 0.4 : 1, boxShadow: '0 0 0 2px var(--role-surface)' }} />
+                    <span className="font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
+                      ${formatCompact(r.sz)} <span style={{ color: 'var(--neg)' }}>{buyEx ? '∞' : `${formatBps(r.ask.slipBps)}bp`}</span>
+                    </span>
+                  </div>
+                  {/* SELL dot — left of axis */}
+                  <div className="absolute right-1/2 flex -translate-y-1/2 flex-row-reverse items-center gap-1.5" style={{ top: `${sellY}%` }}>
+                    <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: 'var(--pos)', opacity: sellEx ? 0.4 : 1, boxShadow: '0 0 0 2px var(--role-surface)' }} />
+                    <span className="font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
+                      <span style={{ color: 'var(--pos)' }}>{sellEx ? '∞' : `${formatBps(r.bid.slipBps)}bp`}</span> ${formatCompact(r.sz)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
