@@ -460,8 +460,11 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={levelData} margin={{ top: 12, right: 8, bottom: 4, left: 4 }}>
-              <XAxis dataKey="px" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+            <BarChart data={levelData} margin={{ top: 12, right: 8, bottom: 4, left: 4 }} barCategoryGap={1}>
+              {/* CATEGORY x-axis (not numeric): a band scale gives each bar a
+                  real width automatically. A numeric axis left the bars 0-wide
+                  (invisible) even with barSize. Thin the crowded price ticks. */}
+              <XAxis dataKey="px" type="category" tickFormatter={(v) => formatCompact(Number(v))} tick={axisTick} axisLine={{ stroke: C.line }} tickLine={false} interval="preserveStartEnd" minTickGap={40} />
               <YAxis tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={false} tickLine={false} width={44} />
               <Tooltip
                 cursor={{ fill: 'var(--bg-secondary-20)' }}
@@ -482,10 +485,10 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
                   );
                 }}
               />
-              {/* A numeric X-axis gives bars no band width, so recharts draws
-                  them zero-width (invisible). Pin an explicit barSize. */}
-              <Bar dataKey="bid" fill={BID} fillOpacity={0.85} barSize={6} isAnimationActive={false} />
-              <Bar dataKey="ask" fill={ASK} fillOpacity={0.85} barSize={6} isAnimationActive={false} />
+              {/* Band scale sizes the bars; cap the width so sparse books don't
+                  render chunky blocks. */}
+              <Bar dataKey="bid" fill={BID} fillOpacity={0.85} maxBarSize={14} isAnimationActive={false} />
+              <Bar dataKey="ask" fill={ASK} fillOpacity={0.85} maxBarSize={14} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         )}
