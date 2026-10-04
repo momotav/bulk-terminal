@@ -892,10 +892,36 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
       bid: simulateOrder(book.bids, mid, 'sell', sz, 0),
       ask: simulateOrder(book.asks, mid, 'buy', sz, 0),
     }));
-    return { bidDepth, askDepth, both, bidShare, ratio, label, ladder };
+    // Max finite slippage across the ladder — normalizes the butterfly bars.
+    let maxSlip = 0;
+    for (const r of ladder) {
+      if (!r.bid.bookExhausted && r.bid.slipBps != null) maxSlip = Math.max(maxSlip, r.bid.slipBps);
+      if (!r.ask.bookExhausted && r.ask.slipBps != null) maxSlip = Math.max(maxSlip, r.ask.slipBps);
+    }
+    if (maxSlip <= 0) maxSlip = 1;
+    return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip };
   }, [book, mid, bandBp]);
 
-  const fmtSlip = (r: SimResult) => (r.bookExhausted ? '∞' : `${formatBps(r.slipBps)} bp`);
+  // One side of a butterfly row. `align` sends the bar toward the center.
+  const slipBar = (r: SimResult, color: string, align: 'right' | 'left') => {
+    const exhausted = r.bookExhausted || r.slipBps == null;
+    const pct = exhausted ? 100 : Math.min(100, ((r.slipBps as number) / (m?.maxSlip ?? 1)) * 100);
+    const val = exhausted ? '∞' : formatBps(r.slipBps);
+    const bar = (
+      <div className="h-full min-w-[2px] rounded-[2px]" style={{ width: `${Math.max(exhausted ? 100 : pct, r.slipBps ? 4 : 0)}%`, background: color, opacity: exhausted ? 0.35 : 0.9 }} />
+    );
+    return align === 'right' ? (
+      <div className="flex items-center gap-1.5">
+        <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums" style={{ color }}>{val}</span>
+        <div className="flex h-3 flex-1 items-center justify-end">{bar}</div>
+      </div>
+    ) : (
+      <div className="flex items-center gap-1.5">
+        <div className="flex h-3 flex-1 items-center justify-start">{bar}</div>
+        <span className="w-10 shrink-0 font-mono text-[11px] tabular-nums" style={{ color }}>{val}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -911,46 +937,42 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
       {!m ? (
         <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">No book.</div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
-          {/* Both-sides total */}
-          <div className="text-center">
-            <div className="font-sans text-[30px] font-medium leading-none tabular-nums text-[var(--role-content)]">${formatCompact(m.both)}</div>
-            <div className="mt-1 text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">within ±{bandBp}bp · both sides</div>
-          </div>
-
-          {/* Bid depth · balance · ask depth */}
-          <div className="flex items-center justify-between font-mono text-xs tabular-nums">
-            <span className="font-medium" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</span>
-            <span className="text-[var(--role-content-muted)]">
-              {m.label} · {Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}
-            </span>
-            <span className="font-medium" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</span>
-          </div>
-          {/* Balance bar */}
-          <div className="h-2 w-full overflow-hidden rounded-full">
-            <div className="flex h-full w-full">
-              <div style={{ width: `${m.bidShare * 100}%`, background: 'linear-gradient(90deg, var(--pos), color-mix(in srgb, var(--pos) 55%, var(--neg)))' }} />
-              <div style={{ width: `${(1 - m.bidShare) * 100}%`, background: 'linear-gradient(90deg, color-mix(in srgb, var(--neg) 55%, var(--pos)), var(--neg))' }} />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
+          {/* ── Depth header: two side-tiles flanking a center imbalance pill ── */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] px-2.5 py-2" style={{ borderLeftColor: 'var(--pos)', borderLeftWidth: 2 }}>
+              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">Bids</div>
+              <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</div>
+            </div>
+            <div className="text-center">
+              <div className="font-mono text-sm font-medium tabular-nums text-[var(--role-content)]">{Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}</div>
+              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">{m.label}</div>
+            </div>
+            <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] px-2.5 py-2 text-right" style={{ borderRightColor: 'var(--neg)', borderRightWidth: 2 }}>
+              <div className="text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">Asks</div>
+              <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</div>
             </div>
           </div>
-
-          {/* Spread row */}
-          <div className="flex items-center justify-between border-y border-[var(--role-line-subtle)] py-2 font-mono text-xs tabular-nums">
-            <span className="font-medium" style={{ color: 'var(--pos)' }}>{stats.bestBid ? formatPrice(stats.bestBid.px) : '—'}</span>
-            <span className="text-[var(--role-content-muted)]"><span className="font-medium text-[var(--role-content)]">{formatBps(stats.spreadBps)}</span> bp spread</span>
-            <span className="font-medium" style={{ color: 'var(--neg)' }}>{stats.bestAsk ? formatPrice(stats.bestAsk.px) : '—'}</span>
+          {/* imbalance meter */}
+          <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
+            <div style={{ width: `${m.bidShare * 100}%`, backgroundColor: 'var(--pos)', opacity: 0.8 }} />
+            <div style={{ width: `${(1 - m.bidShare) * 100}%`, backgroundColor: 'var(--neg)', opacity: 0.8 }} />
+          </div>
+          <div className="mt-1.5 text-center text-[10px] text-[var(--role-content-subtle)]">
+            <span className="font-medium text-[var(--role-content-muted)]">${formatCompact(m.both)}</span> liquidity within ±{bandBp}bp · spread{' '}
+            <span className="font-medium text-[var(--role-content-muted)]">{formatBps(stats.spreadBps)}bp</span>
           </div>
 
-          {/* Slippage ladder: sell (bid) | size | buy (ask) */}
-          <div className="flex items-center justify-between px-0.5 text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">
-            <span>Sell slip</span><span>Order size</span><span>Buy slip</span>
+          {/* ── Butterfly slippage: bars grow OUTWARD from the size in the center ── */}
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-0.5 text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
+            <span className="text-right">◄ Sell slip</span><span>Size</span><span>Buy slip ►</span>
           </div>
-          <div>
+          <div className="mt-1 flex flex-col gap-1.5">
             {m.ladder.map((r) => (
-              <div key={r.sz} className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 font-mono text-xs tabular-nums last:border-0">
-                <span className="w-16" style={{ color: 'var(--pos)' }}>{fmtSlip(r.bid)}</span>
-                <span className="text-[var(--role-content-subtle)]">${formatCompact(r.sz)}</span>
-                <span className="w-16 text-right" style={{ color: 'var(--neg)' }}>{fmtSlip(r.ask)}</span>
+              <div key={r.sz} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                {slipBar(r.bid, 'var(--pos)', 'right')}
+                <span className="w-14 text-center font-mono text-[11px] tabular-nums text-[var(--role-content-muted)]">${formatCompact(r.sz)}</span>
+                {slipBar(r.ask, 'var(--neg)', 'left')}
               </div>
             ))}
           </div>
