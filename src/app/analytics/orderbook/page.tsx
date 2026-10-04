@@ -902,23 +902,12 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
     return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip };
   }, [book, mid, bandBp]);
 
-  // Vertical scale for the elevator: furthest finite fill, padded. ∞ orders
-  // pin to the edge. Floor so a near-zero-slip book still spreads the dots out.
-  const maxScale = m ? Math.max(m.maxSlip * 1.18, 0.5) : 1;
-  // Place an order at a vertical % (0 = top, 100 = bottom). Mid is 50%.
-  // `exRank` staggers exhausted (∞) dots inward so several don't stack on the edge.
-  const yFor = (r: SimResult, dir: 'up' | 'down', exRank = 0): number => {
-    const exhausted = r.bookExhausted || r.slipBps == null;
-    const frac = exhausted ? 1 : Math.min(1, (r.slipBps as number) / maxScale);
-    const base = dir === 'up' ? 50 - frac * 46 : 50 + frac * 46;
-    if (!exhausted) return base;
-    return dir === 'up' ? base + exRank * 6 : base - exRank * 6;
-  };
+  const slipTxt = (r: SimResult) => (r.bookExhausted || r.slipBps == null ? '∞' : formatBps(r.slipBps));
 
   return (
     <div className="glass-card flex h-full flex-col">
       <div className="panel-header">
-        <h2 className="panel-title t-h2">Depth elevator</h2>
+        <h2 className="panel-title t-h2">Two-sided depth</h2>
         <div className="toggle-group">
           {DEPTH_BANDS.map((b) => (
             <button key={b} onClick={() => setBandBp(b)} className={cn('toggle-btn', bandBp === b && 'active')}>±{b}bp</button>
@@ -929,74 +918,55 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
       {!m ? (
         <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">No book.</div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col px-4 py-3">
-          {/* Compact depth / imbalance strip */}
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="font-mono font-medium tabular-nums" style={{ color: 'var(--pos)' }}>▲ ${formatCompact(m.bidDepth)}</span>
-            <span className="text-[var(--role-content-subtle)]">
-              {m.label} · <span className="font-medium text-[var(--role-content-muted)]">{Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}</span> · ${formatCompact(m.both)} ±{bandBp}bp
-            </span>
-            <span className="font-mono font-medium tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)} ▼</span>
-          </div>
-
-          {/* ── The elevator: a central price axis. Buy orders climb up into the
-               asks (red), sell orders sink down into the bids (green); vertical
-               distance from mid = the average fill's slippage. ── */}
-          <div className="relative mt-2 min-h-[220px] flex-1">
-            {/* side depth gradients (opacity ∝ each side's share of the band) */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2" style={{ background: 'linear-gradient(to top, transparent, var(--neg))', opacity: 0.06 + (1 - m.bidShare) * 0.16 }} />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2" style={{ background: 'linear-gradient(to bottom, transparent, var(--pos))', opacity: 0.06 + m.bidShare * 0.16 }} />
-
-            {/* top / bottom edge labels */}
-            <div className="absolute left-0 right-0 top-0 flex justify-between text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
-              <span>Buy ↑ asks</span><span className="tabular-nums">+{maxScale.toFixed(1)}bp</span>
-            </div>
-            <div className="absolute left-0 right-0 bottom-0 flex justify-between text-[9px] uppercase tracking-wide text-[var(--role-content-subtle)]">
-              <span>Sell ↓ bids</span><span className="tabular-nums">−{maxScale.toFixed(1)}bp</span>
-            </div>
-
-            {/* central price axis */}
-            <div className="absolute bottom-5 top-5 left-1/2 w-px -translate-x-1/2 bg-[var(--role-line)]" />
-
-            {/* mid line */}
-            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-[var(--role-content-subtle)] opacity-40" style={{ borderTop: '1px dashed currentColor' }} />
-                <span className="whitespace-nowrap font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
-                  mid {stats.mid != null ? formatPrice(stats.mid) : '—'} · {formatBps(stats.spreadBps)}bp
-                </span>
-                <div className="h-px flex-1 bg-[var(--role-content-subtle)] opacity-40" style={{ borderTop: '1px dashed currentColor' }} />
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* ── Top: three clean stats (bid depth · spread · ask depth) + a thin
+               imbalance meter. A different, flatter header than the big-number /
+               elevator takes. ── */}
+          <div className="border-b border-[var(--role-line)] px-4 pb-3 pt-3">
+            <div className="grid grid-cols-3 items-end gap-2">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Bid depth</div>
+                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Spread</div>
+                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums text-[var(--role-content)]">{formatBps(stats.spreadBps)}<span className="ml-0.5 text-[11px] text-[var(--role-content-subtle)]">bp</span></div>
+              </div>
+              <div className="text-right">
+                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Ask depth</div>
+                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</div>
               </div>
             </div>
+            <div className="mt-2.5 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
+              <div style={{ width: `${m.bidShare * 100}%`, backgroundColor: 'var(--pos)', opacity: 0.85 }} />
+              <div style={{ width: `${(1 - m.bidShare) * 100}%`, backgroundColor: 'var(--neg)', opacity: 0.85 }} />
+            </div>
+            <div className="mt-1.5 text-center text-[10px] text-[var(--role-content-subtle)]">
+              <span className="font-medium text-[var(--role-content-muted)]">{m.label}</span> · {Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'} · <span className="font-medium text-[var(--role-content-muted)]">${formatCompact(m.both)}</span> within ±{bandBp}bp
+            </div>
+          </div>
 
-            {/* order dots — buy above (right of axis), sell below (left of axis) */}
-            {m.ladder.map((r, i) => {
-              // rank among already-exhausted rows (sizes ascending) to stagger ∞ dots
-              const buyExRank = m.ladder.slice(0, i).filter((x) => x.ask.bookExhausted).length;
-              const sellExRank = m.ladder.slice(0, i).filter((x) => x.bid.bookExhausted).length;
-              const buyY = yFor(r.ask, 'up', buyExRank);
-              const sellY = yFor(r.bid, 'down', sellExRank);
-              const buyEx = r.ask.bookExhausted;
-              const sellEx = r.bid.bookExhausted;
-              return (
-                <div key={r.sz}>
-                  {/* BUY dot — right of axis */}
-                  <div className="absolute left-1/2 flex -translate-y-1/2 items-center gap-1.5" style={{ top: `${buyY}%` }}>
-                    <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: 'var(--neg)', opacity: buyEx ? 0.4 : 1, boxShadow: '0 0 0 2px var(--role-surface)' }} />
-                    <span className="font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
-                      ${formatCompact(r.sz)} <span style={{ color: 'var(--neg)' }}>{buyEx ? '∞' : `${formatBps(r.ask.slipBps)}bp`}</span>
-                    </span>
-                  </div>
-                  {/* SELL dot — left of axis */}
-                  <div className="absolute right-1/2 flex -translate-y-1/2 flex-row-reverse items-center gap-1.5" style={{ top: `${sellY}%` }}>
-                    <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: 'var(--pos)', opacity: sellEx ? 0.4 : 1, boxShadow: '0 0 0 2px var(--role-surface)' }} />
-                    <span className="font-mono text-[10px] tabular-nums text-[var(--role-content-muted)]">
-                      <span style={{ color: 'var(--pos)' }}>{sellEx ? '∞' : `${formatBps(r.bid.slipBps)}bp`}</span> ${formatCompact(r.sz)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+          {/* ── Slippage ladder: sell slip (left, dim) · size (center) · buy slip
+               (right, emphasised) — one row per order size. ── */}
+          <div className="flex items-center justify-between px-4 pt-2.5 pb-1 text-[9px] font-medium uppercase tracking-wider">
+            <span style={{ color: 'var(--pos)' }}>Sell slip</span>
+            <span className="text-[var(--role-content-subtle)]">Market order</span>
+            <span style={{ color: 'var(--neg)' }}>Buy slip</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4">
+            {m.ladder.map((r) => (
+              <div key={r.sz} className="grid grid-cols-3 items-center border-b border-[var(--role-line-subtle)] py-3 last:border-0">
+                <span className="font-mono text-[15px] tabular-nums text-[var(--role-content-subtle)]">
+                  {slipTxt(r.bid)}<span className="ml-1 text-[11px]">bp</span>
+                </span>
+                <span className="text-center text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">
+                  ${formatCompact(r.sz)} order
+                </span>
+                <span className="text-right font-mono text-[15px] font-medium tabular-nums text-[var(--role-content)]">
+                  {slipTxt(r.ask)}<span className="ml-1 text-[11px] text-[var(--role-content-subtle)]">bp</span>
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
