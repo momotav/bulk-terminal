@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef, useCallback, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -1187,21 +1187,18 @@ export default function WalletPage() {
   const [profile, setProfile] = useState<WalletProfile | null>(null);
   const [loading, setLoading] = useState(true);
   // Reveal gate: the page's data arrives in several async waves (wallet +
-  // positions, fills/volume, BULK rank). Showing the page the moment the FIRST
-  // wave lands made it flash incomplete numbers. Instead we hold the animated
-  // logo loader until the key waves have all landed (`ready`), then reveal the
-  // whole page at once. A safety timeout guarantees we never hang on a slow/
-  // failed secondary fetch.
-  const [ready, setReady] = useState(false);
-  const readyFlags = useRef({ main: false, fills: false, rank: false });
-  const bumpReady = useCallback(() => {
-    const f = readyFlags.current;
-    if (f.main && f.fills && f.rank) setReady(true);
-  }, []);
+  // positions, fills/volume, BULK rank, then the PnL-chart candles). Revealing
+  // on the first wave flashed incomplete numbers ($0 volume, 0 trades, empty
+  // chart) that only filled in after a refresh. Instead we hold the animated
+  // logo loader until EVERY key wave has landed, then reveal the whole page at
+  // once. A safety timeout guarantees we never hang on a slow/failed fetch.
+  const [mainDone, setMainDone] = useState(false);
+  const [fillsDone, setFillsDone] = useState(false);
+  const [rankDone, setRankDone] = useState(false);
+  const [revealTimedOut, setRevealTimedOut] = useState(false);
   useEffect(() => {
-    readyFlags.current = { main: false, fills: false, rank: false };
-    setReady(false);
-    const t = window.setTimeout(() => setReady(true), 12_000);
+    setMainDone(false); setFillsDone(false); setRankDone(false); setRevealTimedOut(false);
+    const t = window.setTimeout(() => setRevealTimedOut(true), 12_000);
     return () => window.clearTimeout(t);
   }, [address]);
   const [followLoading, setFollowLoading] = useState(false);
@@ -1373,8 +1370,7 @@ export default function WalletPage() {
       } finally {
         if (!silent) {
           setLoading(false);
-          readyFlags.current.main = true; // first (non-silent) load done, pass or fail
-          bumpReady();
+          setMainDone(true); // first (non-silent) load done, pass or fail
         }
       }
     };
@@ -1414,7 +1410,7 @@ export default function WalletPage() {
         // Indexer down or wallet not ranked — fall back to DB stats below
         if (!cancelled) setBulkStats(null);
       } finally {
-        if (!cancelled) { readyFlags.current.rank = true; bumpReady(); }
+        if (!cancelled) setRankDone(true);
       }
     };
     fetchBulkStats();
@@ -1441,40 +1437,26 @@ export default function WalletPage() {
     .sort()
     .join(',');
 
+  // Derive each open position's open-time from the SINGLE all-fills set we
+  // already fetch (allFills), instead of firing one getFills per open position.
+  // That per-position fan-out was a burst of BULK /account calls on page load
+  // (18+ for a multi-position wallet) that the backend now has to serialize —
+  // slow and pointless when allFills already contains these symbols' fills.
+  // computePositionOpenTime returns null when the fills don't cover the open
+  // (e.g. a master account whose subs traded, or older than the fill window).
   useEffect(() => {
-    if (!address) return;
     const positions = data?.live?.positions || [];
-    if (positions.length === 0) return;
-
-    let cancelled = false;
+    if (positions.length === 0) { setPositionOpenTimes({}); return; }
+    if (allFills.length === 0) return; // wait for the fills to land
+    const bySymbol: Record<string, WalletFill[]> = {};
+    for (const f of allFills) (bySymbol[f.symbol] ??= []).push(f);
     const next: Record<string, PositionOpenInfo | null> = {};
-
-    Promise.all(
-      positions.map(async (pos) => {
-        try {
-          const res = await wallet.getFills(address, {
-            symbol: pos.symbol,
-            limit: 500,
-          });
-          // computePositionOpenTime returns null when fills don't include
-          // a flat→nonflat transition for the current position (e.g. the
-          // wallet is a master-account whose sub-accounts did the trading,
-          // or the position is older than BULK's 5000-fill window).
-          const info = computePositionOpenTime(res.fills || []);
-          next[pos.symbol] = info;
-        } catch {
-          next[pos.symbol] = null;
-        }
-      })
-    ).then(() => {
-      if (!cancelled) setPositionOpenTimes(next);
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    for (const pos of positions) {
+      next[pos.symbol] = computePositionOpenTime(bySymbol[pos.symbol] || []);
+    }
+    setPositionOpenTimes(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, openSymbolKey, network]);
+  }, [openSymbolKey, allFills]);
 
   // Compute traded volume per trailing window from the wallet's recent
   // fills. One unfiltered /fills call (capped at 1000) covers most wallets;
@@ -1505,7 +1487,7 @@ export default function WalletPage() {
         setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
       })
       .catch(() => { if (!cancelled) setVolByWindow(null); })
-      .finally(() => { if (!cancelled) { readyFlags.current.fills = true; bumpReady(); } });
+      .finally(() => { if (!cancelled) setFillsDone(true); });
     return () => { cancelled = true; };
   }, [address, network]);
 
@@ -2099,6 +2081,12 @@ export default function WalletPage() {
         net={bulkRealizedPnL}
       />
     ) : undefined;
+
+  // The PnL chart's candles load after the fills. It's "ready" once we have
+  // candles, OR once we know the wallet genuinely has no fills to chart.
+  const klinesReady = Object.keys(klinesBySymbol).length > 0 || (fillsDone && allFills.length === 0);
+  // Reveal only when EVERY key wave has landed — or the safety timeout fires.
+  const ready = revealTimedOut || (mainDone && fillsDone && rankDone && klinesReady);
 
   // Hold the animated logo loader until all the key data waves have landed, so
   // the page reveals complete instead of flashing partial numbers.
