@@ -293,7 +293,10 @@ function MidGeomReader({ xAxisMap, offset, mid, onGeom }: any) {
   if (scale && offset && mid != null) {
     const x = scale(mid);
     if (typeof x === 'number' && isFinite(x)) {
-      const g: MidGeom = { x, top: offset.top, height: offset.height };
+      // Round so sub-pixel jitter in the measured geometry can't make the guard
+      // below think it changed every frame (which would loop rAF→setState→
+      // re-render forever and thrash the chart).
+      const g: MidGeom = { x: Math.round(x), top: Math.round(offset.top), height: Math.round(offset.height) };
       // rAF (not a microtask) so the setState lands between frames, fully
       // outside React's render phase — no "update while rendering" warning.
       requestAnimationFrame(() =>
@@ -347,7 +350,11 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
       </div>
 
       <div className="min-h-0 flex-1 px-2 py-3">
-        {view === 'depth' ? (
+        {(view === 'depth' ? depthData.length : levelData.length) < 2 ? (
+          <div className="flex h-full items-center justify-center text-center text-sm text-[var(--role-content-subtle)]">
+            No depth within ±{(DEFAULT_DEPTH_WINDOW * 100).toFixed(0)}% of mid.
+          </div>
+        ) : view === 'depth' ? (
           <div className="relative h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={depthData} margin={{ top: 26, right: 8, bottom: 4, left: 4 }}>
@@ -1510,22 +1517,24 @@ export default function OrderBookPage() {
         </div>
       </div>
 
-      {/* Execution tools: price-impact curve + size simulator */}
+      {/* Execution tools: cost-to-trade calculator (left) + cost-by-size curve
+          (right). The calculator leads — it's the interactive tool — and gets a
+          taller cell so the "You pay" breakdown isn't cramped. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="h-[300px] lg:col-span-7 lg:h-[392px]">
+        <div className="lg:col-span-5 lg:h-[468px]">
+          {initialLoading || !book ? (
+            <div className="glass-card h-[468px] animate-pulse lg:h-full" />
+          ) : (
+            <SizeSimPanel book={book} mid={stats?.mid ?? null} />
+          )}
+        </div>
+        <div className="h-[320px] lg:col-span-7 lg:h-[468px]">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
           ) : multi ? (
             <MultiVenueImpactPanel venues={activeVenues} />
           ) : (
             <ImpactCurvePanel book={book} mid={stats?.mid ?? null} />
-          )}
-        </div>
-        <div className="h-auto lg:col-span-5 lg:h-[392px]">
-          {initialLoading || !book ? (
-            <div className="glass-card h-full animate-pulse" />
-          ) : (
-            <SizeSimPanel book={book} mid={stats?.mid ?? null} />
           )}
         </div>
       </div>
