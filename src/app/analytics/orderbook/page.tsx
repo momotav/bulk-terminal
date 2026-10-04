@@ -32,6 +32,43 @@ type Market = string;
 const BID = 'var(--pos)';
 const ASK = 'var(--neg)';
 
+// recharts writes stroke/fill as SVG presentation attributes, where CSS custom
+// properties don't reliably resolve (the depth/levels areas + axis ticks came
+// out invisible even though the data + hover worked). Resolve palette vars to a
+// concrete rgb() once, re-reading when the theme / palette changes.
+function resolveCssColor(expr: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const probe = document.createElement('span');
+  probe.style.color = expr;
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  document.body.removeChild(probe);
+  return resolved || fallback;
+}
+
+interface PaletteColors { bid: string; ask: string; accent: string; info: string; content: string; subtle: string; line: string; }
+function usePaletteColors(): PaletteColors {
+  const read = (): PaletteColors => ({
+    bid: resolveCssColor('var(--pos)', '#21C07A'),
+    ask: resolveCssColor('var(--neg)', '#E5484D'),
+    accent: resolveCssColor('var(--accent)', '#FFB457'),
+    info: resolveCssColor('var(--role-signal-info)', '#736A6C'),
+    content: resolveCssColor('var(--role-content)', '#1B1A14'),
+    subtle: resolveCssColor('var(--role-content-subtle)', '#9C9092'),
+    line: resolveCssColor('var(--role-line)', 'rgba(120,110,110,0.3)'),
+  });
+  const [colors, setColors] = useState<PaletteColors>(read);
+  useEffect(() => {
+    const update = () => setColors(read());
+    update();
+    const obs = new MutationObserver(update);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-palette'] });
+    return () => obs.disconnect();
+  }, []);
+  return colors;
+}
+
 // Matches the backend order-book cache TTL. The backend coalesces upstream
 // requests, so polling here stays cheap regardless of how many users are on the
 // page — no need to poll faster than the cache refreshes.
@@ -314,6 +351,8 @@ type LevelPoint = { px: number; bid?: number; ask?: number };
 function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
   const [view, setView] = useState<'depth' | 'levels'>('depth');
   const [midGeom, setMidGeom] = useState<MidGeom | null>(null);
+  const C = usePaletteColors();
+  const BID = C.bid, ASK = C.ask;
 
   const depthData = useMemo(() => buildDepthSeries(book, mid), [book, mid]);
   // Per-price-level size (not cumulative), one point per level, split by side.
@@ -326,7 +365,7 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
     ].sort((a, b) => a.px - b.px);
   }, [book, mid]);
 
-  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  const axisTick = { fill: C.subtle, fontSize: 10 };
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -576,6 +615,8 @@ function OrderBookPanel({
 
 function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
   const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
+  const C = usePaletteColors();
+  const BID = C.bid, ASK = C.ask;
 
   const data = useMemo(() => {
     if (mid == null) return [];
@@ -597,7 +638,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
     return { xTicks: t, xDomain: [0, t[t.length - 1]] as [number, number] };
   }, [data]);
 
-  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  const axisTick = { fill: C.subtle, fontSize: 10 };
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -736,7 +777,7 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
         {/* Size input + presets */}
         <div>
           <label className="mb-1.5 block text-[11px] text-[var(--role-content-subtle)]">Order size (USD)</label>
@@ -1087,6 +1128,7 @@ function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapsho
 
 function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
   const [dist, setDist] = useState(0.005); // ±0.5% default
+  const C = usePaletteColors();
 
   const data = useMemo(() => buildMergedDepth(venues, dist), [venues, dist]);
   // Per-venue totals + quote stats for the legend chips and the tooltip sublines.
@@ -1098,7 +1140,7 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
     })), [venues]);
   const metaById = useMemo(() => new Map(meta.map((m) => [m.id, m])), [meta]);
 
-  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  const axisTick = { fill: C.subtle, fontSize: 10 };
   const dpct = dist * 100;
   // Draw BULK last so its (often shallower) line sits on top and stays visible.
   const drawOrder = [...venues.filter((v) => v.id !== 'bulk'), ...venues.filter((v) => v.id === 'bulk')];
@@ -1205,6 +1247,7 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
   const [side, setSide] = useState<Side>('buy');
   const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
   const [logScale, setLogScale] = useState(true);
+  const C = usePaletteColors();
   const [xmax, setXmax] = useState<number | null>(10_000_000);
 
   const data = useMemo(() => {
@@ -1264,7 +1307,7 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
     return { yTicks: t, yDomain: [0, t[t.length - 1]] as [number, number], yFmt: (v: number) => v.toFixed(dec) };
   }, [data, venues, logScale]);
 
-  const axisTick = { fill: 'var(--role-content-subtle)', fontSize: 10 };
+  const axisTick = { fill: C.subtle, fontSize: 10 };
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -1521,14 +1564,14 @@ export default function OrderBookPage() {
           (right). The calculator leads — it's the interactive tool — and gets a
           taller cell so the "You pay" breakdown isn't cramped. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5 lg:h-[468px]">
+        <div className="lg:col-span-5 lg:h-[500px]">
           {initialLoading || !book ? (
-            <div className="glass-card h-[468px] animate-pulse lg:h-full" />
+            <div className="glass-card h-[500px] animate-pulse lg:h-full" />
           ) : (
             <SizeSimPanel book={book} mid={stats?.mid ?? null} />
           )}
         </div>
-        <div className="h-[320px] lg:col-span-7 lg:h-[468px]">
+        <div className="h-[320px] lg:col-span-7 lg:h-[500px]">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
           ) : multi ? (
