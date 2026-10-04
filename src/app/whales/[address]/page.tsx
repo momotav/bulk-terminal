@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback, type ComponentType, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -1186,6 +1186,24 @@ export default function WalletPage() {
   const [data, setData] = useState<WalletData | null>(null);
   const [profile, setProfile] = useState<WalletProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Reveal gate: the page's data arrives in several async waves (wallet +
+  // positions, fills/volume, BULK rank). Showing the page the moment the FIRST
+  // wave lands made it flash incomplete numbers. Instead we hold the animated
+  // logo loader until the key waves have all landed (`ready`), then reveal the
+  // whole page at once. A safety timeout guarantees we never hang on a slow/
+  // failed secondary fetch.
+  const [ready, setReady] = useState(false);
+  const readyFlags = useRef({ main: false, fills: false, rank: false });
+  const bumpReady = useCallback(() => {
+    const f = readyFlags.current;
+    if (f.main && f.fills && f.rank) setReady(true);
+  }, []);
+  useEffect(() => {
+    readyFlags.current = { main: false, fills: false, rank: false };
+    setReady(false);
+    const t = window.setTimeout(() => setReady(true), 12_000);
+    return () => window.clearTimeout(t);
+  }, [address]);
   const [followLoading, setFollowLoading] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1353,7 +1371,11 @@ export default function WalletPage() {
         // rather than flashing an error banner. The next tick will retry.
         if (!silent) setError('Failed to load wallet data');
       } finally {
-        if (!silent) setLoading(false);
+        if (!silent) {
+          setLoading(false);
+          readyFlags.current.main = true; // first (non-silent) load done, pass or fail
+          bumpReady();
+        }
       }
     };
 
@@ -1391,6 +1413,8 @@ export default function WalletPage() {
       } catch (err) {
         // Indexer down or wallet not ranked — fall back to DB stats below
         if (!cancelled) setBulkStats(null);
+      } finally {
+        if (!cancelled) { readyFlags.current.rank = true; bumpReady(); }
       }
     };
     fetchBulkStats();
@@ -1480,7 +1504,8 @@ export default function WalletPage() {
         setVolByWindow(acc);
         setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
       })
-      .catch(() => { if (!cancelled) setVolByWindow(null); });
+      .catch(() => { if (!cancelled) setVolByWindow(null); })
+      .finally(() => { if (!cancelled) { readyFlags.current.fills = true; bumpReady(); } });
     return () => { cancelled = true; };
   }, [address, network]);
 
@@ -2075,16 +2100,24 @@ export default function WalletPage() {
       />
     ) : undefined;
 
-  if (loading) {
+  // Hold the animated logo loader until all the key data waves have landed, so
+  // the page reveals complete instead of flashing partial numbers.
+  if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-bulk-green" />
+      <div className="fixed inset-0 z-[9999] grid place-items-center bg-[var(--bg-base)]">
+        <div className="flex flex-col items-center gap-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-loader.svg" alt="Loading" className="h-20 w-auto select-none" />
+          <p className="text-[12px] font-medium uppercase tracking-[0.25em] text-[var(--role-content-subtle)] animate-pulse">
+            Loading wallet
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out]">
       <main className="flex-1 w-full px-4 sm:px-6 py-4">
         {/* Page-level width: capped at 1600px and centered. Edge-to-edge
             felt right at 1280px but looks unbounded on 4K / ultrawide
