@@ -863,6 +863,104 @@ function Legend({ sw, label, value }: { sw: string; label: string; value: string
 }
 
 // ----------------------------------------------------------------------------
+// Two-sided depth — band depth + imbalance + a slippage ladder for both sides.
+// Answers "how much liquidity is near the top, is it lopsided, and what does a
+// $X market order cost to buy vs sell" at a glance. All from the live book.
+// ----------------------------------------------------------------------------
+
+const DEPTH_BANDS = [5, 10, 25]; // ±bp around mid
+const LADDER_SIZES = [10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
+
+function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+  const [bandBp, setBandBp] = useState(10);
+  const stats = book.stats;
+
+  const m = useMemo(() => {
+    if (mid == null || mid <= 0) return null;
+    const lo = mid * (1 - bandBp / 1e4);
+    const hi = mid * (1 + bandBp / 1e4);
+    const bidDepth = book.bids.filter((l) => l.px >= lo).reduce((s, l) => s + l.px * l.sz, 0);
+    const askDepth = book.asks.filter((l) => l.px <= hi).reduce((s, l) => s + l.px * l.sz, 0);
+    const both = bidDepth + askDepth;
+    const bidShare = both > 0 ? bidDepth / both : 0.5;
+    const hi2 = Math.max(bidDepth, askDepth), lo2 = Math.min(bidDepth, askDepth);
+    const ratio = lo2 > 0 ? hi2 / lo2 : (hi2 > 0 ? Infinity : 1);
+    const label = ratio < 1.25 ? 'Balanced' : bidDepth > askDepth ? 'Bid heavy' : 'Ask heavy';
+    // Slippage ladder — pure book-walk slippage (no fee), both sides.
+    const ladder = LADDER_SIZES.map((sz) => ({
+      sz,
+      bid: simulateOrder(book.bids, mid, 'sell', sz, 0),
+      ask: simulateOrder(book.asks, mid, 'buy', sz, 0),
+    }));
+    return { bidDepth, askDepth, both, bidShare, ratio, label, ladder };
+  }, [book, mid, bandBp]);
+
+  const fmtSlip = (r: SimResult) => (r.bookExhausted ? '∞' : `${formatBps(r.slipBps)} bp`);
+
+  return (
+    <div className="glass-card flex h-full flex-col">
+      <div className="panel-header">
+        <h2 className="panel-title t-h2">Two-sided depth</h2>
+        <div className="toggle-group">
+          {DEPTH_BANDS.map((b) => (
+            <button key={b} onClick={() => setBandBp(b)} className={cn('toggle-btn', bandBp === b && 'active')}>±{b}bp</button>
+          ))}
+        </div>
+      </div>
+
+      {!m ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">No book.</div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+          {/* Both-sides total */}
+          <div className="text-center">
+            <div className="font-sans text-[30px] font-medium leading-none tabular-nums text-[var(--role-content)]">${formatCompact(m.both)}</div>
+            <div className="mt-1 text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">within ±{bandBp}bp · both sides</div>
+          </div>
+
+          {/* Bid depth · balance · ask depth */}
+          <div className="flex items-center justify-between font-mono text-xs tabular-nums">
+            <span className="font-medium" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</span>
+            <span className="text-[var(--role-content-muted)]">
+              {m.label} · {Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}
+            </span>
+            <span className="font-medium" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</span>
+          </div>
+          {/* Balance bar */}
+          <div className="h-2 w-full overflow-hidden rounded-full">
+            <div className="flex h-full w-full">
+              <div style={{ width: `${m.bidShare * 100}%`, background: 'linear-gradient(90deg, var(--pos), color-mix(in srgb, var(--pos) 55%, var(--neg)))' }} />
+              <div style={{ width: `${(1 - m.bidShare) * 100}%`, background: 'linear-gradient(90deg, color-mix(in srgb, var(--neg) 55%, var(--pos)), var(--neg))' }} />
+            </div>
+          </div>
+
+          {/* Spread row */}
+          <div className="flex items-center justify-between border-y border-[var(--role-line-subtle)] py-2 font-mono text-xs tabular-nums">
+            <span className="font-medium" style={{ color: 'var(--pos)' }}>{stats.bestBid ? formatPrice(stats.bestBid.px) : '—'}</span>
+            <span className="text-[var(--role-content-muted)]"><span className="font-medium text-[var(--role-content)]">{formatBps(stats.spreadBps)}</span> bp spread</span>
+            <span className="font-medium" style={{ color: 'var(--neg)' }}>{stats.bestAsk ? formatPrice(stats.bestAsk.px) : '—'}</span>
+          </div>
+
+          {/* Slippage ladder: sell (bid) | size | buy (ask) */}
+          <div className="flex items-center justify-between px-0.5 text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">
+            <span>Sell slip</span><span>Order size</span><span>Buy slip</span>
+          </div>
+          <div>
+            {m.ladder.map((r) => (
+              <div key={r.sz} className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 font-mono text-xs tabular-nums last:border-0">
+                <span className="w-16" style={{ color: 'var(--pos)' }}>{fmtSlip(r.bid)}</span>
+                <span className="text-[var(--role-content-subtle)]">${formatCompact(r.sz)}</span>
+                <span className="w-16 text-right" style={{ color: 'var(--neg)' }}>{fmtSlip(r.ask)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Venue overlays — BULK is always drawn; these can be toggled on from the header
 // switcher to overlay their book on the depth + impact charts (and add a row to
 // the liquidity table). Colours come from the palette coin ramp so they follow
@@ -1563,18 +1661,24 @@ export default function OrderBookPage() {
         </div>
       </div>
 
-      {/* Execution tools: cost-to-trade calculator (left) + cost-by-size curve
-          (right). The calculator leads — it's the interactive tool — and gets a
-          taller cell so the "You pay" breakdown isn't cramped. */}
+      {/* Execution & liquidity: cost-to-trade calculator · two-sided depth +
+          slippage ladder · cost-by-size curve. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5 lg:h-[500px]">
+        <div className="lg:col-span-4 lg:h-[520px]">
           {initialLoading || !book ? (
-            <div className="glass-card h-[500px] animate-pulse lg:h-full" />
+            <div className="glass-card h-[520px] animate-pulse lg:h-full" />
           ) : (
             <SizeSimPanel book={book} mid={stats?.mid ?? null} />
           )}
         </div>
-        <div className="h-[320px] lg:col-span-7 lg:h-[500px]">
+        <div className="lg:col-span-4 lg:h-[520px]">
+          {initialLoading || !book ? (
+            <div className="glass-card h-[520px] animate-pulse lg:h-full" />
+          ) : (
+            <TwoSidedDepthPanel book={book} mid={stats?.mid ?? null} />
+          )}
+        </div>
+        <div className="h-[320px] lg:col-span-4 lg:h-[520px]">
           {initialLoading || !book ? (
             <div className="glass-card h-full animate-pulse" />
           ) : multi ? (
