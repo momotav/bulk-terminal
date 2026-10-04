@@ -899,7 +899,8 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
       if (!r.ask.bookExhausted && r.ask.slipBps != null) maxSlip = Math.max(maxSlip, r.ask.slipBps);
     }
     if (maxSlip <= 0) maxSlip = 1;
-    return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip };
+    const maxDepth = Math.max(bidDepth, askDepth);
+    return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip, maxDepth };
   }, [book, mid, bandBp]);
 
   const slipTxt = (r: SimResult) => (r.bookExhausted || r.slipBps == null ? '∞' : formatBps(r.slipBps));
@@ -919,30 +920,30 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
         <div className="flex flex-1 items-center justify-center text-sm text-[var(--role-content-subtle)]">No book.</div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* ── Top: three clean stats (bid depth · spread · ask depth) + a thin
-               imbalance meter. A different, flatter header than the big-number /
-               elevator takes. ── */}
+          {/* ── Top: two comparison bars (bid vs ask), each scaled to the larger
+               side so the imbalance is read by bar LENGTH. Spread sits as a chip
+               on the right; a one-line summary underneath. ── */}
           <div className="border-b border-[var(--role-line)] px-4 pb-3 pt-3">
-            <div className="grid grid-cols-3 items-end gap-2">
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Bid depth</div>
-                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--pos)' }}>${formatCompact(m.bidDepth)}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Spread</div>
-                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums text-[var(--role-content)]">{formatBps(stats.spreadBps)}<span className="ml-0.5 text-[11px] text-[var(--role-content-subtle)]">bp</span></div>
-              </div>
-              <div className="text-right">
-                <div className="text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">Ask depth</div>
-                <div className="font-sans text-[18px] font-medium leading-tight tabular-nums" style={{ color: 'var(--neg)' }}>${formatCompact(m.askDepth)}</div>
-              </div>
+            <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">
+              <span>Resting liquidity · ±{bandBp}bp</span>
+              <span>Spread <span className="font-mono text-[11px] font-medium normal-case tracking-normal text-[var(--role-content)]">{formatBps(stats.spreadBps)}</span> bp</span>
             </div>
-            <div className="mt-2.5 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
-              <div style={{ width: `${m.bidShare * 100}%`, backgroundColor: 'var(--pos)', opacity: 0.85 }} />
-              <div style={{ width: `${(1 - m.bidShare) * 100}%`, backgroundColor: 'var(--neg)', opacity: 0.85 }} />
-            </div>
-            <div className="mt-1.5 text-center text-[10px] text-[var(--role-content-subtle)]">
-              <span className="font-medium text-[var(--role-content-muted)]">{m.label}</span> · {Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'} · <span className="font-medium text-[var(--role-content-muted)]">${formatCompact(m.both)}</span> within ±{bandBp}bp
+            {([['Bid', m.bidDepth, 'var(--pos)'], ['Ask', m.askDepth, 'var(--neg)']] as const).map(([lbl, dep, col]) => {
+              const w = m.maxDepth > 0 ? (dep / m.maxDepth) * 100 : 0;
+              return (
+                <div key={lbl} className="mb-1.5 flex items-center gap-2 last:mb-0">
+                  <span className="w-7 shrink-0 text-[10px] font-medium uppercase" style={{ color: col }}>{lbl}</span>
+                  <div className="relative h-5 flex-1 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--role-line-subtle)]">
+                    <div className="absolute inset-y-0 left-0 rounded-[var(--radius-sm)]" style={{ width: `${Math.max(w, 2)}%`, backgroundColor: col, opacity: 0.5 }} />
+                    <span className="absolute inset-y-0 right-2 flex items-center font-mono text-[12px] font-medium tabular-nums" style={{ color: 'var(--role-content)' }}>${formatCompact(dep)}</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="mt-2 text-center text-[10px] text-[var(--role-content-subtle)]">
+              <span className="font-medium" style={{ color: m.label === 'Balanced' ? 'var(--role-content-muted)' : (m.bidDepth > m.askDepth ? 'var(--pos)' : 'var(--neg)') }}>{m.label}</span>
+              {' · '}{Number.isFinite(m.ratio) ? `${m.ratio.toFixed(2)}×` : '—'}{' · '}
+              <span className="font-medium text-[var(--role-content-muted)]">${formatCompact(m.both)}</span> both sides
             </div>
           </div>
 
