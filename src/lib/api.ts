@@ -467,14 +467,26 @@ export interface RiskSurfaceEntry {
  *    maxLev(N) = min + (max − min) · 0.5^(max(0, N − margin_0)/(margin_half − margin_0)) */
 export interface LeverageCurve { min: number; max: number; margin_0: number; margin_half: number; }
 
-/** BULK size-impact curve (GET /impact), per side: 250 log-uniform bps knots.
- *  impactBps(side, size) = linear-interp of bps at i = (ln size − logMin)/logRange·249. */
+/** One side of a BULK size-impact curve: 250 log-uniform bps knots.
+ *  impactBps(size) = linear-interp of bps at i = (ln size − logMin)/logRange·249. */
+export interface ImpactSide { logMin: number; logRange: number; bps: number[]; }
+
+/** BULK size-impact curve (v1.0.18, WS `impact` stream). `full` is the all-in
+ *  impact (incl. liquidation-cascade reserve); `book` is the raw order-book walk. */
 export interface ImpactCurve {
   symbol: string;
   timestamp: number;
-  minSize: number;
-  buyBps: { logMin: number; logRange: number; bps: number[] };
-  sellBps: { logMin: number; logRange: number; bps: number[] };
+  full: { buy: ImpactSide | null; sell: ImpactSide | null };
+  book: { buy: ImpactSide | null; sell: ImpactSide | null } | null;
+  stale?: boolean;
+}
+
+/** Interpolate impact (bps) for a notional `size` from one side's curve. */
+export function impactBps(side: ImpactSide | null | undefined, size: number): number | null {
+  if (!side || !side.bps.length || !(size > 0) || !(side.logRange > 0)) return null;
+  const i = Math.max(0, Math.min(side.bps.length - 1, ((Math.log(size) - side.logMin) / side.logRange) * (side.bps.length - 1)));
+  const lo = Math.floor(i), hi = Math.min(side.bps.length - 1, lo + 1);
+  return side.bps[lo] + (i - lo) * (side.bps[hi] - side.bps[lo]);
 }
 
 export interface RiskSurfaces {
