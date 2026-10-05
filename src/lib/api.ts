@@ -461,10 +461,28 @@ export interface RiskSurfaceEntry {
   sell: RiskSurfaceCell[][];
 }
 
+/** BULK v1.0.18 max-leverage decay curve: the leverage CAP as notional grows.
+ *  Max leverage holds at `max` up to `margin_0`, is halfway to `min` at
+ *  `margin_half`, and asymptotes to `min` for large positions:
+ *    maxLev(N) = min + (max − min) · 0.5^(max(0, N − margin_0)/(margin_half − margin_0)) */
+export interface LeverageCurve { min: number; max: number; margin_0: number; margin_half: number; }
+
+/** BULK size-impact curve (GET /impact), per side: 250 log-uniform bps knots.
+ *  impactBps(side, size) = linear-interp of bps at i = (ln size − logMin)/logRange·249. */
+export interface ImpactCurve {
+  symbol: string;
+  timestamp: number;
+  minSize: number;
+  buyBps: { logMin: number; logRange: number; bps: number[] };
+  sellBps: { logMin: number; logRange: number; bps: number[] };
+}
+
 export interface RiskSurfaces {
   symbol: string;
   /** The regime that is currently active for this market. */
   liveRegime: number;
+  /** Max-leverage decay curve (leverage cap vs notional). null if unavailable. */
+  leverage?: LeverageCurve | null;
   /** One entry per regime the market publishes a surface for. */
   surfaces: RiskSurfaceEntry[];
   /** BULK's portfolio-margining correlation coefficients.
@@ -788,6 +806,14 @@ export const analytics = {
     return request<RiskSurfaces>(
       `/api/analytics/risk-surfaces/${encodeURIComponent(coin)}`
     );
+  },
+
+  // BULK's authoritative size-impact curve (v1.0.18 GET /impact) — the real
+  // liquidation/size impact (bps a market order of a given size moves the
+  // price), 250 log-uniform knots per side. Throws (404) until BULK publishes a
+  // curve for the market. Convert a size → bps with impactBps() below.
+  async getImpact(coin: string): Promise<ImpactCurve> {
+    return request<ImpactCurve>(`/api/analytics/impact/${encodeURIComponent(coin)}`);
   },
 
   // OHLCV candles for a market — used by the position-detail chart on the

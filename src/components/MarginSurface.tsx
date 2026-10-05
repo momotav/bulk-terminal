@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { analytics, cn, type RiskSurfaces, type RiskSurfaceEntry } from '@/lib/api';
+import { analytics, cn, type RiskSurfaces, type RiskSurfaceEntry, type LeverageCurve } from '@/lib/api';
+
+// BULK v1.0.18 max-leverage decay: holds at `max` up to margin_0, halfway to
+// `min` at margin_half, asymptotes to `min`. See LeverageCurve in api.ts.
+function maxLeverageAt(lc: LeverageCurve | null | undefined, notional: number): number | null {
+  if (!lc) return null;
+  const span = lc.margin_half - lc.margin_0;
+  if (!(span > 0)) return lc.max;
+  const x = Math.max(0, notional - lc.margin_0) / span;
+  return lc.min + (lc.max - lc.min) * Math.pow(0.5, x);
+}
 import { CoinPicker } from '@/components/CoinPicker';
 import { Activity } from 'lucide-react';
 
@@ -450,6 +460,19 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
             <span className="font-mono">
               ({formatNotional(hover.notional * hover.effective)})
             </span>
+            {(() => {
+              const cap = maxLeverageAt(data?.leverage, hover.notional);
+              if (cap == null) return null;
+              const over = hover.leverage > cap + 0.5;
+              return (
+                <>
+                  {' · '}
+                  <span className="font-mono" style={{ color: over ? 'var(--neg)' : 'var(--text-secondary)' }}>
+                    max lev {cap.toFixed(0)}x{over ? ' ⚠ above cap' : ''}
+                  </span>
+                </>
+              );
+            })()}
           </span>
         ) : surface ? (
           <span>
@@ -464,6 +487,18 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
           </span>
         ) : null}
       </div>
+
+      {/* Max-leverage cap (BULK v1.0.18 leverage curve): the surface's λ is the
+          maintenance rate; this is the separate leverage CAP, which decays as
+          positions grow. */}
+      {data?.leverage && (
+        <div className="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          Max leverage <span className="font-mono text-[var(--text-secondary)]">{data.leverage.max}×</span> up to{' '}
+          <span className="font-mono">{formatNotional(data.leverage.margin_0)}</span> · decays to{' '}
+          <span className="font-mono text-[var(--text-secondary)]">{data.leverage.min}×</span> floor (½ at{' '}
+          <span className="font-mono">{formatNotional(data.leverage.margin_half)}</span>)
+        </div>
+      )}
 
       {/* Mode context note. Only shown when there's something to clarify —
           if the user is on Live + live regime, a quiet "λ(t) = ..." footnote
