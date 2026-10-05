@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { analytics, cn, type RiskSurfaces, type RiskSurfaceEntry, type LeverageCurve } from '@/lib/api';
+import { analytics, cn, impactBps, type RiskSurfaces, type RiskSurfaceEntry, type LeverageCurve, type ImpactCurve } from '@/lib/api';
 
 // BULK v1.0.18 max-leverage decay: holds at `max` up to margin_0, halfway to
 // `min` at margin_half, asymptotes to `min`. See LeverageCurve in api.ts.
@@ -174,6 +174,12 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
   // 10-second interval to keep the live decay value moving without putting
   // the user's browser under load. null while loading.
   const [regimeDt, setRegimeDt] = useState<number | null>(null);
+  // Mark price (from the same regime feed) — converts the surface's USD notional
+  // axis into the base-asset size the impact curve is indexed by.
+  const [markPrice, setMarkPrice] = useState<number | null>(null);
+  // BULK's authoritative size-impact curve (the "liquidation impact"). null
+  // until it loads; may stay null if BULK hasn't published a curve for the coin.
+  const [impact, setImpact] = useState<ImpactCurve | null>(null);
 
   const [hover, setHover] = useState<HoveredCell | null>(null);
 
@@ -204,6 +210,20 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
     };
   }, [coin]);
 
+  // BULK's size-impact curve ("liquidation impact") for the coin. Refetched on
+  // a 30s interval — the curve updates ~every 10s on BULK's side. Silently
+  // stays null if BULK hasn't published a curve for this market (404).
+  useEffect(() => {
+    let cancelled = false;
+    const pull = () => analytics.getImpact(coin)
+      .then((res) => { if (!cancelled) setImpact(res); })
+      .catch(() => { if (!cancelled) setImpact(null); });
+    setImpact(null);
+    pull();
+    const id = setInterval(pull, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [coin]);
+
   // Poll regime data so regimeDt stays current. The /api/analytics/regime
   // endpoint returns regimeDt for every market in one shot; we filter to
   // the selected coin. 10s matches the granularity at which BULK reports
@@ -229,6 +249,7 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
           // some docs and as raw seconds in others. We treat it as seconds
           // here because the doc calculator uses it raw in `Math.pow(p, dt)`.
           setRegimeDt(market?.regimeDt ?? null);
+          setMarkPrice(market?.markPrice ?? null);
         })
         .catch(() => {
           if (!cancelled) setRegimeDt(null);
@@ -469,6 +490,21 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
                   {' · '}
                   <span className="font-mono" style={{ color: over ? 'var(--neg)' : 'var(--text-secondary)' }}>
                     max lev {cap.toFixed(0)}x{over ? ' ⚠ above cap' : ''}
+                  </span>
+                </>
+              );
+            })()}
+            {(() => {
+              // Liquidation impact: BULK's all-in size-impact at this notional.
+              // The curve is indexed by base-asset size, so divide by mark price.
+              if (!impact?.full || !markPrice || markPrice <= 0) return null;
+              const bps = impactBps(impact.full[side], hover.notional / markPrice);
+              if (bps == null) return null;
+              return (
+                <>
+                  {' · '}
+                  <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    liq. impact {bps >= 400 ? '≥400' : bps.toFixed(2)} bps
                   </span>
                 </>
               );
