@@ -39,11 +39,14 @@ interface Props {
   onCandles?: (candles: Candle[]) => void;
 }
 
-const INTERVALS: [string, string][] = [['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']];
-const CANDLE_LIMIT = 500;
+const INTERVALS: [string, string][] = [['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']];
+const CANDLE_LIMIT = 5000; // BULK returns the full range for a ranged query (caps at 5000)
+// How many candles we're willing to render for the full open→now view — picks
+// the default interval. Comfortable for lightweight-charts, keeps detail.
+const FIT_BARS = 1200;
 
-const barSeconds = (iv: string): number =>
-  iv === '5m' ? 300 : iv === '15m' ? 900 : iv === '1h' ? 3600 : iv === '4h' ? 14400 : iv === '1d' ? 86400 : 3600;
+const IV_SECONDS: [string, number][] = [['1m', 60], ['3m', 180], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
+const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
 
 const resolveColor = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
@@ -56,12 +59,14 @@ const resolveColor = (expr: string, fallback: string): string => {
   return resolved || fallback;
 };
 
-function pickInterval(openedAt: number, endT: number): string {
-  const hrs = (endT - openedAt) / 3_600_000;
-  if (hrs < 1) return '5m';
-  if (hrs < 6) return '15m';
-  if (hrs < 48) return '1h';
-  if (hrs < 240) return '4h';
+// Default interval = the FINEST one where the whole open→now span still fits in
+// CANDLE_LIMIT bars, so the chart shows everything from the trade's start to now
+// (not just the trade window) while staying as detailed as possible.
+function pickInterval(openedAt: number, now: number): string {
+  const span = (now - openedAt) / 1000;
+  for (const [name, sec] of IV_SECONDS) {
+    if (span / sec <= FIT_BARS) return name;
+  }
   return '1d';
 }
 
@@ -84,7 +89,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
 
   const [userInterval, setUserInterval] = useState<string | null>(null);
   const endT = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
-  const iv = userInterval ?? interval ?? pickInterval(openedAt, endT);
+  const iv = userInterval ?? interval ?? pickInterval(openedAt, Date.now());
 
   const [candles, setCandles] = useState<Candle[] | null>(null);
   // The interval the current `candles` were actually fetched with. The chart
@@ -109,16 +114,32 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   );
   markerDataRef.current = markerData;
 
-  // Deep candle history for the selected interval, ending at the trade's end so
-  // the position sits in view with plenty of pannable context on both sides.
+  // Candle history: show everything from the trade's OPEN to NOW when it fits in
+  // CANDLE_LIMIT bars at the selected interval. When the interval is too fine for
+  // that whole span (e.g. the user picks 1m on an old trade), fall back to a
+  // window anchored at the trade so they still get detail where it matters.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setReplaying(false);
-    const end = (isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000)) + barSeconds(iv) * 4000;
+    const now = Date.now();
+    const tradeEnd = isOpen ? now : (closedAt ?? openedAt + 3_600_000);
+    const bar = barSeconds(iv) * 1000;
+    const pad = bar * 8;
+    const cap = FIT_BARS * bar; // span we'll show in full for this interval
+    let startTime: number, endTime: number;
+    if (now - openedAt <= cap) {
+      // Full open→now fits.
+      startTime = openedAt - pad;
+      endTime = now + bar * 4;
+    } else {
+      // Too fine for the whole span — anchor the window at the trade.
+      startTime = openedAt - pad;
+      endTime = Math.min(now + bar * 4, Math.max(tradeEnd + pad, startTime + cap));
+    }
     analytics
-      .getCandles(symbol, iv, CANDLE_LIMIT, { endTime: end })
+      .getCandles(symbol, iv, CANDLE_LIMIT, { startTime, endTime })
       .then((res) => { if (!cancelled) { setCandles(res.candles); setLoadedIv(iv); onCandles?.(res.candles); } })
       .catch(() => { if (!cancelled) setError('Could not load price chart'); })
       .finally(() => { if (!cancelled) setLoading(false); });
