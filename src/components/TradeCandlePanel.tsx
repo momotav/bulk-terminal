@@ -41,9 +41,16 @@ interface Props {
 
 const INTERVALS: [string, string][] = [['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']];
 const CANDLE_LIMIT = 5000; // BULK returns the full range for a ranged query (caps at 5000)
-// How many candles we're willing to render for the full open→now view — picks
-// the default interval. Comfortable for lightweight-charts, keeps detail.
+// How many candles the DEFAULT (auto) interval targets for the full open→now
+// view — kept modest so the default render is snappy.
 const FIT_BARS = 1200;
+// Upper bound for loading the ENTIRE history at a user-picked interval. Stays
+// under BULK's ~5000 ranged cap so the full range comes back complete (e.g.
+// 15m over a month ≈ 3.2k candles still shows everything).
+const FULL_HISTORY_MAX_BARS = 4800;
+// When even the full history is too many bars (5m/1m over weeks), load this many
+// candles CENTERED on the trade instead — history on both sides of the entry.
+const WINDOW_BARS = 2500;
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
@@ -133,10 +140,11 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  // Candle history. By default (auto interval) load the WHOLE history, listing →
-  // now, at an interval that fits in FIT_BARS. If the user picks an interval too
-  // fine to cover all of it (e.g. 1m over 33 days), load the trade window at that
-  // interval instead, so they still get fine detail where the trade happened.
+  // Candle history. Load the WHOLE history (listing → now) whenever it fits
+  // inside BULK's ranged cap (~5000 candles). Only when the interval is so fine
+  // that the full history would exceed that (5m/1m over weeks) do we fall back
+  // to a large window CENTERED on the trade — so there's always plenty of price
+  // action on BOTH sides of the entry, never just "from the trade's open".
   useEffect(() => {
     if (histStart == null) { setLoading(true); return; }
     let cancelled = false;
@@ -147,16 +155,20 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const tradeEnd = isOpen ? now : (closedAt ?? openedAt + 3_600_000);
     const bar = barSeconds(iv) * 1000;
     const pad = bar * 6;
-    const cap = FIT_BARS * bar; // span this interval can cover in full
+    const fullBars = (now - histStart) / bar;
     let startTime: number, endTime: number;
-    if (now - histStart <= cap) {
-      // Whole history fits at this interval — show first candle → now.
+    if (fullBars <= FULL_HISTORY_MAX_BARS) {
+      // Whole history fits under BULK's cap — show first candle → now.
       startTime = Math.max(0, histStart - pad);
       endTime = now + bar * 4;
     } else {
-      // Interval too fine for the full history — anchor the window at the trade.
-      startTime = Math.max(histStart, openedAt - pad);
-      endTime = Math.min(now + bar * 4, Math.max(tradeEnd + pad, startTime + cap));
+      // Too many bars for the full range — center a large window on the trade.
+      const mid = (openedAt + tradeEnd) / 2;
+      const half = (WINDOW_BARS * bar) / 2;
+      startTime = Math.max(histStart, mid - half);
+      // Spend the full bar budget forward from wherever the start landed (if it
+      // clamped to histStart, this still loads a complete window), bounded by now.
+      endTime = Math.min(now + bar * 4, startTime + WINDOW_BARS * bar);
     }
     analytics
       .getCandles(symbol, iv, CANDLE_LIMIT, { startTime, endTime })

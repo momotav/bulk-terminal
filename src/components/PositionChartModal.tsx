@@ -89,9 +89,14 @@ const INTERVALS: { id: string; label: string }[] = [
 const CANDLE_LIMIT = 5000;
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
-// How many candles we're willing to render for the full history view — this
-// picks the default interval (finest one whose full span fits in this budget).
+// Default (auto) interval targets this many candles for the full history view.
 const FIT_BARS = 1200;
+// Load the ENTIRE history at a user-picked interval whenever it fits under this
+// (kept below BULK's ~5000 ranged cap so the range returns complete).
+const FULL_HISTORY_MAX_BARS = 4800;
+// When even full history is too many bars (5m/1m over weeks), load this many
+// candles CENTERED on the trade — price action on both sides of the entry.
+const WINDOW_BARS = 2500;
 function pickFullInterval(histStart: number, now: number): string {
   const span = (now - histStart) / 1000;
   for (const [name, sec] of IV_SECONDS) {
@@ -238,18 +243,20 @@ export function PositionChartModal({ position, onClose }: Props) {
     const now = Date.now();
     const bar = barSeconds(interval) * 1000;
     const pad = bar * 6;
-    const cap = FIT_BARS * bar; // span this interval can cover in full
+    const fullBars = (now - histStart) / bar;
     let timeWindow: { startTime?: number; endTime?: number };
-    if (now - histStart <= cap) {
-      // Whole history fits — show first candle → now.
+    if (fullBars <= FULL_HISTORY_MAX_BARS) {
+      // Whole history fits under BULK's cap — show first candle → now.
       timeWindow = { startTime: Math.max(0, histStart - pad), endTime: now + bar * 4 };
     } else if (position.kind === 'closed') {
-      // Interval too fine for all of it — window anchored at the trade.
-      const startTime = Math.max(histStart, position.openedAt - pad);
-      timeWindow = { startTime, endTime: Math.min(now + bar * 4, Math.max(position.closedAt + pad, startTime + cap)) };
+      // Too fine for the full range — center a large window on the trade so
+      // there's price action on both sides of the entry, not just after it.
+      const mid = (position.openedAt + position.closedAt) / 2;
+      const startTime = Math.max(histStart, mid - (WINDOW_BARS * bar) / 2);
+      timeWindow = { startTime, endTime: Math.min(now + bar * 4, startTime + WINDOW_BARS * bar) };
     } else {
       // Live + fine interval: the most recent window up to now.
-      timeWindow = { startTime: Math.max(histStart, now - cap), endTime: now + bar * 4 };
+      timeWindow = { startTime: Math.max(histStart, now - WINDOW_BARS * bar), endTime: now + bar * 4 };
     }
 
     analytics
