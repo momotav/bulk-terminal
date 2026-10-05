@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { analytics, formatCompact, cn, type OrderbookSnapshot, type OrderbookLevel, type OrderbookStats, type OrderbookCompare } from '@/lib/api';
+import { analytics, formatCompact, cn, impactBps, type OrderbookSnapshot, type OrderbookLevel, type OrderbookStats, type OrderbookCompare, type ImpactCurve } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
 import { StatCard as SharedStatCard } from '@/components/StatCard';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -184,6 +184,14 @@ function simulateOrder(levels: OrderbookLevel[], mid: number, side: Side, target
     bookExhausted: targetNotional > bookNotional,
     bookNotional,
   };
+}
+
+// BULK's authoritative book-impact (bps) for a USD notional on one side — the
+// deep curve that doesn't hit ∞ like our 20-level walk. Converts notional →
+// base-asset size via mid (the curve's x-axis is base units). null if no curve.
+function bulkBookBps(impact: ImpactCurve | null, mid: number | null, side: Side, notionalUsd: number): number | null {
+  if (!impact?.book || !mid || mid <= 0) return null;
+  return impactBps(impact.book[side], notionalUsd / mid);
 }
 
 // Thin adapter around the shared <CoinPicker>: the orderbook API speaks full
@@ -616,13 +624,34 @@ function OrderBookPanel({
 // Price-impact curve — how far a market order walks the book, per side.
 // ----------------------------------------------------------------------------
 
-function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+function ImpactCurvePanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: number | null; impact?: ImpactCurve | null }) {
   const [metric, setMetric] = useState<'slip' | 'allin'>('slip');
   const C = usePaletteColors();
   const BID = C.bid, ASK = C.ask;
 
+  // When BULK's curve is available use it (deep + authoritative, no ∞); else
+  // fall back to walking our 20-level book (shallow, caps at the book depth).
+  const useBulk = !!(impact?.book?.buy && impact?.book?.sell && mid);
+
   const data = useMemo(() => {
     if (mid == null) return [];
+    if (useBulk && impact?.book) {
+      const taker = metric === 'allin' ? BULK_TAKER_BPS : 0;
+      const out: { notional: number; buy?: number; sell?: number }[] = [];
+      const addSide = (s: typeof impact.book.buy, key: 'buy' | 'sell') => {
+        if (!s) return;
+        const N = 120;
+        for (let i = 0; i <= N; i++) {
+          const t = i / N;
+          const notional = Math.exp(s.logMin + t * s.logRange) * mid;
+          const bps = s.bps[Math.round(t * (s.bps.length - 1))];
+          out.push({ notional, [key]: bps + taker });
+        }
+      };
+      addSide(impact.book.buy, 'buy');
+      addSide(impact.book.sell, 'sell');
+      return out.sort((a, b) => a.notional - b.notional);
+    }
     const key = metric === 'allin' ? 'allInBps' : 'slipBps';
     const buy = buildImpactCurve(book.asks, mid, 'buy', BULK_TAKER_BPS);
     const sell = buildImpactCurve(book.bids, mid, 'sell', BULK_TAKER_BPS);
@@ -630,16 +659,26 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
       ...buy.map((p) => ({ notional: p.notional, buy: p[key] })),
       ...sell.map((p) => ({ notional: p.notional, sell: p[key] })),
     ].sort((a, b) => a.notional - b.notional);
-  }, [book, mid, metric]);
+  }, [book, mid, metric, impact, useBulk]);
 
-  // Nice, sparse x ticks pinned to a numeric domain — recharts would otherwise
-  // label every level and smear them together along the axis.
-  const { xTicks, xDomain } = useMemo(() => {
-    const hi = data.reduce((m, d) => Math.max(m, d.notional), 0);
-    if (hi <= 0) return { xTicks: undefined, xDomain: [0, 'dataMax'] as [number, string] };
+  // BULK's curve spans 3+ orders of magnitude → log x-axis (power-of-10 ticks);
+  // the shallow fallback stays linear.
+  const { xTicks, xDomain, xScale } = useMemo(() => {
+    const ns = data.map((d) => d.notional).filter((n) => n > 0);
+    const hi = ns.length ? Math.max(...ns) : 0;
+    const lo = ns.length ? Math.min(...ns) : 0;
+    if (hi <= 0) return { xTicks: undefined, xDomain: [0, 'dataMax'] as [number, string], xScale: 'linear' as const };
+    if (useBulk) {
+      const t: number[] = [];
+      for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+        const v = Math.pow(10, e);
+        if (v >= lo * 0.6 && v <= hi * 1.6) t.push(v);
+      }
+      return { xTicks: t.length ? t : undefined, xDomain: ['auto', 'auto'] as [string, string], xScale: 'log' as const };
+    }
     const t = niceTicks(0, hi, 5);
-    return { xTicks: t, xDomain: [0, t[t.length - 1]] as [number, number] };
-  }, [data]);
+    return { xTicks: t, xDomain: [0, t[t.length - 1]] as [number, number], xScale: 'linear' as const };
+  }, [data, useBulk]);
 
   const axisTick = { fill: C.subtle, fontSize: 10 };
 
@@ -682,7 +721,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
                   <stop offset="100%" stopColor={BID} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="notional" type="number" domain={xDomain} allowDataOverflow ticks={xTicks} interval={0} minTickGap={24} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
+              <XAxis dataKey="notional" type="number" scale={xScale} domain={xDomain} allowDataOverflow ticks={xTicks} interval={0} minTickGap={24} tickFormatter={(v) => formatUsd(v)} tick={axisTick} axisLine={{ stroke: 'var(--role-line)' }} tickLine={false} />
               <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} tick={axisTick} axisLine={false} tickLine={false} width={40} unit=" bps" />
               <Tooltip
                 cursor={{ stroke: 'var(--role-content-subtle)', strokeDasharray: '3 3', strokeOpacity: 0.4 }}
@@ -726,7 +765,7 @@ function ImpactCurvePanel({ book, mid }: { book: OrderbookSnapshot; mid: number 
 
 const SIM_PRESETS = [1_000, 10_000, 50_000, 100_000, 500_000, 1_000_000];
 
-function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+function SizeSimPanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: number | null; impact?: ImpactCurve | null }) {
   const [side, setSide] = useState<Side>('buy');
   const [notional, setNotional] = useState<number>(100_000);
 
@@ -743,20 +782,29 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
   // simulateOrder is avg-fill-vs-mid, which already contains the half-spread —
   // so split it: the first halfSpread bps is "spread", the rest is "slippage".
   const breakdown = useMemo(() => {
-    if (!result || result.slipBps == null) return null;
-    const notionalFilled = result.filledNotional;
+    if (!result) return null;
     const halfSpread = Math.max(0, (book.stats.spreadBps ?? 0) / 2);
-    const spreadBps = Math.min(result.slipBps, halfSpread);
-    const slipBps = Math.max(0, result.slipBps - spreadBps);
     const feeBps = BULK_TAKER_BPS;
+    // Prefer our 20-level walk; when it exhausts (or can't fill), fall back to
+    // BULK's authoritative deep impact curve so the cost is real, not ∞.
+    let slipTotal = result.slipBps;
+    let notionalFilled = result.filledNotional;
+    let fromBulk = false;
+    if (result.bookExhausted || slipTotal == null) {
+      const b = bulkBookBps(impact ?? null, mid, side, notional);
+      if (b != null) { slipTotal = b; notionalFilled = notional; fromBulk = true; }
+    }
+    if (slipTotal == null) return null;
+    const spreadBps = Math.min(slipTotal, halfSpread);
+    const slipBps = Math.max(0, slipTotal - spreadBps);
     const toUsd = (bps: number) => (bps / 1e4) * notionalFilled;
     const totalBps = spreadBps + slipBps + feeBps;
     return {
-      spreadBps, slipBps, feeBps, totalBps,
+      spreadBps, slipBps, feeBps, totalBps, fromBulk,
       spreadUsd: toUsd(spreadBps), slipUsd: toUsd(slipBps), feeUsd: toUsd(feeBps), totalUsd: toUsd(totalBps),
-      impactPct: result.slipBps / 100, // avg-fill vs mid, as a percent
+      impactPct: slipTotal / 100, // avg-fill vs mid, as a percent
     };
-  }, [result, book.stats.spreadBps]);
+  }, [result, book.stats.spreadBps, impact, mid, side, notional]);
 
   const fmtUsdCost = (n: number) => (n > 0 && n < 0.005 ? '<$0.01' : `$${n.toFixed(2)}`);
 
@@ -841,9 +889,15 @@ function SizeSimPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | nu
         )}
 
         {result?.bookExhausted && (
-          <div className="rounded-[var(--radius-sm)] px-3 py-2 text-[11px]" style={{ backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
-            Order exceeds the visible book - only {formatUsd(result.filledNotional)} fills before {side === 'buy' ? 'asks' : 'bids'} run out.
-          </div>
+          breakdown?.fromBulk ? (
+            <div className="rounded-[var(--radius-sm)] px-3 py-2 text-[11px]" style={{ backgroundColor: 'rgb(var(--accent-rgb) / 0.1)', color: 'var(--accent-text)' }}>
+              Beyond our visible book — cost estimated from BULK&apos;s deep impact curve.
+            </div>
+          ) : (
+            <div className="rounded-[var(--radius-sm)] px-3 py-2 text-[11px]" style={{ backgroundColor: 'rgb(var(--neg-rgb) / 0.1)', color: 'var(--neg)' }}>
+              Order exceeds the visible book - only {formatUsd(result.filledNotional)} fills before {side === 'buy' ? 'asks' : 'bids'} run out.
+            </div>
+          )
         )}
       </div>
     </div>
@@ -871,7 +925,7 @@ function Legend({ sw, label, value }: { sw: string; label: string; value: string
 const DEPTH_BANDS = [5, 10, 25]; // ±bp around mid
 const LADDER_SIZES = [10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 
-function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: number | null }) {
+function TwoSidedDepthPanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: number | null; impact?: ImpactCurve | null }) {
   const [bandBp, setBandBp] = useState(10);
   const stats = book.stats;
 
@@ -903,7 +957,14 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
     return { bidDepth, askDepth, both, bidShare, ratio, label, ladder, maxSlip, maxDepth };
   }, [book, mid, bandBp]);
 
-  const slipTxt = (r: SimResult) => (r.bookExhausted || r.slipBps == null ? '∞' : formatBps(r.slipBps));
+  // When our 20-level walk exhausts, fall back to BULK's authoritative deep
+  // impact curve instead of showing ∞. A ~ prefix marks the BULK-sourced value.
+  const slipTxt = (r: SimResult, side: Side, sz: number) => {
+    if (!r.bookExhausted && r.slipBps != null) return formatBps(r.slipBps);
+    const b = bulkBookBps(impact ?? null, mid, side, sz);
+    if (b != null) return b >= 400 ? '≥400' : `~${formatBps(b)}`;
+    return '∞';
+  };
 
   return (
     <div className="glass-card flex h-full flex-col">
@@ -958,13 +1019,13 @@ function TwoSidedDepthPanel({ book, mid }: { book: OrderbookSnapshot; mid: numbe
             {m.ladder.map((r) => (
               <div key={r.sz} className="grid grid-cols-3 items-center border-b border-[var(--role-line-subtle)] py-3 last:border-0">
                 <span className="font-mono text-[15px] tabular-nums text-[var(--role-content-subtle)]">
-                  {slipTxt(r.bid)}<span className="ml-1 text-[11px]">bp</span>
+                  {slipTxt(r.bid, 'sell', r.sz)}<span className="ml-1 text-[11px]">bp</span>
                 </span>
                 <span className="text-center text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">
                   ${formatCompact(r.sz)} order
                 </span>
                 <span className="text-right font-mono text-[15px] font-medium tabular-nums text-[var(--role-content)]">
-                  {slipTxt(r.ask)}<span className="ml-1 text-[11px] text-[var(--role-content-subtle)]">bp</span>
+                  {slipTxt(r.ask, 'buy', r.sz)}<span className="ml-1 text-[11px] text-[var(--role-content-subtle)]">bp</span>
                 </span>
               </div>
             ))}
@@ -1539,6 +1600,9 @@ export default function OrderBookPage() {
   const [compare, setCompare] = useState<OrderbookCompare | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  // BULK's authoritative size-impact curve (deep — fixes our 20-level book
+  // walk hitting ∞ on large orders). null if BULK hasn't published one.
+  const [impact, setImpact] = useState<ImpactCurve | null>(null);
   const lastFetchedCoinRef = useRef<Market | null>(null);
 
   // Deep-link support for the ⌘K command palette, which links markets here as
@@ -1573,6 +1637,18 @@ export default function OrderBookPage() {
     setBook(null);
     fetchBook(coin, true);
   }, [coin, fetchBook, network]);
+
+  // BULK's authoritative impact curve for this market, polled every 30s.
+  useEffect(() => {
+    let alive = true;
+    const pull = () => analytics.getImpact(coin.replace('-USD', ''))
+      .then((r) => { if (alive) setImpact(r); })
+      .catch(() => { if (alive) setImpact(null); });
+    setImpact(null);
+    pull();
+    const id = setInterval(pull, 30_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [coin, network]);
 
   useEffect(() => {
     const id = setInterval(() => fetchBook(coin, false), REFRESH_INTERVAL_MS);
@@ -1683,14 +1759,14 @@ export default function OrderBookPage() {
           {initialLoading || !book ? (
             <div className="glass-card h-[520px] animate-pulse lg:h-full" />
           ) : (
-            <SizeSimPanel book={book} mid={stats?.mid ?? null} />
+            <SizeSimPanel book={book} mid={stats?.mid ?? null} impact={impact} />
           )}
         </div>
         <div className="lg:col-span-4 lg:h-[520px]">
           {initialLoading || !book ? (
             <div className="glass-card h-[520px] animate-pulse lg:h-full" />
           ) : (
-            <TwoSidedDepthPanel book={book} mid={stats?.mid ?? null} />
+            <TwoSidedDepthPanel book={book} mid={stats?.mid ?? null} impact={impact} />
           )}
         </div>
         <div className="h-[320px] lg:col-span-4 lg:h-[520px]">
@@ -1699,7 +1775,7 @@ export default function OrderBookPage() {
           ) : multi ? (
             <MultiVenueImpactPanel venues={activeVenues} />
           ) : (
-            <ImpactCurvePanel book={book} mid={stats?.mid ?? null} />
+            <ImpactCurvePanel book={book} mid={stats?.mid ?? null} impact={impact} />
           )}
         </div>
       </div>
