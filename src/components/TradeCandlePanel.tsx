@@ -48,10 +48,6 @@ const FIT_BARS = 1200;
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
 
-// Always show at least this much history, even for a freshly-opened trade, so
-// the entry has price context before it instead of sitting at the far-left edge.
-const MIN_SPAN_MS = 24 * 3_600_000;
-
 const resolveColor = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
   const probe = document.createElement('span');
@@ -92,10 +88,13 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   const replayingRef = useRef(false);
 
   const [userInterval, setUserInterval] = useState<string | null>(null);
+  // The market's earliest available candle (its listing). Probed once per symbol
+  // so the default view can span the WHOLE history, first candle → now.
+  const [histStart, setHistStart] = useState<number | null>(null);
   const endT = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
-  // Pick the default interval from the full displayed span (trade open OR the
-  // minimum lead-in window, whichever reaches further back) to now.
-  const iv = userInterval ?? interval ?? pickInterval(Math.min(openedAt, Date.now() - MIN_SPAN_MS), Date.now());
+  // Default interval = the finest one where the entire history (listing → now)
+  // still fits in FIT_BARS. Falls back to 1h until the probe resolves.
+  const iv = userInterval ?? interval ?? (histStart != null ? pickInterval(histStart, Date.now()) : '1h');
 
   const [candles, setCandles] = useState<Candle[] | null>(null);
   // The interval the current `candles` were actually fetched with. The chart
@@ -120,11 +119,26 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   );
   markerDataRef.current = markerData;
 
-  // Candle history: show everything from the trade's OPEN to NOW when it fits in
-  // CANDLE_LIMIT bars at the selected interval. When the interval is too fine for
-  // that whole span (e.g. the user picks 1m on an old trade), fall back to a
-  // window anchored at the trade so they still get detail where it matters.
+  // Probe the market's earliest candle once per symbol (a cheap daily pull from
+  // epoch 0 — BULK returns from the listing forward). Gives us the real history
+  // start so the default view can cover first candle → now.
   useEffect(() => {
+    let cancelled = false;
+    setHistStart(null);
+    analytics
+      .getCandles(symbol, '1d', 1000, { startTime: 0, endTime: Date.now() })
+      .then((res) => { if (!cancelled) setHistStart(res.candles[0]?.t ?? openedAt); })
+      .catch(() => { if (!cancelled) setHistStart(openedAt); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
+  // Candle history. By default (auto interval) load the WHOLE history, listing →
+  // now, at an interval that fits in FIT_BARS. If the user picks an interval too
+  // fine to cover all of it (e.g. 1m over 33 days), load the trade window at that
+  // interval instead, so they still get fine detail where the trade happened.
+  useEffect(() => {
+    if (histStart == null) { setLoading(true); return; }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -132,19 +146,16 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const now = Date.now();
     const tradeEnd = isOpen ? now : (closedAt ?? openedAt + 3_600_000);
     const bar = barSeconds(iv) * 1000;
-    const pad = bar * 8;
-    const cap = FIT_BARS * bar; // span we'll show in full for this interval
-    // Reach back to the trade open, but never show less than MIN_SPAN_MS of
-    // history — so a freshly-opened trade still has context before the entry.
-    const wantStart = Math.min(openedAt - pad, now - MIN_SPAN_MS);
+    const pad = bar * 6;
+    const cap = FIT_BARS * bar; // span this interval can cover in full
     let startTime: number, endTime: number;
-    if (now - wantStart <= cap) {
-      // Full displayed span fits.
-      startTime = wantStart;
+    if (now - histStart <= cap) {
+      // Whole history fits at this interval — show first candle → now.
+      startTime = Math.max(0, histStart - pad);
       endTime = now + bar * 4;
     } else {
-      // Too fine for the whole span — anchor the window at the trade.
-      startTime = openedAt - pad;
+      // Interval too fine for the full history — anchor the window at the trade.
+      startTime = Math.max(histStart, openedAt - pad);
       endTime = Math.min(now + bar * 4, Math.max(tradeEnd + pad, startTime + cap));
     }
     analytics
@@ -154,7 +165,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, iv, openedAt, closedAt, isOpen]);
+  }, [symbol, iv, histStart, openedAt, closedAt, isOpen]);
 
   const plotted = useMemo(
     () => clampWicks((candles ?? []).filter((c) =>
@@ -243,13 +254,11 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       el.style.color = d.close >= d.open ? pos : neg;
     });
 
-    // Focus the initial view on the trade (≥45 bars), everything else pannable.
-    const bsec = barSeconds(loadedIv);
-    try {
-      const endSec = Math.floor(endT / 1000) + bsec * 4;
-      const fromSec = Math.min(Math.floor(openedAt / 1000) - bsec * 8, endSec - bsec * 45);
-      chart.timeScale().setVisibleRange({ from: fromSec as UTCTimestamp, to: endSec as UTCTimestamp });
-    } catch { chart.timeScale().fitContent(); }
+    // Show the full loaded range by default: on the auto interval that's the
+    // whole history (first candle → now); on a fine interval it's the trade
+    // window. Either way, everything loaded is on screen — zoom in to the trade
+    // via the markers, or switch to 1m/5m for minute detail at the entry.
+    chart.timeScale().fitContent();
 
     const resize = () => {
       if (!containerRef.current) return;
