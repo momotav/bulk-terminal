@@ -173,40 +173,48 @@ interface Props {
    *    let users scan many trades at once. Mirrors Hyperdash's positions
    *    table convention. */
   density?: 'cards' | 'table';
+  /** When provided (even an empty array), render THESE instead of running the
+   *  component's own fetch. The wallet page passes its already-loaded closed
+   *  positions here so the Recent Trades tab shares that resilient, polled
+   *  data source (backend swrCache + 10s re-poll) rather than firing a fragile
+   *  one-shot fetch that permanently shows "no trades" on a single hiccup. */
+  provided?: ClosedPosition[] | null;
 }
 
-export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, density = 'cards' }: Props) {
-  const [positions, setPositions] = useState<ClosedPosition[] | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, density = 'cards', provided }: Props) {
+  const usingProvided = provided !== undefined;
+  const [fetched, setFetched] = useState<ClosedPosition[] | null>(null);
+  const [loading, setLoading] = useState(!usingProvided);
 
-  // Fetch on mount, refetch when address/symbol changes. We don't refresh
-  // on a timer because closed positions don't update retroactively — once
-  // a position is closed, its row is final. New rows appear when the user
-  // closes new positions, which happens infrequently enough that a manual
-  // page refresh covers it.
+  // Self-fetch only when the parent didn't supply the list (e.g. the chart
+  // modal's per-symbol view). Retries a few times on a THROWN error (network /
+  // 429) so one transient failure doesn't collapse to a permanent empty state;
+  // a genuine 200-empty resolves normally and is shown as "no trades". We don't
+  // poll on a timer — closed positions are immutable once closed.
   useEffect(() => {
+    if (usingProvided) { setLoading(false); return; }
     if (!address) return;
     let cancelled = false;
     setLoading(true);
+    (async () => {
+      for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+        try {
+          const res = await wallet.getClosedPositions(address, { symbol, limit });
+          if (cancelled) return;
+          setFetched(res.positions || []);
+          setLoading(false);
+          return;
+        } catch {
+          if (attempt === 2) { if (!cancelled) { setFetched([]); setLoading(false); } }
+          else await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [address, symbol, limit, usingProvided]);
 
-    wallet
-      .getClosedPositions(address, { symbol, limit })
-      .then((res) => {
-        if (cancelled) return;
-        setPositions(res.positions || []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPositions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [address, symbol, limit]);
+  const sliced = usingProvided ? (provided ?? []).slice(0, limit) : fetched;
+  const positions = sliced;
 
   if (loading) {
     return (

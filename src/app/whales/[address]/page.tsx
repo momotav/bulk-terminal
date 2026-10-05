@@ -1346,16 +1346,21 @@ export default function WalletPage() {
         const [walletResult, profileResult, closedResult] = await Promise.all([
           wallet.getWallet(address),
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
-          wallet.getClosedPositions(address, { limit: 200 }).catch(() => ({ positions: [] })),
+          // null (not { positions: [] }) on failure so a THROWN fetch (network /
+          // 429) is distinguishable from a genuine empty — we must never blank
+          // the trade history just because one request failed.
+          wallet.getClosedPositions(address, { limit: 200 }).catch(() => null),
         ]);
 
         setData(walletResult);
         setProfile((profileResult as any)?.profile || null);
-        // Don't blank closed positions on a BACKGROUND tick that came back empty
-        // — a transient fetch failure returns { positions: [] }, and overwriting
-        // would flash the Daily / Per-trade tabs to their empty state every time
-        // it hiccups. Keep the last-good list; only the initial load may set empty.
-        if (!silent || (closedResult.positions?.length ?? 0) > 0) {
+        // Only overwrite closed positions when the fetch actually SUCCEEDED.
+        // On a failure (closedResult === null) keep whatever we have — even on
+        // the initial load, so a transient failure can't strand the page on
+        // "no trades" until the next poll heals it. On a successful background
+        // tick, only overwrite with a non-empty list (a success that's empty
+        // mid-session is almost always a hiccup, not the wallet going flat).
+        if (closedResult && (!silent || (closedResult.positions?.length ?? 0) > 0)) {
           setClosedPositions(closedResult.positions || []);
         }
 
@@ -3209,9 +3214,13 @@ export default function WalletPage() {
                     </div>
                   )
                 ) : positionsTab === 'recent' ? (
-                  // "Recent" tab — closed-position table.
+                  // "Recent" tab — closed-position table. Fed the page's own
+                  // polled closedPositions (resilient, last-good cached) rather
+                  // than letting the list fire its own fragile one-shot fetch
+                  // that showed "no trades" on a single transient hiccup.
                   <ClosedPositionsList
                     address={address}
+                    provided={closedPositions}
                     limit={50}
                     density="table"
                     onSelect={(p) =>
