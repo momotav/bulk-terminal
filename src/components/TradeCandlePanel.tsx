@@ -18,8 +18,9 @@ import {
   createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle,
   type CandlestickData, type UTCTimestamp,
 } from 'lightweight-charts';
-import { Loader2, Play, Pause } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import { analytics, marketStreamUrl, formatNumber, type Candle } from '@/lib/api';
+import { LogoLoader } from '@/components/LogoLoader';
 import { clampWicks } from '@/lib/candles';
 import type { TradeEventPoint } from '@/lib/positionWalk';
 
@@ -453,9 +454,9 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
         ))}
 
         {(loading || error) && (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 text-[12px] text-[var(--role-content-subtle)]">
-            {loading && !error && <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading price…</>}
-            {error && <span className="text-[var(--neg)]">{error}</span>}
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--bg-base)]/70 backdrop-blur-[1px]">
+            {loading && !error && <LogoLoader sizeClass="h-14" label="Loading price" />}
+            {error && <span className="text-[12px] text-[var(--neg)]">{error}</span>}
           </div>
         )}
       </div>

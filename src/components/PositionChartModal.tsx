@@ -7,6 +7,7 @@ import { X, TrendingUp, TrendingDown, Loader2, Share2 } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills } from '@/lib/positionWalk';
 import { clampWicks } from '@/lib/candles';
+import { LogoLoader } from '@/components/LogoLoader';
 
 // ---------------------------------------------------------------------------
 // PositionChartModal
@@ -1066,6 +1067,14 @@ export function PositionChartModal({ position, onClose }: Props) {
             back to 360px so the chart is always usable. */}
         <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
+
+          {/* Candle loading overlay — animated BULK logo over the chart area. */}
+          {(loading || error) && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--bg-muted)]/70 backdrop-blur-[1px]">
+              {loading && !error && <LogoLoader sizeClass="h-16" label="Loading chart" />}
+              {error && <span className="text-sm text-bulk-red">{error}</span>}
+            </div>
+          )}
 
           {/* PNL / Size badge — floats on the entry line, BULK-style.
               Always mounted; positioned and shown/hidden via badgeRef in
