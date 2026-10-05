@@ -3,19 +3,20 @@
 // ---------------------------------------------------------------------------
 // TradeShareCard
 //
-// A compact, screenshot-ready "share this trade" card in the fomo style —
-// a few candles leading into the trade, running to the last candle (open) or
-// the close bar (closed), with a status-aware headline PnL:
-//   - open   → LIVE unrealized PnL (streams a mark price, the last candle and
-//              the number tick in real time)
-//   - closed → fixed realized PnL
-// plus an Invested / Avg entry / Current stat row. Styled in the BULK palette,
-// layout mirrored from the fomo card. Opened from the observe page.
+// An animated, downloadable "share this trade" card in the fomo style. The
+// whole card is drawn on a <canvas> so the exact same draw function powers:
+//   1. the live preview (auto-replays the candles fast, PnL ticking along), and
+//   2. a downloadable video (MediaRecorder on the canvas capture stream).
+//
+// The replay shows a few candles before the entry, the trade itself, and a few
+// candles after the close (or up to the latest candle for an open trade), with
+// a status-aware headline PnL (unrealized journey → realized for closed).
+// All reconstructed client-side from the data the observe page already has.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
-import { analytics, marketStreamUrl, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { X, Play, Download, Loader2 } from 'lucide-react';
+import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 
 export interface ShareCardData {
@@ -29,37 +30,51 @@ export interface ShareCardData {
   avgEntry: number;
   size: number;          // absolute (peak) size
   leverage: number;      // 0 if unknown
-  markPrice: number | null;  // initial mark (open)
-  exitPrice: number | null;  // final price (closed)
-  /** life.finalPnl — used as the open fallback until the first live tick, and
-   *  as the realized number for closed trades. */
-  pnl: number;
+  markPrice: number | null;
+  exitPrice: number | null;
+  pnl: number;           // life.finalPnl (realized for closed)
 }
 
-interface Props {
-  data: ShareCardData;
-  onClose: () => void;
-}
+interface Props { data: ShareCardData; onClose: () => void; }
 
-// Pick an interval so the trade + a lead-in renders as ~40 candles.
+// Logical card size; the backing canvas is this × SCALE for a crisp, shareable
+// video (880×1240).
+const W = 440, H = 620, SCALE = 2, PAD = 20;
+const FONT = 'ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif';
+const MS_PER_CANDLE = 90;   // replay speed
+const HOLD_MS = 800;        // linger on the final frame
+
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
-function pickCardInterval(spanMs: number): [string, number] {
-  const target = spanMs / 1000 / 40;
-  let best = IV_SECONDS[IV_SECONDS.length - 1];
-  for (const iv of IV_SECONDS) { if (iv[1] >= target) { best = iv; break; } }
-  return best;
+// Pick an interval so the trade itself spans ~16 candles.
+function pickInterval(tradeMs: number): [string, number] {
+  const target = tradeMs / 1000 / 16;
+  for (const iv of IV_SECONDS) if (iv[1] >= target) return iv;
+  return IV_SECONDS[IV_SECONDS.length - 1];
 }
 
-// Deterministic gradient avatar from the wallet address.
-function avatarGradient(addr: string): { bg: string; initials: string } {
+function avatarHues(addr: string): [string, string, string] {
   let h = 7;
   for (const c of addr) h = (h * 31 + c.charCodeAt(0)) | 0;
   const h1 = Math.abs(h) % 360;
-  const h2 = (h1 + 48) % 360;
-  return {
-    bg: `linear-gradient(135deg, hsl(${h1} 65% 55%), hsl(${h2} 70% 42%))`,
-    initials: addr.replace(/^0x/, '').slice(0, 2).toUpperCase(),
-  };
+  return [`hsl(${h1} 65% 55%)`, `hsl(${(h1 + 48) % 360} 70% 42%)`, addr.replace(/^0x/, '').slice(0, 2).toUpperCase()];
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  if (typeof (ctx as any).roundRect === 'function') { ctx.beginPath(); (ctx as any).roundRect(x, y, w, h, r); return; }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function pickMime(): string {
+  const cands = ['video/mp4;codecs=h264', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const m of cands) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { /* ignore */ } }
+  return '';
 }
 
 export function TradeShareCard({ data, onClose }: Props) {
@@ -68,231 +83,326 @@ export function TradeShareCard({ data, onClose }: Props) {
   const notional = size * avgEntry;
   const margin = leverage > 0 ? notional / leverage : notional;
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [candles, setCandles] = useState<Candle[] | null>(null);
-  // Live mark for OPEN trades (streamed). Seeded with the snapshot mark.
-  const [liveMark, setLiveMark] = useState<number | null>(isOpen ? data.markPrice : null);
-  const latestRef = useRef<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const holdRef = useRef<number | null>(null);
+  const varsRef = useRef<Record<string, string> | null>(null);
 
-  // Focused candle window: a lead-in before the entry → last candle (open) or
-  // the close (closed), sized to ~40 bars.
+  const canExport = pickMime() !== '';
+
+  // Tight candle window: ~6 candles before the open, the trade, ~6 after the
+  // close (or up to the latest candle for an open trade).
   useEffect(() => {
     let cancelled = false;
     const end = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
-    const tradeSpan = Math.max(end - openedAt, 30 * 60_000);
-    const lead = Math.max(tradeSpan * 0.5, 20 * 60_000);
-    const start = openedAt - lead;
-    const [iv, sec] = pickCardInterval(end - start);
+    const [iv, sec] = pickInterval(Math.max(end - openedAt, 20 * 60_000));
     const bar = sec * 1000;
+    const start = openedAt - bar * 6;
     analytics
-      .getCandles(symbol, iv, 500, { startTime: start - bar, endTime: end + bar * 2 })
-      .then((res) => { if (!cancelled) setCandles(res.candles); })
+      .getCandles(symbol, iv, 500, { startTime: start, endTime: end + bar * 6 })
+      .then((res) => { if (!cancelled) setCandles(res.candles.filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0)); })
       .catch(() => { if (!cancelled) setCandles([]); });
     return () => { cancelled = true; };
   }, [symbol, isOpen, openedAt, closedAt]);
 
-  // Live price stream for open positions — drives the ticking PnL + last candle.
-  useEffect(() => {
-    if (!isOpen) return;
-    const es = new EventSource(marketStreamUrl(symbol));
-    es.onmessage = (ev) => {
-      let msg: { price: number; kind: string };
-      try { msg = JSON.parse(ev.data); } catch { return; }
-      const p = Number(msg.price);
-      if (p > 0) latestRef.current = p;
+  // Resolve the active palette's CSS vars to concrete colours once (canvas can't
+  // parse var()).
+  const resolveVars = useCallback(() => {
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+    const get = (expr: string, fb: string) => { probe.style.color = ''; probe.style.color = expr; return getComputedStyle(probe).color || fb; };
+    const v = {
+      bgBase: get('var(--bg-base)', 'rgb(13,13,16)'),
+      bgMuted: get('var(--bg-muted)', 'rgb(22,22,26)'),
+      border: get('var(--border-color)', 'rgb(42,42,48)'),
+      text: get('var(--text-primary)', 'rgb(232,232,234)'),
+      text2: get('var(--text-secondary)', 'rgb(176,176,180)'),
+      text3: get('var(--text-tertiary)', 'rgb(138,138,144)'),
+      pos: get('var(--pos)', 'rgb(33,192,122)'),
+      neg: get('var(--neg)', 'rgb(229,72,77)'),
+      accent: get('var(--accent)', 'rgb(255,180,87)'),
+      accentText: get('var(--accent-text)', 'rgb(255,180,87)'),
+      coin: get(getCoinColor(coin), 'rgb(255,180,87)'),
     };
-    es.onerror = () => { /* EventSource auto-reconnects */ };
-    const flush = window.setInterval(() => {
-      const m = latestRef.current;
-      if (m != null) setLiveMark((prev) => (prev === m ? prev : m));
-    }, 400);
-    return () => { es.close(); window.clearInterval(flush); };
-  }, [isOpen, symbol]);
+    document.body.removeChild(probe);
+    return v;
+  }, [coin]);
 
-  // Current price + PnL, status-aware.
-  const currentPrice = isOpen ? (liveMark ?? data.markPrice ?? avgEntry) : (data.exitPrice ?? avgEntry);
-  const pnl = isOpen ? signedSize * (currentPrice - avgEntry) : data.pnl;
-  const pnlPct = margin > 0 ? (pnl / margin) * 100 : 0;
-  const positive = pnl >= 0;
-  const posColor = 'var(--pos)';
-  const negColor = 'var(--neg)';
-  const tone = positive ? posColor : negColor;
+  // Draw the whole card at a given reveal (number of candles shown).
+  const draw = useCallback((reveal: number) => {
+    const canvas = canvasRef.current;
+    const cs = candles;
+    const V = varsRef.current;
+    if (!canvas || !cs || !V) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const N = cs.length;
+    const k = Math.max(1, Math.min(N, Math.round(reveal)));
 
-  // For open trades, let the last candle reflect the live price so the chart
-  // "breathes" with the number.
-  const displayCandles = useMemo(() => {
-    const cs = (candles ?? []).filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0);
-    if (!isOpen || cs.length === 0 || liveMark == null) return cs;
-    const last = { ...cs[cs.length - 1] };
-    last.c = liveMark;
-    last.h = Math.max(last.h, liveMark);
-    last.l = Math.min(last.l, liveMark);
-    return [...cs.slice(0, -1), last];
-  }, [candles, isOpen, liveMark]);
+    ctx.save();
+    ctx.scale(SCALE, SCALE);
+    ctx.clearRect(0, 0, W, H);
 
-  const avatar = avatarGradient(address);
-  const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString(undefined, {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-  const coinColor = getCoinColor(coin);
-  const px = (p: number) => `$${formatNumber(p, p < 10 ? 4 : p < 1000 ? 2 : 0)}`;
+    // Frame + card bg.
+    roundRect(ctx, 0, 0, W, H, 22); ctx.fillStyle = V.accent; ctx.fill();
+    roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
+
+    // ---- Header ----
+    const [a1, a2, initials] = avatarHues(address);
+    const ax = PAD + 24, ay = PAD + 24, ar = 24;
+    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
+    g.addColorStop(0, a1); g.addColorStop(1, a2);
+    ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `600 15px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(initials, ax, ay + 1);
+
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`;
+    ctx.fillText(formatAddress(address), PAD + 58, PAD + 18);
+
+    // status badge
+    const badge = isOpen ? 'OPEN' : 'CLOSED';
+    ctx.font = `600 11px ${FONT}`;
+    const bw = ctx.measureText(badge).width + 16;
+    roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
+    ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = isOpen ? V.accentText : V.text3;
+    ctx.fillText(badge, PAD + 58 + 8, PAD + 41);
+
+    // date + brand (right)
+    const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    ctx.textAlign = 'right';
+    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 14);
+    ctx.fillStyle = V.text2; ctx.font = `600 12px ${FONT}`; ctx.fillText('bulkstats', W - PAD, PAD + 33);
+
+    // ---- Chart ----
+    const cx0 = PAD, cy0 = 88, cw = W - 2 * PAD - 60, ch = 150;
+    const px = (p: number) => `$${formatNumber(p, p < 10 ? 4 : p < 1000 ? 2 : 0)}`;
+    // price / pnl at this reveal
+    const atEnd = k >= N;
+    const lastClose = cs[k - 1].c;
+    const price = (!isOpen && atEnd) ? (data.exitPrice ?? lastClose) : lastClose;
+    const pnl = (!isOpen && atEnd) ? data.pnl : signedSize * (price - avgEntry);
+    const pct = margin > 0 ? (pnl / margin) * 100 : 0;
+    const positive = pnl >= 0;
+    const tone = positive ? V.pos : V.neg;
+
+    // scale over the FULL window so candles fill a fixed frame left→right
+    const lo = Math.min(...cs.map((c) => c.l), price);
+    const hi = Math.max(...cs.map((c) => c.h), price);
+    const range = (hi - lo) || 1;
+    const yOf = (p: number) => cy0 + (1 - (p - lo) / range) * ch;
+    const step = cw / N;
+    const bodyW = Math.max(2, Math.min(11, step * 0.6));
+    for (let i = 0; i < k; i++) {
+      const c = cs[i];
+      const cxx = cx0 + i * step + step / 2;
+      const up = c.c >= c.o;
+      ctx.strokeStyle = up ? V.pos : V.neg; ctx.fillStyle = up ? V.pos : V.neg; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cxx, yOf(c.h)); ctx.lineTo(cxx, yOf(c.l)); ctx.stroke();
+      const yO = yOf(c.o), yC = yOf(c.c);
+      ctx.fillRect(cxx - bodyW / 2, Math.min(yO, yC), bodyW, Math.max(1, Math.abs(yC - yO)));
+    }
+    // current-price dotted line + pill at the last revealed candle
+    const yC = yOf(price);
+    ctx.save();
+    ctx.strokeStyle = tone; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(cx0, yC); ctx.lineTo(cx0 + cw, yC); ctx.stroke();
+    ctx.restore();
+    roundRect(ctx, cx0 + cw + 3, yC - 11, 54, 22, 6); ctx.fillStyle = tone; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(px(price), cx0 + cw + 3 + 27, yC + 1);
+    ctx.textBaseline = 'alphabetic';
+    // sparse time labels
+    const fmtT = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'left';
+    ctx.fillText(fmtT(cs[0].t), cx0 + 2, cy0 + ch + 16);
+    ctx.textAlign = 'center'; ctx.fillText(fmtT(cs[Math.floor(N / 2)].t), cx0 + cw / 2, cy0 + ch + 16);
+
+    // ---- Body card ----
+    const by = 268, bh = 212;
+    roundRect(ctx, PAD, by, W - 2 * PAD, bh, 16); ctx.fillStyle = V.bgMuted; ctx.fill();
+    ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
+
+    // coin row
+    const coinY = by + 26;
+    ctx.beginPath(); ctx.arc(PAD + 20, coinY, 13, 0, Math.PI * 2); ctx.fillStyle = V.coin; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `700 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(coin.slice(0, 1), PAD + 20, coinY + 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = V.text; ctx.font = `500 18px ${FONT}`; ctx.fillText(coin, PAD + 40, coinY + 6);
+    const coinW = ctx.measureText(coin).width;
+    const sideTxt = `${side.toUpperCase()}${leverage > 0 ? ` ${leverage}×` : ''}`;
+    ctx.font = `600 10px ${FONT}`;
+    const stw = ctx.measureText(sideTxt).width + 12;
+    const badgeX = PAD + 40 + coinW + 10;
+    roundRect(ctx, badgeX, coinY - 7, stw, 16, 4);
+    ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.globalAlpha = 0.15; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.fillText(sideTxt, badgeX + 6, coinY + 5);
+
+    // headline PnL
+    ctx.fillStyle = tone; ctx.font = `600 34px ${FONT}`;
+    const pnlTxt = `${positive ? '+' : '−'}$${formatNumber(Math.abs(pnl), 2)}`;
+    ctx.fillText(pnlTxt, PAD + 18, by + 86);
+    ctx.font = `500 17px ${FONT}`;
+    const pw = ctx.measureText(pnlTxt).width;
+    ctx.fillText(`${positive ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%`, PAD + 18 + pw + 10, by + 86);
+    ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`;
+    ctx.fillText(isOpen ? 'UNREALIZED PNL' : 'REALIZED PNL', PAD + 18, by + 106);
+
+    // stats grid
+    const gy = by + 124, gh = 62, gw = (W - 2 * PAD - 24) / 3, gx0 = PAD + 12;
+    roundRect(ctx, gx0, gy, gw * 3, gh, 12); ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
+    const stats: [string, string][] = [
+      ['Invested', `$${formatCompact(margin)}`],
+      ['Avg. entry', px(avgEntry)],
+      [isOpen ? 'Current' : 'Exit', px(price)],
+    ];
+    stats.forEach(([label, val], i) => {
+      const x = gx0 + gw * i;
+      if (i > 0) { ctx.strokeStyle = V.border; ctx.beginPath(); ctx.moveTo(x, gy + 10); ctx.lineTo(x, gy + gh - 10); ctx.stroke(); }
+      ctx.textAlign = 'left';
+      ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`; ctx.fillText(label, x + 12, gy + 24);
+      ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
+    });
+
+    // ---- Footer ----
+    ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `600 16px ${FONT}`;
+    ctx.fillText('bulkstats', PAD, H - PAD);
+    ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`;
+    ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
+
+    ctx.restore();
+  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, signedSize, margin, coin, data.exitPrice, data.pnl]);
+
+  // Run one replay pass (0→N + hold). Returns a promise that resolves when done.
+  const play = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const cs = candles;
+      if (!cs || cs.length < 2) { draw(cs?.length ?? 1); resolve(); return; }
+      const N = cs.length;
+      const dur = Math.max(1500, N * MS_PER_CANDLE);
+      const t0 = performance.now();
+      const frame = (t: number) => {
+        const e = t - t0;
+        if (e < dur) {
+          draw(Math.max(1, Math.min(N, Math.ceil((e / dur) * N))));
+          rafRef.current = requestAnimationFrame(frame);
+        } else {
+          draw(N);
+          holdRef.current = window.setTimeout(resolve, HOLD_MS);
+        }
+      };
+      rafRef.current = requestAnimationFrame(frame);
+    });
+  }, [candles, draw]);
+
+  const stop = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (holdRef.current) clearTimeout(holdRef.current);
+    rafRef.current = null; holdRef.current = null;
+  }, []);
+
+  // Size the canvas, resolve colours, draw the first frame, auto-play once.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !candles) return;
+    canvas.width = W * SCALE; canvas.height = H * SCALE;
+    varsRef.current = resolveVars();
+    draw(1);
+    if (candles.length >= 2) {
+      setPlaying(true);
+      play().then(() => setPlaying(false));
+    }
+    return () => stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles]);
+
+  const replay = () => {
+    if (playing || recording) return;
+    stop(); setPlaying(true);
+    play().then(() => setPlaying(false));
+  };
+
+  const download = async () => {
+    const canvas = canvasRef.current;
+    const mime = pickMime();
+    if (!canvas || !mime || recording) return;
+    stop();
+    setRecording(true);
+    try {
+      draw(1);
+      const stream = (canvas as any).captureStream(30) as MediaStream;
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+      const chunks: BlobPart[] = [];
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      const stopped = new Promise<void>((res) => { rec.onstop = () => res(); });
+      rec.start();
+      await play();
+      rec.stop();
+      await stopped;
+      const blob = new Blob(chunks, { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+      a.href = url;
+      a.download = `bulkstats-${coin}-${new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toISOString().slice(0, 10)}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } finally {
+      setRecording(false);
+    }
+  };
+
+  const busy = playing || recording;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !recording) onClose(); }}
     >
-      <div className="relative w-full max-w-[420px]">
+      <div className="relative flex flex-col items-center gap-3">
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute -top-3 -right-3 z-10 rounded-full bg-[var(--bg-muted)] border border-[var(--border-color)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]"
+          className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]"
         >
           <X className="h-4 w-4" />
         </button>
 
-        {/* Accent frame → card, mirroring the fomo bordered look. */}
-        <div className="rounded-[22px] p-[3px]" style={{ background: 'linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 35%, transparent))' }}>
-          <div className="overflow-hidden rounded-[19px] bg-[var(--bg-base)]">
-            {/* Header */}
-            <div className="flex items-center gap-3 px-5 pt-5">
-              <div
-                className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                style={{ background: avatar.bg }}
-              >
-                {avatar.initials}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-lg font-semibold text-[var(--text-primary)]" title={address}>
-                  {formatAddress(address)}
-                </div>
-                <span
-                  className="mt-0.5 inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-                  style={{
-                    color: isOpen ? 'var(--accent-text)' : 'var(--role-content-subtle)',
-                    background: isOpen ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--bg-secondary-20)',
-                  }}
-                >
-                  {isOpen ? 'Open' : 'Closed'}
-                </span>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-xs text-[var(--text-tertiary)]">{dateStr}</span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/chartlogo.png" alt="bulkstats" className="h-5 w-auto select-none opacity-80" />
-              </div>
-            </div>
-
-            {/* Mini candle chart with the current-price dotted line + pill. */}
-            <div className="mt-4 px-2">
-              <MiniCandles candles={displayCandles} currentPrice={currentPrice} tone={tone} priceLabel={px(currentPrice)} />
-            </div>
-
-            {/* Body card */}
-            <div className="m-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-5">
-              {/* Coin row */}
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: coinColor }}>
-                  {coin.slice(0, 1)}
-                </span>
-                <span className="text-lg font-medium text-[var(--text-primary)]">{coin}</span>
-                <span
-                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: side === 'long' ? posColor : negColor, background: side === 'long' ? 'color-mix(in srgb, var(--pos) 15%, transparent)' : 'color-mix(in srgb, var(--neg) 15%, transparent)' }}
-                >
-                  {side}{leverage > 0 ? ` ${leverage}×` : ''}
-                </span>
-              </div>
-
-              {/* Headline PnL */}
-              <div className="mt-4 flex items-baseline gap-2.5">
-                <span className="text-[34px] font-semibold leading-none tabular-nums" style={{ color: tone }}>
-                  {positive ? '+' : '−'}${formatNumber(Math.abs(pnl), 2)}
-                </span>
-                <span className="text-lg font-medium tabular-nums" style={{ color: tone }}>
-                  {positive ? '▲' : '▼'} {Math.abs(pnlPct).toFixed(2)}%
-                </span>
-              </div>
-              <div className="mt-1 text-[11px] uppercase tracking-wider text-[var(--text-tertiary)]">
-                {isOpen ? 'Unrealized PnL' : 'Realized PnL'}
-              </div>
-
-              {/* Stats */}
-              <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-[var(--border-color)]">
-                <CardStat label="Invested" value={`$${formatCompact(margin)}`} />
-                <CardStat label="Avg. entry" value={px(avgEntry)} border />
-                <CardStat label={isOpen ? 'Current' : 'Exit'} value={px(currentPrice)} border />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-5 pb-4 pt-1">
-              <span className="text-base font-semibold lowercase text-[var(--text-primary)]">bulkstats</span>
-              <span className="text-[11px] text-[var(--text-tertiary)]">observe on bulkstats.com</span>
-            </div>
+        <canvas
+          ref={canvasRef}
+          style={{ width: W, height: H }}
+          className="rounded-[22px] shadow-2xl"
+        />
+        {!candles && (
+          <div className="absolute inset-0 grid place-items-center">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" />
           </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={replay}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+          >
+            <Play className="h-3.5 w-3.5" /> Replay
+          </button>
+          <button
+            onClick={download}
+            disabled={busy || !canExport}
+            title={canExport ? 'Download as video' : 'Video recording not supported in this browser'}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_25%,transparent)] disabled:opacity-50"
+          >
+            {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</> : <><Download className="h-3.5 w-3.5" /> Download video</>}
+          </button>
         </div>
       </div>
     </div>
-  );
-}
-
-function CardStat({ label, value, border }: { label: string; value: string; border?: boolean }) {
-  return (
-    <div className={`px-3 py-3 ${border ? 'border-l border-[var(--border-color)]' : ''}`}>
-      <div className="text-[11px] text-[var(--text-tertiary)]">{label}</div>
-      <div className="mt-1 text-base font-medium tabular-nums text-[var(--text-primary)]">{value}</div>
-    </div>
-  );
-}
-
-// Compact SVG candlestick chart: wicks + bodies, with a dotted horizontal line
-// at the current price carrying a colored pill on the right edge.
-function MiniCandles({ candles, currentPrice, tone, priceLabel }: { candles: Candle[]; currentPrice: number; tone: string; priceLabel: string }) {
-  const W = 400, H = 150, padR = 64, padT = 10, padB = 22;
-  if (candles.length < 2) {
-    return <div className="h-[150px] w-full" />;
-  }
-  const n = candles.length;
-  const plotW = W - padR;
-  const lo = Math.min(...candles.map((c) => c.l), currentPrice);
-  const hi = Math.max(...candles.map((c) => c.h), currentPrice);
-  const range = hi - lo || 1;
-  const y = (p: number) => padT + (1 - (p - lo) / range) * (H - padT - padB);
-  const step = plotW / n;
-  const bodyW = Math.max(2, Math.min(10, step * 0.6));
-  const pos = 'var(--pos)', neg = 'var(--neg)';
-  const cy = y(currentPrice);
-
-  // Time labels — first and middle candle.
-  const fmtT = (t: number) => new Date(t).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-[150px] w-full" preserveAspectRatio="none">
-      {candles.map((c, i) => {
-        const cx = i * step + step / 2;
-        const up = c.c >= c.o;
-        const col = up ? pos : neg;
-        const yO = y(c.o), yC = y(c.c);
-        const top = Math.min(yO, yC);
-        const hgt = Math.max(1, Math.abs(yC - yO));
-        return (
-          <g key={i}>
-            <line x1={cx} x2={cx} y1={y(c.h)} y2={y(c.l)} stroke={col} strokeWidth={1} />
-            <rect x={cx - bodyW / 2} y={top} width={bodyW} height={hgt} fill={col} />
-          </g>
-        );
-      })}
-      {/* current-price dotted line + pill */}
-      <line x1={0} x2={plotW} y1={cy} y2={cy} stroke={tone} strokeWidth={1} strokeDasharray="2 3" opacity={0.9} />
-      <rect x={plotW + 2} y={cy - 11} width={padR - 4} height={22} rx={6} fill={tone} />
-      <text x={plotW + padR / 2} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#fff">
-        {priceLabel}
-      </text>
-      {/* sparse x-axis time labels */}
-      <text x={step / 2} y={H - 6} fontSize={10} fill="var(--text-tertiary)">{fmtT(candles[0].t)}</text>
-      <text x={plotW / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="var(--text-tertiary)">
-        {fmtT(candles[Math.floor(n / 2)].t)}
-      </text>
-    </svg>
   );
 }
