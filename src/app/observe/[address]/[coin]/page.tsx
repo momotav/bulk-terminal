@@ -22,7 +22,9 @@ import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, ty
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
+import { TradeShareCard } from '@/components/TradeShareCard';
 import { getCoinColor } from '@/lib/coins';
+import { Image as ImageIcon } from 'lucide-react';
 
 export default function ObserveTradePage() {
   const params = useParams<{ address: string; coin: string }>();
@@ -41,6 +43,7 @@ export default function ObserveTradePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showCard, setShowCard] = useState(false);
 
   // Resolve the full symbol ("BTC" → "BTC-USD") from the wallet's own fills so
   // we never guess a quote the market doesn't use.
@@ -203,6 +206,12 @@ export default function ObserveTradePage() {
             {formatAddress(address)} <ExternalLink className="h-3 w-3" />
           </Link>
           <button
+            onClick={() => setShowCard(true)}
+            className="inline-flex items-center gap-1.5 border border-[var(--role-line)] px-2.5 py-1 text-[11px] uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
+          >
+            <ImageIcon className="h-3.5 w-3.5" /> Card
+          </button>
+          <button
             onClick={share}
             className="inline-flex items-center gap-1.5 border border-[var(--role-line)] px-2.5 py-1 text-[11px] uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
           >
@@ -210,6 +219,27 @@ export default function ObserveTradePage() {
           </button>
         </div>
       </div>
+
+      {showCard && (
+        <TradeShareCard
+          onClose={() => setShowCard(false)}
+          data={{
+            address,
+            symbol,
+            coin,
+            side: life.side,
+            isOpen: life.isOpen,
+            openedAt: life.openedAt,
+            closedAt: life.closedAt,
+            avgEntry: life.avgEntry,
+            size: life.peakSize,
+            leverage: livePos?.leverage ?? 0,
+            markPrice,
+            exitPrice: life.isOpen ? markPrice : lastPrice,
+            pnl: life.finalPnl,
+          }}
+        />
+      )}
 
       {/* Terminal grid — big chart left, data readout right. */}
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
