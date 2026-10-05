@@ -45,8 +45,12 @@ const CANDLE_LIMIT = 5000; // BULK returns the full range for a ranged query (ca
 // the default interval. Comfortable for lightweight-charts, keeps detail.
 const FIT_BARS = 1200;
 
-const IV_SECONDS: [string, number][] = [['1m', 60], ['3m', 180], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
+const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
+
+// Always show at least this much history, even for a freshly-opened trade, so
+// the entry has price context before it instead of sitting at the far-left edge.
+const MIN_SPAN_MS = 24 * 3_600_000;
 
 const resolveColor = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
@@ -89,7 +93,9 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
 
   const [userInterval, setUserInterval] = useState<string | null>(null);
   const endT = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
-  const iv = userInterval ?? interval ?? pickInterval(openedAt, Date.now());
+  // Pick the default interval from the full displayed span (trade open OR the
+  // minimum lead-in window, whichever reaches further back) to now.
+  const iv = userInterval ?? interval ?? pickInterval(Math.min(openedAt, Date.now() - MIN_SPAN_MS), Date.now());
 
   const [candles, setCandles] = useState<Candle[] | null>(null);
   // The interval the current `candles` were actually fetched with. The chart
@@ -128,10 +134,13 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const bar = barSeconds(iv) * 1000;
     const pad = bar * 8;
     const cap = FIT_BARS * bar; // span we'll show in full for this interval
+    // Reach back to the trade open, but never show less than MIN_SPAN_MS of
+    // history — so a freshly-opened trade still has context before the entry.
+    const wantStart = Math.min(openedAt - pad, now - MIN_SPAN_MS);
     let startTime: number, endTime: number;
-    if (now - openedAt <= cap) {
-      // Full open→now fits.
-      startTime = openedAt - pad;
+    if (now - wantStart <= cap) {
+      // Full displayed span fits.
+      startTime = wantStart;
       endTime = now + bar * 4;
     } else {
       // Too fine for the whole span — anchor the window at the trade.
