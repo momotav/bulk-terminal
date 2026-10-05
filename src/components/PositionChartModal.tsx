@@ -73,9 +73,10 @@ interface Props {
   onClose: () => void;
 }
 
-// Available time intervals. Kept short so the chart is readable on a
-// streaming feed; we don't need every interval BULK supports.
+// Available time intervals. 1m added so users can zoom right into the
+// minutes around a trade's entry/exit.
 const INTERVALS: { id: string; label: string }[] = [
+  { id: '1m', label: '1m' },
   { id: '5m', label: '5m' },
   { id: '15m', label: '15m' },
   { id: '1h', label: '1H' },
@@ -83,8 +84,21 @@ const INTERVALS: { id: string; label: string }[] = [
   { id: '1d', label: '1D' },
 ];
 
-const DEFAULT_INTERVAL = '1h';
-const CANDLE_LIMIT = 200;
+// BULK returns the full range for a ranged query (caps at 5000); the backend
+// `limit` param is effectively ignored once startTime/endTime are given.
+const CANDLE_LIMIT = 5000;
+const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
+const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
+// How many candles we're willing to render for the full history view — this
+// picks the default interval (finest one whose full span fits in this budget).
+const FIT_BARS = 1200;
+function pickFullInterval(histStart: number, now: number): string {
+  const span = (now - histStart) / 1000;
+  for (const [name, sec] of IV_SECONDS) {
+    if (span / sec <= FIT_BARS) return name;
+  }
+  return '1d';
+}
 
 // One custom trade marker (the position's open, and the close for closed
 // trades). Rendered as an HTML overlay and positioned each frame from its
@@ -128,32 +142,39 @@ export function PositionChartModal({ position, onClose }: Props) {
   // the backdrop element below for the full rationale.
   const mouseDownOnBackdropRef = useRef(false);
 
-  // Auto-pick a sensible default interval. For live we always start at
-  // 1H. For closed positions we pick based on trade duration so a
-  // 30-minute scalp doesn't render as one candle on a 1D chart, and a
-  // multi-day swing doesn't render as 5000 5m candles.
-  const initialInterval = (() => {
-    if (!position || position.kind === 'live') return DEFAULT_INTERVAL;
-    const durMs = position.closedAt - position.openedAt;
-    const hours = durMs / (60 * 60_000);
-    if (hours < 1) return '5m';
-    if (hours < 6) return '15m';
-    if (hours < 48) return '1h';
-    if (hours < 240) return '4h';   // ~10 days
-    return '1d';
-  })();
-
-  const [interval, setInterval] = useState(initialInterval);
+  // The market's earliest candle (its listing), probed once per symbol so the
+  // default view can span the WHOLE history (first candle → now) like the
+  // observe page, instead of only the few candles around the trade.
+  const [histStart, setHistStart] = useState<number | null>(null);
+  // User-chosen interval (null = auto). The effective interval is derived: the
+  // finest one whose full history fits in FIT_BARS, falling back to 1h until
+  // the probe resolves.
+  const [userInterval, setUserInterval] = useState<string | null>(null);
+  const interval = userInterval ?? (histStart != null ? pickFullInterval(histStart, Date.now()) : '1h');
 
   // Throttled live mark price (live positions only). null until the first
   // SSE tick arrives; the header falls back to the snapshot mark until then.
   const [liveMark, setLiveMark] = useState<number | null>(null);
 
-  // Reset interval when the active position changes — otherwise switching
-  // from a 5-minute scalp to a 5-day swing would keep the wrong interval.
+  // Reset the picked interval + live mark when the active position changes.
   useEffect(() => {
-    setInterval(initialInterval);
+    setUserInterval(null);
     setLiveMark(null);
+  }, [position]);
+
+  // Probe the market's earliest candle (cheap daily pull from epoch 0; BULK
+  // returns from the listing forward). Falls back to the trade's own start so
+  // we still render if the probe fails.
+  useEffect(() => {
+    if (!position) return;
+    let cancelled = false;
+    setHistStart(null);
+    const fallback = position.kind === 'closed' ? position.openedAt : Date.now() - 7 * 86_400_000;
+    analytics
+      .getCandles(position.symbol, '1d', 1000, { startTime: 0, endTime: Date.now() })
+      .then((res) => { if (!cancelled) setHistStart(res.candles[0]?.t ?? fallback); })
+      .catch(() => { if (!cancelled) setHistStart(fallback); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -202,29 +223,33 @@ export function PositionChartModal({ position, onClose }: Props) {
     };
   }, [position]);
 
-  // Fetch candles whenever the active position or interval changes.
-  // For live positions we fetch the most recent N candles. For closed
-  // positions we fetch a window centered on the trade's lifespan so the
-  // chart always shows the relevant period (otherwise a trade that
-  // closed days ago would render off-screen).
+  // Fetch candles whenever the active position, interval, or history start
+  // changes. By default (auto interval) we load the WHOLE history, listing →
+  // now, at an interval that fits in FIT_BARS — same as the observe page. When
+  // the interval is too fine to cover all of it (e.g. 1m over weeks), we load a
+  // window anchored at the trade so the user still gets minute detail there.
   useEffect(() => {
     if (!position) return;
+    if (histStart == null) { setLoading(true); return; } // wait for the probe
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    // Time window for closed-position candles. We pad the trade's
-    // lifespan by 25% on each side so users see context (price action
-    // before entry, price action after exit). For very short trades we
-    // floor the padding at 30 min so the chart isn't pixel-narrow.
-    let timeWindow: { startTime?: number; endTime?: number } = {};
-    if (position.kind === 'closed') {
-      const dur = Math.max(position.closedAt - position.openedAt, 30 * 60_000);
-      const pad = Math.max(dur * 0.25, 15 * 60_000);
-      timeWindow = {
-        startTime: position.openedAt - pad,
-        endTime: position.closedAt + pad,
-      };
+    const now = Date.now();
+    const bar = barSeconds(interval) * 1000;
+    const pad = bar * 6;
+    const cap = FIT_BARS * bar; // span this interval can cover in full
+    let timeWindow: { startTime?: number; endTime?: number };
+    if (now - histStart <= cap) {
+      // Whole history fits — show first candle → now.
+      timeWindow = { startTime: Math.max(0, histStart - pad), endTime: now + bar * 4 };
+    } else if (position.kind === 'closed') {
+      // Interval too fine for all of it — window anchored at the trade.
+      const startTime = Math.max(histStart, position.openedAt - pad);
+      timeWindow = { startTime, endTime: Math.min(now + bar * 4, Math.max(position.closedAt + pad, startTime + cap)) };
+    } else {
+      // Live + fine interval: the most recent window up to now.
+      timeWindow = { startTime: Math.max(histStart, now - cap), endTime: now + bar * 4 };
     }
 
     analytics
@@ -245,7 +270,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [position, interval]);
+  }, [position, interval, histStart]);
 
   // Fetch the wallet's fill history for this market. Doesn't depend on
   // the interval — fills are point events, not aggregates. Fired once per
@@ -482,12 +507,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     // time-scale space without drawing anything and is honored by fitContent,
     // unlike a manual visible-range tweak (which fights the auto-fit).
     if (position.kind === 'closed' && data.length > 0) {
-      const barSec =
-        interval === '5m' ? 300 :
-        interval === '15m' ? 900 :
-        interval === '1h' ? 3600 :
-        interval === '4h' ? 14400 :
-        interval === '1d' ? 86400 : 3600;
+      const barSec = barSeconds(interval);
       const lastSec = data[data.length - 1].time as number;
       for (let i = 1; i <= 3; i++) {
         data.push({ time: (lastSec + i * barSec) as UTCTimestamp });
@@ -683,12 +703,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     let es: EventSource | null = null;
     let headerFlush: number | null = null;
     if (position.kind === 'live') {
-      const bucketSec =
-        interval === '5m' ? 300 :
-        interval === '15m' ? 900 :
-        interval === '1h' ? 3600 :
-        interval === '4h' ? 14400 :
-        interval === '1d' ? 86400 : 3600;
+      const bucketSec = barSeconds(interval);
 
       es = new EventSource(marketStreamUrl(position.symbol));
       es.onmessage = (ev) => {
@@ -993,7 +1008,7 @@ export function PositionChartModal({ position, onClose }: Props) {
           {INTERVALS.map((iv) => (
             <button
               key={iv.id}
-              onClick={() => setInterval(iv.id)}
+              onClick={() => setUserInterval(iv.id)}
               className={`px-2.5 py-1 text-xs rounded transition-colors ${
                 interval === iv.id
                   ? 'bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]'
