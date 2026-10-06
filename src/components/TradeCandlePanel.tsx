@@ -94,6 +94,14 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   const replayTimerRef = useRef<number | null>(null);
   const replayCutoffRef = useRef<number>(Infinity); // ms — markers/candles after this are hidden
   const replayingRef = useRef(false);
+  // Lazy back-fill plumbing: displayRef holds EVERY candle currently on the
+  // series (the initial window + any older chunks paged in as the user scrolls
+  // left), so even at 1m/5m the whole history is reachable despite BULK's
+  // 5000-per-request cap. Survives re-renders (unlike `plotted`, which is the
+  // initial window only).
+  const displayRef = useRef<Candle[]>([]);
+  const loadingOlderRef = useRef(false);
+  const histStartRef = useRef<number | null>(null);
 
   const [userInterval, setUserInterval] = useState<string | null>(null);
   // The market's earliest available candle (its listing). Probed once per symbol
@@ -187,6 +195,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     [candles],
   );
   plottedRef.current = plotted;
+  histStartRef.current = histStart;
 
   const toLW = (c: Candle): CandlestickData => ({ time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c });
 
@@ -273,6 +282,77 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     // via the markers, or switch to 1m/5m for minute detail at the entry.
     chart.timeScale().fitContent();
 
+    // ---- lazy back-fill: page older candles in as the user scrolls left ------
+    // The initial window is a slice (full history for coarse intervals, a
+    // trade-centered window for fine ones). As the left edge comes into view we
+    // fetch the next older chunk (BULK caps each request at 5000) and prepend it,
+    // keeping the viewport fixed — so the whole history is reachable at ANY
+    // timeframe, 1m included, just by scrolling back.
+    displayRef.current = [...plotted];
+    loadingOlderRef.current = false;
+    const barMs = barSeconds(loadedIv) * 1000;
+    const loadOlder = async () => {
+      if (loadingOlderRef.current) return;
+      const buf = displayRef.current;
+      if (buf.length === 0) return;
+      const earliest = buf[0].t;
+      const hs = histStartRef.current;
+      if (hs != null && earliest - barMs <= hs) return; // reached the listing
+      loadingOlderRef.current = true;
+      try {
+        const CHUNK = 3000;
+        const startTime = Math.max(hs ?? 0, earliest - CHUNK * barMs);
+        const endTime = earliest - 1;
+        if (endTime <= startTime) return;
+        const res = await analytics.getCandles(symbol, loadedIv, 5000, { startTime, endTime });
+        const older = (res.candles || []).filter(
+          (c) => c.t < earliest && Number.isFinite(c.o) && c.o > 0 && Number.isFinite(c.h) && c.h > 0 && Number.isFinite(c.l) && c.l > 0 && Number.isFinite(c.c) && c.c > 0,
+        );
+        const s = seriesRef.current, c = chartRef.current;
+        if (!older.length || !s || !c) return;
+        const merged = clampWicks([...older, ...buf]);
+        displayRef.current = merged;
+        const vis = c.timeScale().getVisibleRange(); // time-based → stable across prepend
+        s.setData(merged.map(toLW));
+        if (vis) { try { c.timeScale().setVisibleRange(vis); } catch { /* out of range */ } }
+      } catch { /* ignore — the user can scroll again to retry */ }
+      finally { loadingOlderRef.current = false; }
+    };
+    // Symmetric forward-fill: page NEWER candles in when scrolling right toward
+    // the present (so a fine-interval window reaches "to the last candle" too).
+    const loadNewer = async () => {
+      if (loadingOlderRef.current) return;
+      const buf = displayRef.current;
+      if (buf.length === 0) return;
+      const latest = buf[buf.length - 1].t;
+      const now = Date.now();
+      if (latest + barMs >= now) return; // already at the present
+      loadingOlderRef.current = true;
+      try {
+        const CHUNK = 3000;
+        const startTime = latest + 1;
+        const endTime = Math.min(now + barMs * 2, latest + CHUNK * barMs);
+        const res = await analytics.getCandles(symbol, loadedIv, 5000, { startTime, endTime });
+        const newer = (res.candles || []).filter(
+          (c) => c.t > latest && Number.isFinite(c.o) && c.o > 0 && Number.isFinite(c.h) && c.h > 0 && Number.isFinite(c.l) && c.l > 0 && Number.isFinite(c.c) && c.c > 0,
+        );
+        const s = seriesRef.current, c = chartRef.current;
+        if (!newer.length || !s || !c) return;
+        const merged = clampWicks([...buf, ...newer]);
+        displayRef.current = merged;
+        const vis = c.timeScale().getVisibleRange();
+        s.setData(merged.map(toLW));
+        if (vis) { try { c.timeScale().setVisibleRange(vis); } catch { /* out of range */ } }
+      } catch { /* ignore */ }
+      finally { loadingOlderRef.current = false; }
+    };
+    const onRange = (range: { from: number; to: number } | null) => {
+      if (!range || replayingRef.current) return;
+      if (range.from < 12) loadOlder();
+      else if (range.to > displayRef.current.length - 12) loadNewer();
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
     const resize = () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth; const h = containerRef.current.clientHeight;
@@ -352,7 +432,9 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   // ---- replay ---------------------------------------------------------------
   useEffect(() => {
     const s = seriesRef.current;
-    const data = plottedRef.current;
+    // Use the full displayed buffer (initial window + any back-filled older
+    // candles) so stopping replay doesn't wipe history the user scrolled in.
+    const data = displayRef.current.length ? displayRef.current : plottedRef.current;
     if (!s || data.length < 2) return;
 
     if (!replaying) {
