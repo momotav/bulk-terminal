@@ -106,7 +106,8 @@ export function TradeShareCard({ data, onClose }: Props) {
   const varsRef = useRef<Record<string, string> | null>(null);
   const scaleRef = useRef<{ lo: number; hi: number } | null>(null); // smoothed y-axis
   const logoRef = useRef<HTMLImageElement | null>(null);
-  const bulkLogoRef = useRef<HTMLImageElement | null>(null);
+  const lockupLightRef = useRef<HTMLImageElement | null>(null); // for dark cards
+  const lockupDarkRef = useRef<HTMLImageElement | null>(null);  // for light cards
   const lastHeadRef = useRef(0);
   // live option values read inside the (memoised) draw closure
   const optRef = useRef({ hideWallet, showRef, refCode });
@@ -132,11 +133,15 @@ export function TradeShareCard({ data, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coin]);
 
-  // Preload the BULK wordmark for the "trade on BULK" mark.
+  // Preload both "trade on BULK" lockups (light for dark cards, dark for light).
   useEffect(() => {
-    const img = new Image();
-    img.onload = () => { bulkLogoRef.current = img; draw(lastHeadRef.current); };
-    img.src = '/bulk-logomark.png';
+    const load = (src: string, ref: React.MutableRefObject<HTMLImageElement | null>) => {
+      const img = new Image();
+      img.onload = () => { ref.current = img; draw(lastHeadRef.current); };
+      img.src = src;
+    };
+    load('/bulk-lockup-light.png', lockupLightRef);
+    load('/bulk-lockup-dark.png', lockupDarkRef);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -237,16 +242,13 @@ export function TradeShareCard({ data, onClose }: Props) {
     roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
     ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
-    // "trade on" on its own row, then the (enlarged) BULK wordmark below it,
-    // right-aligned. The date/time moved into the coin card, so there's room.
-    const blogo = bulkLogoRef.current;
-    if (blogo && blogo.complete && blogo.naturalWidth > 0) {
-      const lh = 26, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
-      const logoCx = W - PAD - lw / 2; // center the block on the logo
-      ctx.drawImage(blogo, W - PAD - lw, PAD + 18, lw, lh);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
-      ctx.fillText('trade on', logoCx, PAD + 13);
+    // "trade on BULK" lockup, top-right. Pick the light or dark version from the
+    // card background's luminance so it's always readable in either theme.
+    const bgLum = (() => { const m = V.bgBase.match(/\d+/g); if (!m) return 20; const [r, gr, b] = m.slice(0, 3).map(Number); return 0.299 * r + 0.587 * gr + 0.114 * b; })();
+    const lockup = bgLum > 140 ? lockupDarkRef.current : lockupLightRef.current;
+    if (lockup && lockup.complete && lockup.naturalWidth > 0) {
+      const lw = 118, lh = lw * (lockup.naturalHeight / lockup.naturalWidth);
+      ctx.drawImage(lockup, W - PAD - lw, PAD - 2, lw, lh);
     }
 
     // ---- chart (scrolling feed) ----
@@ -432,7 +434,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     // date of the candle currently in view, right-aligned on the coin row
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
-    ctx.fillText(fmtDate(curT), W - PAD - 2, coinY);
+    ctx.fillText(fmtDate(curT), W - PAD - 16, coinY);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
     // headline PnL (0 before entry) + % — no label, larger number, measured so
