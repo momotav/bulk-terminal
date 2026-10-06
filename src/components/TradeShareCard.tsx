@@ -50,7 +50,6 @@ const LABEL_SEC = 1.3;       // how long a fill's pop-up label stays up
 // Chart band + body layout (taller chart, tighter bottom gap).
 const CHART_Y = 78, CHART_H = 204;
 const BODY_Y = 302, BODY_H = 206;
-const REF_BAND = 50; // extra card height when a referral code is shown
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 // Finest interval that keeps the trade itself under ~70 candles.
@@ -123,8 +122,7 @@ export function TradeShareCard({ data, onClose }: Props) {
   optRef.current = { hideWallet, showRef, refCode };
 
   const canExport = pickMime() !== '';
-  // The card grows by REF_BAND when a referral code is shown.
-  const displayH = H + (showRef && refCode.trim() ? REF_BAND : 0);
+  const displayH = H;
 
   // Preload the coin logo from /public/coins (same-origin → canvas stays clean
   // so the video export still works). Try .svg then .png; fall back to a letter.
@@ -227,7 +225,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     lastHeadRef.current = headF;
     const opt = optRef.current;
     const refShown = opt.showRef && opt.refCode.trim().length > 0;
-    const cardH = H + (refShown ? REF_BAND : 0);
+    const cardH = H;
     const intHead = Math.min(N - 1, Math.floor(h));
     const frac = h - intHead;
 
@@ -444,10 +442,22 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (levTxt) { ctx.fillStyle = V.text; ctx.fillText(levTxt, badgeX + padX + dirW + gapW, coinY + 0.5); }
     ctx.textBaseline = 'alphabetic';
 
-    // date of the candle currently in view, right-aligned on the coin row
+    // date of the candle currently in view, right-aligned on the coin row; the
+    // referral code (when set) sits just under it — tiny label + the code.
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
     ctx.fillText(fmtDate(curT), W - PAD - 16, coinY);
+    if (refShown) {
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = V.text3; ctx.font = `400 9px ${FONT}`;
+      ctx.fillText('referral code', W - PAD - 16, coinY + 20);
+      let fs = 15, shown = opt.refCode.trim();
+      const avail = W / 2 - PAD;
+      ctx.font = `500 ${fs}px ${FONT}`;
+      while (fs > 10 && ctx.measureText(shown).width > avail) { fs -= 1; ctx.font = `500 ${fs}px ${FONT}`; }
+      while (shown.length > 4 && ctx.measureText(shown).width > avail) shown = shown.slice(0, -2) + '…';
+      ctx.fillStyle = V.text; ctx.fillText(shown, W - PAD - 16, coinY + 36);
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
     // headline PnL (0 before entry) + % — no label, larger number, measured so
@@ -478,29 +488,8 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // referral code — a bordered box UNDER the stats grid (card is taller when
-    // shown). Stroke matches the chart/stat dividers; text stays high-contrast.
-    if (refShown) {
-      const code = opt.refCode.trim();
-      const rbx = gx0, rby = gy + gh + 10, rbw = gw * 3, rbh = 32;
-      roundRect(ctx, rbx, rby, rbw, rbh, 10);
-      ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
-      ctx.fillText('Referral code', rbx + 12, rby + rbh / 2);
-      const labelW = ctx.measureText('Referral code').width;
-      const avail = rbw - 24 - labelW - 14;
-      let fs = 15, shown = code;
-      ctx.font = `600 ${fs}px ${FONT}`;
-      while (fs > 10 && ctx.measureText(shown).width > avail) { fs -= 1; ctx.font = `600 ${fs}px ${FONT}`; }
-      while (shown.length > 4 && ctx.measureText(shown).width > avail) shown = shown.slice(0, -2) + '…';
-      ctx.textAlign = 'right'; ctx.fillStyle = V.text; ctx.fillText(shown, rbx + rbw - 12, rby + rbh / 2);
-      ctx.textBaseline = 'alphabetic';
-    }
-
-    // footer — site mention centered in the space below the last element.
-    const footerTop = refShown ? gy + gh + 42 : BODY_Y + BODY_H;
-    const footCy = (footerTop + cardH) / 2;
+    // footer — site mention centered in the space below the body card.
+    const footCy = (BODY_Y + BODY_H + cardH) / 2;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
     ctx.fillText('bulkstats.com', W / 2, footCy);
     ctx.textBaseline = 'alphabetic';
