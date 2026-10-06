@@ -81,6 +81,12 @@ function pickMime(): string {
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const pad2 = (n: number) => String(n).padStart(2, '0');
+// DD/MM/YYYY HH:MM:SS (local time, locale-neutral numerics)
+const fmtDateTime = (t: number) => {
+  const d = new Date(t);
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+};
 
 export function TradeShareCard({ data, onClose }: Props) {
   const { address, symbol, coin, side, isOpen, openedAt, closedAt, avgEntry, size, leverage } = data;
@@ -230,17 +236,15 @@ export function TradeShareCard({ data, onClose }: Props) {
     roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
     ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
-    const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    ctx.textAlign = 'right';
-    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 12);
-    // "trade on" on its own row, then the BULK wordmark below it (right-aligned).
+    // "trade on" on its own row, then the (enlarged) BULK wordmark below it,
+    // right-aligned. The date/time moved into the coin card, so there's room.
     const blogo = bulkLogoRef.current;
     if (blogo && blogo.complete && blogo.naturalWidth > 0) {
       ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = V.text3; ctx.font = `500 10px ${FONT}`;
-      ctx.fillText('trade on', W - PAD, PAD + 29);
-      const lh = 18, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
-      ctx.drawImage(blogo, W - PAD - lw, PAD + 34, lw, lh);
+      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
+      ctx.fillText('trade on', W - PAD, PAD + 13);
+      const lh = 26, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
+      ctx.drawImage(blogo, W - PAD - lw, PAD + 18, lw, lh);
     }
 
     // ---- chart (scrolling feed) ----
@@ -370,11 +374,6 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.textAlign = 'left'; ctx.globalAlpha = 1;
     }
 
-    // time label (head time)
-    const fmtT = (t: number) => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center';
-    ctx.fillText(fmtT(curT), headX, cy0 + ch + 15);
-
     // ---- body card ----
     const by = BODY_Y, bh = BODY_H;
     roundRect(ctx, PAD, by, W - 2 * PAD, bh, 16); ctx.fillStyle = V.bgMuted; ctx.fill();
@@ -416,18 +415,23 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (levTxt) { ctx.fillStyle = V.text; ctx.fillText(levTxt, badgeX + padX + dirW + gapW, coinY + 0.5); }
     ctx.textBaseline = 'alphabetic';
 
-    // headline PnL (0 before entry) + % — measured so they never overlap
+    // date + time of the candle currently in view, right-aligned on the coin row
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
+    ctx.fillText(fmtDateTime(curT), W - PAD - 2, coinY);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+    // headline PnL (0 before entry) + % — no label, larger number, measured so
+    // the number and percentage never overlap.
     const pctNow = margin > 0 ? (pnlNow / margin) * 100 : 0;
     const pnlTxt = `${pnlNow >= 0 ? '+' : '−'}$${Math.abs(pnlNow) >= 100000 ? formatCompact(Math.abs(pnlNow)) : formatNumber(Math.abs(pnlNow), 2)}`;
     const pctTxt = `${pnlNow >= 0 ? '▲' : '▼'} ${Math.abs(pctNow).toFixed(2)}%`;
     ctx.fillStyle = tone;
-    ctx.font = `600 32px ${FONT}`;
+    ctx.font = `600 42px ${FONT}`;
     const pnlW = ctx.measureText(pnlTxt).width;
-    ctx.fillText(pnlTxt, PAD + 18, by + 86);
-    ctx.font = `500 16px ${FONT}`;
-    ctx.fillText(pctTxt, PAD + 18 + pnlW + 12, by + 86);
-    ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`;
-    ctx.fillText(isOpen ? 'UNREALIZED PNL' : 'REALIZED PNL', PAD + 18, by + 106);
+    ctx.fillText(pnlTxt, PAD + 18, by + 98);
+    ctx.font = `500 18px ${FONT}`;
+    ctx.fillText(pctTxt, PAD + 18 + pnlW + 12, by + 98);
 
     // stats
     const gy = by + 124, gh = 62, gw = (W - 2 * PAD - 24) / 3, gx0 = PAD + 12;
