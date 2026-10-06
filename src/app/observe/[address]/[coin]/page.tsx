@@ -78,12 +78,22 @@ export default function ObserveTradePage() {
     [fills, coin],
   );
 
-  // Restrict to the pinned trade's window (with a little slop on each edge) so
-  // we reconstruct exactly that one instance. Unpinned → the whole coin history,
-  // from which buildTradeLifecycle shows the most recent instance.
+  // Pin the trade instance the URL points at. Unpinned → the whole coin history
+  // (buildTradeLifecycle shows the most recent instance).
+  //
+  // CLOSED (to set): keep every fill UP TO the close and let buildTradeLifecycle
+  // slice back to the real open (the last flat→non-flat before the close). We do
+  // NOT filter on `from` because BULK's reported openTime often doesn't match the
+  // position's actual first fill — it can sit days late, or (as for continuously-
+  // held positions it splits into lot-records) land mid-position. Filtering on it
+  // dropped the opening fills and left a degenerate 1–2 fill fragment with wrong/
+  // missing markers. Trusting only the close reconstructs the whole real trade.
+  //
+  // OPEN (from only): fills from `from` onward — the current instance.
   const tradeFills = useMemo(() => {
     if (!pinned) return coinFills;
-    return coinFills.filter((f) => f.timestamp >= fromMs - 2000 && (toMs > 0 ? f.timestamp <= toMs + 2000 : true));
+    if (toMs > 0) return coinFills.filter((f) => f.timestamp <= toMs + 2000);
+    return coinFills.filter((f) => f.timestamp >= fromMs - 2000);
   }, [coinFills, pinned, fromMs, toMs]);
 
   // Live position + mark (if this market is currently open in the wallet).
