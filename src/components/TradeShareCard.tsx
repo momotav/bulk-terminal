@@ -50,6 +50,7 @@ const LABEL_SEC = 1.3;       // how long a fill's pop-up label stays up
 // Chart band + body layout (taller chart, tighter bottom gap).
 const CHART_Y = 78, CHART_H = 204;
 const BODY_Y = 302, BODY_H = 206;
+const REF_BAND = 50; // extra card height when a referral code is shown
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 // Finest interval that keeps the trade itself under ~70 candles.
@@ -58,11 +59,19 @@ function pickInterval(tradeMs: number): [string, number] {
   return IV_SECONDS[IV_SECONDS.length - 1];
 }
 
+// Curated, always-harmonious gradient pairs — picked deterministically per
+// wallet (instead of arbitrary hues that could clash).
+const WALLET_GRADS: [string, string][] = [
+  ['#FF8A3D', '#FF3D77'], ['#3D9BFF', '#7A5CFF'], ['#21C07A', '#0E8F8F'],
+  ['#FFB457', '#FF6B6B'], ['#A78BFA', '#EC4899'], ['#34D399', '#3B82F6'],
+  ['#F59E0B', '#EF4444'], ['#22D3EE', '#4F7BFF'], ['#F472B6', '#A855F7'],
+  ['#FACC15', '#F97316'], ['#2DD4BF', '#6366F1'], ['#FB7185', '#C026D3'],
+];
 function avatarHues(addr: string): [string, string, string] {
   let h = 7;
   for (const c of addr) h = (h * 31 + c.charCodeAt(0)) | 0;
-  const h1 = Math.abs(h) % 360;
-  return [`hsl(${h1} 65% 55%)`, `hsl(${(h1 + 48) % 360} 70% 42%)`, addr.replace(/^0x/, '').slice(0, 2).toUpperCase()];
+  const [a1, a2] = WALLET_GRADS[Math.abs(h) % WALLET_GRADS.length];
+  return [a1, a2, addr.replace(/^0x/, '').slice(0, 2).toUpperCase()];
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -114,6 +123,8 @@ export function TradeShareCard({ data, onClose }: Props) {
   optRef.current = { hideWallet, showRef, refCode };
 
   const canExport = pickMime() !== '';
+  // The card grows by REF_BAND when a referral code is shown.
+  const displayH = H + (showRef && refCode.trim() ? REF_BAND : 0);
 
   // Preload the coin logo from /public/coins (same-origin → canvas stays clean
   // so the video export still works). Try .svg then .png; fall back to a letter.
@@ -215,6 +226,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     const h = Math.max(0, Math.min(N - 1, headF));
     lastHeadRef.current = headF;
     const opt = optRef.current;
+    const refShown = opt.showRef && opt.refCode.trim().length > 0;
+    const cardH = H + (refShown ? REF_BAND : 0);
     const intHead = Math.min(N - 1, Math.floor(h));
     const frac = h - intHead;
 
@@ -222,20 +235,20 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.scale(SCALE, SCALE);
     ctx.imageSmoothingEnabled = true;
     (ctx as any).imageSmoothingQuality = 'high';
-    ctx.clearRect(0, 0, W, H);
-    roundRect(ctx, 0, 0, W, H, 22); ctx.fillStyle = V.accent; ctx.fill();
-    roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
+    ctx.clearRect(0, 0, W, cardH);
+    roundRect(ctx, 0, 0, W, cardH, 22); ctx.fillStyle = V.accent; ctx.fill();
+    roundRect(ctx, 3, 3, W - 6, cardH - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
 
-    // ---- header ----  (wallet hidden → anonymous)
-    const [a1, a2, initials] = avatarHues(address);
+    // ---- header ----  (wallet hidden → "bulker")
+    const [a1, a2, initials] = avatarHues(opt.hideWallet ? 'bulker' : address);
     const ax = PAD + 24, ay = PAD + 24, ar = 24;
     const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
-    if (opt.hideWallet) { g.addColorStop(0, V.text3); g.addColorStop(1, V.border); } else { g.addColorStop(0, a1); g.addColorStop(1, a2); }
+    g.addColorStop(0, a1); g.addColorStop(1, a2);
     ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `600 ${opt.hideWallet ? 18 : 15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(opt.hideWallet ? '?' : initials, ax, ay + 1);
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${opt.hideWallet ? 17 : 15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(opt.hideWallet ? 'B' : initials, ax, ay + 1);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'Anonymous' : formatAddress(address), PAD + 58, PAD + 18);
+    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'bulker' : formatAddress(address), PAD + 58, PAD + 18);
     const badge = isOpen ? 'OPEN' : 'CLOSED';
     ctx.font = `600 11px ${FONT}`;
     const bw = ctx.measureText(badge).width + 16;
@@ -247,8 +260,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     const bgLum = (() => { const m = V.bgBase.match(/\d+/g); if (!m) return 20; const [r, gr, b] = m.slice(0, 3).map(Number); return 0.299 * r + 0.587 * gr + 0.114 * b; })();
     const lockup = bgLum > 140 ? lockupDarkRef.current : lockupLightRef.current;
     if (lockup && lockup.complete && lockup.naturalWidth > 0) {
-      const lw = 118, lh = lw * (lockup.naturalHeight / lockup.naturalWidth);
-      ctx.drawImage(lockup, W - PAD - lw, PAD - 2, lw, lh);
+      const lw = 98, lh = lw * (lockup.naturalHeight / lockup.naturalWidth);
+      ctx.drawImage(lockup, W - PAD - lw, PAD - 4, lw, lh);
     }
 
     // ---- chart (scrolling feed) ----
@@ -453,7 +466,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     const gy = by + 124, gh = 62, gw = (W - 2 * PAD - 24) / 3, gx0 = PAD + 12;
     roundRect(ctx, gx0, gy, gw * 3, gh, 12); ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
     const stats: [string, string][] = [
-      ['Invested', `$${formatCompact(margin)}`],
+      ['Margin', `$${formatCompact(margin)}`],
       ['Avg. entry', px(avgEntry)],
       [isOpen ? 'Current' : 'Exit', px(price)],
     ];
@@ -465,23 +478,32 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // footer — site mention centered in the space below the body card (BODY_Y +
-    // BODY_H → H), both horizontally and vertically.
-    const footCy = (BODY_Y + BODY_H + H) / 2;
+    // referral code — a bordered box UNDER the stats grid (card is taller when
+    // shown). Stroke matches the chart/stat dividers; text stays high-contrast.
+    if (refShown) {
+      const code = opt.refCode.trim();
+      const rbx = gx0, rby = gy + gh + 10, rbw = gw * 3, rbh = 32;
+      roundRect(ctx, rbx, rby, rbw, rbh, 10);
+      ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
+      ctx.fillText('Referral code', rbx + 12, rby + rbh / 2);
+      const labelW = ctx.measureText('Referral code').width;
+      const avail = rbw - 24 - labelW - 14;
+      let fs = 15, shown = code;
+      ctx.font = `600 ${fs}px ${FONT}`;
+      while (fs > 10 && ctx.measureText(shown).width > avail) { fs -= 1; ctx.font = `600 ${fs}px ${FONT}`; }
+      while (shown.length > 4 && ctx.measureText(shown).width > avail) shown = shown.slice(0, -2) + '…';
+      ctx.textAlign = 'right'; ctx.fillStyle = V.text; ctx.fillText(shown, rbx + rbw - 12, rby + rbh / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // footer — site mention centered in the space below the last element.
+    const footerTop = refShown ? gy + gh + 42 : BODY_Y + BODY_H;
+    const footCy = (footerTop + cardH) / 2;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
     ctx.fillText('bulkstats.com', W / 2, footCy);
     ctx.textBaseline = 'alphabetic';
-    const code = opt.showRef ? opt.refCode.trim() : '';
-    if (code) {
-      // "code: XXXX" bottom-left — shrink the font / ellipsize so even a long
-      // code fits the left side without reaching the centered site mention.
-      const maxW = W / 2 - PAD - 18;
-      let fs = 12, shown = `code: ${code}`;
-      ctx.font = `500 ${fs}px ${FONT}`;
-      while (fs > 8 && ctx.measureText(shown).width > maxW) { fs -= 1; ctx.font = `500 ${fs}px ${FONT}`; }
-      while (shown.length > 8 && ctx.measureText(shown).width > maxW) shown = shown.slice(0, -2) + '…';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.accentText; ctx.fillText(shown, PAD, footCy); ctx.textBaseline = 'alphabetic';
-    }
     ctx.restore();
   }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
 
@@ -518,7 +540,7 @@ export function TradeShareCard({ data, onClose }: Props) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !candles) return;
-    canvas.width = W * SCALE; canvas.height = H * SCALE;
+    canvas.width = W * SCALE; canvas.height = displayH * SCALE;
     varsRef.current = resolveVars();
     scaleRef.current = null;
     let cancelled = false;
@@ -538,12 +560,15 @@ export function TradeShareCard({ data, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
 
-  // Repaint the current (static) frame when a share option changes mid-pause.
+  // Repaint the current (static) frame when a share option changes mid-pause;
+  // resize the canvas backing first so the referral band appears/disappears.
   useEffect(() => {
-    if (!candles || playing || recording) return;
+    const canvas = canvasRef.current;
+    if (!canvas || !candles || playing || recording) return;
+    if (canvas.height !== displayH * SCALE) { canvas.width = W * SCALE; canvas.height = displayH * SCALE; }
     draw(lastHeadRef.current || candles.length - 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hideWallet, showRef, refCode, candles]);
+  }, [hideWallet, showRef, refCode, candles, displayH]);
 
   const replay = () => { if (playing || recording) return; stop(); setPlaying(true); play().then(() => setPlaying(false)); };
 
@@ -584,7 +609,7 @@ export function TradeShareCard({ data, onClose }: Props) {
         <button onClick={onClose} aria-label="Close" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
           <X className="h-4 w-4" />
         </button>
-        <canvas ref={canvasRef} style={{ width: W, height: H }} className="rounded-[22px] shadow-2xl" />
+        <canvas ref={canvasRef} style={{ width: W, height: displayH }} className="rounded-[22px] shadow-2xl" />
         {!candles && <div className="absolute inset-0 grid place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" /></div>}
 
         {/* Share options */}
@@ -612,7 +637,7 @@ export function TradeShareCard({ data, onClose }: Props) {
           <button onClick={replay} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50">
             <Play className="h-3.5 w-3.5" /> Replay
           </button>
-          <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_25%,transparent)] disabled:opacity-50">
+          <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] disabled:opacity-50">
             {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</> : <><Download className="h-3.5 w-3.5" /> Download video</>}
           </button>
         </div>
