@@ -232,17 +232,15 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
     const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
-    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 13);
-    // "trade on [BULK]" — the wordmark right-aligned under the date
+    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 12);
+    // "trade on" on its own row, then the BULK wordmark below it (right-aligned).
     const blogo = bulkLogoRef.current;
     if (blogo && blogo.complete && blogo.naturalWidth > 0) {
-      const lh = 15, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
-      const ly = PAD + 24;
-      ctx.drawImage(blogo, W - PAD - lw, ly, lw, lh);
-      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
-      ctx.fillText('trade on', W - PAD - lw - 6, ly + lh / 2 + 1);
-      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = V.text3; ctx.font = `500 10px ${FONT}`;
+      ctx.fillText('trade on', W - PAD, PAD + 29);
+      const lh = 18, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
+      ctx.drawImage(blogo, W - PAD - lw, PAD + 34, lw, lh);
     }
 
     // ---- chart (scrolling feed) ----
@@ -447,9 +445,12 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // footer — site mention centered at the bottom; optional ref code bottom-left
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
-    ctx.fillText('bulkstats.com', W / 2, H - PAD);
+    // footer — site mention centered in the space below the body card (BODY_Y +
+    // BODY_H → H), both horizontally and vertically.
+    const footCy = (BODY_Y + BODY_H + H) / 2;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
+    ctx.fillText('bulkstats.com', W / 2, footCy);
+    ctx.textBaseline = 'alphabetic';
     const code = opt.showRef ? opt.refCode.trim() : '';
     if (code) {
       // "code: XXXX" bottom-left — shrink the font / ellipsize so even a long
@@ -459,7 +460,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.font = `500 ${fs}px ${FONT}`;
       while (fs > 8 && ctx.measureText(shown).width > maxW) { fs -= 1; ctx.font = `500 ${fs}px ${FONT}`; }
       while (shown.length > 8 && ctx.measureText(shown).width > maxW) shown = shown.slice(0, -2) + '…';
-      ctx.textAlign = 'left'; ctx.fillStyle = V.accentText; ctx.fillText(shown, PAD, H - PAD);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.accentText; ctx.fillText(shown, PAD, footCy); ctx.textBaseline = 'alphabetic';
     }
     ctx.restore();
   }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
