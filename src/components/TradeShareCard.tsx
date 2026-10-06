@@ -19,7 +19,7 @@ import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 
-export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; value: number }
+export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number }
 export interface ShareCardData {
   address: string;
   symbol: string;        // "BTC-USD"
@@ -92,12 +92,39 @@ export function TradeShareCard({ data, onClose }: Props) {
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Share options.
+  const [hideWallet, setHideWallet] = useState(false);
+  const [showRef, setShowRef] = useState(false);
+  const [refCode, setRefCode] = useState('');
   const rafRef = useRef<number | null>(null);
   const holdRef = useRef<number | null>(null);
   const varsRef = useRef<Record<string, string> | null>(null);
   const scaleRef = useRef<{ lo: number; hi: number } | null>(null); // smoothed y-axis
+  const logoRef = useRef<HTMLImageElement | null>(null);
+  const lastHeadRef = useRef(0);
+  // live option values read inside the (memoised) draw closure
+  const optRef = useRef({ hideWallet, showRef, refCode });
+  optRef.current = { hideWallet, showRef, refCode };
 
   const canExport = pickMime() !== '';
+
+  // Preload the coin logo from /public/coins (same-origin → canvas stays clean
+  // so the video export still works). Try .svg then .png; fall back to a letter.
+  useEffect(() => {
+    logoRef.current = null;
+    const exts = ['svg', 'png'];
+    let done = false;
+    const tryLoad = (i: number) => {
+      if (i >= exts.length || done) return;
+      const img = new Image();
+      img.onload = () => { if (!done) { done = true; logoRef.current = img; draw(lastHeadRef.current); } };
+      img.onerror = () => tryLoad(i + 1);
+      img.src = `/coins/${coin.toUpperCase()}.${exts[i]}`;
+    };
+    tryLoad(0);
+    return () => { done = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coin]);
 
   // Focused window: lead-in before the entry, the trade, a little after the
   // close (or up to the latest candle for an open trade).
@@ -167,6 +194,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (!ctx || cs.length < 2) return;
     const N = cs.length;
     const h = Math.max(0, Math.min(N - 1, headF));
+    lastHeadRef.current = headF;
+    const opt = optRef.current;
     const intHead = Math.min(N - 1, Math.floor(h));
     const frac = h - intHead;
 
@@ -176,22 +205,23 @@ export function TradeShareCard({ data, onClose }: Props) {
     roundRect(ctx, 0, 0, W, H, 22); ctx.fillStyle = V.accent; ctx.fill();
     roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
 
-    // ---- header ----
+    // ---- header ----  (wallet hidden → anonymous)
     const [a1, a2, initials] = avatarHues(address);
     const ax = PAD + 24, ay = PAD + 24, ar = 24;
-    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar); g.addColorStop(0, a1); g.addColorStop(1, a2);
+    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
+    if (opt.hideWallet) { g.addColorStop(0, V.text3); g.addColorStop(1, V.border); } else { g.addColorStop(0, a1); g.addColorStop(1, a2); }
     ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `600 15px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(initials, ax, ay + 1);
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${opt.hideWallet ? 18 : 15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(opt.hideWallet ? '?' : initials, ax, ay + 1);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(formatAddress(address), PAD + 58, PAD + 18);
+    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'Anonymous' : formatAddress(address), PAD + 58, PAD + 18);
     const badge = isOpen ? 'OPEN' : 'CLOSED';
     ctx.font = `600 11px ${FONT}`;
     const bw = ctx.measureText(badge).width + 16;
     roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
     ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
-    const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
     ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 14);
     ctx.fillStyle = V.text2; ctx.font = `600 12px ${FONT}`; ctx.fillText('bulkstats', W - PAD, PAD + 33);
@@ -295,11 +325,18 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(px(price), cx0 + cw + 3 + 26, yC + 1); ctx.textBaseline = 'alphabetic';
 
-    // pop-up fill label (speech bubble above the marker): action + $ value
+    // pop-up fill label (speech bubble above the marker). Shows the TRUE
+    // per-fill numbers from the lifecycle: exits (reduce/close/flip) show the
+    // realized PnL booked by that fill (colored); entries (open/add) show the
+    // size added. Never the raw notional, which read like a fake profit.
     if (active && active.op > 0.02) {
       const { e, x, my, op } = active;
       const top = (e.label || (e.buy ? 'Buy' : 'Sell')).toUpperCase();
-      const val = `${e.buy ? '+' : '−'}$${formatCompact(e.value)}`;
+      const isExit = e.action === 'reduce' || e.action === 'close' || e.action === 'flip';
+      const val = isExit
+        ? `${e.realized >= 0 ? '+' : '−'}$${formatCompact(Math.abs(e.realized))}`
+        : `${formatNumber(e.units, e.units < 1 ? 4 : 2)} ${coin}`;
+      const valColor = isExit ? (e.realized >= 0 ? V.pos : V.neg) : V.text2;
       ctx.font = `600 12px ${FONT}`; const w1 = ctx.measureText(val).width;
       ctx.font = `600 9px ${FONT}`; const w0 = ctx.measureText(top).width;
       const bw = Math.max(w0, w1) + 22, bh = 34;
@@ -308,17 +345,16 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.globalAlpha = op;
       roundRect(ctx, bx, byl, bw, bh, 8); ctx.fillStyle = V.bgMuted; ctx.fill();
       ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
-      // caret
       ctx.beginPath(); ctx.moveTo(x - 5, byl + bh); ctx.lineTo(x + 5, byl + bh); ctx.lineTo(x, byl + bh + 6); ctx.closePath();
       ctx.fillStyle = V.bgMuted; ctx.fill();
       ctx.textAlign = 'center';
       ctx.fillStyle = V.text3; ctx.font = `600 9px ${FONT}`; ctx.fillText(top, bx + bw / 2, byl + 13);
-      ctx.fillStyle = e.buy ? V.pos : V.neg; ctx.font = `600 12px ${FONT}`; ctx.fillText(val, bx + bw / 2, byl + 27);
+      ctx.fillStyle = valColor; ctx.font = `600 12px ${FONT}`; ctx.fillText(val, bx + bw / 2, byl + 27);
       ctx.textAlign = 'left'; ctx.globalAlpha = 1;
     }
 
     // time label (head time)
-    const fmtT = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const fmtT = (t: number) => new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center';
     ctx.fillText(fmtT(curT), headX, cy0 + ch + 15);
 
@@ -327,11 +363,19 @@ export function TradeShareCard({ data, onClose }: Props) {
     roundRect(ctx, PAD, by, W - 2 * PAD, bh, 16); ctx.fillStyle = V.bgMuted; ctx.fill();
     ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
 
-    // coin row
-    const coinY = by + 26;
-    ctx.beginPath(); ctx.arc(PAD + 20, coinY, 13, 0, Math.PI * 2); ctx.fillStyle = V.coin; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `700 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(coin.slice(0, 1), PAD + 20, coinY + 1);
+    // coin row — real logo if we have one, else a colored letter disc
+    const coinY = by + 26, cr = 14, ccx = PAD + 21;
+    const logo = logoRef.current;
+    if (logo && logo.complete && logo.naturalWidth > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(ccx, coinY, cr, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.clip();
+      ctx.drawImage(logo, ccx - cr, coinY - cr, cr * 2, cr * 2);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(ccx, coinY, cr, 0, Math.PI * 2); ctx.fillStyle = V.coin; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = `700 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(coin.slice(0, 1), ccx, coinY + 1);
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     const pairName = `${coin}/USD`;
     ctx.fillStyle = V.text; ctx.font = `500 18px ${FONT}`; ctx.fillText(pairName, PAD + 40, coinY + 6);
@@ -373,9 +417,21 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // footer
+    // footer — brand left; ref code (if set) else the observe URL on the right
     ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `600 16px ${FONT}`; ctx.fillText('bulkstats', PAD, H - PAD);
-    ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`; ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
+    const code = opt.showRef ? opt.refCode.trim() : '';
+    if (code) {
+      // "code: XXXX" right-aligned — shrink the font so even a long code fits
+      // the right half of the footer, ellipsizing only as a last resort.
+      const maxW = W - 2 * PAD - 92; // leave room for the "bulkstats" wordmark
+      let fs = 12, shown = `code: ${code}`;
+      ctx.font = `600 ${fs}px ${FONT}`;
+      while (fs > 8 && ctx.measureText(shown).width > maxW) { fs -= 1; ctx.font = `600 ${fs}px ${FONT}`; }
+      while (shown.length > 8 && ctx.measureText(shown).width > maxW) shown = shown.slice(0, -2) + '…';
+      ctx.textAlign = 'right'; ctx.fillStyle = V.accentText; ctx.fillText(shown, W - PAD, H - PAD);
+    } else {
+      ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`; ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
+    }
     ctx.restore();
   }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
 
@@ -421,6 +477,13 @@ export function TradeShareCard({ data, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
 
+  // Repaint the current (static) frame when a share option changes mid-pause.
+  useEffect(() => {
+    if (!candles || playing || recording) return;
+    draw(lastHeadRef.current || candles.length - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hideWallet, showRef, refCode, candles]);
+
   const replay = () => { if (playing || recording) return; stop(); setPlaying(true); play().then(() => setPlaying(false)); };
 
   const download = async () => {
@@ -462,6 +525,28 @@ export function TradeShareCard({ data, onClose }: Props) {
         </button>
         <canvas ref={canvasRef} style={{ width: W, height: H }} className="rounded-[22px] shadow-2xl" />
         {!candles && <div className="absolute inset-0 grid place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" /></div>}
+
+        {/* Share options */}
+        <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
+          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>Hide wallet</span>
+            <input type="checkbox" checked={hideWallet} onChange={(e) => setHideWallet(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>Show referral code</span>
+            <input type="checkbox" checked={showRef} onChange={(e) => setShowRef(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+          </label>
+          {showRef && (
+            <input
+              value={refCode}
+              onChange={(e) => setRefCode(e.target.value)}
+              placeholder="your referral code"
+              maxLength={48}
+              className="mt-0.5 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            />
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           <button onClick={replay} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50">
             <Play className="h-3.5 w-3.5" /> Replay

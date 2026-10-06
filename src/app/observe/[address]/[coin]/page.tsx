@@ -259,7 +259,7 @@ export default function ObserveTradePage() {
             markPrice,
             exitPrice: life.isOpen ? markPrice : lastPrice,
             pnl: life.finalPnl,
-            events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, value: Math.abs(e.sizeDelta) * e.price })),
+            events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
             pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
           }}
         />
