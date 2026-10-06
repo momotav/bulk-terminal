@@ -1198,7 +1198,10 @@ export default function WalletPage() {
   const [revealTimedOut, setRevealTimedOut] = useState(false);
   useEffect(() => {
     setMainDone(false); setFillsDone(false); setRankDone(false); setRevealTimedOut(false);
-    const t = window.setTimeout(() => setRevealTimedOut(true), 12_000);
+    // Last-resort reveal cap. The waves now retry until COMPLETE before flipping
+    // their done flags, so this only fires if the backend stays down — a longer
+    // wait than before, but the user asked for complete info over a fast reveal.
+    const t = window.setTimeout(() => setRevealTimedOut(true), 30_000);
     return () => window.clearTimeout(t);
   }, [address]);
   const [followLoading, setFollowLoading] = useState(false);
@@ -1323,65 +1326,60 @@ export default function WalletPage() {
 
   useEffect(() => {
     if (!address) return;
+    let cancelledMain = false;
 
-    // Single fetch routine. The `silent` flag controls whether we trigger
-    // the loading spinner — true on initial mount, false on background
-    // refresh ticks (so the UI doesn't flicker every 10 seconds during a
-    // stream).
-    const fetchData = async (silent: boolean) => {
-      if (!silent) {
-        setLoading(true);
-        setError('');
-      }
-
+    // One fetch attempt of the main account data. Returns true only when the
+    // data we need to render a COMPLETE page actually came back — i.e. the live
+    // account loaded AND the closed-position fetch succeeded (a genuine 200,
+    // even if empty). The `silent` flag suppresses the spinner on background
+    // ticks.
+    const fetchData = async (silent: boolean): Promise<boolean> => {
+      if (!silent) setError('');
       try {
         // Three parallel fetches:
         //  - wallet.getWallet:        live BULK account + tracked DB row
         //  - userApi.getWalletProfile: claimed username if any
-        //  - wallet.getClosedPositions: closed-position history for the
-        //    derived analysis stats (performance bar, win streak, etc.).
-        //    Backend has a 60s server-side cache so this is cheap; the
-        //    Recent Trades panel hits the same endpoint and shares the
-        //    cache hit.
+        //  - wallet.getClosedPositions: closed-position history (Recent Trades,
+        //    PnL heatmap, per-trade chart, win-rate stats).
         const [walletResult, profileResult, closedResult] = await Promise.all([
           wallet.getWallet(address),
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
           // null (not { positions: [] }) on failure so a THROWN fetch (network /
-          // 429) is distinguishable from a genuine empty — we must never blank
-          // the trade history just because one request failed.
+          // 429) is distinguishable from a genuine empty.
           wallet.getClosedPositions(address, { limit: 200 }).catch(() => null),
         ]);
 
         setData(walletResult);
         setProfile((profileResult as any)?.profile || null);
-        // Only overwrite closed positions when the fetch actually SUCCEEDED.
-        // On a failure (closedResult === null) keep whatever we have — even on
-        // the initial load, so a transient failure can't strand the page on
-        // "no trades" until the next poll heals it. On a successful background
-        // tick, only overwrite with a non-empty list (a success that's empty
-        // mid-session is almost always a hiccup, not the wallet going flat).
+        // Overwrite closed positions when the fetch SUCCEEDED. On a failure
+        // (null) keep what we have. On a silent tick only overwrite with a
+        // non-empty list (a mid-session empty success is almost always a hiccup).
         if (closedResult && (!silent || (closedResult.positions?.length ?? 0) > 0)) {
           setClosedPositions(closedResult.positions || []);
         }
-
-        // Only track on first load — no need to re-track every 10s.
-        if (!silent) {
-          await wallet.trackWallet(address).catch(() => {});
-        }
-      } catch (err) {
-        // On background refresh failures, keep existing data on screen
-        // rather than flashing an error banner. The next tick will retry.
+        // Complete = account came back AND closed-positions fetch succeeded.
+        return !!walletResult && closedResult !== null;
+      } catch {
         if (!silent) setError('Failed to load wallet data');
-      } finally {
-        if (!silent) {
-          setLoading(false);
-          setMainDone(true); // first (non-silent) load done, pass or fail
-        }
+        return false;
       }
     };
 
-    // Initial load — full spinner.
-    fetchData(false);
+    // Initial load — keep retrying until the data is COMPLETE before revealing,
+    // so the page never flashes a half-empty state that heals on the next poll.
+    // The reveal timeout is the ultimate safety net if the backend stays down.
+    (async () => {
+      setLoading(true);
+      let ok = false;
+      for (let attempt = 0; attempt < 6 && !cancelledMain && !ok; attempt++) {
+        ok = await fetchData(false);
+        if (!ok && !cancelledMain) await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
+      if (cancelledMain) return;
+      await wallet.trackWallet(address).catch(() => {}); // track once, after load
+      setLoading(false);
+      setMainDone(true); // only now — we have complete data (or exhausted retries)
+    })();
 
     // Background refresh every 10 seconds. Cleared on unmount or when the
     // wallet address changes. We don't visualize the refresh (no spinner,
@@ -1389,7 +1387,7 @@ export default function WalletPage() {
     // behavior the BULK dev specifically asked for: live-feeling without
     // user action.
     const tick = window.setInterval(() => fetchData(true), 10_000);
-    return () => window.clearInterval(tick);
+    return () => { cancelledMain = true; window.clearInterval(tick); };
   }, [address, network]);
 
   // Fetch this wallet's stats from BULK's official indexer. We use the
@@ -1470,29 +1468,40 @@ export default function WalletPage() {
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
-    wallet.getFills(address, { limit: 1000 })
-      .then((res) => {
-        if (cancelled) return;
-        const fills = res.fills || [];
-        setAllFills(fills);
-        const now = Date.now();
-        const D = 86_400_000;
-        const acc = { d7: 0, d14: 0, d30: 0, d90: 0 };
-        let lifetime = 0;
-        for (const f of fills) {
-          const v = Math.abs(f.size || 0) * (f.price || 0);
-          lifetime += v;
-          const age = now - f.timestamp;
-          if (age <= 7 * D) acc.d7 += v;
-          if (age <= 14 * D) acc.d14 += v;
-          if (age <= 30 * D) acc.d30 += v;
-          if (age <= 90 * D) acc.d90 += v;
+    // Retry until the fills fetch succeeds before marking this wave done — the
+    // PnL reconstruction, volume windows and position open-times all depend on
+    // it, and (unlike the main data) nothing re-fetches fills on a timer, so a
+    // one-shot failure would leave those permanently empty.
+    (async () => {
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+        try {
+          const res = await wallet.getFills(address, { limit: 1000 });
+          if (cancelled) return;
+          const fills = res.fills || [];
+          setAllFills(fills);
+          const now = Date.now();
+          const D = 86_400_000;
+          const acc = { d7: 0, d14: 0, d30: 0, d90: 0 };
+          let lifetime = 0;
+          for (const f of fills) {
+            const v = Math.abs(f.size || 0) * (f.price || 0);
+            lifetime += v;
+            const age = now - f.timestamp;
+            if (age <= 7 * D) acc.d7 += v;
+            if (age <= 14 * D) acc.d14 += v;
+            if (age <= 30 * D) acc.d30 += v;
+            if (age <= 90 * D) acc.d90 += v;
+          }
+          setVolByWindow(acc);
+          setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
+          break; // success (even if genuinely empty)
+        } catch {
+          if (attempt === 5) { if (!cancelled) setVolByWindow(null); }
+          else await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
         }
-        setVolByWindow(acc);
-        setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
-      })
-      .catch(() => { if (!cancelled) setVolByWindow(null); })
-      .finally(() => { if (!cancelled) setFillsDone(true); });
+      }
+      if (!cancelled) setFillsDone(true);
+    })();
     return () => { cancelled = true; };
   }, [address, network]);
 
@@ -1509,14 +1518,21 @@ export default function WalletPage() {
     const hours = Math.ceil((endTime - startTime) / 3_600_000);
     const limit = Math.min(1000, Math.max(24, hours + 6));
     Promise.all(
-      symbols.map((sym) =>
-        analytics
-          .getCandles(sym, '1h', limit, { startTime, endTime })
-          // Clamp bad-print wicks (same as the position modal) so a stray
-          // print can't distort the mark used for unrealized PnL.
-          .then((res) => [sym, clampWicks(res.candles || [])] as const)
-          .catch(() => [sym, [] as Candle[]] as const),
-      ),
+      symbols.map(async (sym) => {
+        // Retry per symbol so a transient candle failure doesn't leave the PnL
+        // reconstruction flat/empty when the page reveals.
+        for (let i = 0; i < 3 && !cancelled; i++) {
+          try {
+            const res = await analytics.getCandles(sym, '1h', limit, { startTime, endTime });
+            // Clamp bad-print wicks (same as the position modal) so a stray
+            // print can't distort the mark used for unrealized PnL.
+            return [sym, clampWicks(res.candles || [])] as const;
+          } catch {
+            if (i < 2) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+          }
+        }
+        return [sym, [] as Candle[]] as const;
+      }),
     ).then((entries) => {
       if (!cancelled) setKlinesBySymbol(Object.fromEntries(entries));
     });
@@ -2089,7 +2105,7 @@ export default function WalletPage() {
 
   // The PnL chart's candles load after the fills. It's "ready" once we have
   // candles, OR once we know the wallet genuinely has no fills to chart.
-  const klinesReady = Object.keys(klinesBySymbol).length > 0 || (fillsDone && allFills.length === 0);
+  const klinesReady = Object.values(klinesBySymbol).some((c) => c.length > 0) || (fillsDone && allFills.length === 0);
   // Reveal only when EVERY key wave has landed — or the safety timeout fires.
   const ready = revealTimedOut || (mainDone && fillsDone && rankDone && klinesReady);
 
