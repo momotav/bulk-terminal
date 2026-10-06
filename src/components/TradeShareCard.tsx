@@ -81,7 +81,11 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 function pickMime(): string {
-  const cands = ['video/mp4;codecs=h264', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  // Prefer WebM: Chrome/Firefox produce a VALID WebM, whereas Chrome's
+  // MediaRecorder reports video/mp4 as supported but often emits a malformed,
+  // unplayable MP4. Safari doesn't do WebM, so it falls through to its working
+  // MP4 path.
+  const cands = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=h264', 'video/mp4'];
   if (typeof MediaRecorder === 'undefined') return '';
   for (const m of cands) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { /* ignore */ } }
   return '';
