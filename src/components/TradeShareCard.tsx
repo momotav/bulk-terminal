@@ -101,6 +101,7 @@ export function TradeShareCard({ data, onClose }: Props) {
   const varsRef = useRef<Record<string, string> | null>(null);
   const scaleRef = useRef<{ lo: number; hi: number } | null>(null); // smoothed y-axis
   const logoRef = useRef<HTMLImageElement | null>(null);
+  const bulkLogoRef = useRef<HTMLImageElement | null>(null);
   const lastHeadRef = useRef(0);
   // live option values read inside the (memoised) draw closure
   const optRef = useRef({ hideWallet, showRef, refCode });
@@ -125,6 +126,14 @@ export function TradeShareCard({ data, onClose }: Props) {
     return () => { done = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coin]);
+
+  // Preload the BULK wordmark for the "trade on BULK" mark.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => { bulkLogoRef.current = img; draw(lastHeadRef.current); };
+    img.src = '/bulk-logomark.png';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Focused window: lead-in before the entry, the trade, a little after the
   // close (or up to the latest candle for an open trade).
@@ -223,7 +232,18 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
     const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
-    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 22);
+    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 13);
+    // "trade on [BULK]" — the wordmark right-aligned under the date
+    const blogo = bulkLogoRef.current;
+    if (blogo && blogo.complete && blogo.naturalWidth > 0) {
+      const lh = 15, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
+      const ly = PAD + 24;
+      ctx.drawImage(blogo, W - PAD - lw, ly, lw, lh);
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
+      ctx.fillText('trade on', W - PAD - lw - 6, ly + lh / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     // ---- chart (scrolling feed) ----
     const cx0 = PAD, cy0 = CHART_Y, cw = W - 2 * PAD - 58, ch = CHART_H;
@@ -379,13 +399,24 @@ export function TradeShareCard({ data, onClose }: Props) {
     const pairName = `${coin}/USD`;
     ctx.fillStyle = V.text; ctx.font = `500 18px ${FONT}`; ctx.fillText(pairName, PAD + 40, coinY + 6);
     const coinW = ctx.measureText(pairName).width;
-    const sideTxt = `${side.toUpperCase()}${leverage > 0 ? ` ${leverage}×` : ''}`;
-    ctx.font = `600 10px ${FONT}`;
-    const stw = ctx.measureText(sideTxt).width + 12;
-    const badgeX = PAD + 40 + coinW + 10;
-    roundRect(ctx, badgeX, coinY - 7, stw, 16, 4);
-    ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.globalAlpha = 0.15; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.fillText(sideTxt, badgeX + 6, coinY + 5);
+    // Side + leverage pill — "Long"/"Short" colored, leverage neutral; sized to
+    // match the coin-name height, bordered like the exchange UI.
+    const sideColor = side === 'long' ? V.pos : V.neg;
+    const dirTxt = side === 'long' ? 'Long' : 'Short';
+    const levTxt = leverage > 0 ? `${leverage}x` : '';
+    ctx.font = `500 15px ${FONT}`;
+    const dirW = ctx.measureText(dirTxt).width;
+    const gapW = levTxt ? 7 : 0;
+    const levW = levTxt ? ctx.measureText(levTxt).width : 0;
+    const padX = 12, bh2 = 26, bw2 = padX * 2 + dirW + gapW + levW;
+    const badgeX = PAD + 40 + coinW + 12, badgeY = coinY - bh2 / 2;
+    roundRect(ctx, badgeX, badgeY, bw2, bh2, bh2 / 2);
+    ctx.fillStyle = sideColor; ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1; ctx.strokeStyle = sideColor; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = sideColor; ctx.font = `500 15px ${FONT}`; ctx.fillText(dirTxt, badgeX + padX, coinY + 0.5);
+    if (levTxt) { ctx.fillStyle = V.text; ctx.fillText(levTxt, badgeX + padX + dirW + gapW, coinY + 0.5); }
+    ctx.textBaseline = 'alphabetic';
 
     // headline PnL (0 before entry) + % — measured so they never overlap
     const pctNow = margin > 0 ? (pnlNow / margin) * 100 : 0;
@@ -417,8 +448,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     });
 
     // footer — site mention centered at the bottom; optional ref code bottom-left
-    ctx.textAlign = 'center'; ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
-    ctx.fillText('observe on bulkstats.com', W / 2, H - PAD);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
+    ctx.fillText('bulkstats.com', W / 2, H - PAD);
     const code = opt.showRef ? opt.refCode.trim() : '';
     if (code) {
       // "code: XXXX" bottom-left — shrink the font / ellipsize so even a long
