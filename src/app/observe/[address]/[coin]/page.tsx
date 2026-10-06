@@ -161,7 +161,7 @@ export default function ObserveTradePage() {
   if (loading) {
     return (
       <Shell>
-        <div className="flex h-[60vh] items-center justify-center gap-2 text-[var(--role-content-subtle)]">
+        <div className="flex h-[60vh] items-center justify-center gap-2 text-[var(--text-tertiary)]">
           <Loader2 className="h-4 w-4 animate-spin" /> Reconstructing trade…
         </div>
       </Shell>
@@ -171,11 +171,11 @@ export default function ObserveTradePage() {
   if (error || !life) {
     return (
       <Shell>
-        <div className="mx-auto mt-16 max-w-md rounded-xl border border-[var(--role-line)] bg-[var(--role-surface)] p-6 text-center">
-          <p className="text-sm text-[var(--role-content)]">
+        <div className="mx-auto mt-16 max-w-md rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-6 text-center">
+          <p className="text-sm text-[var(--text-primary)]">
             {error ?? `No ${coin} trade found for this wallet in the available fill history.`}
           </p>
-          <p className="mt-2 text-xs text-[var(--role-content-subtle)]">
+          <p className="mt-2 text-xs text-[var(--text-tertiary)]">
             BULK keeps a limited window of fills — very old trades may have aged out.
           </p>
           <Link href={`/whales/${address}`} className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-text)] hover:underline">
@@ -207,35 +207,43 @@ export default function ObserveTradePage() {
 
   return (
     <Shell>
-      {/* Top bar — terminal status line */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--role-line)] pb-3">
-        <Link href={`/whales/${address}`} className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-[var(--role-content-subtle)] transition-colors hover:text-[var(--role-content)]">
-          <ArrowLeft className="h-3.5 w-3.5" /> Wallet
-        </Link>
-        <span className="text-[var(--role-line)]">/</span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full" style={{ background: coinColor }} />
-          <span className="text-sm font-medium tracking-wide text-[var(--role-content)]">{coin}</span>
+      {/* Back link */}
+      <Link href={`/whales/${address}`} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to wallet
+      </Link>
+
+      {/* Header card — coin + pair + side/status, actions on the right */}
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-4 py-3.5">
+        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full" style={{ background: coinColor }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/coins/${coin}.svg`} alt={coin} className="h-9 w-9 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
         </span>
-        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>
-          {life.side}
-        </span>
-        <span className={`text-[11px] uppercase tracking-wider ${life.isOpen ? 'text-[var(--accent-text)]' : 'text-[var(--role-content-subtle)]'}`}>
-          {life.isOpen ? '● open' : 'closed'}
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          <Link href={`/whales/${address}`} className="hidden items-center gap-1 text-[11px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)] sm:inline-flex">
-            {formatAddress(address)} <ExternalLink className="h-3 w-3" />
-          </Link>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-medium text-[var(--text-primary)]">{coin}/USD</span>
+            <span
+              className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+              style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 12%, transparent)` }}
+            >
+              {life.side === 'long' ? 'Long' : 'Short'}{life.isOpen && livePos?.leverage ? ` ${livePos.leverage}×` : ''}
+            </span>
+          </div>
+          <div className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
+            <span style={{ color: life.isOpen ? 'var(--accent-text)' : undefined }}>{life.isOpen ? '● Open' : 'Closed'}</span>
+            <span className="mx-1.5 text-[var(--border-color)]">·</span>
+            <span className="hidden sm:inline">{formatAddress(address)}</span>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setShowCard(true)}
-            className="inline-flex items-center gap-1.5 border border-[var(--role-line)] px-2.5 py-1 text-[11px] uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
           >
             <ImageIcon className="h-3.5 w-3.5" /> Card
           </button>
           <button
             onClick={share}
-            className="inline-flex items-center gap-1.5 border border-[var(--role-line)] px-2.5 py-1 text-[11px] uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
             {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Share2 className="h-3.5 w-3.5" /> Share</>}
           </button>
@@ -302,7 +310,7 @@ export default function ObserveTradePage() {
         <div className="flex min-w-0 flex-col gap-3">
           <TermPanel title="Position" icon={Wallet}>
             <div className="p-3">
-              <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">
+              <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
                 {life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}
               </div>
               <div className="mt-1 flex items-end gap-2">
@@ -322,7 +330,7 @@ export default function ObserveTradePage() {
                 <MiniStat label="Held" value={isFallback ? 'live' : formatDuration(heldMs)} />
               </div>
 
-              <div className="mt-3 border-t border-[var(--role-line)]">
+              <div className="mt-3 border-t border-[var(--border-color)]">
                 <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
                 <DataRow label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? `$${formatNumber(lastPrice, lastPrice < 10 ? 4 : 2)}` : '—'} />
                 <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
@@ -345,7 +353,7 @@ export default function ObserveTradePage() {
           <TermPanel title="Lifecycle" icon={ListOrdered} right={`${life.events.length}`}>
             <ol className="max-h-[320px] overflow-y-auto overscroll-contain lg:max-h-[380px]">
               {isFallback && (
-                <li className="border-b border-[var(--role-line-subtle)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
+                <li className="border-b border-[var(--border-color)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
                   Per-fill history unavailable (opened beyond BULK&apos;s window, or rate-limited) — live position marked to market.
                 </li>
               )}
@@ -353,10 +361,10 @@ export default function ObserveTradePage() {
                 <TermEventRow key={`${e.t}-${i}`} e={e} coin={coin} />
               ))}
               {life.isOpen && (
-                <li className="flex items-center gap-2 border-t border-[var(--role-line-subtle)] px-3 py-2 text-[11px]">
+                <li className="flex items-center gap-2 border-t border-[var(--border-color)] px-3 py-2 text-[11px]">
                   <CircleDot className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                  <span className="font-medium text-[var(--role-content)]">tracking live</span>
-                  <span className="ml-auto tabular-nums text-[var(--role-content-subtle)]">now</span>
+                  <span className="font-medium text-[var(--text-primary)]">tracking live</span>
+                  <span className="ml-auto tabular-nums text-[var(--text-tertiary)]">now</span>
                 </li>
               )}
             </ol>
@@ -365,7 +373,7 @@ export default function ObserveTradePage() {
       </div>
 
       {/* Honest scope note */}
-      <p className="mt-6 text-[11px] leading-relaxed text-[var(--role-content-subtle)]">
+      <p className="mt-6 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
         Reconstructed from BULK fills and candles. Take-profit / stop-loss placements and isolated-margin
         top-ups aren&apos;t exposed by any BULK feed we read yet, so they aren&apos;t shown here.
       </p>
@@ -424,14 +432,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>;
 }
 
-// A bordered terminal panel with an icon + uppercase title bar (BULK font).
+// A clean rounded card panel — matches the share-card aesthetic.
 function TermPanel({ title, icon: Icon, right, children }: { title: string; icon: LucideIcon; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-[var(--role-line)] bg-[var(--role-surface)]">
-      <header className="flex items-center gap-2 border-b border-[var(--role-line)] px-3 py-2">
-        <Icon className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--role-content-subtle)]">{title}</span>
-        {right != null && <span className="ml-auto text-[11px] font-medium tabular-nums text-[var(--role-content-subtle)]">{right}</span>}
+    <section className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)]">
+      <header className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
+        <Icon className="h-3.5 w-3.5 text-[var(--accent)]" />
+        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{title}</span>
+        {right != null && <span className="ml-auto text-[11px] font-medium tabular-nums text-[var(--text-tertiary)]">{right}</span>}
       </header>
       {children}
     </section>
@@ -441,18 +449,18 @@ function TermPanel({ title, icon: Icon, right, children }: { title: string; icon
 // LABEL ............ value row for the position readout.
 function DataRow({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-[var(--role-line-subtle)] py-1.5 text-[12px] last:border-b-0">
-      <span className="font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</span>
-      <span className={`font-medium tabular-nums ${valueClass ?? 'text-[var(--role-content)]'}`}>{value}</span>
+    <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 py-2 text-[13px] last:border-b-0">
+      <span className="text-[var(--text-tertiary)]">{label}</span>
+      <span className={`font-medium tabular-nums ${valueClass ?? 'text-[var(--text-primary)]'}`}>{value}</span>
     </div>
   );
 }
 
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
   return (
-    <div className="rounded border border-[var(--role-line-subtle)] px-2 py-1.5">
-      <div className="text-[9px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">{label}</div>
-      <div className="mt-0.5 text-[13px] font-medium tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
+    <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">{label}</div>
+      <div className="mt-0.5 text-[14px] font-medium tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
         {value}
       </div>
     </div>
@@ -475,15 +483,15 @@ function TermEventRow({ e, coin }: { e: TradeEventPoint; coin: string }) {
   const tint = building ? 'var(--accent-text)' : (e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)');
   const Icon = eventIcon(e);
   return (
-    <li className="flex items-center gap-2 border-b border-[var(--role-line-subtle)] px-3 py-2 text-[11px] last:border-b-0">
+    <li className="flex items-center gap-2 border-b border-[var(--border-color)] px-3 py-2 text-[11px] last:border-b-0">
       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, currentColor 14%, transparent)', color: tint }}>
         <Icon className="h-3 w-3" />
       </span>
-      <span className="shrink-0 tabular-nums text-[var(--role-content-subtle)]">{time}</span>
-      <span className="shrink-0 font-medium uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--role-content)' }}>
+      <span className="shrink-0 tabular-nums text-[var(--text-tertiary)]">{time}</span>
+      <span className="shrink-0 font-medium uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--text-primary)' }}>
         {e.actionLabel}
       </span>
-      <span className="truncate tabular-nums text-[var(--role-content-subtle)]">
+      <span className="truncate tabular-nums text-[var(--text-tertiary)]">
         {formatNumber(Math.abs(e.sizeDelta), 4)} @ {formatNumber(e.price, e.price < 10 ? 4 : 2)}
       </span>
       {Math.abs(e.realizedDelta) > 1e-6 && (
