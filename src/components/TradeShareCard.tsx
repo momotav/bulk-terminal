@@ -82,11 +82,10 @@ function pickMime(): string {
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const pad2 = (n: number) => String(n).padStart(2, '0');
-// DD/MM/YYYY HH:MM:SS (local time, locale-neutral numerics)
-const fmtDateTime = (t: number) => {
-  const d = new Date(t);
-  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-};
+// DD/MM/YYYY (local time, locale-neutral numerics)
+const fmtDate = (t: number) => { const d = new Date(t); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; };
+// HH:MM for the scrolling time axis
+const fmtTime = (t: number) => { const d = new Date(t); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 
 export function TradeShareCard({ data, onClose }: Props) {
   const { address, symbol, coin, side, isOpen, openedAt, closedAt, avgEntry, size, leverage } = data;
@@ -216,6 +215,8 @@ export function TradeShareCard({ data, onClose }: Props) {
 
     ctx.save();
     ctx.scale(SCALE, SCALE);
+    ctx.imageSmoothingEnabled = true;
+    (ctx as any).imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, W, H);
     roundRect(ctx, 0, 0, W, H, 22); ctx.fillStyle = V.accent; ctx.fill();
     roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
@@ -240,11 +241,12 @@ export function TradeShareCard({ data, onClose }: Props) {
     // right-aligned. The date/time moved into the coin card, so there's room.
     const blogo = bulkLogoRef.current;
     if (blogo && blogo.complete && blogo.naturalWidth > 0) {
-      ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
-      ctx.fillText('trade on', W - PAD, PAD + 13);
       const lh = 26, lw = lh * (blogo.naturalWidth / blogo.naturalHeight);
+      const logoCx = W - PAD - lw / 2; // center the block on the logo
       ctx.drawImage(blogo, W - PAD - lw, PAD + 18, lw, lh);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
+      ctx.fillText('trade on', logoCx, PAD + 13);
     }
 
     // ---- chart (scrolling feed) ----
@@ -341,6 +343,18 @@ export function TradeShareCard({ data, onClose }: Props) {
     }
     ctx.restore(); // end clip
 
+    // scrolling time axis: HH:MM ticks under the chart at fixed candle indices,
+    // so they slide left with the candles as the feed scrolls.
+    const tickEvery = Math.max(4, Math.round(VISIBLE / 4));
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = `10px ${FONT}`;
+    for (let i = Math.max(0, firstIdx - (firstIdx % tickEvery)); i <= intHead; i += tickEvery) {
+      const tx = camX(i);
+      if (tx < cx0 + 8 || tx > cx0 + cw - 2) continue;
+      ctx.globalAlpha = clamp01((tx - cx0) / (step * 1.5));
+      ctx.fillStyle = V.text3; ctx.fillText(fmtTime(cs[i].t), tx, cy0 + ch + 15);
+    }
+    ctx.globalAlpha = 1;
+
     // price pill (outside the clip, at the right)
     roundRect(ctx, cx0 + cw + 3, yC - 11, 52, 22, 6); ctx.fillStyle = tone; ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -415,10 +429,10 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (levTxt) { ctx.fillStyle = V.text; ctx.fillText(levTxt, badgeX + padX + dirW + gapW, coinY + 0.5); }
     ctx.textBaseline = 'alphabetic';
 
-    // date + time of the candle currently in view, right-aligned on the coin row
+    // date of the candle currently in view, right-aligned on the coin row
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = V.text3; ctx.font = `500 11px ${FONT}`;
-    ctx.fillText(fmtDateTime(curT), W - PAD - 2, coinY);
+    ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
+    ctx.fillText(fmtDate(curT), W - PAD - 2, coinY);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
     // headline PnL (0 before entry) + % — no label, larger number, measured so
