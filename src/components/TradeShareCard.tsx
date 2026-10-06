@@ -19,7 +19,7 @@ import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 
-export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string }
+export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; value: number }
 export interface ShareCardData {
   address: string;
   symbol: string;        // "BTC-USD"
@@ -40,12 +40,16 @@ export interface ShareCardData {
 
 interface Props { data: ShareCardData; onClose: () => void; }
 
-const W = 440, H = 620, SCALE = 2, PAD = 20;
+const W = 440, H = 540, SCALE = 2, PAD = 20;
 const FONT = 'ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif';
 const VISIBLE = 22;          // candles on screen at once (the scrolling window)
 const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
 const HOLD_MS = 1100;        // linger on the final frame
 const FADE_SEC = 1.0;        // marker fade in/out duration
+const LABEL_SEC = 1.3;       // how long a fill's pop-up label stays up
+// Chart band + body layout (taller chart, tighter bottom gap).
+const CHART_Y = 78, CHART_H = 204;
+const BODY_Y = 302, BODY_H = 206;
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 // Finest interval that keeps the trade itself under ~70 candles.
@@ -91,6 +95,7 @@ export function TradeShareCard({ data, onClose }: Props) {
   const rafRef = useRef<number | null>(null);
   const holdRef = useRef<number | null>(null);
   const varsRef = useRef<Record<string, string> | null>(null);
+  const scaleRef = useRef<{ lo: number; hi: number } | null>(null); // smoothed y-axis
 
   const canExport = pickMime() !== '';
 
@@ -192,19 +197,27 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = V.text2; ctx.font = `600 12px ${FONT}`; ctx.fillText('bulkstats', W - PAD, PAD + 33);
 
     // ---- chart (scrolling feed) ----
-    const cx0 = PAD, cy0 = 88, cw = W - 2 * PAD - 58, ch = 150;
+    const cx0 = PAD, cy0 = CHART_Y, cw = W - 2 * PAD - 58, ch = CHART_H;
     const px = (p: number) => `$${formatNumber(p, p < 10 ? 4 : p < 1000 ? 2 : 0)}`;
     const step = cw / VISIBLE;
     const headX = cx0 + cw - step * 0.6;          // newest candle sits near the right
     const bodyW = Math.max(2, step * 0.62);
     const camX = (i: number) => headX - (h - i) * step;
 
-    // stable y-scale over the whole window (so candles don't jump vertically)
     const price = lerp(cs[intHead].c, cs[Math.min(N - 1, intHead + 1)].c, frac);
     const curT = lerp(cs[intHead].t, cs[Math.min(N - 1, intHead + 1)].t, frac);
-    let lo = Infinity, hi = -Infinity;
-    for (const c of cs) { if (c.l < lo) lo = c.l; if (c.h > hi) hi = c.h; }
-    lo = Math.min(lo, avgEntry); hi = Math.max(hi, avgEntry);
+
+    // y-scale auto-fits the VISIBLE candles (so they fill the band instead of
+    // bunching), smoothed frame-to-frame so it glides rather than jumps.
+    const firstIdx = Math.max(0, Math.floor(h) - VISIBLE - 2);
+    let vlo = Infinity, vhi = -Infinity;
+    for (let i = firstIdx; i <= intHead; i++) { if (cs[i].l < vlo) vlo = cs[i].l; if (cs[i].h > vhi) vhi = cs[i].h; }
+    vlo = Math.min(vlo, price); vhi = Math.max(vhi, price);
+    const vpad = (vhi - vlo) * 0.12 || Math.max(1, vhi * 0.002);
+    const target = { lo: vlo - vpad, hi: vhi + vpad };
+    if (!scaleRef.current) scaleRef.current = target;
+    else scaleRef.current = { lo: lerp(scaleRef.current.lo, target.lo, 0.18), hi: lerp(scaleRef.current.hi, target.hi, 0.18) };
+    const lo = scaleRef.current.lo, hi = scaleRef.current.hi;
     const range = (hi - lo) || 1;
     const yOf = (p: number) => cy0 + (1 - (p - lo) / range) * ch;
 
@@ -218,8 +231,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.beginPath(); ctx.moveTo(cx0, yE); ctx.lineTo(cx0 + cw, yE); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha = 1;
 
-    const first = Math.max(0, Math.floor(h) - VISIBLE - 2);
-    for (let i = first; i <= intHead; i++) {
+    for (let i = firstIdx; i <= intHead; i++) {
       const x = camX(i);
       if (x < cx0 - step || x > cx0 + cw + step) continue;
       const edge = clamp01((x - cx0) / (step * 1.5));   // fade as it slides off the left
@@ -243,15 +255,19 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.beginPath(); ctx.moveTo(cx0, yC); ctx.lineTo(headX, yC); ctx.stroke();
     ctx.setLineDash([]);
 
-    // fill markers (fade in over ~1s on reveal, out as they exit left)
+    // fill markers (fade in over ~1s on reveal, out as they exit left). Also
+    // pick the most-recently-revealed fill to show a pop-up label for.
     const candlesPerSec = N / Math.max(2.5, (N / VISIBLE) * SECONDS_PER_SCREEN);
     const fadeBars = Math.max(0.5, candlesPerSec * FADE_SEC);
+    const labelBars = Math.max(0.5, candlesPerSec * LABEL_SEC);
+    let active: { x: number; my: number; e: ShareCardEvent; op: number } | null = null;
     for (const e of data.events) {
       const eIdx = idxAtTime(cs, e.t);
       if (eIdx > h) continue;                   // not revealed yet
       const x = camX(eIdx);
       if (x < cx0 - step || x > headX + step) continue;
-      const appear = clamp01((h - eIdx) / fadeBars);
+      const since = h - eIdx;
+      const appear = clamp01(since / fadeBars);
       const edge = clamp01((x - cx0) / (step * 1.5));
       const op = appear * edge;
       if (op <= 0.02) continue;
@@ -264,6 +280,13 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillText(e.buy ? 'B' : 'S', x, my + 0.5);
       ctx.textBaseline = 'alphabetic';
       ctx.globalAlpha = 1;
+      // the freshest fill still inside its label window owns the pop-up
+      if (since <= labelBars && (!active || eIdx > idxAtTime(cs, active.e.t))) {
+        // ease in over the first 20%, hold, ease out over the last 30%
+        const lop = since < labelBars * 0.2 ? since / (labelBars * 0.2)
+          : since > labelBars * 0.7 ? clamp01((labelBars - since) / (labelBars * 0.3)) : 1;
+        active = { x, my, e, op: lop * edge };
+      }
     }
     ctx.restore(); // end clip
 
@@ -272,13 +295,35 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(px(price), cx0 + cw + 3 + 26, yC + 1); ctx.textBaseline = 'alphabetic';
 
-    // time labels (start of window + head time)
+    // pop-up fill label (speech bubble above the marker): action + $ value
+    if (active && active.op > 0.02) {
+      const { e, x, my, op } = active;
+      const top = (e.label || (e.buy ? 'Buy' : 'Sell')).toUpperCase();
+      const val = `${e.buy ? '+' : '−'}$${formatCompact(e.value)}`;
+      ctx.font = `600 12px ${FONT}`; const w1 = ctx.measureText(val).width;
+      ctx.font = `600 9px ${FONT}`; const w0 = ctx.measureText(top).width;
+      const bw = Math.max(w0, w1) + 22, bh = 34;
+      let bx = x - bw / 2; bx = Math.max(cx0, Math.min(cx0 + cw - bw, bx));
+      const byl = my - 16 - bh;
+      ctx.globalAlpha = op;
+      roundRect(ctx, bx, byl, bw, bh, 8); ctx.fillStyle = V.bgMuted; ctx.fill();
+      ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
+      // caret
+      ctx.beginPath(); ctx.moveTo(x - 5, byl + bh); ctx.lineTo(x + 5, byl + bh); ctx.lineTo(x, byl + bh + 6); ctx.closePath();
+      ctx.fillStyle = V.bgMuted; ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = V.text3; ctx.font = `600 9px ${FONT}`; ctx.fillText(top, bx + bw / 2, byl + 13);
+      ctx.fillStyle = e.buy ? V.pos : V.neg; ctx.font = `600 12px ${FONT}`; ctx.fillText(val, bx + bw / 2, byl + 27);
+      ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+    }
+
+    // time label (head time)
     const fmtT = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center';
-    ctx.fillText(fmtT(curT), headX, cy0 + ch + 16);
+    ctx.fillText(fmtT(curT), headX, cy0 + ch + 15);
 
     // ---- body card ----
-    const by = 268, bh = 212;
+    const by = BODY_Y, bh = BODY_H;
     roundRect(ctx, PAD, by, W - 2 * PAD, bh, 16); ctx.fillStyle = V.bgMuted; ctx.fill();
     ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
 
@@ -288,8 +333,9 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = '#fff'; ctx.font = `700 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(coin.slice(0, 1), PAD + 20, coinY + 1);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = V.text; ctx.font = `500 18px ${FONT}`; ctx.fillText(coin, PAD + 40, coinY + 6);
-    const coinW = ctx.measureText(coin).width;
+    const pairName = `${coin}/USD`;
+    ctx.fillStyle = V.text; ctx.font = `500 18px ${FONT}`; ctx.fillText(pairName, PAD + 40, coinY + 6);
+    const coinW = ctx.measureText(pairName).width;
     const sideTxt = `${side.toUpperCase()}${leverage > 0 ? ` ${leverage}×` : ''}`;
     ctx.font = `600 10px ${FONT}`;
     const stw = ctx.measureText(sideTxt).width + 12;
@@ -338,6 +384,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     return new Promise((resolve) => {
       const cs = candles;
       if (!cs || cs.length < 2) { draw(cs?.length ? cs.length - 1 : 0); resolve(); return; }
+      scaleRef.current = null; // re-init the smoothed y-axis for this pass
       const N = cs.length;
       const screens = N / VISIBLE;
       const dur = Math.max(4500, Math.min(11000, screens * SECONDS_PER_SCREEN * 1000));
@@ -367,6 +414,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (!canvas || !candles) return;
     canvas.width = W * SCALE; canvas.height = H * SCALE;
     varsRef.current = resolveVars();
+    scaleRef.current = null;
     draw(0);
     if (candles.length >= 2) { setPlaying(true); play().then(() => setPlaying(false)); }
     return () => stop();
