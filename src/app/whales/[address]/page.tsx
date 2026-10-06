@@ -3025,6 +3025,11 @@ export default function WalletPage() {
                     >
                       <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                       Recent Trades
+                      {closedPositions.length > 0 && (
+                        <span className="text-[var(--text-tertiary)] tabular-nums">
+                          {closedPositions.length}
+                        </span>
+                      )}
                     </button>
                     {/* Liquidations tab — surfaces the riskHistory feed
                         (force-close events, ADL events) that used to sit
