@@ -51,21 +51,33 @@ export default function ObserveTradePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
-      wallet.getWallet(address).catch(() => null),
+    (async () => {
+      let wd: WalletData | null = null;
+      try { wd = await wallet.getWallet(address); } catch { wd = null; }
+
       // Server-side symbol filter — an active wallet's per-coin fills get pushed
       // out of an unfiltered recent window by other markets, so ask BULK for
-      // this coin's fills directly (the backend proxies BULK's symbol filter).
-      wallet.getFills(address, { symbol: `${coin}-USD`, limit: 1000 }).then((r) => r.fills).catch(() => [] as WalletFill[]),
-    ])
-      .then(([wd, fl]) => {
-        if (cancelled) return;
-        setWalletData(wd);
-        setFills(fl);
-      })
-      .catch(() => { if (!cancelled) setError('Could not load this wallet.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      // this coin's fills directly. RETRY until we get a non-empty result: the
+      // fills call can transiently 429 to EMPTY, and a one-shot empty wrongly
+      // reads as "No <coin> trade found" for a coin the wallet actually traded
+      // (the position modal, fetched separately, shows the fills fine). We keep
+      // the last response so a genuinely-empty coin still resolves after retries.
+      let fl: WalletFill[] = [];
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        try {
+          const r = await wallet.getFills(address, { symbol: `${coin}-USD`, limit: 1000 });
+          fl = r.fills || [];
+          if (fl.length > 0) break;
+        } catch { /* transient — retry below */ }
+        if (attempt < 3) await new Promise((res) => setTimeout(res, 700 * (attempt + 1)));
+      }
+      if (cancelled) return;
+      setWalletData(wd);
+      setFills(fl);
+      setLoading(false);
+    })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
   const symbol = useMemo(() => {
