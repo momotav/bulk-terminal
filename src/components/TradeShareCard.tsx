@@ -4,14 +4,14 @@
 // TradeShareCard
 //
 // An animated, downloadable "share this trade" card in the fomo style. The
-// whole card is drawn on a <canvas> so the exact same draw function powers:
-//   1. the live preview (auto-replays the candles fast, PnL ticking along), and
-//   2. a downloadable video (MediaRecorder on the canvas capture stream).
+// whole card is drawn on a <canvas>, so one draw function powers the live
+// preview AND a downloadable video (MediaRecorder on the capture stream).
 //
-// The replay shows a few candles before the entry, the trade itself, and a few
-// candles after the close (or up to the latest candle for an open trade), with
-// a status-aware headline PnL (unrealized journey → realized for closed).
-// All reconstructed client-side from the data the observe page already has.
+// The replay is a smooth LIVE-FEED scroll: candles stream in at the right and
+// older ones slide off the left (camera follows the newest bar). The PnL is
+// read from the trade's reconstructed PnL curve — it stays flat at $0 until the
+// position actually opens, then tracks, then snaps to realized at the close.
+// Fill markers (open / add / partial-close / close) fade in and out over ~1s.
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,6 +19,7 @@ import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 
+export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string }
 export interface ShareCardData {
   address: string;
   symbol: string;        // "BTC-USD"
@@ -33,22 +34,23 @@ export interface ShareCardData {
   markPrice: number | null;
   exitPrice: number | null;
   pnl: number;           // life.finalPnl (realized for closed)
+  events: ShareCardEvent[];        // fills → markers
+  pnlCurve: { t: number; pnl: number }[]; // PnL journey over time
 }
 
 interface Props { data: ShareCardData; onClose: () => void; }
 
-// Logical card size; the backing canvas is this × SCALE for a crisp, shareable
-// video (880×1240).
 const W = 440, H = 620, SCALE = 2, PAD = 20;
 const FONT = 'ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif';
-const MS_PER_CANDLE = 90;   // replay speed
-const HOLD_MS = 800;        // linger on the final frame
+const VISIBLE = 22;          // candles on screen at once (the scrolling window)
+const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
+const HOLD_MS = 1100;        // linger on the final frame
+const FADE_SEC = 1.0;        // marker fade in/out duration
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
-// Pick an interval so the trade itself spans ~16 candles.
+// Finest interval that keeps the trade itself under ~70 candles.
 function pickInterval(tradeMs: number): [string, number] {
-  const target = tradeMs / 1000 / 16;
-  for (const iv of IV_SECONDS) if (iv[1] >= target) return iv;
+  for (const iv of IV_SECONDS) if (tradeMs / 1000 / iv[1] <= 70) return iv;
   return IV_SECONDS[IV_SECONDS.length - 1];
 }
 
@@ -62,12 +64,8 @@ function avatarHues(addr: string): [string, string, string] {
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   if (typeof (ctx as any).roundRect === 'function') { ctx.beginPath(); (ctx as any).roundRect(x, y, w, h, r); return; }
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
 function pickMime(): string {
@@ -76,6 +74,9 @@ function pickMime(): string {
   for (const m of cands) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { /* ignore */ } }
   return '';
 }
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 export function TradeShareCard({ data, onClose }: Props) {
   const { address, symbol, coin, side, isOpen, openedAt, closedAt, avgEntry, size, leverage } = data;
@@ -93,23 +94,20 @@ export function TradeShareCard({ data, onClose }: Props) {
 
   const canExport = pickMime() !== '';
 
-  // Tight candle window: ~6 candles before the open, the trade, ~6 after the
+  // Focused window: lead-in before the entry, the trade, a little after the
   // close (or up to the latest candle for an open trade).
   useEffect(() => {
     let cancelled = false;
     const end = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
     const [iv, sec] = pickInterval(Math.max(end - openedAt, 20 * 60_000));
     const bar = sec * 1000;
-    const start = openedAt - bar * 6;
     analytics
-      .getCandles(symbol, iv, 500, { startTime: start, endTime: end + bar * 6 })
+      .getCandles(symbol, iv, 500, { startTime: openedAt - bar * 6, endTime: end + bar * 6 })
       .then((res) => { if (!cancelled) setCandles(res.candles.filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0)); })
       .catch(() => { if (!cancelled) setCandles([]); });
     return () => { cancelled = true; };
   }, [symbol, isOpen, openedAt, closedAt]);
 
-  // Resolve the active palette's CSS vars to concrete colours once (canvas can't
-  // parse var()).
   const resolveVars = useCallback(() => {
     const probe = document.createElement('span');
     probe.style.display = 'none';
@@ -132,98 +130,154 @@ export function TradeShareCard({ data, onClose }: Props) {
     return v;
   }, [coin]);
 
-  // Draw the whole card at a given reveal (number of candles shown).
-  const draw = useCallback((reveal: number) => {
-    const canvas = canvasRef.current;
-    const cs = candles;
-    const V = varsRef.current;
+  // PnL at a given time, from the reconstructed curve. Flat 0 before the trade
+  // opens; clamped to the realized total at/after the close.
+  const pnlAt = useCallback((t: number): number => {
+    const cv = data.pnlCurve;
+    if (!cv.length) return t >= openedAt ? data.pnl : 0;
+    if (t <= cv[0].t) return 0;                 // before entry → no position yet
+    if (t >= cv[cv.length - 1].t) return cv[cv.length - 1].pnl;
+    let lo = 0, hi = cv.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cv[mid].t <= t) lo = mid; else hi = mid; }
+    const span = cv[hi].t - cv[lo].t || 1;
+    return lerp(cv[lo].pnl, cv[hi].pnl, (t - cv[lo].t) / span);
+  }, [data.pnlCurve, data.pnl, openedAt]);
+
+  // Fractional candle index for an arbitrary timestamp (for marker placement).
+  const idxAtTime = useCallback((cs: Candle[], t: number): number => {
+    if (cs.length === 0) return 0;
+    if (t <= cs[0].t) return 0;
+    if (t >= cs[cs.length - 1].t) return cs.length - 1;
+    let lo = 0, hi = cs.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cs[mid].t <= t) lo = mid; else hi = mid; }
+    const span = cs[hi].t - cs[lo].t || 1;
+    return lo + (t - cs[lo].t) / span;
+  }, []);
+
+  // ---- the single draw function: renders the card at a given scroll head -----
+  const draw = useCallback((headF: number) => {
+    const canvas = canvasRef.current, cs = candles, V = varsRef.current;
     if (!canvas || !cs || !V) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx || cs.length < 2) return;
     const N = cs.length;
-    const k = Math.max(1, Math.min(N, Math.round(reveal)));
+    const h = Math.max(0, Math.min(N - 1, headF));
+    const intHead = Math.min(N - 1, Math.floor(h));
+    const frac = h - intHead;
 
     ctx.save();
     ctx.scale(SCALE, SCALE);
     ctx.clearRect(0, 0, W, H);
-
-    // Frame + card bg.
     roundRect(ctx, 0, 0, W, H, 22); ctx.fillStyle = V.accent; ctx.fill();
     roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
 
-    // ---- Header ----
+    // ---- header ----
     const [a1, a2, initials] = avatarHues(address);
     const ax = PAD + 24, ay = PAD + 24, ar = 24;
-    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
-    g.addColorStop(0, a1); g.addColorStop(1, a2);
+    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar); g.addColorStop(0, a1); g.addColorStop(1, a2);
     ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = `600 15px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(initials, ax, ay + 1);
-
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`;
-    ctx.fillText(formatAddress(address), PAD + 58, PAD + 18);
-
-    // status badge
+    ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(formatAddress(address), PAD + 58, PAD + 18);
     const badge = isOpen ? 'OPEN' : 'CLOSED';
     ctx.font = `600 11px ${FONT}`;
     const bw = ctx.measureText(badge).width + 16;
     roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
     ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = isOpen ? V.accentText : V.text3;
-    ctx.fillText(badge, PAD + 58 + 8, PAD + 41);
-
-    // date + brand (right)
+    ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
     const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
     ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 14);
     ctx.fillStyle = V.text2; ctx.font = `600 12px ${FONT}`; ctx.fillText('bulkstats', W - PAD, PAD + 33);
 
-    // ---- Chart ----
-    const cx0 = PAD, cy0 = 88, cw = W - 2 * PAD - 60, ch = 150;
+    // ---- chart (scrolling feed) ----
+    const cx0 = PAD, cy0 = 88, cw = W - 2 * PAD - 58, ch = 150;
     const px = (p: number) => `$${formatNumber(p, p < 10 ? 4 : p < 1000 ? 2 : 0)}`;
-    // price / pnl at this reveal
-    const atEnd = k >= N;
-    const lastClose = cs[k - 1].c;
-    const price = (!isOpen && atEnd) ? (data.exitPrice ?? lastClose) : lastClose;
-    const pnl = (!isOpen && atEnd) ? data.pnl : signedSize * (price - avgEntry);
-    const pct = margin > 0 ? (pnl / margin) * 100 : 0;
-    const positive = pnl >= 0;
-    const tone = positive ? V.pos : V.neg;
+    const step = cw / VISIBLE;
+    const headX = cx0 + cw - step * 0.6;          // newest candle sits near the right
+    const bodyW = Math.max(2, step * 0.62);
+    const camX = (i: number) => headX - (h - i) * step;
 
-    // scale over the FULL window so candles fill a fixed frame left→right
-    const lo = Math.min(...cs.map((c) => c.l), price);
-    const hi = Math.max(...cs.map((c) => c.h), price);
+    // stable y-scale over the whole window (so candles don't jump vertically)
+    const price = lerp(cs[intHead].c, cs[Math.min(N - 1, intHead + 1)].c, frac);
+    const curT = lerp(cs[intHead].t, cs[Math.min(N - 1, intHead + 1)].t, frac);
+    let lo = Infinity, hi = -Infinity;
+    for (const c of cs) { if (c.l < lo) lo = c.l; if (c.h > hi) hi = c.h; }
+    lo = Math.min(lo, avgEntry); hi = Math.max(hi, avgEntry);
     const range = (hi - lo) || 1;
     const yOf = (p: number) => cy0 + (1 - (p - lo) / range) * ch;
-    const step = cw / N;
-    const bodyW = Math.max(2, Math.min(11, step * 0.6));
-    for (let i = 0; i < k; i++) {
-      const c = cs[i];
-      const cxx = cx0 + i * step + step / 2;
-      const up = c.c >= c.o;
-      ctx.strokeStyle = up ? V.pos : V.neg; ctx.fillStyle = up ? V.pos : V.neg; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cxx, yOf(c.h)); ctx.lineTo(cxx, yOf(c.l)); ctx.stroke();
-      const yO = yOf(c.o), yC = yOf(c.c);
-      ctx.fillRect(cxx - bodyW / 2, Math.min(yO, yC), bodyW, Math.max(1, Math.abs(yC - yO)));
-    }
-    // current-price dotted line + pill at the last revealed candle
-    const yC = yOf(price);
-    ctx.save();
-    ctx.strokeStyle = tone; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
-    ctx.beginPath(); ctx.moveTo(cx0, yC); ctx.lineTo(cx0 + cw, yC); ctx.stroke();
-    ctx.restore();
-    roundRect(ctx, cx0 + cw + 3, yC - 11, 54, 22, 6); ctx.fillStyle = tone; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(px(price), cx0 + cw + 3 + 27, yC + 1);
-    ctx.textBaseline = 'alphabetic';
-    // sparse time labels
-    const fmtT = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'left';
-    ctx.fillText(fmtT(cs[0].t), cx0 + 2, cy0 + ch + 16);
-    ctx.textAlign = 'center'; ctx.fillText(fmtT(cs[Math.floor(N / 2)].t), cx0 + cw / 2, cy0 + ch + 16);
 
-    // ---- Body card ----
+    // clip the chart band so candles slide off cleanly at the edges
+    ctx.save();
+    ctx.beginPath(); ctx.rect(cx0 - 1, cy0 - 6, cw + 2, ch + 12); ctx.clip();
+
+    // avg-entry reference line (muted)
+    const yE = yOf(avgEntry);
+    ctx.strokeStyle = V.text3; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.setLineDash([1, 4]);
+    ctx.beginPath(); ctx.moveTo(cx0, yE); ctx.lineTo(cx0 + cw, yE); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    const first = Math.max(0, Math.floor(h) - VISIBLE - 2);
+    for (let i = first; i <= intHead; i++) {
+      const x = camX(i);
+      if (x < cx0 - step || x > cx0 + cw + step) continue;
+      const edge = clamp01((x - cx0) / (step * 1.5));   // fade as it slides off the left
+      const c = cs[i];
+      const up = c.c >= c.o;
+      ctx.globalAlpha = 0.25 + 0.75 * edge;
+      ctx.strokeStyle = up ? V.pos : V.neg; ctx.fillStyle = up ? V.pos : V.neg; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, yOf(c.h)); ctx.lineTo(x, yOf(c.l)); ctx.stroke();
+      const yO = yOf(c.o), yC = yOf(c.c);
+      ctx.fillRect(x - bodyW / 2, Math.min(yO, yC), bodyW, Math.max(1, Math.abs(yC - yO)));
+    }
+    ctx.globalAlpha = 1;
+
+    // current-price dotted line, tracking the head
+    const beforeEntry = curT < (data.pnlCurve[0]?.t ?? openedAt);
+    const pnlNow = pnlAt(curT);
+    const positive = pnlNow >= 0;
+    const tone = beforeEntry ? V.text3 : (positive ? V.pos : V.neg);
+    const yC = yOf(price);
+    ctx.strokeStyle = tone; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(cx0, yC); ctx.lineTo(headX, yC); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // fill markers (fade in over ~1s on reveal, out as they exit left)
+    const candlesPerSec = N / Math.max(2.5, (N / VISIBLE) * SECONDS_PER_SCREEN);
+    const fadeBars = Math.max(0.5, candlesPerSec * FADE_SEC);
+    for (const e of data.events) {
+      const eIdx = idxAtTime(cs, e.t);
+      if (eIdx > h) continue;                   // not revealed yet
+      const x = camX(eIdx);
+      if (x < cx0 - step || x > headX + step) continue;
+      const appear = clamp01((h - eIdx) / fadeBars);
+      const edge = clamp01((x - cx0) / (step * 1.5));
+      const op = appear * edge;
+      if (op <= 0.02) continue;
+      const my = yOf(e.price);
+      ctx.globalAlpha = op;
+      ctx.beginPath(); ctx.arc(x, my, 8, 0, Math.PI * 2);
+      ctx.fillStyle = e.buy ? V.pos : V.neg; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = V.bgBase; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `700 9px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e.buy ? 'B' : 'S', x, my + 0.5);
+      ctx.textBaseline = 'alphabetic';
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore(); // end clip
+
+    // price pill (outside the clip, at the right)
+    roundRect(ctx, cx0 + cw + 3, yC - 11, 52, 22, 6); ctx.fillStyle = tone; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `600 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(px(price), cx0 + cw + 3 + 26, yC + 1); ctx.textBaseline = 'alphabetic';
+
+    // time labels (start of window + head time)
+    const fmtT = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    ctx.fillStyle = V.text3; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText(fmtT(curT), headX, cy0 + ch + 16);
+
+    // ---- body card ----
     const by = 268, bh = 212;
     roundRect(ctx, PAD, by, W - 2 * PAD, bh, 16); ctx.fillStyle = V.bgMuted; ctx.fill();
     ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
@@ -244,17 +298,20 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.globalAlpha = 0.15; ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = side === 'long' ? V.pos : V.neg; ctx.fillText(sideTxt, badgeX + 6, coinY + 5);
 
-    // headline PnL
-    ctx.fillStyle = tone; ctx.font = `600 34px ${FONT}`;
-    const pnlTxt = `${positive ? '+' : '−'}$${formatNumber(Math.abs(pnl), 2)}`;
+    // headline PnL (0 before entry) + % — measured so they never overlap
+    const pctNow = margin > 0 ? (pnlNow / margin) * 100 : 0;
+    const pnlTxt = `${pnlNow >= 0 ? '+' : '−'}$${Math.abs(pnlNow) >= 100000 ? formatCompact(Math.abs(pnlNow)) : formatNumber(Math.abs(pnlNow), 2)}`;
+    const pctTxt = `${pnlNow >= 0 ? '▲' : '▼'} ${Math.abs(pctNow).toFixed(2)}%`;
+    ctx.fillStyle = tone;
+    ctx.font = `600 32px ${FONT}`;
+    const pnlW = ctx.measureText(pnlTxt).width;
     ctx.fillText(pnlTxt, PAD + 18, by + 86);
-    ctx.font = `500 17px ${FONT}`;
-    const pw = ctx.measureText(pnlTxt).width;
-    ctx.fillText(`${positive ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%`, PAD + 18 + pw + 10, by + 86);
+    ctx.font = `500 16px ${FONT}`;
+    ctx.fillText(pctTxt, PAD + 18 + pnlW + 12, by + 86);
     ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`;
     ctx.fillText(isOpen ? 'UNREALIZED PNL' : 'REALIZED PNL', PAD + 18, by + 106);
 
-    // stats grid
+    // stats
     const gy = by + 124, gh = 62, gw = (W - 2 * PAD - 24) / 3, gx0 = PAD + 12;
     roundRect(ctx, gx0, gy, gw * 3, gh, 12); ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
     const stats: [string, string][] = [
@@ -270,30 +327,28 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // ---- Footer ----
-    ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `600 16px ${FONT}`;
-    ctx.fillText('bulkstats', PAD, H - PAD);
-    ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`;
-    ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
-
+    // footer
+    ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `600 16px ${FONT}`; ctx.fillText('bulkstats', PAD, H - PAD);
+    ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`; ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
     ctx.restore();
-  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, signedSize, margin, coin, data.exitPrice, data.pnl]);
+  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
 
-  // Run one replay pass (0→N + hold). Returns a promise that resolves when done.
+  // One smooth replay pass (steady scroll) → resolves after a short end-hold.
   const play = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const cs = candles;
-      if (!cs || cs.length < 2) { draw(cs?.length ?? 1); resolve(); return; }
+      if (!cs || cs.length < 2) { draw(cs?.length ? cs.length - 1 : 0); resolve(); return; }
       const N = cs.length;
-      const dur = Math.max(1500, N * MS_PER_CANDLE);
+      const screens = N / VISIBLE;
+      const dur = Math.max(4500, Math.min(11000, screens * SECONDS_PER_SCREEN * 1000));
       const t0 = performance.now();
       const frame = (t: number) => {
         const e = t - t0;
         if (e < dur) {
-          draw(Math.max(1, Math.min(N, Math.ceil((e / dur) * N))));
+          draw((e / dur) * (N - 1)); // linear → steady live-feed scroll
           rafRef.current = requestAnimationFrame(frame);
         } else {
-          draw(N);
+          draw(N - 1);
           holdRef.current = window.setTimeout(resolve, HOLD_MS);
         }
       };
@@ -307,39 +362,30 @@ export function TradeShareCard({ data, onClose }: Props) {
     rafRef.current = null; holdRef.current = null;
   }, []);
 
-  // Size the canvas, resolve colours, draw the first frame, auto-play once.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !candles) return;
     canvas.width = W * SCALE; canvas.height = H * SCALE;
     varsRef.current = resolveVars();
-    draw(1);
-    if (candles.length >= 2) {
-      setPlaying(true);
-      play().then(() => setPlaying(false));
-    }
+    draw(0);
+    if (candles.length >= 2) { setPlaying(true); play().then(() => setPlaying(false)); }
     return () => stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
 
-  const replay = () => {
-    if (playing || recording) return;
-    stop(); setPlaying(true);
-    play().then(() => setPlaying(false));
-  };
+  const replay = () => { if (playing || recording) return; stop(); setPlaying(true); play().then(() => setPlaying(false)); };
 
   const download = async () => {
     const canvas = canvasRef.current;
     const mime = pickMime();
     if (!canvas || !mime || recording) return;
-    stop();
-    setRecording(true);
+    stop(); setRecording(true);
     try {
-      draw(1);
+      draw(0);
       const stream = (canvas as any).captureStream(30) as MediaStream;
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
       const chunks: BlobPart[] = [];
-      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
       const stopped = new Promise<void>((res) => { rec.onstop = () => res(); });
       rec.start();
       await play();
@@ -349,13 +395,10 @@ export function TradeShareCard({ data, onClose }: Props) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const ext = mime.includes('mp4') ? 'mp4' : 'webm';
-      a.href = url;
-      a.download = `bulkstats-${coin}-${new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toISOString().slice(0, 10)}.${ext}`;
+      a.href = url; a.download = `bulkstats-${coin}-${new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } finally {
-      setRecording(false);
-    }
+    } finally { setRecording(false); }
   };
 
   const busy = playing || recording;
@@ -366,39 +409,16 @@ export function TradeShareCard({ data, onClose }: Props) {
       onClick={(e) => { if (e.target === e.currentTarget && !recording) onClose(); }}
     >
       <div className="relative flex flex-col items-center gap-3">
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]"
-        >
+        <button onClick={onClose} aria-label="Close" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
           <X className="h-4 w-4" />
         </button>
-
-        <canvas
-          ref={canvasRef}
-          style={{ width: W, height: H }}
-          className="rounded-[22px] shadow-2xl"
-        />
-        {!candles && (
-          <div className="absolute inset-0 grid place-items-center">
-            <Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" />
-          </div>
-        )}
-
+        <canvas ref={canvasRef} style={{ width: W, height: H }} className="rounded-[22px] shadow-2xl" />
+        {!candles && <div className="absolute inset-0 grid place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" /></div>}
         <div className="flex items-center gap-2">
-          <button
-            onClick={replay}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
-          >
+          <button onClick={replay} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50">
             <Play className="h-3.5 w-3.5" /> Replay
           </button>
-          <button
-            onClick={download}
-            disabled={busy || !canExport}
-            title={canExport ? 'Download as video' : 'Video recording not supported in this browser'}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_25%,transparent)] disabled:opacity-50"
-          >
+          <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_25%,transparent)] disabled:opacity-50">
             {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</> : <><Download className="h-3.5 w-3.5" /> Download video</>}
           </button>
         </div>
