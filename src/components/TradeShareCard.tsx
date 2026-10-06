@@ -41,7 +41,7 @@ export interface ShareCardData {
 interface Props { data: ShareCardData; onClose: () => void; }
 
 const W = 440, H = 540, SCALE = 2, PAD = 20;
-const FONT = 'ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT = "'BULK', ui-sans-serif, -apple-system, \"Segoe UI\", Roboto, sans-serif";
 const VISIBLE = 22;          // candles on screen at once (the scrolling window)
 const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
 const HOLD_MS = 1100;        // linger on the final frame
@@ -223,8 +223,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
     const dateStr = new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
-    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 14);
-    ctx.fillStyle = V.text2; ctx.font = `600 12px ${FONT}`; ctx.fillText('bulkstats', W - PAD, PAD + 33);
+    ctx.fillStyle = V.text3; ctx.font = `12px ${FONT}`; ctx.fillText(dateStr, W - PAD, PAD + 22);
 
     // ---- chart (scrolling feed) ----
     const cx0 = PAD, cy0 = CHART_Y, cw = W - 2 * PAD - 58, ch = CHART_H;
@@ -417,20 +416,19 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`; ctx.fillText(val, x + 12, gy + 46);
     });
 
-    // footer — brand left; ref code (if set) else the observe URL on the right
-    ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `600 16px ${FONT}`; ctx.fillText('bulkstats', PAD, H - PAD);
+    // footer — site mention centered at the bottom; optional ref code bottom-left
+    ctx.textAlign = 'center'; ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
+    ctx.fillText('observe on bulkstats.com', W / 2, H - PAD);
     const code = opt.showRef ? opt.refCode.trim() : '';
     if (code) {
-      // "code: XXXX" right-aligned — shrink the font so even a long code fits
-      // the right half of the footer, ellipsizing only as a last resort.
-      const maxW = W - 2 * PAD - 92; // leave room for the "bulkstats" wordmark
+      // "code: XXXX" bottom-left — shrink the font / ellipsize so even a long
+      // code fits the left side without reaching the centered site mention.
+      const maxW = W / 2 - PAD - 18;
       let fs = 12, shown = `code: ${code}`;
-      ctx.font = `600 ${fs}px ${FONT}`;
-      while (fs > 8 && ctx.measureText(shown).width > maxW) { fs -= 1; ctx.font = `600 ${fs}px ${FONT}`; }
+      ctx.font = `500 ${fs}px ${FONT}`;
+      while (fs > 8 && ctx.measureText(shown).width > maxW) { fs -= 1; ctx.font = `500 ${fs}px ${FONT}`; }
       while (shown.length > 8 && ctx.measureText(shown).width > maxW) shown = shown.slice(0, -2) + '…';
-      ctx.textAlign = 'right'; ctx.fillStyle = V.accentText; ctx.fillText(shown, W - PAD, H - PAD);
-    } else {
-      ctx.textAlign = 'right'; ctx.fillStyle = V.text3; ctx.font = `11px ${FONT}`; ctx.fillText('observe on bulkstats.com', W - PAD, H - PAD);
+      ctx.textAlign = 'left'; ctx.fillStyle = V.accentText; ctx.fillText(shown, PAD, H - PAD);
     }
     ctx.restore();
   }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
@@ -471,9 +469,20 @@ export function TradeShareCard({ data, onClose }: Props) {
     canvas.width = W * SCALE; canvas.height = H * SCALE;
     varsRef.current = resolveVars();
     scaleRef.current = null;
-    draw(0);
-    if (candles.length >= 2) { setPlaying(true); play().then(() => setPlaying(false)); }
-    return () => stop();
+    let cancelled = false;
+    const start = () => {
+      if (cancelled) return;
+      scaleRef.current = null;
+      draw(0);
+      if (candles.length >= 2) { setPlaying(true); play().then(() => { if (!cancelled) setPlaying(false); }); }
+    };
+    // Make sure the BULK font is loaded so the canvas renders in it (not a
+    // fallback), then start.
+    const fonts = (document as any).fonts;
+    if (fonts?.load) {
+      Promise.all([fonts.load('400 16px BULK'), fonts.load('500 16px BULK')]).then(start).catch(start);
+    } else { start(); }
+    return () => { cancelled = true; stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
 
