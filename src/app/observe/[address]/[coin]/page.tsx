@@ -235,7 +235,7 @@ export default function ObserveTradePage() {
               className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
               style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}
             >
-              {life.side === 'long' ? 'Long' : 'Short'}{life.isOpen && livePos?.leverage ? ` ${Number(livePos.leverage.toFixed(1))}×` : ''}
+              {life.side === 'long' ? 'Long' : 'Short'}{livePos?.leverage ? ` ${Number(livePos.leverage.toFixed(1))}×` : ''}
             </span>
             {/* Open/Closed — a real pill so it doesn't blend into the bg */}
             <span
