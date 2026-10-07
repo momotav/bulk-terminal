@@ -1243,7 +1243,7 @@ export default function WalletPage() {
     // Last-resort reveal cap. The waves now retry until COMPLETE before flipping
     // their done flags, so this only fires if the backend stays down — a longer
     // wait than before, but the user asked for complete info over a fast reveal.
-    const t = window.setTimeout(() => setRevealTimedOut(true), 30_000);
+    const t = window.setTimeout(() => setRevealTimedOut(true), 55_000);
     return () => window.clearTimeout(t);
   }, [address]);
   const [followLoading, setFollowLoading] = useState(false);
@@ -1415,9 +1415,9 @@ export default function WalletPage() {
     (async () => {
       setLoading(true);
       let ok = false;
-      for (let attempt = 0; attempt < 6 && !cancelledMain && !ok; attempt++) {
+      for (let attempt = 0; attempt < 9 && !cancelledMain && !ok; attempt++) {
         ok = await fetchData(false);
-        if (!ok && !cancelledMain) await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+        if (!ok && !cancelledMain) await new Promise((r) => setTimeout(r, Math.min(3000, 500 * (attempt + 1))));
       }
       if (cancelledMain) return;
       await wallet.trackWallet(address).catch(() => {}); // track once, after load
@@ -1517,7 +1517,7 @@ export default function WalletPage() {
     // it, and (unlike the main data) nothing re-fetches fills on a timer, so a
     // one-shot failure would leave those permanently empty.
     (async () => {
-      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+      for (let attempt = 0; attempt < 9 && !cancelled; attempt++) {
         try {
           const res = await wallet.getFills(address, { limit: 1000 });
           if (cancelled) return;
@@ -1540,8 +1540,8 @@ export default function WalletPage() {
           setLifetimeFillVol({ total: lifetime, truncated: fills.length >= 1000 });
           break; // success (even if genuinely empty)
         } catch {
-          if (attempt === 5) { if (!cancelled) setVolByWindow(null); }
-          else await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+          if (attempt === 8) { if (!cancelled) setVolByWindow(null); }
+          else await new Promise((r) => setTimeout(r, Math.min(3000, 500 * (attempt + 1))));
         }
       }
       if (!cancelled) setFillsDone(true);
