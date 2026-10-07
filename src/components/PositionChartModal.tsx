@@ -450,6 +450,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     const chart = createChart(container, {
       width: initialWidth,
       height: initialHeight,
+      localization: { locale: 'en-US' },
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor,
@@ -891,7 +892,7 @@ export function PositionChartModal({ position, onClose }: Props) {
                     {position.liquidated ? 'LIQUIDATED' : 'CLOSED'}
                   </span>
                   {' '}
-                  {new Date(position.closedAt).toLocaleString(undefined, {
+                  {new Date(position.closedAt).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
@@ -1119,7 +1120,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             return (
               <div
                 ref={badgeRef}
-                className="absolute z-10 pointer-events-none"
+                className="absolute z-10 pointer-events-none hidden sm:block"
                 style={{ left: '58%', top: 0, opacity: 0, willChange: 'transform, opacity' }}
               >
                 <span

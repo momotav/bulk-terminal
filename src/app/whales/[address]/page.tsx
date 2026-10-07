@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Activity,
   AlertCircle, Clock, Loader2, UserCheck,
   BarChart3, Flame, Shield, PiggyBank, DollarSign,
-  Receipt, Repeat, Image as ImageIcon
+  Receipt, Repeat, Image as ImageIcon, ChevronDown
 } from 'lucide-react';
 import { wallet, leaderboard, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, type ClosedPosition, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
@@ -326,6 +326,46 @@ function PlaceholderCard({
 // breakdown. Tooltip anchors below the row so it doesn't overflow
 // the rail's narrow width.
 // ----------------------------------------------------------------------------
+// Collapsible sidebar section. On mobile the header is a toggle (chevron) and
+// the body hides when collapsed; on desktop (lg+) it's always expanded and the
+// toggle is inert — so the rail stays full on wide screens but folds down on a
+// phone where the long stacked list was overwhelming.
+function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-[var(--border-color)] pt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between lg:pointer-events-none"
+      >
+        <span className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold">{title}</span>
+        <ChevronDown className={cn('h-4 w-4 text-[var(--text-tertiary)] transition-transform lg:hidden', open && 'rotate-180')} />
+      </button>
+      <div className={cn('lg:!block lg:mt-2', open ? 'mt-2 block' : 'hidden')}>{children}</div>
+    </div>
+  );
+}
+
+// Main-column collapsible: a toggle header on mobile, always-open on desktop
+// (no header on lg). Lets heavy strips fold down on a phone.
+function MobileCollapse({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="lg:hidden flex w-full items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5"
+      >
+        <span className="text-xs font-semibold text-[var(--text-secondary)]">{title}</span>
+        <ChevronDown className={cn('h-4 w-4 text-[var(--text-tertiary)] transition-transform', open && 'rotate-180')} />
+      </button>
+      <div className={cn('lg:!block', open ? 'block mt-2.5' : 'hidden')}>{children}</div>
+    </div>
+  );
+}
+
 function OverviewRow({
   label,
   value,
@@ -2355,10 +2395,7 @@ export default function WalletPage() {
                   same flex layout (label left, value right) so the
                   column reads cleanly. Tone applied to the value side
                   only when it carries semantic meaning (PnL sign). */}
-              <div className="border-t border-[var(--border-color)] pt-4">
-                <div className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold mb-2">
-                  Overview
-                </div>
+              <Section title="Overview" defaultOpen>
                 <div className="flex flex-col gap-2">
                   <OverviewRow
                     label="Unrealized PnL"
@@ -2396,31 +2433,21 @@ export default function WalletPage() {
                     value={String(tracked?.total_liquidations || 0)}
                   />
                 </div>
-              </div>
+              </Section>
 
-              {/* Volume by period — traded volume over trailing windows,
-                  derived from recent fills. Complements the lifetime Volume
-                  row above with a recency view of how active the wallet is. */}
-              <div className="border-t border-[var(--border-color)] pt-4">
-                <div className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold mb-2">
-                  Volume
-                </div>
+              {/* Volume by period — traded volume over trailing windows. */}
+              <Section title="Volume">
                 <div className="flex flex-col gap-2">
                   <OverviewRow label="7D" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '-'} />
                   <OverviewRow label="14D" value={volByWindow ? `$${formatCompact(volByWindow.d14)}` : '-'} />
                   <OverviewRow label="30D" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '-'} />
                   <OverviewRow label="90D" value={volByWindow ? `$${formatCompact(volByWindow.d90)}` : '-'} />
                 </div>
-              </div>
+              </Section>
 
-              {/* Analysis — derived stats from closed positions. Same
-                  layout vocabulary as Overview so the rail reads as
-                  one cohesive sidebar with topical sub-sections. */}
+              {/* Analysis — derived stats from closed positions. */}
               {closedPositions.length > 0 && (
-                <div className="border-t border-[var(--border-color)] pt-4">
-                  <div className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold mb-2">
-                    Analysis
-                  </div>
+                <Section title="Analysis">
                   <div className="flex flex-col gap-2">
                     <OverviewRow
                       label="Longest Win Streak"
@@ -2449,18 +2476,12 @@ export default function WalletPage() {
                       tone="green"
                     />
                   </div>
-                </div>
+                </Section>
               )}
 
-              {/* Performance — Drawdown / Win Rate / Sharpe, mirroring
-                  Hyperdash's performance sub-panel. All derived from the
-                  closed-position series, so available for any wallet with
-                  trade history. */}
+              {/* Performance — Drawdown / Win Rate / Sharpe. */}
               {closedPositions.length > 0 && (
-                <div className="border-t border-[var(--border-color)] pt-4">
-                  <div className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold mb-2">
-                    Performance
-                  </div>
+                <Section title="Performance">
                   <div className="flex flex-col gap-2">
                     <OverviewRow
                       label="Max Drawdown"
@@ -2491,7 +2512,7 @@ export default function WalletPage() {
                       tone="neutral"
                     />
                   </div>
-                </div>
+                </Section>
               )}
             </aside>
 
@@ -2549,8 +2570,9 @@ export default function WalletPage() {
                 Daily / Drawdown / Per-trade views ride along as chart tabs. */}
             <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col min-w-0">
               <div className="p-3 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
-                {/* View tabs. */}
-                <div className="flex items-center gap-1">
+                {/* View tabs — scroll horizontally on narrow screens instead of
+                    overflowing / clipping. */}
+                <div className="flex items-center gap-1 -mx-1 px-1 overflow-x-auto max-w-full whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0">
                   <button
                     type="button"
                     onClick={() => setChartView('pnl')}
@@ -2966,6 +2988,7 @@ export default function WalletPage() {
                 full-width strip (the bars kept out of the shared KPI strip).
                 Full width + PositionExposure below avoids the side-by-side
                 height mismatch that left a gap under the shorter card. */}
+            <MobileCollapse title="Signals & exposure">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {!isSystemWallet(address) ? (
                 <PerformanceCard
@@ -3022,6 +3045,7 @@ export default function WalletPage() {
                 <PlaceholderCard label="Effective Leverage" subtitle="No open positions" />
               )}
             </div>
+            </MobileCollapse>
 
             {/* Position intelligence — full-width panel. A left column of
                 stats + long/short split, and the per-coin allocation filling
