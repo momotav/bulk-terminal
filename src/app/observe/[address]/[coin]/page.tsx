@@ -18,7 +18,7 @@ import {
   ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink,
   CandlestickChart, Activity, Wallet, ListOrdered, Flag, Plus, Minus, ArrowUpRight, ArrowDownRight, type LucideIcon,
 } from 'lucide-react';
-import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill } from '@/lib/api';
+import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
@@ -40,6 +40,11 @@ export default function ObserveTradePage() {
 
   const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [fills, setFills] = useState<WalletFill[] | null>(null);
+  // Closed-position records for this coin (only fetched for a pinned CLOSED
+  // trade). For high-frequency wallets the net position never goes flat, so
+  // fills-reconstruction can't isolate one lot — BULK's own closed record is the
+  // authoritative source for that trade's realized PnL / entry / exit / size.
+  const [closedPositions, setClosedPositions] = useState<ClosedPosition[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -71,9 +76,26 @@ export default function ObserveTradePage() {
         } catch { /* transient — retry below */ }
         if (attempt < 3) await new Promise((res) => setTimeout(res, 700 * (attempt + 1)));
       }
+      // For a pinned CLOSED trade (both from & to), also pull BULK's closed
+      // positions for this coin so we can anchor the view to the exact lot
+      // record rather than a fills reconstruction (which merges with the live
+      // position on wallets that never flatten). Non-blocking — the page still
+      // renders from fills if this fails.
+      let cp: ClosedPosition[] | null = null;
+      if (toMs > 0) {
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+          try {
+            const r = await wallet.getClosedPositions(address, { symbol: `${coin}-USD`, limit: 1000 });
+            cp = r.positions || [];
+            if (cp.length > 0) break;
+          } catch { /* transient — retry */ }
+          if (attempt < 2) await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+        }
+      }
       if (cancelled) return;
       setWalletData(wd);
       setFills(fl);
+      setClosedPositions(cp);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -115,6 +137,22 @@ export default function ObserveTradePage() {
   );
   const markPrice = walletData?.markPrices?.[symbol] ?? livePos?.price ?? null;
 
+  // For a pinned CLOSED trade, find the matching BULK closed-position record.
+  // Match by CLOSE time (the URL's `to`) — BULK's openTime can be unreliable but
+  // the close time is solid. This is the exact lot the wallet row linked to, and
+  // its realized PnL / entry / exit / size are authoritative (unlike a fills
+  // reconstruction, which on a scalping wallet merges into the live open book).
+  const pinnedRecord = useMemo<ClosedPosition | null>(() => {
+    if (!pinned || toMs <= 0 || !closedPositions || !closedPositions.length) return null;
+    let best: ClosedPosition | null = null;
+    let bestDiff = Infinity;
+    for (const p of closedPositions) {
+      const d = Math.abs(p.closedAt - toMs);
+      if (d < bestDiff) { bestDiff = d; best = p; }
+    }
+    return best && bestDiff <= 5000 ? best : null;
+  }, [pinned, toMs, closedPositions]);
+
   // Leverage. BULK's closed-position records carry NO leverage, and the only
   // leverage-like value the API exposes for a market is `leverageSettings` — but
   // that's the exchange-wide MAX leverage for the coin (identical across every
@@ -127,7 +165,10 @@ export default function ObserveTradePage() {
     );
     return s?.leverage ?? 0;
   }, [walletData, coin]);
-  const liveLeverage = livePos?.leverage && livePos.leverage > 0 ? livePos.leverage : 0;
+  // Use the live position's actual leverage ONLY when we're showing that live
+  // position — never for a pinned CLOSED trade (that's a different, earlier lot;
+  // the live 20× would be misleading). Closed trades fall back to the max bound.
+  const liveLeverage = !pinnedRecord && livePos?.leverage && livePos.leverage > 0 ? livePos.leverage : 0;
   // What we display per row: the actual live leverage when we have it, else the
   // market max as an explicit bound (relabeled "Max leverage" / "Min margin").
   const shownLeverage = liveLeverage || maxLeverage;
@@ -139,6 +180,10 @@ export default function ObserveTradePage() {
   const [candleTick, setCandleTick] = useState(0);
 
   const life = useMemo<TradeLifecycle | null>(() => {
+    // Pinned CLOSED trade with a matching BULK record → anchor the ENTIRE view
+    // (headline PnL, entry/exit, size, chart span, journey) to that record, so
+    // it shows the trade the wallet row linked to instead of the live position.
+    if (pinnedRecord) return lifecycleFromClosedRecord(pinnedRecord, symbol);
     const candles = candleCache.get(symbol) ?? [];
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
@@ -156,7 +201,7 @@ export default function ObserveTradePage() {
       return liveFallbackLifecycle(symbol, livePos, candles, markPrice);
     }
     return null;
-  }, [tradeFills, symbol, markPrice, candleTick, livePos, toMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tradeFills, symbol, markPrice, candleTick, livePos, toMs, pinnedRecord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const journeyMarkers = useMemo<JourneyMarker[]>(() => {
     if (!life || !life.pnlCurve.length) return [];
@@ -501,6 +546,36 @@ function TermPanel({ title, icon: Icon, right, children }: { title: string; icon
 }
 
 // LABEL ............ value row for the position readout.
+// Build a TradeLifecycle straight from a BULK closed-position record, so a pinned
+// CLOSED trade shows exactly what the wallet row linked to. Needed for wallets
+// whose net position never flattens (high-frequency scalpers): fills-recon can't
+// isolate a single lot there, but BULK's record carries the lot's authoritative
+// realized PnL / entry / exit / size. Two events (open → close) + a 2-point PnL
+// curve (0 → realized) is all the downstream UI needs.
+function lifecycleFromClosedRecord(cp: ClosedPosition, symbol: string): TradeLifecycle {
+  const size = Math.abs(cp.size);
+  const signedOpen = cp.side === 'long' ? size : -size;
+  const openEvent: TradeEventPoint = {
+    t: cp.openedAt, action: 'open', actionLabel: cp.side === 'long' ? 'Opened long' : 'Opened short',
+    price: cp.openPrice, sizeDelta: signedOpen, positionAfter: signedOpen, realizedDelta: 0,
+  };
+  const closeEvent: TradeEventPoint = {
+    t: cp.closedAt, action: 'close', actionLabel: cp.liquidated ? 'Liquidated' : 'Closed',
+    price: cp.closePrice, sizeDelta: -signedOpen, positionAfter: 0, realizedDelta: cp.realizedPnl,
+  };
+  return {
+    symbol, side: cp.side, openedAt: cp.openedAt, closedAt: cp.closedAt, isOpen: false,
+    openPrice: cp.openPrice, avgEntry: cp.openPrice, peakSize: size, currentSize: 0,
+    events: [openEvent, closeEvent],
+    pnlCurve: [
+      { t: cp.openedAt, pnl: 0, realized: 0, price: cp.openPrice },
+      { t: cp.closedAt, pnl: cp.realizedPnl, realized: cp.realizedPnl, price: cp.closePrice },
+    ],
+    realizedTotal: cp.realizedPnl, peakPnl: Math.max(0, cp.realizedPnl),
+    troughPnl: Math.min(0, cp.realizedPnl), finalPnl: cp.realizedPnl,
+  };
+}
+
 function DataRow({ label, value, valueClass, hint }: { label: string; value: string; valueClass?: string; hint?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 py-2 text-[13px] last:border-b-0">
