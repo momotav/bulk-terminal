@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
 import Link from 'next/link';
-import { X, TrendingUp, TrendingDown, Loader2, Share2 } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
-import { annotateFills } from '@/lib/positionWalk';
+import { annotateFills, buildTradeLifecycle } from '@/lib/positionWalk';
 import { clampWicks } from '@/lib/candles';
+import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
 import { LogoLoader } from '@/components/LogoLoader';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +167,7 @@ export function PositionChartModal({ position, onClose }: Props) {
   useEffect(() => {
     setUserInterval(null);
     setLiveMark(null);
+    setShowShareCard(false);
   }, [position]);
 
   // Probe the market's earliest candle (cheap daily pull from epoch 0; BULK
@@ -185,6 +187,7 @@ export function PositionChartModal({ position, onClose }: Props) {
   }, [position]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [fills, setFills] = useState<WalletFill[] | null>(null);
+  const [showShareCard, setShowShareCard] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -341,6 +344,28 @@ export function PositionChartModal({ position, onClose }: Props) {
     }
     return annotated;
   }, [fills, position]);
+
+  // Reconstruct the shareable trade card for THIS position (same lifecycle the
+  // observe page builds) so the Card button can open it inline.
+  const shareCardData = useMemo<ShareCardData | null>(() => {
+    if (!position || !fills) return null;
+    const coin = position.symbol.replace(/-USD$/, '');
+    // closed → every fill up to the close (buildTradeLifecycle slices to the
+    // real open); live → all fills (latest instance).
+    const tf = position.kind === 'closed' ? fills.filter((f) => f.timestamp <= position.closedAt + 2000) : fills;
+    const mark = position.kind === 'live' ? (liveMark ?? position.markPrice) : null;
+    const life = buildTradeLifecycle(tf, plottedCandles, { markPrice: mark });
+    if (!life) return null;
+    const lastPrice = life.isOpen ? mark : (life.events.length ? life.events[life.events.length - 1].price : mark);
+    return {
+      address: position.walletAddress, symbol: position.symbol, coin,
+      side: life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
+      avgEntry: life.avgEntry, size: life.peakSize, leverage: position.leverage ?? 0,
+      markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: life.finalPnl,
+      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
+      pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
+    };
+  }, [position, fills, plottedCandles, liveMark]);
 
   // The trade's endpoint markers. B/S direction comes from the position's own
   // side (the LONG/SHORT badge), never from a fills walk — BULK's fill history
@@ -892,9 +917,18 @@ export function PositionChartModal({ position, onClose }: Props) {
               })()}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-bulk-green hover:text-[var(--text-primary)]"
             >
-              <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Observe</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">More details</span>
             </Link>
+            {shareCardData && (
+              <button
+                onClick={() => setShowShareCard(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Card</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
@@ -1133,6 +1167,10 @@ export function PositionChartModal({ position, onClose }: Props) {
           ))}
         </div>
       </div>
+
+      {showShareCard && shareCardData && (
+        <TradeShareCard data={shareCardData} onClose={() => setShowShareCard(false)} />
+      )}
     </div>
   );
 }

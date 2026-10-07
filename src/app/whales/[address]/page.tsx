@@ -8,13 +8,14 @@ import {
   TrendingUp, TrendingDown, Wallet, Activity,
   AlertCircle, Clock, Loader2, UserCheck,
   BarChart3, Flame, Shield, PiggyBank, DollarSign,
-  Receipt, Repeat, Share2
+  Receipt, Repeat, Image as ImageIcon
 } from 'lucide-react';
 import { wallet, leaderboard, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, type ClosedPosition, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
-import { computePositionOpenTime, formatDuration, realizedPnlSeries, symbolPositionTimeline, type PositionOpenInfo } from '@/lib/positionWalk';
+import { computePositionOpenTime, formatDuration, realizedPnlSeries, symbolPositionTimeline, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
 import type { WalletFill, Candle } from '@/lib/api';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
+import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
 import { useStore } from '@/store';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
@@ -26,6 +27,7 @@ import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 import { ChartFrame } from '@/components/ChartFrame';
 import { StatCard as SharedStatCard } from '@/components/StatCard';
+import { Sparkline } from '@/components/Sparkline';
 import { getCoinColor } from '@/lib/coins';
 import { clampWicks } from '@/lib/candles';
 
@@ -1264,7 +1266,9 @@ export default function WalletPage() {
   const [chartRange, setChartRange] = useState<'24h' | '7d' | '30d' | 'all'>('all');
   // Tracks which position row's share button was just clicked, to flash a
   // checkmark for ~1.5s as copy confirmation.
-  const [sharedSymbol, setSharedSymbol] = useState<string | null>(null);
+  // Share-card state: reconstruct a trade's lifecycle (fills + klines) and open
+  // the animated card for it — same card the observe page uses.
+  const [cardData, setCardData] = useState<ShareCardData | null>(null);
 
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
@@ -1786,6 +1790,44 @@ export default function WalletPage() {
     return out;
   }, [continuousPnl, reconstructedRealized]);
 
+  // Tiny trend series for the KPI sparklines.
+  const kpiSeries = useMemo(() => {
+    const totalPnl = continuousPnl.length ? continuousPnl[continuousPnl.length - 1].v : 0;
+    const base = (margin?.totalBalance ?? 0) - totalPnl;
+    const acct = continuousPnl.map((p) => base + p.v);
+    const allTime = reconstructedRealized.map((p) => p.v);
+    const realAt = (t: number) => {
+      let v = 0;
+      for (const p of reconstructedRealized) { if (p.t <= t) v = p.v; else break; }
+      return v;
+    };
+    const unreal = continuousPnl.map((p) => p.v - realAt(p.t));
+    const sortedClosed = [...closedPositions].sort((a, b) => a.closedAt - b.closedAt);
+    let w = 0;
+    const winRate = sortedClosed.map((p, i) => { if (p.realizedPnl >= 0) w++; return (w / (i + 1)) * 100; });
+    return { acct, allTime, unreal, winRate };
+  }, [continuousPnl, reconstructedRealized, margin?.totalBalance, closedPositions]);
+
+  // Reconstruct and open the share card for a market's current instance.
+  const openShareCard = (sym: string) => {
+    const coin2 = sym.replace(/-USD$/, '');
+    const tf = allFills.filter((f) => f.symbol === sym);
+    if (tf.length === 0) return;
+    const mark = data?.markPrices?.[sym] ?? null;
+    const life = buildTradeLifecycle(tf, klinesBySymbol[sym] ?? [], { markPrice: mark });
+    if (!life) return;
+    const lp = data?.live?.positions.find((p) => p.symbol === sym);
+    const lastPrice = life.isOpen ? mark : (life.events.length ? life.events[life.events.length - 1].price : mark);
+    setCardData({
+      address, symbol: sym, coin: coin2,
+      side: life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
+      avgEntry: life.avgEntry, size: life.peakSize, leverage: lp?.leverage ?? 0,
+      markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: life.finalPnl,
+      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
+      pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
+    });
+  };
+
   // The series the hero PnL/Value chart plots: the fills+klines continuous
   // total-PnL curve when we could reconstruct it, otherwise the coarse
   // snapshot curve (wallets with no fills, or before fills load). Each point is
@@ -2127,6 +2169,7 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out]">
+      {cardData && <TradeShareCard data={cardData} onClose={() => setCardData(null)} />}
       <main className="flex-1 w-full px-4 sm:px-6 py-4">
         {/* Page-level width: capped at 1600px and centered. Edge-to-edge
             felt right at 1280px but looks unbounded on 4K / ultrawide
@@ -2477,27 +2520,27 @@ export default function WalletPage() {
                 dedicated Signals & exposure panel below. */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
               <SharedStatCard
-                size="compact"
                 label="Account value"
                 value={margin ? `$${formatNumber(margin.totalBalance, 2)}` : '-'}
+                chart={kpiSeries.acct.length >= 2 ? <Sparkline data={kpiSeries.acct} height={34} color="var(--accent)" /> : undefined}
               />
               <SharedStatCard
-                size="compact"
                 label="Unrealized PnL"
                 value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '-'}
                 valueColor={margin ? (margin.unrealizedPnl >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)') : undefined}
+                chart={kpiSeries.unreal.length >= 2 ? <Sparkline data={kpiSeries.unreal} height={34} color={margin && margin.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)'} /> : undefined}
               />
               <SharedStatCard
-                size="compact"
                 label="All-time PnL"
                 value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
                 valueColor={bulkRealizedPnL >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)'}
+                chart={kpiSeries.allTime.length >= 2 ? <Sparkline data={kpiSeries.allTime} height={34} color={bulkRealizedPnL >= 0 ? 'var(--pos)' : 'var(--neg)'} /> : undefined}
               />
               <SharedStatCard
-                size="compact"
                 label="Win rate"
                 value={analysisStats?.closedWinRate != null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '-'}
                 sub={analysisStats?.longestStreak ? `${analysisStats.longestStreak}-trade streak` : undefined}
+                chart={kpiSeries.winRate.length >= 2 ? <Sparkline data={kpiSeries.winRate} height={34} color="var(--accent)" /> : undefined}
               />
             </div>
 
@@ -3202,21 +3245,11 @@ export default function WalletPage() {
                               <td className="px-2 py-2.5 text-right">
                                 <button
                                   type="button"
-                                  title="Copy link to this position"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const url = `${window.location.origin}/whales/${address}?asset=${encodeURIComponent(pos.symbol)}`;
-                                    navigator.clipboard?.writeText(url).catch(() => {});
-                                    setSharedSymbol(pos.symbol);
-                                    setTimeout(() => setSharedSymbol(null), 1500);
-                                  }}
+                                  title="Open share card"
+                                  onClick={(e) => { e.stopPropagation(); openShareCard(pos.symbol); }}
                                   className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--bg-secondary-20)]/40 transition-colors"
                                 >
-                                  {sharedSymbol === pos.symbol ? (
-                                    <Check className="w-3.5 h-3.5 text-bulk-green" />
-                                  ) : (
-                                    <Share2 className="w-3.5 h-3.5" />
-                                  )}
+                                  <ImageIcon className="w-3.5 h-3.5" />
                                 </button>
                               </td>
                             </tr>
