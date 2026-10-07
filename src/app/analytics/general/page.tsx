@@ -13,6 +13,7 @@ import { ProtocolRevenueChart } from '@/components/ProtocolRevenueChart';
 import { ResizableChartRow } from '@/components/ResizableChartRow';
 import { CoinSelector } from '@/components/CoinSelector';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { OI_SIDE_FACTOR } from '@/hooks/useTickers';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   DEFAULT_COINS,
@@ -517,9 +518,11 @@ export default function AnalyticsPage() {
             totalOI += oi * mark;
           }
         }
-        // BULK now reports the full OI directly (confirmed by the BULK dev
-        // 2026-09-27), so we display it as-is — no more ×2 two-sided adjustment.
-        setLiveOI(totalOI);
+        // Per-ticker OI is ONE-SIDED (BULK changed this ~2026-10), so the sum is
+        // half of BULK's displayed /stats total — ×OI_SIDE_FACTOR to match it.
+        // (The exchange-wide /stats total read elsewhere is already full; only
+        // this ticker-sum needs the factor.) See useTickers.ts for the evidence.
+        setLiveOI(totalOI * OI_SIDE_FACTOR);
       } catch (error) {
         console.error('Failed to fetch live OI:', error);
       }

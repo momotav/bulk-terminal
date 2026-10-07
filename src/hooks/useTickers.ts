@@ -97,11 +97,19 @@ export function useTickers() {
   return { tickers, loading };
 }
 
-// Open interest arrives denominated in the base coin. Multiplying by mark
-// price gives the USD notional. BULK now reports the full OI directly
-// (confirmed by the BULK dev 2026-09-27), so we display it as-is — no ×2.
+// Per-ticker open interest is ONE-SIDED: as of ~2026-10 BULK's per-market
+// `openInterest` reports a single side, so summing tickers lands at exactly
+// HALF of BULK's own displayed total (its /stats `openInterest.totalUsd`,
+// verified 2026-10-08: ticker-sum $5.15M vs /stats $10.32M, ratio 2.01). The
+// exchange-wide total we read straight from /stats is already full and must NOT
+// be doubled — this factor applies ONLY to per-ticker values so per-coin OI and
+// any ticker-sum match BULK. (The 2026-09-27 "no ×2" note referred to the
+// /stats total, which is still correct; per-ticker has since gone one-sided.)
+export const OI_SIDE_FACTOR = 2;
+// Open interest arrives denominated in the base coin. Multiply by mark price
+// for USD notional, then ×OI_SIDE_FACTOR to get the full (two-sided) OI.
 export function openInterestUsd(t: BulkTicker): number {
-  return t.openInterest * (t.markPrice || t.lastPrice);
+  return t.openInterest * (t.markPrice || t.lastPrice) * OI_SIDE_FACTOR;
 }
 
 // Price formatting has to span BTC at ~66,000 and FARTCOIN at fractions of

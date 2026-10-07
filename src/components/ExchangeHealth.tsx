@@ -80,11 +80,13 @@ export function ExchangeHealthStats({ keys }: { keys?: SparkKey[] } = {}) {
           if (bulkData.markets) {
             for (const market of bulkData.markets) {
               volume24h += market.quoteVolume || 0;
-              openInterest += (market.openInterest || 0) * (market.markPrice || 0);
+              // Per-market OI is one-sided — ×2 for the full (two-sided) total,
+              // matching BULK's /stats total. See useTickers.ts OI_SIDE_FACTOR.
+              openInterest += (market.openInterest || 0) * (market.markPrice || 0) * 2;
             }
           }
-          
-          // Use totalUsd if available
+
+          // Prefer the full /stats total when available (already two-sided).
           if (bulkData.openInterest?.totalUsd) {
             openInterest = bulkData.openInterest.totalUsd;
           }
