@@ -283,6 +283,11 @@ export interface WalletData {
        *  Can be out of range for degenerate system accounts — guard on render. */
       riskAllocation?: number;
     }>;
+    /** Per-symbol leverage the wallet has configured (persists after a position
+     *  closes), e.g. `[{ symbol: 'SOL-USD', leverage: 20 }]`. Lets us recover the
+     *  leverage — and thus initial margin — for a CLOSED trade even when no live
+     *  position in that market exists. */
+    leverageSettings?: Array<{ symbol: string; leverage: number }>;
   } | null;
   markPrices: Record<string, number>;
   tracked: {
