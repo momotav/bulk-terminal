@@ -494,8 +494,14 @@ export function TradeShareCard({ data, onClose }: Props) {
     // stats
     const gy = by + 124, gh = 62, gw = (W - 2 * PAD - 24) / 3, gx0 = PAD + 12;
     roundRect(ctx, gx0, gy, gw * 3, gh, 12); ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
+    // Leverage is known only for a live position; for a closed trade BULK gives
+    // no leverage, so we can't know the margin. Show the factual position size
+    // (notional) instead of mislabeling notional as "Margin".
+    const leverageKnown = leverage > 0;
     const stats: [string, string][] = [
-      ['Margin', `$${formatCompact(margin)}`],
+      leverageKnown
+        ? ['Margin', `$${formatCompact(margin)}`]
+        : ['Size', `$${formatCompact(notional)}`],
       ['Avg. entry', px(avgEntry)],
       [isOpen ? 'Current' : 'Exit', px(price)],
     ];
