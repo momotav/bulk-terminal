@@ -195,17 +195,24 @@ export function TradeShareCard({ data, onClose }: Props) {
     return v;
   }, [coin]);
 
-  // PnL at a given time, from the reconstructed curve. Flat 0 before the trade
-  // opens; clamped to the realized total at/after the close.
+  // PnL at a given time, from the reconstructed curve, CALIBRATED so the journey
+  // lands exactly on the authoritative final value (data.pnl — BULK's unrealized
+  // for a live position / realized for a closed one). The reconstructed curve's
+  // own endpoint can drift from BULK's number (different mark/avg-entry), so we
+  // ramp that delta in across the trade. Flat 0 before the position opens.
   const pnlAt = useCallback((t: number): number => {
     const cv = data.pnlCurve;
     if (!cv.length) return t >= openedAt ? data.pnl : 0;
-    if (t <= cv[0].t) return 0;                 // before entry → no position yet
-    if (t >= cv[cv.length - 1].t) return cv[cv.length - 1].pnl;
+    const t0 = cv[0].t, tN = cv[cv.length - 1].t;
+    const delta = data.pnl - cv[cv.length - 1].pnl; // BULK endpoint − curve endpoint
+    const prog = (x: number) => (tN > t0 ? clamp01((x - t0) / (tN - t0)) : 1);
+    if (t <= t0) return 0;                       // before entry → no position yet
+    if (t >= tN) return data.pnl;                // land on the authoritative value
     let lo = 0, hi = cv.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cv[mid].t <= t) lo = mid; else hi = mid; }
     const span = cv[hi].t - cv[lo].t || 1;
-    return lerp(cv[lo].pnl, cv[hi].pnl, (t - cv[lo].t) / span);
+    const raw = lerp(cv[lo].pnl, cv[hi].pnl, (t - cv[lo].t) / span);
+    return raw + delta * prog(t);
   }, [data.pnlCurve, data.pnl, openedAt]);
 
   // Fractional candle index for an arbitrary timestamp (for marker placement).
@@ -318,7 +325,9 @@ export function TradeShareCard({ data, onClose }: Props) {
 
     // current-price dotted line, tracking the head
     const beforeEntry = curT < (data.pnlCurve[0]?.t ?? openedAt);
-    const pnlNow = pnlAt(curT);
+    // At the last frame land exactly on the authoritative value even if the card's
+    // candle window ends a touch before the curve's "now" point.
+    const pnlNow = h >= N - 1 ? data.pnl : pnlAt(curT);
     const positive = pnlNow >= 0;
     const tone = beforeEntry ? V.text3 : (positive ? V.pos : V.neg);
     const yC = yOf(price);

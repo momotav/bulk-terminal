@@ -187,9 +187,14 @@ export default function ObserveTradePage() {
   }
 
   const coinColor = getCoinColor(coin);
-  const isUp = life.finalPnl >= 0;
+  // For a LIVE position, prefer BULK's authoritative unrealized PnL over the
+  // fills-reconstructed value so the number matches the wallet page exactly.
+  const displayPnl = (life.isOpen && livePos && Number.isFinite(livePos.unrealizedPnl))
+    ? livePos.unrealizedPnl
+    : life.finalPnl;
+  const isUp = displayPnl >= 0;
   const notionalPeak = life.peakSize * life.avgEntry;
-  const roi = notionalPeak > 0 ? (life.finalPnl / (livePos?.leverage ? notionalPeak / livePos.leverage : notionalPeak)) * 100 : null;
+  const roi = notionalPeak > 0 ? (displayPnl / (livePos?.leverage ? notionalPeak / livePos.leverage : notionalPeak)) * 100 : null;
   // Fallback = live position with no fill history; we don't know when it opened,
   // so "Held" is unknown and the lifecycle rail is empty.
   const isFallback = life.events.length === 0;
@@ -283,7 +288,7 @@ export default function ObserveTradePage() {
             leverage: livePos?.leverage ?? 0,
             markPrice,
             exitPrice: life.isOpen ? markPrice : lastPrice,
-            pnl: life.finalPnl,
+            pnl: displayPnl,
             events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
             pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
           }}
@@ -332,7 +337,7 @@ export default function ObserveTradePage() {
               </div>
               <div className="mt-1 flex items-end gap-2">
                 <span className="text-[32px] font-medium leading-none tracking-tight tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
-                  {isUp ? '+' : '−'}${formatNumber(Math.abs(life.finalPnl), 2)}
+                  {isUp ? '+' : '−'}${formatNumber(Math.abs(displayPnl), 2)}
                 </span>
                 {roi != null && Number.isFinite(roi) && (
                   <span className="pb-0.5 text-[12px] font-medium tabular-nums" style={{ color: roi >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
