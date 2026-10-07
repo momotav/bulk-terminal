@@ -58,13 +58,14 @@ function pickInterval(tradeMs: number): [string, number] {
   return IV_SECONDS[IV_SECONDS.length - 1];
 }
 
-// Curated, always-harmonious gradient pairs — picked deterministically per
-// wallet (instead of arbitrary hues that could clash).
+// BULK-themed wallet gradients — warm gold / amber / bronze family (the brand's
+// signature palette), with enough tonal variety to tell wallets apart. Picked
+// deterministically per wallet.
 const WALLET_GRADS: [string, string][] = [
-  ['#FF8A3D', '#FF3D77'], ['#3D9BFF', '#7A5CFF'], ['#21C07A', '#0E8F8F'],
-  ['#FFB457', '#FF6B6B'], ['#A78BFA', '#EC4899'], ['#34D399', '#3B82F6'],
-  ['#F59E0B', '#EF4444'], ['#22D3EE', '#4F7BFF'], ['#F472B6', '#A855F7'],
-  ['#FACC15', '#F97316'], ['#2DD4BF', '#6366F1'], ['#FB7185', '#C026D3'],
+  ['#FFD27A', '#E0872E'], ['#FFC078', '#C9771F'], ['#F5C56B', '#A86A1C'],
+  ['#FFB457', '#D9641A'], ['#EAB85C', '#B07722'], ['#FFDE9E', '#F2993D'],
+  ['#E8A33D', '#8F5213'], ['#F7C873', '#CB8A2A'], ['#FFCC80', '#E06D1C'],
+  ['#D9A441', '#7E4E14'], ['#FFE0A3', '#D98A2B'], ['#F0B24C', '#A35A17'],
 ];
 function avatarHues(addr: string): [string, string, string] {
   let h = 7;

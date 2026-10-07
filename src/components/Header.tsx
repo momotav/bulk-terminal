@@ -263,6 +263,11 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Theme Toggle - hidden on mobile */}
+            <div className="hidden sm:block">
+              <AppearanceMenu />
+            </div>
+
             {/* Global search — opens the ⌘K command palette (search pages,
                 markets, wallets from anywhere). Full pill on sm+, icon on mobile. */}
             <button
@@ -276,11 +281,6 @@ export function Header() {
               <kbd className="hidden rounded border border-[var(--border-color)] px-1.5 py-0.5 text-[10px] font-medium sm:inline">⌘K</kbd>
             </button>
 
-            {/* Theme Toggle - hidden on mobile */}
-            <div className="hidden sm:block">
-              <AppearanceMenu />
-            </div>
-            
             {ready && authenticated ? (
               <div className="relative profile-menu-container">
                 <button
