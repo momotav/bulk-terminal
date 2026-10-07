@@ -214,24 +214,41 @@ export default function ObserveTradePage() {
 
       {/* Header card — coin + pair + side/status, actions on the right */}
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-4 py-3.5">
-        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full" style={{ background: coinColor }}>
+        <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full" style={{ background: coinColor }}>
+          <span className="text-sm font-semibold text-white">{coin.slice(0, 1)}</span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/coins/${coin}.svg`} alt={coin} className="h-9 w-9 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+          <img
+            src={`/coins/${coin}.svg`}
+            alt=""
+            className="absolute inset-0 h-9 w-9 object-cover"
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement;
+              if (!el.dataset.triedPng) { el.dataset.triedPng = '1'; el.src = `/coins/${coin}.png`; }
+              else { el.style.display = 'none'; }
+            }}
+          />
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-lg font-medium text-[var(--text-primary)]">{coin}/USD</span>
             <span
-              className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
-              style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 12%, transparent)` }}
+              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}
             >
-              {life.side === 'long' ? 'Long' : 'Short'}{life.isOpen && livePos?.leverage ? ` ${livePos.leverage}×` : ''}
+              {life.side === 'long' ? 'Long' : 'Short'}{life.isOpen && livePos?.leverage ? ` ${Number(livePos.leverage.toFixed(1))}×` : ''}
+            </span>
+            {/* Open/Closed — a real pill so it doesn't blend into the bg */}
+            <span
+              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+              style={life.isOpen
+                ? { color: 'var(--accent-text)', borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 16%, transparent)' }
+                : { color: 'var(--text-secondary)', borderColor: 'var(--border-color)', background: 'var(--bg-base)' }}
+            >
+              {life.isOpen ? '● Open' : 'Closed'}
             </span>
           </div>
-          <div className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
-            <span style={{ color: life.isOpen ? 'var(--accent-text)' : undefined }}>{life.isOpen ? '● Open' : 'Closed'}</span>
-            <span className="mx-1.5 text-[var(--border-color)]">·</span>
-            <span className="hidden sm:inline">{formatAddress(address)}</span>
+          <div className="mt-1 font-mono text-[11px] leading-snug text-[var(--text-tertiary)] break-all">
+            {address}
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -334,18 +351,22 @@ export default function ObserveTradePage() {
                 <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
                 <DataRow label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? `$${formatNumber(lastPrice, lastPrice < 10 ? 4 : 2)}` : '—'} />
                 <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
+                {/* Notional = position VALUE (size × avg entry). Margin needs
+                    leverage, which BULK only reports on LIVE positions — so it's
+                    "—" for reconstructed/closed trades rather than wrong. */}
                 <DataRow label="Notional" value={`$${formatCompact(notionalPeak)}`} />
-                {life.isOpen && livePos ? (
-                  <>
-                    <DataRow label="Leverage" value={livePos.leverage > 0 ? `${livePos.leverage}×` : '—'} />
-                    <DataRow label="Liq." value={livePos.liquidationPrice > 0 ? `$${formatNumber(livePos.liquidationPrice, 2)}` : '—'} valueClass="text-[var(--neg)]" />
-                  </>
-                ) : (
-                  <>
-                    <DataRow label="Realized" value={`${life.realizedTotal >= 0 ? '+' : '−'}$${formatNumber(Math.abs(life.realizedTotal), 2)}`} valueClass={life.realizedTotal >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]'} />
-                    <DataRow label="Fills" value={String(life.events.length)} />
-                  </>
+                <DataRow
+                  label="Leverage"
+                  value={livePos && livePos.leverage > 0 ? `${Number(livePos.leverage.toFixed(1))}×` : '—'}
+                />
+                {livePos && livePos.leverage > 0 && (
+                  <DataRow label="Margin" value={`$${formatCompact(notionalPeak / livePos.leverage)}`} />
                 )}
+                {life.isOpen && livePos && livePos.liquidationPrice > 0 && (
+                  <DataRow label="Liq." value={`$${formatNumber(livePos.liquidationPrice, 2)}`} valueClass="text-[var(--neg)]" />
+                )}
+                <DataRow label="Realized" value={`${life.realizedTotal >= 0 ? '+' : '−'}$${formatNumber(Math.abs(life.realizedTotal), 2)}`} valueClass={life.realizedTotal >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]'} />
+                <DataRow label="Fills" value={String(life.events.length)} />
               </div>
             </div>
           </TermPanel>
