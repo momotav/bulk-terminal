@@ -115,22 +115,23 @@ export default function ObserveTradePage() {
   );
   const markPrice = walletData?.markPrices?.[symbol] ?? livePos?.price ?? null;
 
-  // Leverage we can attribute to this coin. BULK's closed-position records carry
-  // NO leverage, but the wallet's per-symbol `leverageSettings` persists after a
-  // trade closes — so for a CLOSED trade (no live position) we fall back to that
-  // configured leverage. It's the current setting, not a historical snapshot, so
-  // it's right only if the user hasn't changed it since; we label the derived
-  // margin accordingly. From leverage we recover initial margin = notional / lev.
-  const settingLeverage = useMemo(() => {
+  // Leverage. BULK's closed-position records carry NO leverage, and the only
+  // leverage-like value the API exposes for a market is `leverageSettings` — but
+  // that's the exchange-wide MAX leverage for the coin (identical across every
+  // wallet), NOT the user's actual chosen leverage. So the real per-position
+  // leverage is only knowable for a LIVE position. For a CLOSED trade we can only
+  // state a BOUND: actual leverage ≤ maxLeverage ⟹ actual margin ≥ notional/max.
+  const maxLeverage = useMemo(() => {
     const s = walletData?.live?.leverageSettings?.find(
       (e) => e.symbol.replace(/-USD$/, '').toUpperCase() === coin,
     );
     return s?.leverage ?? 0;
   }, [walletData, coin]);
-  const effectiveLeverage = livePos?.leverage && livePos.leverage > 0 ? livePos.leverage : settingLeverage;
-  // True when the leverage came from the persistent setting rather than a live
-  // position (i.e. a closed trade) — drives the "from account setting" hint.
-  const leverageFromSetting = !(livePos?.leverage && livePos.leverage > 0) && settingLeverage > 0;
+  const liveLeverage = livePos?.leverage && livePos.leverage > 0 ? livePos.leverage : 0;
+  // What we display per row: the actual live leverage when we have it, else the
+  // market max as an explicit bound (relabeled "Max leverage" / "Min margin").
+  const shownLeverage = liveLeverage || maxLeverage;
+  const leverageIsBound = liveLeverage === 0 && maxLeverage > 0;
 
   // The journey curve needs candles too. Rather than fetch them twice, the
   // candle panel reports the candles it loaded back up here via a shared
@@ -211,7 +212,7 @@ export default function ObserveTradePage() {
     : life.finalPnl;
   const isUp = displayPnl >= 0;
   const notionalPeak = life.peakSize * life.avgEntry;
-  const roi = notionalPeak > 0 ? (displayPnl / (effectiveLeverage > 0 ? notionalPeak / effectiveLeverage : notionalPeak)) * 100 : null;
+  const roi = notionalPeak > 0 ? (displayPnl / (liveLeverage > 0 ? notionalPeak / liveLeverage : notionalPeak)) * 100 : null;
   // Fallback = live position with no fill history; we don't know when it opened,
   // so "Held" is unknown and the lifecycle rail is empty.
   const isFallback = life.events.length === 0;
@@ -257,7 +258,7 @@ export default function ObserveTradePage() {
               className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
               style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}
             >
-              {life.side === 'long' ? 'Long' : 'Short'}{effectiveLeverage > 0 ? ` ${Number(effectiveLeverage.toFixed(1))}×` : ''}
+              {life.side === 'long' ? 'Long' : 'Short'}{liveLeverage > 0 ? ` ${Number(liveLeverage.toFixed(1))}×` : ''}
             </span>
             {/* Open/Closed — a real pill so it doesn't blend into the bg */}
             <span
@@ -302,7 +303,7 @@ export default function ObserveTradePage() {
             closedAt: life.closedAt,
             avgEntry: life.avgEntry,
             size: life.peakSize,
-            leverage: effectiveLeverage || 0,
+            leverage: liveLeverage || 0,
             markPrice,
             exitPrice: life.isOpen ? markPrice : lastPrice,
             pnl: displayPnl,
@@ -373,23 +374,22 @@ export default function ObserveTradePage() {
                 <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
                 <DataRow label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? `$${formatNumber(lastPrice, lastPrice < 10 ? 4 : 2)}` : '—'} />
                 <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
-                {/* Notional = position VALUE (size × avg entry). Leverage &
-                    Margin: BULK's closed-position records have no leverage, but
-                    the wallet's per-symbol leverageSettings persists after close,
-                    so a closed trade falls back to that configured leverage
-                    (tagged "setting"). Margin = notional / leverage (initial
-                    margin requirement). "—" only when we have neither. */}
+                {/* Notional = position VALUE (size × avg entry). Leverage/Margin:
+                    BULK records no leverage on CLOSED trades and the only
+                    leverage value it exposes per market is the exchange MAX
+                    (same for everyone) — not the trader's actual pick. So we show
+                    the real values only for a LIVE position; for a closed trade we
+                    show a true BOUND: "Max leverage" and "Min margin"
+                    (= notional / max leverage, since actual leverage ≤ max). */}
                 <DataRow label="Notional" value={`$${formatCompact(notionalPeak)}`} />
                 <DataRow
-                  label="Leverage"
-                  value={effectiveLeverage > 0 ? `${Number(effectiveLeverage.toFixed(1))}×` : '—'}
-                  hint={leverageFromSetting ? 'setting' : undefined}
+                  label={leverageIsBound ? 'Max leverage' : 'Leverage'}
+                  value={shownLeverage > 0 ? `${Number(shownLeverage.toFixed(1))}×` : '—'}
                 />
-                {effectiveLeverage > 0 && (
+                {shownLeverage > 0 && (
                   <DataRow
-                    label="Margin"
-                    value={`$${formatCompact(notionalPeak / effectiveLeverage)}`}
-                    hint={leverageFromSetting ? 'est.' : undefined}
+                    label={leverageIsBound ? 'Min margin' : 'Margin'}
+                    value={`${leverageIsBound ? '≥ ' : ''}$${formatCompact(notionalPeak / shownLeverage)}`}
                   />
                 )}
                 {life.isOpen && livePos && livePos.liquidationPrice > 0 && (
@@ -425,10 +425,11 @@ export default function ObserveTradePage() {
 
       {/* Honest scope note */}
       <p className="mt-6 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
-        Reconstructed from BULK fills and candles. Leverage/margin on a closed trade come from the
-        wallet&apos;s current per-symbol leverage setting (marked <span className="uppercase tracking-wide">est.</span>),
-        which is right unless it was changed after the trade. Take-profit / stop-loss placements and
-        isolated-margin top-ups aren&apos;t exposed by any BULK feed we read yet, so they aren&apos;t shown.
+        Reconstructed from BULK fills and candles. BULK doesn&apos;t record a closed position&apos;s actual
+        leverage — the only value it exposes per market is the exchange max — so a closed trade shows a
+        bound (Max leverage → Min margin), not the trader&apos;s real figure; the exact leverage/margin is
+        known only while the position is live. Take-profit / stop-loss placements and isolated-margin
+        top-ups aren&apos;t exposed by any BULK feed we read yet, so they aren&apos;t shown.
       </p>
     </Shell>
   );
