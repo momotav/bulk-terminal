@@ -110,6 +110,8 @@ export function TradeShareCard({ data, onClose }: Props) {
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertPct, setConvertPct] = useState(0);
   // Share options.
   const [hideWallet, setHideWallet] = useState(false);
   const [showRef, setShowRef] = useState(false);
@@ -594,17 +596,30 @@ export function TradeShareCard({ data, onClose }: Props) {
       await play();
       rec.stop();
       await stopped;
-      const blob = new Blob(chunks, { type: mime });
-      const url = URL.createObjectURL(blob);
+      let outBlob = new Blob(chunks, { type: mime });
+      let ext = mime.includes('mp4') ? 'mp4' : 'webm';
+      // Chrome can only record valid WebM — transcode it to a real MP4 so the
+      // user always gets a universally-playable .mp4. Falls back to the WebM if
+      // the (lazy, in-browser) conversion ever fails.
+      if (ext !== 'mp4') {
+        setRecording(false);
+        setConverting(true); setConvertPct(0);
+        try {
+          const { webmToMp4 } = await import('@/lib/webmToMp4');
+          outBlob = await webmToMp4(outBlob, (r) => setConvertPct(Math.round(r * 100)));
+          ext = 'mp4';
+        } catch { /* keep the WebM */ }
+        finally { setConverting(false); }
+      }
+      const url = URL.createObjectURL(outBlob);
       const a = document.createElement('a');
-      const ext = mime.includes('mp4') ? 'mp4' : 'webm';
       a.href = url; a.download = `bulkstats-${coin}-${new Date(isOpen ? Date.now() : (closedAt ?? openedAt)).toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } finally { setRecording(false); }
+    } finally { setRecording(false); setConverting(false); }
   };
 
-  const busy = playing || recording;
+  const busy = playing || recording || converting;
 
   return (
     <div
@@ -644,7 +659,9 @@ export function TradeShareCard({ data, onClose }: Props) {
             <Play className="h-3.5 w-3.5" /> Replay
           </button>
           <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] disabled:opacity-50">
-            {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</> : <><Download className="h-3.5 w-3.5" /> Download video</>}
+            {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</>
+              : converting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Converting{convertPct ? ` ${convertPct}%` : ''}…</>
+              : <><Download className="h-3.5 w-3.5" /> Download video</>}
           </button>
         </div>
       </div>
