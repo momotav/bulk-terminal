@@ -198,13 +198,24 @@ export function Header() {
               <Menu className="w-5 h-5" />
             </button>
             
-            <Link href="/" className="flex items-center shrink-0">
-              <Image 
-                src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
-                alt="BULK Stats" 
-                width={140} 
-                height={36} 
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              {/* Logomark — white on dark, black on light. Always shown (on
+                  phones it's the whole brand). */}
+              <Image
+                src={currentTheme === 'light' ? '/stats-mark-dark.png' : '/stats-mark-light.png'}
+                alt="BULKSTATS"
+                width={48}
+                height={51}
                 className="h-7 w-auto"
+                priority
+              />
+              {/* Wordmark — hidden on phones. */}
+              <Image
+                src={currentTheme === 'light' ? '/bulkstats2.png' : '/bulkstats.png'}
+                alt="BULK Stats"
+                width={140}
+                height={36}
+                className="hidden h-6 w-auto sm:block"
                 priority
               />
             </Link>

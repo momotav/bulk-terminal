@@ -413,7 +413,10 @@ export function TradeShareCard({ data, onClose }: Props) {
     // coin row — real logo if we have one, else a colored letter disc
     const coinY = by + 26, cr = 14, ccx = PAD + 21;
     const logo = logoRef.current;
-    if (logo && logo.complete && logo.naturalWidth > 0) {
+    // logoRef is only set on a successful onload, so a non-null ref means it
+    // loaded. Don't gate on naturalWidth — SVGs frequently report 0 there yet
+    // still render fine via drawImage with explicit dimensions.
+    if (logo && logo.complete) {
       ctx.save();
       ctx.beginPath(); ctx.arc(ccx, coinY, cr, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.clip();
       ctx.drawImage(logo, ccx - cr, coinY - cr, cr * 2, cr * 2);
