@@ -104,8 +104,11 @@ export function ProtocolRevenueChart() {
   } | null>(null);
 
   useEffect(() => {
-    const fetchRevenue = async () => {
-      setLoading(true);
+    let cancelled = false;
+    // `silent` refreshes (the 60s poll) skip the loading flag so the chart
+    // doesn't flash a skeleton — it just updates in place with newer numbers.
+    const fetchRevenue = async (silent = false) => {
+      if (!silent) setLoading(true);
       try {
         const data = await analytics.getProtocolRevenueChart(revenueHours);
         // Transform data to make all values positive for display
@@ -115,14 +118,16 @@ export function ProtocolRevenueChart() {
           takerFees: Math.abs(d.takerFees),
           periodRevenue: Math.abs(d.periodRevenue),
         }));
-        setRevenueData(transformed);
+        if (!cancelled) setRevenueData(transformed);
       } catch (error) {
         console.error('Failed to fetch revenue:', error);
       } finally {
-        setLoading(false);
+        if (!silent && !cancelled) setLoading(false);
       }
     };
     fetchRevenue();
+    const id = setInterval(() => fetchRevenue(true), 60000); // 60s — revenue changes slowly
+    return () => { cancelled = true; clearInterval(id); };
   }, [revenueHours, network]);
 
   useEffect(() => {

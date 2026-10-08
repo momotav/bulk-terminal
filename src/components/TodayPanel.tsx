@@ -39,7 +39,7 @@ export function TodayPanel() {
         .catch(() => {});
     };
     load();
-    const id = window.setInterval(load, 30000);
+    const id = window.setInterval(load, 15000); // 15s — keep OI / active-trader cards fresh
     return () => { cancelled = true; window.clearInterval(id); };
   }, [network]);
 
@@ -134,10 +134,14 @@ function RevenueCard() {
 
   useEffect(() => {
     let cancelled = false;
-    analytics.getProtocolRevenueChart(8760 * 3) // ALL → daily buckets
-      .then((d) => { if (!cancelled) setAllRows(Array.isArray(d?.data) ? d.data : []); })
-      .catch(() => { if (!cancelled) setAllRows([]); });
-    return () => { cancelled = true; };
+    const load = () => analytics.getProtocolRevenueChart(8760 * 3) // ALL → daily buckets
+      .then((d) => { if (!cancelled && Array.isArray(d?.data)) setAllRows(d.data); })
+      .catch(() => { /* keep the last good data on a transient failure */ });
+    load();
+    // Revenue changes slowly (daily buckets + today's growing bucket) — a 60s
+    // refresh keeps today's number current without re-pulling all history often.
+    const id = window.setInterval(load, 60000);
+    return () => { cancelled = true; window.clearInterval(id); };
   }, [network]);
 
   // Constant stats from the FULL history (identical on every timeframe):

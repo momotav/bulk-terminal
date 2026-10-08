@@ -53,7 +53,7 @@ export function VolumeHero() {
       .then((d) => { if (!cancelled && d?.volume24h != null) setVol24h(d.volume24h); })
       .catch(() => {});
     load();
-    const id = window.setInterval(load, 30000);
+    const id = window.setInterval(load, 15000); // 15s — keep the headline volume fresh
     return () => { cancelled = true; window.clearInterval(id); };
   }, [network]);
 

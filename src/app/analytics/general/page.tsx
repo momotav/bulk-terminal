@@ -540,9 +540,16 @@ export default function AnalyticsPage() {
       } catch { /* non-blocking */ }
     };
 
+    // Refresh the 24h Volume / Trades KPIs (from /analytics/stats) too.
+    const fetchStats24h = async () => {
+      try { const d = await analytics.getStats(); if (d) setStats(d); } catch { /* non-blocking */ }
+    };
+
     fetchLiveOI();
     fetchActive24h();
-    const interval = setInterval(fetchLiveOI, 30000); // Refresh every 30s
+    // 15s — keep the live OI, active-trader and 24h volume KPIs fresh (all cheap;
+    // the backend coalesces + caches, so this just surfaces new data sooner).
+    const interval = setInterval(() => { fetchLiveOI(); fetchActive24h(); fetchStats24h(); }, 15000);
     return () => clearInterval(interval);
   }, [network]);
 
