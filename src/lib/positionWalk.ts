@@ -284,6 +284,20 @@ export interface TradeEventPoint {
   positionAfter: number;
   /** Realized PnL booked by this fill (0 for pure opens/adds). */
   realizedDelta: number;
+  /** Set when this fill was FORCED by the risk engine (BULK reasonCode):
+   *  'partial' = partial liquidation / liquidation sweep (position reduced),
+   *  'full'    = full liquidation (position closed), 'adl' = auto-deleverage.
+   *  null/undefined = ordinary trade. Lets the card mark liquidations. */
+  liq?: 'partial' | 'full' | 'adl' | null;
+}
+
+/** Map BULK's fill reason token to a liquidation kind (null = ordinary trade).
+ *  Backend tokens: 'trade' | 'liq' | 'liq_sweep' | 'adl'. */
+export function liqReasonKind(reasonCode?: string): 'liq' | 'adl' | null {
+  const r = String(reasonCode ?? '').toLowerCase();
+  if (r.includes('liq')) return 'liq';   // covers 'liq' and 'liq_sweep'
+  if (r.includes('adl')) return 'adl';
+  return null;
 }
 
 /** One sample on the trade's PnL journey (realized + unrealized at time t). */
@@ -315,6 +329,14 @@ export interface TradeLifecycle {
   currentSize: number;
   events: TradeEventPoint[];
   pnlCurve: PnlCurvePoint[];
+  /** Reconstructed liquidation-price trajectory over the trade's life, as a STEP
+   *  series (one point per fill that left the position open). The line widens
+   *  (moves away from entry) after a partial liquidation because the remaining
+   *  position is smaller. Empty when leverage is unknown. Anchored to the real
+   *  liquidation fill prices at liq events and to the real current liq price for
+   *  an open position; the between-event and opening values are a leverage-based
+   *  estimate (maintenance ≈ 0.5 / leverage). */
+  liqCurve: { t: number; price: number }[];
   /** Cumulative realized PnL at the end of the life. */
   realizedTotal: number;
   peakPnl: number;
@@ -361,7 +383,7 @@ function replaySegment(seg: AnnotatedFill[], uptoT: number): { size: number; avg
 export function buildTradeLifecycle(
   fills: WalletFill[],
   candles: OHLC[],
-  opts: { markPrice?: number | null; now?: number } = {},
+  opts: { markPrice?: number | null; now?: number; leverage?: number; liqPrice?: number | null } = {},
 ): TradeLifecycle | null {
   if (!fills || fills.length === 0) return null;
   const annotated = annotateFills(fills); // sorted ascending, with actions
@@ -390,6 +412,21 @@ export function buildTradeLifecycle(
   // a trader means for a finished trade that was added to several times.
   let entryNotional = 0;
   let entrySize = 0;
+  // Liquidation-price reconstruction (needs leverage). Collateral is tracked so
+  // the liq price WIDENS after a partial liquidation (remaining position is
+  // smaller). Maintenance ≈ 0.5 / leverage is a generic for the modeled segments.
+  const lev = opts.leverage && opts.leverage > 0 ? opts.leverage : 0;
+  const mmr = lev > 0 ? 0.5 / lev : 0;
+  let collateral = 0;
+  const liqCurve: { t: number; price: number }[] = [];
+  const pushLiqPoint = (t: number) => {
+    if (lev <= 0 || Math.abs(size) < ZERO_EPS) return;
+    const maint = Math.abs(size) * avgEntry * mmr;
+    const dist = (collateral - maint) / Math.abs(size);
+    const p = side === 'long' ? avgEntry - dist : avgEntry + dist;
+    if (Number.isFinite(p) && p > 0) liqCurve.push({ t, price: p });
+  };
+
   const events: TradeEventPoint[] = [];
   for (let i = 0; i < seg.length; i++) {
     const f = seg[i];
@@ -404,21 +441,36 @@ export function buildTradeLifecycle(
       size = after;
       entryNotional += Math.abs(delta) * f.price;
       entrySize += Math.abs(delta);
+      if (lev > 0) collateral += (Math.abs(delta) * f.price) / lev;   // margin posted on open/add
     } else {
       const closed = Math.min(Math.abs(before), Math.abs(delta));
       realizedDelta = closed * (f.price - avgEntry) * Math.sign(before);
       realizedCum += realizedDelta;
-      if (Math.abs(after) < ZERO_EPS) { size = 0; avgEntry = 0; }
+      if (lev > 0) collateral += realizedDelta;                        // P&L accrues to margin
+      if (Math.abs(after) < ZERO_EPS) { size = 0; avgEntry = 0; if (lev > 0) collateral = 0; }
       else if (Math.sign(after) !== Math.sign(before)) {
         // Flip: the leftover opens a fresh leg at this fill's price.
         size = after; avgEntry = f.price;
         entryNotional += Math.abs(after) * f.price;
         entrySize += Math.abs(after);
+        if (lev > 0) collateral = (Math.abs(after) * f.price) / lev;   // fresh leg margin
       }
       else size = after;
     }
     if (Math.abs(size) > peakSize) peakSize = Math.abs(size);
-    events.push({ t: f.timestamp, action: f.action, actionLabel: f.actionLabel, price: f.price, sizeDelta: delta, positionAfter: after, realizedDelta });
+
+    // Classify forced (liquidation) fills from BULK's reason token.
+    const lk = liqReasonKind(f.reasonCode);
+    let liq: TradeEventPoint['liq'] = null;
+    let label = f.actionLabel;
+    if (lk === 'adl') { liq = 'adl'; label = 'ADL'; }
+    else if (lk === 'liq') {
+      if (f.action === 'close' || f.action === 'flip') { liq = 'full'; label = `Liquidated ${before > 0 ? 'long' : 'short'}`; }
+      else { liq = 'partial'; label = 'Partial liq'; }
+    }
+
+    events.push({ t: f.timestamp, action: f.action, actionLabel: label, price: f.price, sizeDelta: delta, positionAfter: after, realizedDelta, liq });
+    pushLiqPoint(f.timestamp);   // step point — liq price for the (post-fill) open position
     if (i > 0 && Math.abs(size) < ZERO_EPS && closedAt === null) closedAt = f.timestamp;
   }
 
@@ -426,6 +478,12 @@ export function buildTradeLifecycle(
   const currentSize = isOpen ? size : 0;
   const now = opts.now ?? Date.now();
   const endT = isOpen ? now : (closedAt ?? seg[seg.length - 1].timestamp);
+
+  // Anchor an OPEN position's tail to the REAL current liquidation price (from
+  // the live snapshot) so the end of the line is exact, not modeled.
+  if (isOpen && opts.liqPrice && opts.liqPrice > 0 && liqCurve.length) {
+    liqCurve.push({ t: endT, price: opts.liqPrice });
+  }
 
   // --- PnL journey ---------------------------------------------------------
   // Sample at every candle close inside the life window, plus every event
@@ -474,6 +532,7 @@ export function buildTradeLifecycle(
     currentSize,
     events,
     pnlCurve,
+    liqCurve,
     realizedTotal: realizedCum,
     peakPnl,
     troughPnl,

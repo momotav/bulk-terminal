@@ -354,7 +354,10 @@ export function PositionChartModal({ position, onClose }: Props) {
     // real open); live → all fills (latest instance).
     const tf = position.kind === 'closed' ? fills.filter((f) => f.timestamp <= position.closedAt + 2000) : fills;
     const mark = position.kind === 'live' ? (liveMark ?? position.markPrice) : null;
-    const life = buildTradeLifecycle(tf, plottedCandles, { markPrice: mark });
+    const liqPrice = position.kind === 'live' ? position.liquidationPrice : null;
+    const life = buildTradeLifecycle(tf, plottedCandles, {
+      markPrice: mark, leverage: position.leverage ?? 0, liqPrice,
+    });
     if (!life) return null;
     const lastPrice = life.isOpen ? mark : (life.events.length ? life.events[life.events.length - 1].price : mark);
     return {
@@ -362,8 +365,9 @@ export function PositionChartModal({ position, onClose }: Props) {
       side: life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
       avgEntry: life.avgEntry, size: life.peakSize, leverage: position.leverage ?? 0,
       markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: life.finalPnl,
-      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
+      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
       pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
+      liqCurve: life.liqCurve,
     };
   }, [position, fills, plottedCandles, liveMark]);
 

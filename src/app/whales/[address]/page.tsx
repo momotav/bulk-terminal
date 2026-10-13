@@ -1854,17 +1854,20 @@ export default function WalletPage() {
     const tf = allFills.filter((f) => f.symbol === sym);
     if (tf.length === 0) return;
     const mark = data?.markPrices?.[sym] ?? null;
-    const life = buildTradeLifecycle(tf, klinesBySymbol[sym] ?? [], { markPrice: mark });
-    if (!life) return;
     const lp = data?.live?.positions.find((p) => p.symbol === sym);
+    const life = buildTradeLifecycle(tf, klinesBySymbol[sym] ?? [], {
+      markPrice: mark, leverage: lp?.leverage ?? 0, liqPrice: lp?.liquidationPrice ?? null,
+    });
+    if (!life) return;
     const lastPrice = life.isOpen ? mark : (life.events.length ? life.events[life.events.length - 1].price : mark);
     setCardData({
       address, symbol: sym, coin: coin2,
       side: life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
       avgEntry: life.avgEntry, size: life.peakSize, leverage: lp?.leverage ?? 0,
       markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: life.finalPnl,
-      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
+      events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
       pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
+      liqCurve: life.liqCurve,
     });
   };
 

@@ -188,7 +188,14 @@ export default function ObserveTradePage() {
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
     if (tradeFills.length) {
-      const l = buildTradeLifecycle(tradeFills, candles, { markPrice });
+      // Pass leverage (actual for a live position, else the market-max bound) and
+      // the live liq price so the lifecycle can reconstruct the liquidation-price
+      // line — it widens at partial liquidations.
+      const l = buildTradeLifecycle(tradeFills, candles, {
+        markPrice,
+        leverage: liveLeverage || maxLeverage,
+        liqPrice: livePos?.liquidationPrice ?? null,
+      });
       if (l) return l;
     }
     // Fills unavailable (aged out of BULK's window, or a transient 429) but the
@@ -352,8 +359,9 @@ export default function ObserveTradePage() {
             markPrice,
             exitPrice: life.isOpen ? markPrice : lastPrice,
             pnl: displayPnl,
-            events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta) })),
+            events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
             pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
+            liqCurve: life.liqCurve,
           }}
         />
       )}
@@ -520,6 +528,9 @@ function liveFallbackLifecycle(
     currentSize: size,
     events: [],
     pnlCurve: curve,
+    liqCurve: (pos.liquidationPrice && pos.liquidationPrice > 0)
+      ? [{ t: openedAt, price: pos.liquidationPrice }, { t: now, price: pos.liquidationPrice }]
+      : [],
     realizedTotal: pos.realizedPnl ?? 0,
     peakPnl: peak,
     troughPnl: trough,
@@ -571,6 +582,7 @@ function lifecycleFromClosedRecord(cp: ClosedPosition, symbol: string): TradeLif
       { t: cp.openedAt, pnl: 0, realized: 0, price: cp.openPrice },
       { t: cp.closedAt, pnl: cp.realizedPnl, realized: cp.realizedPnl, price: cp.closePrice },
     ],
+    liqCurve: [],
     realizedTotal: cp.realizedPnl, peakPnl: Math.max(0, cp.realizedPnl),
     troughPnl: Math.min(0, cp.realizedPnl), finalPnl: cp.realizedPnl,
   };

@@ -19,7 +19,7 @@ import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 
-export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number }
+export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number; liq?: 'partial' | 'full' | 'adl' | null }
 export interface ShareCardData {
   address: string;
   symbol: string;        // "BTC-USD"
@@ -36,6 +36,9 @@ export interface ShareCardData {
   pnl: number;           // life.finalPnl (realized for closed)
   events: ShareCardEvent[];        // fills → markers
   pnlCurve: { t: number; pnl: number }[]; // PnL journey over time
+  /** Liquidation-price step series over the trade (widens at partial liqs).
+   *  Empty when leverage is unknown → no liq line drawn. */
+  liqCurve?: { t: number; price: number }[];
 }
 
 interface Props { data: ShareCardData; onClose: () => void; }
@@ -217,6 +220,18 @@ export function TradeShareCard({ data, onClose }: Props) {
     return raw + delta * prog(t);
   }, [data.pnlCurve, data.pnl, openedAt]);
 
+  // Liquidation price at time t — a STEP series (holds the last value), so the
+  // line jumps WIDER exactly when a partial liquidation reduces the position.
+  // Returns null before the first point (and when leverage is unknown → no line).
+  const liqAt = useCallback((t: number): number | null => {
+    const lc = data.liqCurve;
+    if (!lc || !lc.length) return null;
+    if (t < lc[0].t) return null;
+    let p = lc[0].price;
+    for (const q of lc) { if (q.t <= t) p = q.price; else break; }
+    return p;
+  }, [data.liqCurve]);
+
   // Fractional candle index for an arbitrary timestamp (for marker placement).
   const idxAtTime = useCallback((cs: Candle[], t: number): number => {
     if (cs.length === 0) return 0;
@@ -325,6 +340,20 @@ export function TradeShareCard({ data, onClose }: Props) {
     }
     ctx.globalAlpha = 1;
 
+    // liquidation-price line (red, dashed). Drawn from data.liqCurve as a STEP
+    // series so it visibly WIDENS (steps away from entry) at each partial
+    // liquidation, then holds as the trade recovers. Null before the first liq
+    // point / when leverage is unknown.
+    const liqNow = liqAt(curT);
+    if (liqNow != null && Number.isFinite(liqNow)) {
+      const yL = yOf(liqNow);
+      ctx.strokeStyle = V.neg; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(cx0, yL); ctx.lineTo(cx0 + cw, yL); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.font = `700 9px ${FONT}`; ctx.fillStyle = V.neg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('LIQ', cx0 + 3, yL - 6); ctx.textBaseline = 'alphabetic';
+    }
+
     // current-price dotted line, tracking the head
     const beforeEntry = curT < (data.pnlCurve[0]?.t ?? openedAt);
     // At the last frame land exactly on the authoritative value even if the card's
@@ -354,12 +383,14 @@ export function TradeShareCard({ data, onClose }: Props) {
       const op = appear * edge;
       if (op <= 0.02) continue;
       const my = yOf(e.price);
+      const isLiq = !!e.liq;
       ctx.globalAlpha = op;
-      ctx.beginPath(); ctx.arc(x, my, 8, 0, Math.PI * 2);
-      ctx.fillStyle = e.buy ? V.pos : V.neg; ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = V.bgBase; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, my, isLiq ? 9 : 8, 0, Math.PI * 2);
+      ctx.fillStyle = isLiq ? V.neg : (e.buy ? V.pos : V.neg); ctx.fill();
+      // Liquidations get a bright white ring so they stand out from ordinary fills.
+      ctx.lineWidth = isLiq ? 2 : 1.5; ctx.strokeStyle = isLiq ? '#fff' : V.bgBase; ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.font = `700 9px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(e.buy ? 'B' : 'S', x, my + 0.5);
+      ctx.fillText(isLiq ? 'L' : (e.buy ? 'B' : 'S'), x, my + 0.5);
       ctx.textBaseline = 'alphabetic';
       ctx.globalAlpha = 1;
       // the freshest fill still inside its label window owns the pop-up
@@ -519,7 +550,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillText('bulkstats.com', W / 2, footCy);
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
-  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, pnlAt, idxAtTime]);
+  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
 
   // One smooth replay pass (steady scroll) → resolves after a short end-hold.
   const play = useCallback((): Promise<void> => {
