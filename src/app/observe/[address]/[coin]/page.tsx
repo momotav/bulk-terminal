@@ -180,11 +180,24 @@ export default function ObserveTradePage() {
   const [candleTick, setCandleTick] = useState(0);
 
   const life = useMemo<TradeLifecycle | null>(() => {
-    // Pinned CLOSED trade with a matching BULK record → anchor the ENTIRE view
-    // (headline PnL, entry/exit, size, chart span, journey) to that record, so
-    // it shows the trade the wallet row linked to instead of the live position.
-    if (pinnedRecord) return lifecycleFromClosedRecord(pinnedRecord, symbol);
     const candles = candleCache.get(symbol) ?? [];
+    // Pinned CLOSED trade. PREFER the fills reconstruction when it reproduces the
+    // record's realized PnL — only it carries the liquidation markers + liq-price
+    // line. Fall back to the authoritative BULK record for high-frequency / scalper
+    // lots where fills can't cleanly isolate the trade (the original reason this
+    // path existed — fills merge into the live book there).
+    if (pinnedRecord) {
+      if (tradeFills.length) {
+        const l = buildTradeLifecycle(tradeFills, candles, {
+          markPrice, leverage: maxLeverage, liqPrice: null,
+        });
+        if (l) {
+          const tol = Math.max(1, Math.abs(pinnedRecord.realizedPnl) * 0.1);
+          if (Math.abs(l.finalPnl - pinnedRecord.realizedPnl) <= tol) return l;
+        }
+      }
+      return lifecycleFromClosedRecord(pinnedRecord, symbol);
+    }
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
     if (tradeFills.length) {
