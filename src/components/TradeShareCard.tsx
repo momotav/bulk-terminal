@@ -350,8 +350,15 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.strokeStyle = V.neg; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
       ctx.beginPath(); ctx.moveTo(cx0, yL); ctx.lineTo(cx0 + cw, yL); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
-      ctx.font = `700 9px ${FONT}`; ctx.fillStyle = V.neg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText('LIQ', cx0 + 3, yL - 6); ctx.textBaseline = 'alphabetic';
+      // "Liq $<price>" label on the line — the number visibly moves WIDER each
+      // time a partial liquidation steps the line away from entry.
+      ctx.font = `700 9.5px ${FONT}`;
+      const lbl = `LIQ ${px(liqNow)}`;
+      const lw = ctx.measureText(lbl).width;
+      ctx.fillStyle = V.bgBase; ctx.globalAlpha = 0.85;
+      roundRect(ctx, cx0 + 2, yL - 15, lw + 10, 13, 3); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = V.neg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(lbl, cx0 + 7, yL - 8); ctx.textBaseline = 'alphabetic';
     }
 
     // current-price dotted line, tracking the head
