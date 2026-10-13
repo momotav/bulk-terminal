@@ -470,7 +470,12 @@ export function buildTradeLifecycle(
     }
 
     events.push({ t: f.timestamp, action: f.action, actionLabel: label, price: f.price, sizeDelta: delta, positionAfter: after, realizedDelta, liq });
-    pushLiqPoint(f.timestamp);   // step point — liq price for the (post-fill) open position
+    // Liq-price step point. At a liquidation event the fill EXECUTED at ~the liq
+    // price, so anchor to the REAL fill price (works with no leverage model, and
+    // successive partial liqs land at wider prices → the line visibly widens).
+    // Between liqs, use the leverage model when available.
+    if (liq) liqCurve.push({ t: f.timestamp, price: f.price });
+    else pushLiqPoint(f.timestamp);
     if (i > 0 && Math.abs(size) < ZERO_EPS && closedAt === null) closedAt = f.timestamp;
   }
 

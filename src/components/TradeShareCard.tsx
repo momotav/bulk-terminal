@@ -302,12 +302,24 @@ export function TradeShareCard({ data, onClose }: Props) {
     const price = lerp(cs[intHead].c, cs[Math.min(N - 1, intHead + 1)].c, frac);
     const curT = lerp(cs[intHead].t, cs[Math.min(N - 1, intHead + 1)].t, frac);
 
+    // Current liquidation price (step series) — computed here so the y-scale can
+    // keep it in frame, otherwise the LIQ line sits off the top/bottom and is
+    // invisible even though it's "drawn".
+    const liqNow = liqAt(curT);
+
     // y-scale auto-fits the VISIBLE candles (so they fill the band instead of
     // bunching), smoothed frame-to-frame so it glides rather than jumps.
     const firstIdx = Math.max(0, Math.floor(h) - VISIBLE - 2);
     let vlo = Infinity, vhi = -Infinity;
     for (let i = firstIdx; i <= intHead; i++) { if (cs[i].l < vlo) vlo = cs[i].l; if (cs[i].h > vhi) vhi = cs[i].h; }
     vlo = Math.min(vlo, price); vhi = Math.max(vhi, price);
+    // Keep the liq line in view, but don't let a very distant liq squash the
+    // candles to a flat line — clamp its pull to ±8% beyond the candle range.
+    if (liqNow != null && Number.isFinite(liqNow)) {
+      const span = (vhi - vlo) || Math.max(1, vhi * 0.01);
+      vlo = Math.min(vlo, Math.max(liqNow, vlo - span * 0.8));
+      vhi = Math.max(vhi, Math.min(liqNow, vhi + span * 0.8));
+    }
     const vpad = (vhi - vlo) * 0.12 || Math.max(1, vhi * 0.002);
     const target = { lo: vlo - vpad, hi: vhi + vpad };
     if (!scaleRef.current) scaleRef.current = target;
@@ -344,7 +356,6 @@ export function TradeShareCard({ data, onClose }: Props) {
     // series so it visibly WIDENS (steps away from entry) at each partial
     // liquidation, then holds as the trade recovers. Null before the first liq
     // point / when leverage is unknown.
-    const liqNow = liqAt(curT);
     if (liqNow != null && Number.isFinite(liqNow)) {
       const yL = yOf(liqNow);
       ctx.strokeStyle = V.neg; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
