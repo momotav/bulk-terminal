@@ -1,15 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, 
-  TrendingUp, TrendingDown, Wallet, Activity,
-  AlertCircle, Clock, Loader2, UserCheck,
-  BarChart3, Flame, Shield, PiggyBank, DollarSign,
-  Receipt, Repeat, Image as ImageIcon, ChevronDown
-} from 'lucide-react';
+import { ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, TrendingUp, Wallet, Activity, AlertCircle, Clock, Loader2, UserCheck, Shield, Image as ImageIcon } from 'lucide-react';
 import { wallet, leaderboard, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type BulkLeaderboardRankResponse, type ClosedPosition, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
 import { computePositionOpenTime, formatDuration, realizedPnlSeries, symbolPositionTimeline, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
@@ -26,8 +20,6 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 import { ChartFrame } from '@/components/ChartFrame';
-import { StatCard as SharedStatCard } from '@/components/StatCard';
-import { Sparkline } from '@/components/Sparkline';
 import { getCoinColor } from '@/lib/coins';
 import { clampWicks } from '@/lib/candles';
 
@@ -51,168 +43,6 @@ interface WalletProfile {
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
 }
-
-// Compact label/value pair for the integrated stats panel. Uppercase 10px
-// label on top, big tabular-nums value below. Optional accent color tints
-// the value (used for liquidations count when > 0).
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: 'orange';
-}) {
-  return (
-    <div>
-      <p className="text-[10px] text-[var(--text-tertiary)] tracking-normal mb-1">{label}</p>
-      <p
-        className={cn(
-          'text-lg sm:text-xl font-semibold tabular-nums truncate',
-          accent === 'orange' ? 'text-orange-400' : 'text-[var(--text-primary)]'
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-// Compact inline variant of Stat. Used in the dense single-row stats
-// strip on the wallet page header. Smaller value text and tighter spacing
-// than the full Stat — suitable for sitting alongside several siblings
-// in one horizontal row without needing a grid layout.
-function InlineStat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: 'orange';
-}) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] text-[var(--text-tertiary)] tracking-normal leading-tight">
-        {label}
-      </span>
-      <span
-        className={cn(
-          'text-base font-semibold tabular-nums leading-tight mt-0.5',
-          accent === 'orange' ? 'text-orange-400' : 'text-[var(--text-primary)]'
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// Color-coded stat card. One card per metric; each metric has its own
-// accent color so users can scan the panel by color (volume is always
-// blue, balance is always green, etc.) instead of reading every label.
-//
-// The `tone` controls icon + label + value color collectively. For PnL
-// metrics where the value's sign should flip color (positive=green,
-// negative=red), pass `valueTone` as well — that lets us keep the
-// label/icon at their semantic color while the number itself responds
-// to its sign.
-//
-// Each card is self-contained (own border, own padding) so the panel
-// reads as a grid of independent tiles rather than a continuous strip.
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  tone,
-  valueTone,
-  tooltip,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  /** Color tone for icon + label + value. Use 'neutral' for reference
-   *  numbers (volume, balance, etc.) where color carries no semantic
-   *  meaning. Use the colored tones only for metrics whose sign or
-   *  identity matters at a glance — PnL is the obvious case. */
-  tone: 'neutral' | 'green' | 'red' | 'orange';
-  /** Override color of the value alone. Used by PnL cards where the
-   *  number's sign drives its color but the label stays semantic. */
-  valueTone?: 'green' | 'red';
-  /** Optional rich breakdown content shown in a popover on hover. When
-   *  provided, the card gets a `cursor-help` affordance and the popover
-   *  anchors to the card. Used by Total PnL to show gross/fees/net. */
-  tooltip?: ReactNode;
-}) {
-  // Tone → Tailwind color classes. Kept as a static map (not template
-  // strings) because Tailwind's JIT only includes classes it can see at
-  // build time; dynamically-built class names get purged.
-  //
-  // The 'neutral' tone uses the standard text colors so non-semantic
-  // metrics (volume, trades, balance, margin, available) read as
-  // reference numbers rather than competing for attention. PnL keeps
-  // tinted icon/label so it stands out from neutrals at a glance.
-  const toneClasses: Record<typeof tone, { icon: string; label: string; value: string }> = {
-    neutral: {
-      icon: 'text-[var(--text-tertiary)]',
-      label: 'text-[var(--text-tertiary)]',
-      value: 'text-[var(--text-primary)]',
-    },
-    green:  { icon: 'text-bulk-green', label: 'text-bulk-green/80', value: 'text-bulk-green' },
-    red:    { icon: 'text-bulk-red',   label: 'text-bulk-red/80',   value: 'text-bulk-red' },
-    orange: { icon: 'text-bulk-orange',label: 'text-bulk-orange/80',value: 'text-bulk-orange' },
-  };
-  const c = toneClasses[tone];
-  // valueTone overrides the value color when given (PnL sign flip).
-  const valueColor =
-    valueTone === 'green' ? 'text-bulk-green' :
-    valueTone === 'red' ? 'text-bulk-red' :
-    c.value;
-
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      className={cn(
-        'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4',
-        // Anchor for the optional popover; cursor-help signals interactivity.
-        Boolean(tooltip) && 'relative cursor-help',
-      )}
-      onMouseEnter={tooltip ? () => setHovered(true) : undefined}
-      onMouseLeave={tooltip ? () => setHovered(false) : undefined}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={cn('w-4 h-4', c.icon)} />
-        <span className={cn('text-[10px] tracking-normal font-medium', c.label)}>
-          {label}
-        </span>
-      </div>
-      <p className={cn('text-2xl font-bold tabular-nums tracking-tight truncate', valueColor)}>
-        {value}
-      </p>
-      {tooltip && hovered && (
-        // Popover anchored below the card, left-aligned (cards live in a
-        // grid; left-align avoids clipping at the right edge of the row).
-        // pointer-events-none so the hover stays attached to the card,
-        // not the popover, preventing flicker as the cursor moves.
-        <div
-          role="tooltip"
-          className={cn(
-            'absolute left-0 top-full mt-1.5 z-30',
-            'rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)]',
-            'shadow-lg shadow-black/30',
-            'min-w-[200px] px-3 py-2.5',
-            'pointer-events-none',
-          )}
-        >
-          {tooltip}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Breakdown content for the "Total PnL" StatCard hover popover. Renders
 // a Gross / Fees / Net summary so users can see how fees discounted the
 // headline number. Reused at both StatCard call sites (with-live and
@@ -277,367 +107,6 @@ function TotalPnlBreakdown({
     </>
   );
 }
-
-// ----------------------------------------------------------------------------
-// PlaceholderCard
-//
-// Lightweight placeholder that matches BarMetricCard's geometry — used
-// in the top strip to fill slots that can't compute (e.g. Direction Bias
-// when the wallet has no open positions). Keeps the 4-card strip shape
-// stable instead of letting it collapse to 1/2/3 cards depending on
-// wallet state, which would look broken.
-//
-// Visual: same border + padding + label as a real card, but the primary
-// value is "—" and the bar is muted.
-// ----------------------------------------------------------------------------
-function PlaceholderCard({
-  label,
-  subtitle = 'No data',
-}: {
-  label: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 opacity-60">
-      <div className="text-[10px] tracking-normal text-[var(--text-tertiary)] font-medium mb-1">
-        {label}
-      </div>
-      <div className="text-xl font-bold tabular-nums tracking-tight text-[var(--text-tertiary)] mb-1.5">
-        -
-      </div>
-      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5" />
-      <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
-        {subtitle}
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// OverviewRow
-//
-// Compact label/value pair used inside the left-rail Overview and
-// Analysis sections. Renders as a single flex line so the rail stays
-// scan-able vertically. Optional tone tints just the value, leaving
-// the label muted.
-//
-// When `tooltip` is provided, the value gets a help-cursor and shows
-// the popover content on hover — used for Total PnL's gross/fees/net
-// breakdown. Tooltip anchors below the row so it doesn't overflow
-// the rail's narrow width.
-// ----------------------------------------------------------------------------
-// Collapsible sidebar section. On mobile the header is a toggle (chevron) and
-// the body hides when collapsed; on desktop (lg+) it's always expanded and the
-// toggle is inert — so the rail stays full on wide screens but folds down on a
-// phone where the long stacked list was overwhelming.
-function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border-t border-[var(--border-color)] pt-4">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between lg:pointer-events-none"
-      >
-        <span className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold">{title}</span>
-        <ChevronDown className={cn('h-4 w-4 text-[var(--text-tertiary)] transition-transform lg:hidden', open && 'rotate-180')} />
-      </button>
-      <div className={cn('lg:!block lg:mt-2', open ? 'mt-2 block' : 'hidden')}>{children}</div>
-    </div>
-  );
-}
-
-// Main-column collapsible: a toggle header on mobile, always-open on desktop
-// (no header on lg). Lets heavy strips fold down on a phone.
-function MobileCollapse({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="lg:hidden flex w-full items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5"
-      >
-        <span className="text-xs font-semibold text-[var(--text-secondary)]">{title}</span>
-        <ChevronDown className={cn('h-4 w-4 text-[var(--text-tertiary)] transition-transform', open && 'rotate-180')} />
-      </button>
-      <div className={cn('lg:!block', open ? 'block mt-2.5' : 'hidden')}>{children}</div>
-    </div>
-  );
-}
-
-function OverviewRow({
-  label,
-  value,
-  tone = 'neutral',
-  tooltip,
-}: {
-  label: string;
-  value: string;
-  tone?: 'green' | 'red' | 'neutral';
-  tooltip?: ReactNode;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const valueColor =
-    tone === 'green' ? 'text-bulk-green' :
-    tone === 'red' ? 'text-bulk-red' :
-    'text-[var(--text-primary)]';
-  return (
-    <div
-      className={cn('relative flex items-center justify-between gap-3 text-sm', Boolean(tooltip) && 'cursor-help')}
-      onMouseEnter={tooltip ? () => setHovered(true) : undefined}
-      onMouseLeave={tooltip ? () => setHovered(false) : undefined}
-    >
-      {/* Label: secondary text (not tertiary) for stronger contrast
-          against the value. The whole row uses text-sm - bumped from
-          text-xs - to give the rail more presence on the page. */}
-      <span className="text-[var(--text-secondary)]">{label}</span>
-      <span className={cn('font-mono tabular-nums font-medium', valueColor)}>{value}</span>
-      {tooltip && hovered && (
-        <div
-          role="tooltip"
-          className={cn(
-            'absolute left-0 top-full mt-1 z-30',
-            'rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)]',
-            'shadow-lg shadow-black/30',
-            'min-w-[200px] px-3 py-2.5',
-            'pointer-events-none',
-          )}
-        >
-          {tooltip}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Format ms duration as "Xd Yh" / "Xh Ym" / "Xm" / "—". Shared helper
-// between the left-rail Analysis section and any other place that needs
-// the same short-form duration format.
-function formatDurationShort(ms: number | null): string {
-  if (ms === null || ms <= 0) return '-';
-  const minutes = Math.floor(ms / 60_000);
-  const hours = Math.floor(ms / 3_600_000);
-  const days = Math.floor(ms / 86_400_000);
-  if (days > 0) {
-    const remainingHours = Math.floor((ms - days * 86_400_000) / 3_600_000);
-    return `${days}d ${remainingHours}h`;
-  }
-  if (hours > 0) {
-    const remainingMinutes = Math.floor((ms - hours * 3_600_000) / 60_000);
-    return `${hours}h ${remainingMinutes}m`;
-  }
-  return `${minutes}m`;
-}
-
-// ----------------------------------------------------------------------------
-// PerformanceCard
-//
-// Top-strip variant of the performance visualization. Renders as a
-// full-size card matching BarMetricCard's dimensions so the 4-card top
-// strip (Performance / Direction Bias / Distance to Liq / Leverage)
-// reads as one unified row.
-//
-// Compared to a small inline strip: bigger bars (so they're legible at
-// glance), bigger value text (the win rate number leads), explicit
-// "Performance" label header to match the strip neighbors.
-// ----------------------------------------------------------------------------
-function PerformanceCard({
-  recentWinLoss,
-  winRate,
-  totalTrades,
-}: {
-  recentWinLoss: boolean[];
-  winRate: number | null;
-  totalTrades: number;
-}) {
-  const winRateColor =
-    winRate === null ? 'text-[var(--text-tertiary)]' :
-    winRate >= 0.6 ? 'text-bulk-green' :
-    winRate >= 0.4 ? 'text-[var(--text-primary)]' :
-    'text-bulk-red';
-
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4">
-      <div className="text-[10px] tracking-normal text-[var(--text-tertiary)] font-medium mb-1">
-        Performance
-      </div>
-      <div className={cn('text-xl font-bold tabular-nums tracking-tight mb-1.5', winRateColor)}>
-        {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : 'N/A'}
-      </div>
-      {/* Single win-rate fill bar — matches the BarMetricCard treatment on
-          the neighbouring cards so the top strip reads as one coordinated
-          row rather than four different visual styles. */}
-      <div className="h-1.5 w-full rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5">
-        <div
-          className={cn('h-full rounded-full', winRate !== null && winRate < 0.4 ? 'bg-bulk-red' : 'bg-bulk-green')}
-          style={{ width: `${Math.round((winRate ?? 0) * 100)}%` }}
-        />
-      </div>
-      <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
-        {winRate !== null ? `${(winRate * 100).toFixed(0)}% Win Rate` : 'N/A Win Rate'} · {totalTrades} {totalTrades === 1 ? 'Trade' : 'Trades'}
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// BarMetricCard
-//
-// Card for a metric that has a meaningful 0-100% bar visualization:
-// Direction Bias (long vs short %), Distance to Liquidation (% headroom
-// before forced close), Effective Leverage (% of max safe leverage).
-//
-// The visual structure mirrors Hyperdash's Performance/Leverage/Margin
-// Usage/Direction Bias cards in their wallet view: small label at top,
-// large primary value, then a thin filled bar, then a secondary line
-// of context. The `barColor` and `fillPct` are computed by the caller
-// since each metric has different sign semantics.
-// ----------------------------------------------------------------------------
-function BarMetricCard({
-  label,
-  value,
-  valueTone,
-  barColor,
-  fillPct,
-  subtitle,
-  secondaryFillPct,
-  secondaryBarColor,
-}: {
-  label: string;
-  value: string;
-  valueTone?: 'green' | 'red' | 'orange' | 'neutral';
-  /** Tailwind class for the bar fill, e.g. "bg-bulk-green". */
-  barColor: string;
-  /** Primary bar fill 0..1. */
-  fillPct: number;
-  /** Subtitle line — context like "$1.8M Notional · $477.2K Equity". */
-  subtitle?: string;
-  /** Optional second bar fill (used by Direction Bias to show long+short
-   *  as a split — long fills from the left, short from the right). */
-  secondaryFillPct?: number;
-  secondaryBarColor?: string;
-}) {
-  const valueColor =
-    valueTone === 'green' ? 'text-bulk-green' :
-    valueTone === 'red' ? 'text-bulk-red' :
-    valueTone === 'orange' ? 'text-bulk-orange' :
-    'text-[var(--text-primary)]';
-  // Clamp to [0, 1] so a bug doesn't cause the bar to overflow the track.
-  const clampedFill = Math.max(0, Math.min(1, fillPct));
-  const clampedSecondary = secondaryFillPct !== undefined
-    ? Math.max(0, Math.min(1, secondaryFillPct))
-    : null;
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4">
-      <div className="text-[10px] tracking-normal text-[var(--text-tertiary)] font-medium mb-1">
-        {label}
-      </div>
-      <div className={cn('text-xl font-bold tabular-nums tracking-tight mb-1.5', valueColor)}>
-        {value}
-      </div>
-      {/* Bar track. We use a single 8px-tall rounded track with two
-          potential fills overlaid - the secondary fill renders from the
-          RIGHT (justify-end via absolute right-0) so long/short splits
-          read intuitively. */}
-      <div className="relative h-1.5 rounded-full bg-[var(--bg-secondary-20)]/40 overflow-hidden mb-1.5">
-        <div
-          className={cn('absolute left-0 top-0 h-full rounded-full', barColor)}
-          style={{ width: `${clampedFill * 100}%` }}
-        />
-        {clampedSecondary !== null && secondaryBarColor && (
-          <div
-            className={cn('absolute right-0 top-0 h-full rounded-full', secondaryBarColor)}
-            style={{ width: `${clampedSecondary * 100}%` }}
-          />
-        )}
-      </div>
-      {subtitle && (
-        <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
-          {subtitle}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// AnalysisCard
-//
-// Vertical key/value list of derived analysis stats. Sits in the left
-// column above the positions panel as a compact ~140px-tall summary.
-// Mirrors the "Analysis" sidebar in Hyperdash's wallet view (Longest
-// Win Streak, Avg Trade Duration, Median Trade Duration, PnL Cohort,
-// Size Cohort) but renders horizontally compact since vertical space
-// in our layout is more contested.
-// ----------------------------------------------------------------------------
-function AnalysisCard({
-  longestStreak,
-  avgDuration,
-  medianDuration,
-  pnlCohort,
-  sizeCohort,
-}: {
-  longestStreak: number;
-  avgDuration: number | null;
-  medianDuration: number | null;
-  pnlCohort: { label: string; tone: 'green' | 'red' | 'neutral' };
-  sizeCohort: string;
-}) {
-  // Format ms duration as "Xd Yh" / "Xh Ym" / "Xm" — depending on scale.
-  // Matches Hyperdash's "19d 19h" style. Returns "—" for null/zero.
-  const formatDuration = (ms: number | null): string => {
-    if (ms === null || ms <= 0) return '-';
-    const minutes = Math.floor(ms / 60_000);
-    const hours = Math.floor(ms / 3_600_000);
-    const days = Math.floor(ms / 86_400_000);
-    if (days > 0) {
-      const remainingHours = Math.floor((ms - days * 86_400_000) / 3_600_000);
-      return `${days}d ${remainingHours}h`;
-    }
-    if (hours > 0) {
-      const remainingMinutes = Math.floor((ms - hours * 3_600_000) / 60_000);
-      return `${hours}h ${remainingMinutes}m`;
-    }
-    return `${minutes}m`;
-  };
-
-  const cohortToneClass =
-    pnlCohort.tone === 'green' ? 'text-bulk-green' :
-    pnlCohort.tone === 'red' ? 'text-bulk-red' :
-    'text-[var(--text-secondary)]';
-
-  // Each row is a label/value pair. Two-column flex layout — left
-  // justified label, right justified value — gives a clean read.
-  const rows: { label: string; value: string; valueClass?: string }[] = [
-    { label: 'Longest Win Streak', value: longestStreak > 0 ? `${longestStreak} Trade${longestStreak === 1 ? '' : 's'}` : '-' },
-    { label: 'Avg Trade Duration', value: formatDuration(avgDuration) },
-    { label: 'Median Trade Duration', value: formatDuration(medianDuration) },
-    { label: 'PnL Cohort', value: pnlCohort.label, valueClass: cohortToneClass + ' font-semibold' },
-    { label: 'Size Cohort', value: sizeCohort, valueClass: 'text-bulk-green font-semibold' },
-  ];
-
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4">
-      <div className="text-[10px] tracking-normal text-[var(--text-tertiary)] font-medium mb-3">
-        Analysis
-      </div>
-      <div className="flex flex-col gap-2">
-        {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-3 text-xs">
-            <span className="text-[var(--text-tertiary)] tracking-normal text-[10px]">
-              {row.label}
-            </span>
-            <span className={cn('font-mono tabular-nums', row.valueClass ?? 'text-[var(--text-primary)]')}>
-              {row.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ----------------------------------------------------------------------------
 // PnlCalendarHeatmap
 //
@@ -1084,103 +553,6 @@ function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPo
     </div>
   );
 }
-
-// Position Intelligence: per-coin exposure donut + net long/short +
-// concentration. Computed from the wallet's live open positions.
-function PositionExposure({ positions }: { positions: NonNullable<WalletData['live']>['positions'] }) {
-  const intel = useMemo(() => {
-    if (!positions?.length) return null;
-    let long = 0, short = 0;
-    const byCoin = new Map<string, number>();
-    for (const p of positions) {
-      const n = Math.abs((p.size || 0) * (p.price || 0));
-      if ((p.size || 0) > 0) long += n; else short += n;
-      const c = p.symbol.replace(/-USD$/, '');
-      byCoin.set(c, (byCoin.get(c) || 0) + n);
-    }
-    const total = long + short;
-    if (total <= 0) return null;
-    const coins = [...byCoin.entries()]
-      .map(([coin, n]) => ({ coin, notional: n, share: n / total, color: getCoinColor(coin) }))
-      .sort((a, b) => b.share - a.share);
-    return {
-      coins,
-      netSide: long >= short ? 'Long' : 'Short',
-      netPct: Math.abs(long - short) / total,
-      longPct: long / total,
-      shortPct: short / total,
-      concentration: coins[0]?.share ?? 0,
-      marketCount: coins.length,
-    };
-  }, [positions]);
-
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] flex flex-col">
-      <div className="panel-header">
-        <h2 className="panel-title t-h2">Position intelligence</h2>
-      </div>
-      {intel ? (
-        <div className="grid grid-cols-1 gap-4 p-3 lg:grid-cols-[minmax(0,15rem)_1fr] lg:gap-6">
-          {/* Left — headline stats + directional split. */}
-          <div className="flex flex-col gap-3.5">
-            <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
-              <div>
-                <div className="text-[10px] text-[var(--role-content-subtle)]">Net exposure</div>
-                <div
-                  className="mt-1 font-mono text-[15px] font-semibold tabular-nums"
-                  style={{ color: intel.netSide === 'Long' ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)' }}
-                >
-                  {(intel.netPct * 100).toFixed(0)}% {intel.netSide}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--role-content-subtle)]">Concentration</div>
-                <div className="mt-1 font-mono text-[15px] font-semibold tabular-nums text-[var(--role-content)]">
-                  {(intel.concentration * 100).toFixed(0)}%
-                  <span className="ml-1 text-[10px] font-normal text-[var(--role-content-subtle)]">{intel.coins[0]?.coin}</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--role-content-subtle)]">Markets</div>
-                <div className="mt-1 font-mono text-[15px] font-semibold tabular-nums text-[var(--role-content)]">{intel.marketCount}</div>
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between text-[10px] text-[var(--role-content-subtle)]">
-                <span style={{ color: intel.longPct > 0 ? 'var(--role-signal-positive)' : undefined }}>Long {(intel.longPct * 100).toFixed(0)}%</span>
-                <span style={{ color: intel.shortPct > 0 ? 'var(--role-signal-negative)' : undefined }}>Short {(intel.shortPct * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--role-surface-raised)]">
-                <div style={{ width: `${intel.longPct * 100}%`, background: 'var(--role-signal-positive)' }} />
-                <div style={{ width: `${intel.shortPct * 100}%`, background: 'var(--role-signal-negative)' }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Right — per-coin allocation, filling the width. */}
-          <div className="flex flex-col gap-2 lg:border-l lg:border-[var(--role-line-subtle)] lg:pl-6">
-            <div className="text-[10px] text-[var(--role-content-subtle)]">Allocation</div>
-            {intel.coins.map((c) => (
-              <div key={c.coin} className="flex items-center gap-2.5">
-                <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: c.color }} />
-                <span className="w-12 shrink-0 text-xs font-medium text-[var(--role-content)]">{c.coin}</span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--role-surface-raised)]">
-                  <div className="h-full rounded-full" style={{ width: `${c.share * 100}%`, background: c.color }} />
-                </div>
-                <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--role-content-muted)]">{(c.share * 100).toFixed(0)}%</span>
-                <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--role-content-subtle)]">${formatCompact(c.notional)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="p-8 text-center text-xs text-[var(--role-content-subtle)]">No open positions</div>
-      )}
-    </div>
-  );
-}
-
 // Trade Timeline: recent closed positions rendered as plain-language events.
 function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   const items = useMemo(() =>
@@ -1211,6 +583,351 @@ function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] 
         </ol>
       ) : <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">No closed trades yet</div>}
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Dense strip primitives
+//
+// The wallet page's "now" and "performance" readouts are laid out as ONE
+// bordered panel split into cells by hairlines, not as a row of padded cards.
+// Cards spend ~40% of the main column on padding and give every number equal
+// weight; hairline cells pack ~2× the information per screen and let the big
+// mono figure carry the hierarchy on its own. Same density the BULK exchange
+// itself runs at.
+// ----------------------------------------------------------------------------
+function StripCell({
+  label,
+  value,
+  tone = 'neutral',
+  sub,
+  children,
+  className,
+  title,
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: 'green' | 'red' | 'orange' | 'neutral' | 'muted';
+  /** One or two short context lines under the figure. */
+  sub?: ReactNode;
+  /** Optional inline viz (bar) between the figure and the sub line. */
+  children?: ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  const color =
+    tone === 'green' ? 'var(--pos)' :
+    tone === 'red' ? 'var(--neg)' :
+    tone === 'orange' ? 'var(--warn, var(--neg))' :
+    tone === 'muted' ? 'var(--role-content-subtle)' :
+    'var(--role-content)';
+  return (
+    <div className={cn('min-w-0 px-4 py-3 flex flex-col gap-1.5', className)} title={title}>
+      <div className="t-label truncate">{label}</div>
+      <div className="font-mono text-[19px] sm:text-[22px] leading-none font-medium tabular-nums tracking-tight truncate" style={{ color }}>
+        {value}
+      </div>
+      {children}
+      {sub && <div className="text-[11px] leading-snug text-[var(--role-content-muted)] truncate">{sub}</div>}
+    </div>
+  );
+}
+
+/** Thin track with one fill (and an optional second fill from the right). */
+function StripBar({ pct, color, pct2, color2 }: { pct: number; color: string; pct2?: number; color2?: string }) {
+  const a = Math.max(0, Math.min(1, pct));
+  const b = pct2 !== undefined ? Math.max(0, Math.min(1, pct2)) : null;
+  return (
+    <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-[var(--role-surface-raised)]">
+      <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${a * 100}%`, background: color }} />
+      {b !== null && color2 && (
+        <div className="absolute right-0 top-0 h-full rounded-full" style={{ width: `${b * 100}%`, background: color2 }} />
+      )}
+    </div>
+  );
+}
+
+/** Label/value row for the rail ledger. Hairlines come from the parent `divide-y`. */
+function LedgerRow({
+  label,
+  hint,
+  value,
+  tone = 'neutral',
+  title,
+}: {
+  label: string;
+  /** Small muted qualifier after the label, e.g. "14d" or "200 loaded". */
+  hint?: string;
+  value: ReactNode;
+  tone?: 'green' | 'red' | 'neutral' | 'muted';
+  title?: string;
+}) {
+  const color =
+    tone === 'green' ? 'var(--pos)' :
+    tone === 'red' ? 'var(--neg)' :
+    tone === 'muted' ? 'var(--role-content-subtle)' :
+    'var(--role-content)';
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-[7px] text-[13px]" title={title}>
+      <span className="min-w-0 truncate text-[var(--role-content-muted)]">
+        {label}
+        {hint && <span className="ml-1.5 text-[10px] text-[var(--role-content-subtle)]">{hint}</span>}
+      </span>
+      <span className="shrink-0 font-mono tabular-nums" style={{ color }}>{value}</span>
+    </div>
+  );
+}
+
+function LedgerSection({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
+  return (
+    <section className="pt-3">
+      <div className="mb-0.5 flex items-baseline justify-between gap-2">
+        <h3 className="t-label">{title}</h3>
+        {aside && <span className="text-[10px] text-[var(--role-content-subtle)]">{aside}</span>}
+      </div>
+      <div className="divide-y divide-[var(--role-line-subtle)]">{children}</div>
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// ExposureStrip — "what is this wallet doing right now", in one panel.
+//
+// Direction · Notional/margin · Margin usage · Nearest liquidation as four
+// hairline cells, then a HOLDS row of the open markets. Absorbs what used to
+// be three separate regions (KPI row, Signals strip, Position intelligence).
+// ----------------------------------------------------------------------------
+function ExposureStrip({
+  positions,
+  margin,
+  markPrices,
+  directionBias,
+  distanceToLiq,
+  effectiveLeverage,
+  totalNotional,
+}: {
+  positions: NonNullable<WalletData['live']>['positions'];
+  margin: NonNullable<WalletData['live']>['margin'] | null | undefined;
+  markPrices: Record<string, number>;
+  directionBias: { label: string; longPct: number; longNotional: number; shortNotional: number } | null;
+  distanceToLiq: { symbol: string; pct: number } | null;
+  effectiveLeverage: number | null;
+  totalNotional: number;
+}) {
+  const open = positions.length > 0 && !!directionBias;
+  const longN = directionBias?.longNotional ?? 0;
+  const shortN = directionBias?.shortNotional ?? 0;
+  const netExposure = longN - shortN;
+  const longPct = directionBias?.longPct ?? 0;
+  // Plain-language direction, mirroring BULK's own vocabulary on the exchange.
+  const dirLabel = !open ? 'Flat'
+    : longPct >= 0.9 ? 'All long'
+    : longPct >= 0.6 ? 'Mostly long'
+    : longPct > 0.4 ? 'Balanced'
+    : longPct > 0.1 ? 'Mostly short'
+    : 'All short';
+  const dirTone: 'green' | 'red' | 'neutral' | 'muted' = !open ? 'muted' : longPct > 0.6 ? 'green' : longPct < 0.4 ? 'red' : 'neutral';
+  const dirArrow = !open ? '' : longPct > 0.6 ? ' ↗' : longPct < 0.4 ? ' ↘' : ' →';
+
+  const equity = margin?.totalBalance ?? 0;
+  const used = margin?.marginUsed ?? 0;
+  // BULK reports maintenance margin per position; when present the cell shows
+  // maintenance ÷ equity (the liquidation-relevant ratio). Otherwise it falls
+  // back to margin used ÷ equity and says so in the label.
+  const maint = positions.reduce((s, p) => s + (typeof p.maintenanceMargin === 'number' && p.maintenanceMargin > 0 ? p.maintenanceMargin : 0), 0);
+  const hasMaint = maint > 0;
+  const usagePct = equity > 0 ? (hasMaint ? maint : used) / equity : 0;
+  const usageTone: 'green' | 'orange' | 'red' | 'neutral' | 'muted' = !open ? 'muted' : usagePct >= 0.8 ? 'red' : usagePct >= 0.5 ? 'orange' : 'neutral';
+
+  const liqPos = distanceToLiq ? positions.find((p) => p.symbol === distanceToLiq.symbol) : null;
+  const liqMark = liqPos ? (markPrices[liqPos.symbol] ?? liqPos.price) : null;
+  const liqTone: 'green' | 'orange' | 'red' | 'muted' = !distanceToLiq ? 'muted' : distanceToLiq.pct < 0.05 ? 'red' : distanceToLiq.pct < 0.15 ? 'orange' : 'green';
+
+  const holds = [...positions]
+    .map((p) => ({ ...p, coin: p.symbol.replace(/-USD$/, ''), n: Math.abs((p.size || 0) * (p.price || 0)) }))
+    .sort((a, b) => b.n - a.n);
+
+  return (
+    <section className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] min-w-0">
+      <div className="flex items-baseline gap-2 px-4 pt-2.5 pb-2 border-b border-[var(--border-color)]">
+        <h2 className="t-label !text-[var(--role-content)]">Exposure</h2>
+        <span className="text-[11px] text-[var(--role-content-subtle)]">open positions now</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-[var(--border-color)]">
+        <StripCell label="Direction" value={`${dirLabel}${dirArrow}`} tone={dirTone}
+          sub={open
+            ? <><span style={{ color: 'var(--pos)' }}>{(longPct * 100).toFixed(0)}% long · ${formatCompact(longN)}</span><span className="mx-1.5 text-[var(--role-content-subtle)]">/</span><span style={{ color: 'var(--neg)' }}>{((1 - longPct) * 100).toFixed(0)}% short · ${formatCompact(shortN)}</span></>
+            : 'No open positions'}>
+          {open && <StripBar pct={longPct} color="var(--pos)" pct2={1 - longPct} color2="var(--neg)" />}
+        </StripCell>
+        <StripCell label="Notional / margin" value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}×` : '—'} tone={effectiveLeverage === null ? 'muted' : 'neutral'}
+          sub={open
+            ? <>${formatCompact(totalNotional)} notional on ${formatCompact(equity)} margin<br />net exposure <span style={{ color: netExposure >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{netExposure >= 0 ? '+' : '−'}${formatCompact(Math.abs(netExposure))}</span></>
+            : 'Nothing deployed'} />
+        <StripCell label={hasMaint ? 'Maintenance / margin' : 'Margin usage'} value={margin ? `${(usagePct * 100).toFixed(1)}%` : '—'} tone={usageTone}
+          sub={margin
+            ? (hasMaint
+              ? <>${formatCompact(maint)} maintenance of ${formatCompact(equity)}<br />${formatCompact(used)} in margin</>
+              : `$${formatCompact(used)} of $${formatCompact(equity)} margin`)
+            : '—'}>
+          {margin && <StripBar pct={usagePct} color={usageTone === 'red' ? 'var(--neg)' : usageTone === 'orange' ? 'var(--warn, var(--neg))' : 'var(--role-content-muted)'} />}
+        </StripCell>
+        <StripCell label="Nearest liq. price" value={distanceToLiq ? `${(distanceToLiq.pct * 100).toFixed(1)}%` : '—'} tone={liqTone}
+          sub={distanceToLiq && liqPos
+            ? <>{liqPos.symbol} <span style={{ color: liqPos.size > 0 ? 'var(--pos)' : 'var(--neg)' }}>{liqPos.size > 0 ? 'long' : 'short'}</span><br />liq. {formatNumber(liqPos.liquidationPrice, 2)} · mark {liqMark != null ? formatNumber(liqMark, 2) : '—'}</>
+            : 'No liquidation exposure'} />
+      </div>
+      {holds.length > 0 && (
+        <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap px-4 py-2 border-t border-[var(--border-color)]">
+          <span className="t-label">Holds</span>
+          {holds.map((p) => (
+            <span key={p.symbol} className="inline-flex items-center gap-1.5 text-[12px]">
+              <span className="h-2 w-2 rounded-full" style={{ background: getCoinColor(p.coin) }} />
+              <span className="font-medium text-[var(--role-content)]">{p.symbol}</span>
+              <span style={{ color: p.size > 0 ? 'var(--pos)' : 'var(--neg)' }}>{p.size > 0 ? 'long' : 'short'}</span>
+              <span className="font-mono tabular-nums text-[var(--role-content-muted)]">${formatCompact(p.n)}</span>
+              <span className="font-mono text-[10px] text-[var(--role-content-subtle)]">{p.leverage}×</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// PerformanceStrip — the numbers that belong WITH the PnL curve.
+//
+// Return · Drawdown · Sharpe · Best day · Worst day · Up days, all derived from
+// the same series the chart plots (fills + 1h marks when reconstructable),
+// then a one-line PnL split (trading / funding / fees) and trade stats. Every
+// figure says what it was computed from — the honest version of the headline.
+// ----------------------------------------------------------------------------
+function PerformanceStrip({
+  series,
+  source,
+  daily,
+  margin,
+  closedPositions,
+  analysisStats,
+  tradeCount,
+}: {
+  series: { t: number; v: number }[];
+  source: 'reconstructed' | 'realized' | 'snapshot';
+  daily: Map<string, number> | null;
+  margin: { totalBalance: number; realizedPnl: number; unrealizedPnl: number; fees: number; funding: number } | null | undefined;
+  closedPositions: ClosedPosition[];
+  analysisStats: { closedWinRate: number | null; longestStreak: number };
+  tradeCount: number;
+}) {
+  const m = useMemo(() => {
+    const last = series.length ? series[series.length - 1].v : 0;
+    const equityNow = margin?.totalBalance ?? 0;
+    // Starting equity implied by today's balance minus everything earned since
+    // the first point — i.e. the capital the curve was earned on. Deposits in
+    // between shift it; labelled as such.
+    const base = equityNow - last;
+    const ret = base > 0 && series.length >= 2 ? last / base : null;
+
+    // Max drawdown of EQUITY (base + cumulative PnL), peak → trough, with dates.
+    let peak = -Infinity, peakT = 0, dd = 0, ddFrom = 0, ddTo = 0;
+    if (base > 0) {
+      for (const p of series) {
+        const eq = base + p.v;
+        if (eq > peak) { peak = eq; peakT = p.t; }
+        if (peak > 0) {
+          const d = (peak - eq) / peak;
+          if (d > dd) { dd = d; ddFrom = peakT; ddTo = p.t; }
+        }
+      }
+    }
+
+    // Daily returns on the running equity → annualised Sharpe. Needs 14
+    // complete days or it is mostly noise; say so instead of printing one.
+    const days = daily ? Array.from(daily.entries()).sort((a, b) => a[0].localeCompare(b[0])) : [];
+    let sharpe: number | null = null;
+    if (days.length >= 14 && base > 0) {
+      let eq = base;
+      const rets: number[] = [];
+      for (const [, pnl] of days) { rets.push(pnl / Math.max(1, eq)); eq += pnl; }
+      const mean = rets.reduce((s, r) => s + r, 0) / rets.length;
+      const sd = Math.sqrt(rets.reduce((s, r) => s + (r - mean) ** 2, 0) / (rets.length - 1));
+      sharpe = sd > 0 ? (mean / sd) * Math.sqrt(365) : null;
+    }
+    let best: [string, number] | null = null, worst: [string, number] | null = null, up = 0, down = 0, flat = 0;
+    for (const d of days) {
+      if (!best || d[1] > best[1]) best = d;
+      if (!worst || d[1] < worst[1]) worst = d;
+      if (d[1] > 0.005) up++; else if (d[1] < -0.005) down++; else flat++;
+    }
+    const gp = closedPositions.filter((p) => p.realizedPnl > 0).reduce((s, p) => s + p.realizedPnl, 0);
+    const gl = Math.abs(closedPositions.filter((p) => p.realizedPnl < 0).reduce((s, p) => s + p.realizedPnl, 0));
+    const profitFactor = gp === 0 && gl === 0 ? null : gl > 0 ? gp / gl : Infinity;
+    return { ret, base, dd, ddFrom, ddTo, sharpe, dayCount: days.length, best, worst, up, down, flat, profitFactor };
+  }, [series, daily, margin?.totalBalance, closedPositions]);
+
+  const fmtDay = (key: string) => {
+    const [y, mo, d] = key.split('-').map(Number);
+    return new Date(y, mo - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const fmtT = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const pct = (v: number) => `${v >= 0 ? '+' : '−'}${(Math.abs(v) * 100).toFixed(2)}%`;
+  const usd = (v: number) => `${v >= 0 ? '+' : '−'}$${formatCompact(Math.abs(v))}`;
+  const since = series.length ? fmtT(series[0].t) : null;
+  const totalDays = m.up + m.down + m.flat;
+
+  // PnL split. margin.realizedPnl is NET (gross + fees + funding), so trading
+  // = net − fees − funding; unrealized rides on top.
+  const fees = margin?.fees ?? 0;
+  const funding = margin?.funding ?? 0;
+  const trading = margin ? margin.realizedPnl - fees - funding + margin.unrealizedPnl : null;
+  const sourceLabel = source === 'reconstructed' ? 'BULK fills + 1h marks' : source === 'realized' ? 'BULK fills, realized only' : 'collector snapshots';
+
+  return (
+    <>
+      <div className="grid grid-cols-3 lg:grid-cols-6 divide-x divide-y lg:divide-y-0 divide-[var(--border-color)] border-b border-[var(--border-color)]">
+        <StripCell label="Return" value={m.ret !== null ? pct(m.ret) : '—'} tone={m.ret === null ? 'muted' : m.ret >= 0 ? 'green' : 'red'}
+          sub={since ? `since ${since} · on starting equity` : '—'} title="Cumulative PnL over the equity the curve started on (today's balance minus PnL since). Deposits or withdrawals in between shift it." />
+        <StripCell label="Drawdown" value={m.dd > 0 ? `−${(m.dd * 100).toFixed(2)}%` : series.length >= 2 ? '0.00%' : '—'} tone={m.dd > 0 ? 'red' : 'muted'}
+          sub={m.dd > 0 ? `${fmtT(m.ddFrom)} → ${fmtT(m.ddTo)}` : 'no fall from a prior high'} title="Largest fall of equity below an earlier high on this curve." />
+        <StripCell label="Sharpe" value={m.sharpe !== null ? m.sharpe.toFixed(2) : '—'} tone={m.sharpe === null ? 'muted' : m.sharpe >= 1 ? 'green' : m.sharpe < 0 ? 'red' : 'neutral'}
+          sub={m.sharpe !== null ? `annualised · ${m.dayCount} days` : `${Math.min(m.dayCount, 14)} of 14 days`} title="Mean ÷ stdev of daily returns on running equity, × √365. Needs 14 complete days." />
+        <StripCell label="Best day" value={m.best && m.best[1] > 0 ? usd(m.best[1]) : '—'} tone={m.best && m.best[1] > 0 ? 'green' : 'muted'}
+          sub={m.best && m.best[1] > 0 ? fmtDay(m.best[0]) : totalDays ? 'no positive day yet' : '—'} />
+        <StripCell label="Worst day" value={m.worst && m.worst[1] < 0 ? usd(m.worst[1]) : '—'} tone={m.worst && m.worst[1] < 0 ? 'red' : 'muted'}
+          sub={m.worst && m.worst[1] < 0 ? fmtDay(m.worst[0]) : totalDays ? 'no negative day yet' : '—'} />
+        <StripCell label="Up days" value={totalDays ? `${Math.round((m.up / totalDays) * 100)}%` : '—'} tone={totalDays ? 'neutral' : 'muted'}
+          sub={totalDays ? `${m.up} of ${totalDays}` : '—'}>
+          {totalDays > 0 && (
+            <div className="flex h-[3px] w-full overflow-hidden rounded-full bg-[var(--role-surface-raised)]">
+              <div style={{ width: `${(m.up / totalDays) * 100}%`, background: 'var(--pos)' }} />
+              <div style={{ width: `${(m.flat / totalDays) * 100}%` }} />
+              <div style={{ width: `${(m.down / totalDays) * 100}%`, background: 'var(--neg)' }} />
+            </div>
+          )}
+        </StripCell>
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1.5 px-4 py-2 text-[11px] border-b border-[var(--border-color)]">
+        <span className="inline-flex items-baseline gap-3">
+          <span className="t-label">PnL split <span className="normal-case tracking-normal text-[var(--role-content-subtle)]">lifetime</span></span>
+          {trading !== null ? (
+            <>
+              <span className="whitespace-nowrap text-[var(--role-content-muted)]">Trading <b className="font-mono font-medium tabular-nums" style={{ color: trading >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{usd(trading)}</b></span>
+              <span className="whitespace-nowrap text-[var(--role-content-muted)]">Funding <b className="font-mono font-medium tabular-nums" style={{ color: funding >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{usd(funding)}</b></span>
+              <span className="whitespace-nowrap text-[var(--role-content-muted)]">Fees <b className="font-mono font-medium tabular-nums" style={{ color: fees >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{usd(fees)}</b></span>
+            </>
+          ) : <span className="text-[var(--role-content-subtle)]">—</span>}
+        </span>
+        <span className="inline-flex items-baseline gap-3">
+          <span className="t-label">Trades</span>
+          <span className="whitespace-nowrap text-[var(--role-content-muted)]">Win rate <b className="font-mono font-medium tabular-nums text-[var(--role-content)]">{analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '—'}</b></span>
+          <span className="whitespace-nowrap text-[var(--role-content-muted)]">Profit factor <b className="font-mono font-medium tabular-nums text-[var(--role-content)]">{m.profitFactor === null ? '—' : m.profitFactor === Infinity ? '∞' : m.profitFactor.toFixed(2)}</b></span>
+          <span className="whitespace-nowrap text-[var(--role-content-muted)]">Streak <b className="font-mono font-medium tabular-nums text-[var(--role-content)]">{analysisStats.longestStreak || '—'}</b></span>
+          <span className="text-[var(--role-content-muted)]"><b className="font-mono font-medium tabular-nums text-[var(--role-content)]">{tradeCount.toLocaleString('en-US')}</b> closed</span>
+        </span>
+        <span className="ml-auto text-[var(--role-content-subtle)]">{sourceLabel}{since ? ` · since ${since}` : ''} · this account only</span>
+      </div>
+    </>
   );
 }
 
@@ -1557,9 +1274,16 @@ export default function WalletPage() {
     if (allFills.length === 0) { setKlinesBySymbol({}); return; }
     let cancelled = false;
     const symbols = Array.from(new Set(allFills.map((f) => f.symbol)));
-    const startTime = Math.min(...allFills.map((f) => f.timestamp));
-    const endTime = Date.now();
-    const hours = Math.ceil((endTime - startTime) / 3_600_000);
+    // Snap the window to 1h boundaries so the request is byte-identical for
+    // every viewer of this wallet within the same hour → it hits the backend's
+    // candle cache instead of re-fetching 4 symbols × ~140 KB from BULK on
+    // every load (the old `endTime = Date.now()` was unique per request and
+    // never cached). Rounding the end UP to the next boundary also makes BULK
+    // include the currently-forming candle, which `now` omitted.
+    const HOUR = 3_600_000;
+    const startTime = Math.floor(Math.min(...allFills.map((f) => f.timestamp)) / HOUR) * HOUR;
+    const endTime = Math.ceil(Date.now() / HOUR) * HOUR;
+    const hours = Math.ceil((endTime - startTime) / HOUR);
     const limit = Math.min(1000, Math.max(24, hours + 6));
     Promise.all(
       symbols.map(async (sym) => {
@@ -1830,23 +1554,6 @@ export default function WalletPage() {
     return out;
   }, [continuousPnl, reconstructedRealized]);
 
-  // Tiny trend series for the KPI sparklines.
-  const kpiSeries = useMemo(() => {
-    const totalPnl = continuousPnl.length ? continuousPnl[continuousPnl.length - 1].v : 0;
-    const base = (margin?.totalBalance ?? 0) - totalPnl;
-    const acct = continuousPnl.map((p) => base + p.v);
-    const allTime = reconstructedRealized.map((p) => p.v);
-    const realAt = (t: number) => {
-      let v = 0;
-      for (const p of reconstructedRealized) { if (p.t <= t) v = p.v; else break; }
-      return v;
-    };
-    const unreal = continuousPnl.map((p) => p.v - realAt(p.t));
-    const sortedClosed = [...closedPositions].sort((a, b) => a.closedAt - b.closedAt);
-    let w = 0;
-    const winRate = sortedClosed.map((p, i) => { if (p.realizedPnl >= 0) w++; return (w / (i + 1)) * 100; });
-    return { acct, allTime, unreal, winRate };
-  }, [continuousPnl, reconstructedRealized, margin?.totalBalance, closedPositions]);
 
   // Reconstruct and open the share card for a market's current instance.
   const openShareCard = (sym: string) => {
@@ -2213,7 +1920,7 @@ export default function WalletPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out]">
       {cardData && <TradeShareCard data={cardData} onClose={() => setCardData(null)} />}
-      <main className="flex-1 w-full px-4 sm:px-6 py-4">
+      <main className="flex-1 w-full px-3 sm:px-4 py-3">
         {/* Page-level width: capped at 1600px and centered. Edge-to-edge
             felt right at 1280px but looks unbounded on 4K / ultrawide
             displays where the chart stretches to ~3000px and reads as
@@ -2225,10 +1932,10 @@ export default function WalletPage() {
         <div className="max-w-[1600px] mx-auto">
         <Link 
           href="/whales"
-          className="inline-flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-4 transition-colors"
+          className="inline-flex items-center gap-1.5 text-[12px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)] mb-2.5 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Whale Tracker
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Whale Tracker
         </Link>
 
         {error && !hasTrackedData ? (
@@ -2242,7 +1949,7 @@ export default function WalletPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-2">
             {/* ──────────────────────────────────────────────────────
                 LEFT RAIL - identity + headline value + Overview list +
                 Analysis list. Mirrors Hyperdash's wallet view sidebar:
@@ -2254,269 +1961,162 @@ export default function WalletPage() {
                 (mobile/tablet), so phones see a normal vertical scroll
                 with all the rail content at the top.
                 ────────────────────────────────────────────────────── */}
-            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 flex flex-col lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-              {/* Card-style left rail matching Hyperdash's sidebar
-                  treatment. Sticky on lg+ so the identity + stats stay in
-                  view while the main column scrolls - this is what keeps
-                  the rail visually "ending with" the content instead of
-                  leaving a tall empty gap beside a long activity feed. */}
-              {/* Identity block — avatar + names + address. Compact
-                  vertical stack since the rail is narrow (~300px). The
-                  pb-5 mirrors the pt-5 that subsequent sections use, so
-                  the visual rhythm of the rail stays consistent. */}
-              <div className="flex flex-col items-start gap-2.5 pb-4">
+            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] px-4 pt-3 pb-2 flex flex-col lg:self-start lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+              {/* The rail is a LEDGER: identity, the one headline figure, then
+                  dense label/value rows under small kickers. Nothing in it
+                  competes with the main column for weight — the old 56px
+                  avatar and full-width accent Follow pill were the loudest
+                  things on the page and said the least. */}
+
+              {/* Identity — avatar + name + address on one row. */}
+              <div className="flex items-start gap-3">
                 {twitterAvatar ? (
                   <img
                     src={twitterAvatar}
                     alt=""
-                    width={56}
-                    height={56}
+                    width={40}
+                    height={40}
                     loading="eager"
                     decoding="async"
-                    // Explicit width/height + a solid placeholder background
-                    // reserve the circle's space immediately, so the avatar
-                    // no longer "pops in" and shoves the name down when it
-                    // finishes loading (the lag you saw). The bg shows while
-                    // loading; on error we hide the broken img and the ring
-                    // + bg remain as a clean fallback.
-                    className="w-14 h-14 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary-20)]/40 object-cover shrink-0"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
+                    className="w-10 h-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary-20)]/40 object-cover shrink-0"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-full bg-bulk-accent/15 border border-bulk-accent/30 flex items-center justify-center shrink-0">
-                    <Wallet className="w-7 h-7 text-bulk-green" />
+                  <div className="w-10 h-10 rounded-full bg-[var(--role-surface-raised)] border border-[var(--border-color)] flex items-center justify-center shrink-0">
+                    <Wallet className="w-4 h-4 text-[var(--role-content-muted)]" />
                   </div>
                 )}
-                <div className="w-full min-w-0">
-                  {displayName && (
-                    <h1 className="text-lg font-semibold text-[var(--text-primary)] truncate">
-                      {displayName}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h1 className="font-mono text-[15px] font-medium text-[var(--role-content)] truncate">
+                      {displayName || formatAddress(address)}
                     </h1>
-                  )}
-                  {twitterHandle && (
-                    <a
-                      href={`https://twitter.com/${twitterHandle}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors mb-1"
-                    >
-                      <XIcon className="w-3 h-3" />
-                      @{twitterHandle}
-                    </a>
-                  )}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h2 className="font-mono text-sm text-[var(--text-primary)]">{formatAddress(address)}</h2>
-                    <button
-                      onClick={copyAddress}
-                      className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
-                      title="Copy address"
-                    >
-                      {copied ? <Check className="w-3 h-3 text-bulk-green" /> : <Copy className="w-3 h-3 text-[var(--text-tertiary)]" />}
-                    </button>
-                    <a
-                      href={`https://explorer.bulk.trade/address/${address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 hover:bg-[var(--bg-secondary-20)] rounded transition-colors"
-                      title="View on BULK explorer"
-                    >
-                      <ExternalLink className="w-3 h-3 text-[var(--text-tertiary)]" />
-                    </a>
+                    {isOwnWallet && (
+                      <span className="shrink-0 px-1 py-px text-[9px] font-medium uppercase tracking-wider rounded-sm bg-[var(--accent)]/15 text-[var(--accent)]">You</span>
+                    )}
                   </div>
-                  {isOwnWallet && (
-                    <span className="inline-block mt-1 px-1.5 py-0.5 bg-bulk-accent/20 text-bulk-accent text-[10px] font-semibold rounded uppercase tracking-wider border border-bulk-accent/30">
-                      You
-                    </span>
+                  <div className="flex items-center gap-1 min-w-0 mt-0.5">
+                    <span className="font-mono text-[11px] text-[var(--role-content-subtle)] truncate" title={address}>{address}</span>
+                    <button onClick={copyAddress} className="p-0.5 shrink-0 rounded hover:bg-[var(--role-surface-raised)] transition-colors" title="Copy address" aria-label="Copy address">
+                      {copied ? <Check className="w-3 h-3 text-bulk-green" /> : <Copy className="w-3 h-3 text-[var(--role-content-subtle)]" />}
+                    </button>
+                  </div>
+                  {twitterHandle && (
+                    <a href={`https://twitter.com/${twitterHandle}`} target="_blank" rel="noopener noreferrer"
+                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
+                      <XIcon className="w-2.5 h-2.5" />@{twitterHandle}
+                    </a>
                   )}
                 </div>
-                {/* Hierarchy + rank stacked beneath identity. They're
-                    contextual to the wallet itself, not actions. */}
-                <div className="flex flex-col gap-2 w-full">
-                  {isSystemWallet(address) ? (
-                    <div
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-bulk-accent/10 border-bulk-accent/30 text-bulk-accent self-start"
-                      title="This wallet is operated by the BULK exchange protocol"
-                    >
-                      <Shield className="w-3.5 h-3.5" />
-                      <span className="font-semibold">BULK System</span>
-                    </div>
-                  ) : (
-                    <BulkRankBadge address={address} />
-                  )}
-                  <AccountHierarchy address={address} />
-                </div>
-                {/* Follow / Claim buttons stacked below. Full width so
-                    they fill the rail. */}
-                {canClaimWallet && (
-                  <button
-                    onClick={handleClaimWallet}
-                    disabled={claimLoading}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all bg-bulk-accent/20 text-bulk-accent border border-bulk-accent/30 hover:bg-bulk-accent/30 disabled:opacity-50"
-                  >
-                    {claimLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><UserCheck className="w-4 h-4" />This is my wallet</>)}
-                  </button>
-                )}
-                {isClaimedWallet && (
-                  <span className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-bulk-accent/20 text-bulk-accent border border-bulk-accent/30 rounded-lg text-sm font-medium">
-                    <UserCheck className="w-4 h-4" />
-                    Your Claimed Wallet
-                  </span>
-                )}
+              </div>
+
+              {/* Actions — one quiet row. Follow stays the primary verb but at
+                  the size of the row, not a billboard. */}
+              <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                 {!isOwnWallet && (
                   <button
                     onClick={toggleFollow}
                     disabled={followLoading}
                     className={cn(
-                      "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-full font-medium transition-all disabled:opacity-50",
+                      'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] font-medium border transition-colors disabled:opacity-50',
                       isFollowing
-                        ? "bg-bulk-accent/10 text-[var(--accent)] border border-bulk-accent/30 hover:bg-bulk-accent/20"
-                        : "bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 shadow-[0_0_16px_rgb(var(--accent-rgb) / 0.25)]"
+                        ? 'border-[var(--accent)]/40 text-[var(--accent)] bg-[var(--accent)]/10 hover:bg-[var(--accent)]/15'
+                        : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110'
                     )}
                   >
-                    {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? (<><StarOff className="w-4 h-4" />Unfollow</>) : (<><Star className="w-4 h-4" />Follow</>)}
+                    {followLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : isFollowing ? <StarOff className="w-3 h-3" /> : <Star className="w-3 h-3" />}
+                    {isFollowing ? 'Following' : 'Follow'}
                   </button>
+                )}
+                {canClaimWallet && (
+                  <button onClick={handleClaimWallet} disabled={claimLoading}
+                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] font-medium border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors disabled:opacity-50">
+                    {claimLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+                    This is my wallet
+                  </button>
+                )}
+                {isClaimedWallet && (
+                  <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--accent)]/30 text-[var(--accent)]">
+                    <UserCheck className="w-3 h-3" />Claimed
+                  </span>
+                )}
+                <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
+                  Explorer <ExternalLink className="w-3 h-3" />
+                </a>
+                <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
+                  Solscan <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              {/* Standing — rank + hierarchy, contextual facts. */}
+              <div className="mt-2.5 flex flex-col gap-1.5">
+                {isSystemWallet(address) ? (
+                  <div className="inline-flex items-center gap-1.5 self-start px-2 py-1 rounded-[var(--radius-md)] text-[11px] border border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]"
+                    title="This wallet is operated by the BULK exchange protocol">
+                    <Shield className="w-3 h-3" /><span className="font-medium">BULK System</span>
+                  </div>
+                ) : (
+                  <BulkRankBadge address={address} />
+                )}
+                <AccountHierarchy address={address} />
+              </div>
+
+              {/* Net worth — THE headline figure of the rail. */}
+              <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                <div className="flex items-baseline justify-between">
+                  <span className="t-label">Net worth</span>
+                  {hasLiveData && <span className="text-[10px] text-[var(--role-content-subtle)]">BULK · live</span>}
+                </div>
+                <div className="mt-1 font-mono text-[28px] leading-none font-medium tabular-nums tracking-tight text-[var(--role-content)]">
+                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
+                </div>
+                <div className="mt-2.5 grid grid-cols-2 divide-x divide-[var(--border-color)] border border-[var(--border-color)] rounded-[var(--radius-md)]">
+                  <div className="px-2.5 py-2 min-w-0" title={totalPnlTooltip ? undefined : 'Net realized PnL (after fees and funding)'}>
+                    <div className="t-label">PnL</div>
+                    <div className="mt-0.5 font-mono text-[15px] font-medium tabular-nums truncate" style={{ color: bulkRealizedPnL >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+                      {bulkRealizedPnL >= 0 ? '+' : '−'}${formatNumber(Math.abs(bulkRealizedPnL), 2)}
+                    </div>
+                  </div>
+                  <div className="px-2.5 py-2 min-w-0">
+                    <div className="t-label">Unrealized</div>
+                    <div className="mt-0.5 font-mono text-[15px] font-medium tabular-nums truncate" style={{ color: !margin ? 'var(--role-content-subtle)' : margin.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+                      {margin ? `${margin.unrealizedPnl >= 0 ? '+' : '−'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'}
+                    </div>
+                  </div>
+                </div>
+                {margin && (
+                  <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)] font-mono tabular-nums truncate">
+                    ${formatCompact(margin.availableBalance)} available · ${formatCompact(margin.marginUsed)} in margin
+                  </div>
                 )}
               </div>
 
-              {/* Account Value — the huge headline number. Mimics
-                  Hyperdash's left-rail anchor. Falls back to "-" when
-                  live balance hasn't loaded; the small skeleton-y
-                  treatment is intentional rather than a spinner so the
-                  rail layout stays stable. */}
-              <div className="border-t border-[var(--border-color)] pt-4">
-                <div className="text-xs tracking-normal text-[var(--text-secondary)] font-semibold mb-1.5">
-                  Account Value
-                </div>
-                <div className="text-[26px] font-bold tabular-nums tracking-tight text-[var(--text-primary)]">
-                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '-'}
-                </div>
+              <div className="mt-1 border-t border-[var(--border-color)]">
+                <LedgerSection title="Fees & volume" aside={lifetimeFillVol?.truncated ? 'fills capped' : undefined}>
+                  <LedgerRow label="Volume" hint="lifetime" value={`$${formatCompact(bulkVolume)}`} />
+                  <LedgerRow label="Volume" hint="7d" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '—'} tone={volByWindow ? 'neutral' : 'muted'} />
+                  <LedgerRow label="Volume" hint="30d" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '—'} tone={volByWindow ? 'neutral' : 'muted'} />
+                  <LedgerRow label="Net fees" value={lifetimeFees !== null ? `${lifetimeFees > 0 ? '+' : lifetimeFees < 0 ? '−' : ''}$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
+                    tone={lifetimeFees === null ? 'muted' : lifetimeFees > 0 ? 'green' : lifetimeFees < 0 ? 'red' : 'neutral'}
+                    title="BULK lifetime fee counter: negative when paid, positive when net rebates" />
+                  <LedgerRow label="Funding" value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '−'}$${formatCompact(Math.abs(lifetimeFunding))}` : '—'}
+                    tone={lifetimeFunding === null ? 'muted' : lifetimeFunding >= 0 ? 'green' : 'red'} />
+                  <LedgerRow label="Maker fills" hint={allFills.length ? `${allFills.length} loaded` : undefined}
+                    value={allFills.length ? `${Math.round((allFills.filter((f) => f.maker === address).length / allFills.length) * 100)}%` : '—'}
+                    tone={allFills.length ? 'neutral' : 'muted'} title="Share of loaded fills where this wallet was the maker" />
+                  <LedgerRow label="Avg fill" value={allFills.length ? `$${formatCompact(allFills.reduce((s, f) => s + Math.abs(f.size) * f.price, 0) / allFills.length)}` : '—'} tone={allFills.length ? 'neutral' : 'muted'} />
+                </LedgerSection>
+
+                <LedgerSection title="Analysis">
+                  <LedgerRow label="Closed trades" value={String(bulkClosedCount)} />
+                  <LedgerRow label="Liquidations" value={String(tracked?.total_liquidations || 0)} tone={(tracked?.total_liquidations || 0) > 0 ? 'red' : 'neutral'} />
+                  {analysisStats.tradingStyle !== 'Unknown' && <LedgerRow label="Style" value={analysisStats.tradingStyle} />}
+                  <LedgerRow label="PnL cohort" value={analysisStats.pnlCohort.label} tone={analysisStats.pnlCohort.tone} />
+                  <LedgerRow label="Size cohort" value={analysisStats.sizeCohort} />
+                </LedgerSection>
               </div>
-
-              {/* Overview — compact key:value list. Each row uses the
-                  same flex layout (label left, value right) so the
-                  column reads cleanly. Tone applied to the value side
-                  only when it carries semantic meaning (PnL sign). */}
-              <Section title="Overview" defaultOpen>
-                <div className="flex flex-col gap-2">
-                  <OverviewRow
-                    label="Unrealized PnL"
-                    value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '-'}
-                    tone={margin ? (margin.unrealizedPnl >= 0 ? 'green' : 'red') : 'neutral'}
-                  />
-                  <OverviewRow
-                    label="Account Leverage"
-                    value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}x` : '-'}
-                  />
-                  <OverviewRow
-                    label="Margin Usage"
-                    value={
-                      margin && margin.totalBalance > 0
-                        ? `${((margin.marginUsed / margin.totalBalance) * 100).toFixed(2)}%`
-                        : '-'
-                    }
-                  />
-                  <OverviewRow
-                    label="All Time PnL"
-                    value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
-                    tone={bulkRealizedPnL >= 0 ? 'green' : 'red'}
-                    tooltip={totalPnlTooltip}
-                  />
-                  <OverviewRow
-                    label="Volume"
-                    value={`$${formatCompact(bulkVolume)}`}
-                  />
-                  <OverviewRow
-                    label="Fees Paid"
-                    value={lifetimeFees !== null ? `$${formatCompact(Math.abs(lifetimeFees))}` : '-'}
-                  />
-                  <OverviewRow
-                    label="Liquidations"
-                    value={String(tracked?.total_liquidations || 0)}
-                  />
-                </div>
-              </Section>
-
-              {/* Volume by period — traded volume over trailing windows. */}
-              <Section title="Volume">
-                <div className="flex flex-col gap-2">
-                  <OverviewRow label="7D" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '-'} />
-                  <OverviewRow label="14D" value={volByWindow ? `$${formatCompact(volByWindow.d14)}` : '-'} />
-                  <OverviewRow label="30D" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '-'} />
-                  <OverviewRow label="90D" value={volByWindow ? `$${formatCompact(volByWindow.d90)}` : '-'} />
-                </div>
-              </Section>
-
-              {/* Analysis — derived stats from closed positions. */}
-              {closedPositions.length > 0 && (
-                <Section title="Analysis">
-                  <div className="flex flex-col gap-2">
-                    <OverviewRow
-                      label="Longest Win Streak"
-                      value={analysisStats.longestStreak > 0 ? `${analysisStats.longestStreak} Trade${analysisStats.longestStreak === 1 ? '' : 's'}` : '-'}
-                    />
-                    {/* Trading Style — only shown when we have valid hold
-                        durations (BULK's openTime bug zeroes them; falls
-                        back to 'Unknown' which we hide rather than show). */}
-                    {analysisStats.tradingStyle !== 'Unknown' && (
-                      <OverviewRow label="Trading Style" value={analysisStats.tradingStyle} />
-                    )}
-                    {/* "Avg Trade Duration" + "Median Trade Duration"
-                        rows hidden - BULK currently reports
-                        openTime === closeTime on closed positions, so
-                        every duration computes to 0 and both rows would
-                        always show "-". Re-enable when BULK ships the
-                        timestamp fix post-competition. */}
-                    <OverviewRow
-                      label="PnL Cohort"
-                      value={analysisStats.pnlCohort.label}
-                      tone={analysisStats.pnlCohort.tone}
-                    />
-                    <OverviewRow
-                      label="Size Cohort"
-                      value={analysisStats.sizeCohort}
-                      tone="green"
-                    />
-                  </div>
-                </Section>
-              )}
-
-              {/* Performance — Drawdown / Win Rate / Sharpe. */}
-              {closedPositions.length > 0 && (
-                <Section title="Performance">
-                  <div className="flex flex-col gap-2">
-                    <OverviewRow
-                      label="Max Drawdown"
-                      value={analysisStats.drawdown !== null ? `${analysisStats.drawdown.toFixed(1)}%` : '-'}
-                      tone={
-                        analysisStats.drawdown === null ? 'neutral'
-                          : analysisStats.drawdown >= 50 ? 'red'
-                          : 'neutral'
-                      }
-                    />
-                    <OverviewRow
-                      label="Win Rate"
-                      value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '-'}
-                      tone={
-                        analysisStats.closedWinRate === null ? 'neutral'
-                          : analysisStats.closedWinRate >= 0.5 ? 'green'
-                          : 'red'
-                      }
-                    />
-                    <OverviewRow
-                      label="Profit Factor"
-                      value={(() => {
-                        const gp = closedPositions.filter((p) => p.realizedPnl > 0).reduce((s, p) => s + p.realizedPnl, 0);
-                        const gl = Math.abs(closedPositions.filter((p) => p.realizedPnl < 0).reduce((s, p) => s + p.realizedPnl, 0));
-                        if (gp === 0 && gl === 0) return '-';
-                        return gl > 0 ? (gp / gl).toFixed(2) : '∞';
-                      })()}
-                      tone="neutral"
-                    />
-                  </div>
-                </Section>
-              )}
             </aside>
 
             {/* ──────────────────────────────────────────────────────
@@ -2525,148 +2125,72 @@ export default function WalletPage() {
                 vertical stack so each block gets the full main-column
                 width.
                 ────────────────────────────────────────────────────── */}
-            <div className="flex flex-col gap-2.5 min-w-0">
+            <div className="flex flex-col gap-2 min-w-0">
 
-            {/* Top strip — 4 bar-style cards that read as the Hyperdash
-                signature: Performance, Direction Bias, Distance to
-                Liquidation, Effective Leverage. Each card carries a
-                primary value + bar viz + footer subtitle in the same
-                visual treatment, so the row reads as one coordinated
-                strip rather than 4 unrelated stats.
-                
-                Cards with no data (e.g. closed wallet with no open
-                positions → Distance to Liq has nothing to compute)
-                render as a placeholder "-" rather than collapsing.
-                Keeps the 4-card strip shape stable across wallets. */}
-            {/* KPI strip — the headline numbers, in the shared StatCard so
-                they match every other page. The richer bar visuals (win/loss,
-                direction, distance-to-liq, leverage gauges) live in the
-                dedicated Signals & exposure panel below. */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <SharedStatCard
-                label="Account value"
-                value={margin ? `$${formatNumber(margin.totalBalance, 2)}` : '-'}
-                chart={kpiSeries.acct.length >= 2 ? <Sparkline data={kpiSeries.acct} height={34} color="var(--accent)" /> : undefined}
-              />
-              <SharedStatCard
-                label="Unrealized PnL"
-                value={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '-'}
-                valueColor={margin ? (margin.unrealizedPnl >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)') : undefined}
-                chart={kpiSeries.unreal.length >= 2 ? <Sparkline data={kpiSeries.unreal} height={34} color={margin && margin.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)'} /> : undefined}
-              />
-              <SharedStatCard
-                label="All-time PnL"
-                value={`${bulkRealizedPnL >= 0 ? '+' : '-'}$${formatCompact(Math.abs(bulkRealizedPnL))}`}
-                valueColor={bulkRealizedPnL >= 0 ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)'}
-                chart={kpiSeries.allTime.length >= 2 ? <Sparkline data={kpiSeries.allTime} height={34} color={bulkRealizedPnL >= 0 ? 'var(--pos)' : 'var(--neg)'} /> : undefined}
-              />
-              <SharedStatCard
-                label="Win rate"
-                value={analysisStats?.closedWinRate != null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '-'}
-                sub={analysisStats?.longestStreak ? `${analysisStats.longestStreak}-trade streak` : undefined}
-                chart={kpiSeries.winRate.length >= 2 ? <Sparkline data={kpiSeries.winRate} height={34} color="var(--accent)" /> : undefined}
-              />
-            </div>
+            {/* Exposure — "right now" in one panel: direction, leverage,
+                margin usage, nearest liquidation, holdings. Replaces the
+                KPI sparkline row + Signals strip + Position intelligence,
+                which spread the same idea across three regions. */}
+            <ExposureStrip
+              positions={positions}
+              margin={margin}
+              markPrices={markPrices}
+              directionBias={directionBias}
+              distanceToLiq={distanceToLiq}
+              effectiveLeverage={effectiveLeverage}
+              totalNotional={totalNotional}
+            />
 
             {/* Hero — the wallet's story as one big, full-width PnL /
                 account-value curve. This is the page's visual anchor; the
                 Daily / Drawdown / Per-trade views ride along as chart tabs. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col min-w-0">
-              <div className="p-3 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
-                {/* View tabs — scroll horizontally on narrow screens instead of
-                    overflowing / clipping. */}
-                <div className="flex items-center gap-1 -mx-1 px-1 overflow-x-auto max-w-full whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setChartView('pnl')}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                      chartView === 'pnl'
-                        ? 'bg-[var(--role-surface-raised)] text-[var(--role-content)]'
-                        : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                    )}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    PnL
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartView('calendar')}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                      chartView === 'calendar'
-                        ? 'bg-[var(--role-surface-raised)] text-[var(--role-content)]'
-                        : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                    )}
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    Daily
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartView('drawdown')}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                      chartView === 'drawdown'
-                        ? 'bg-[var(--role-surface-raised)] text-[var(--role-content)]'
-                        : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                    )}
-                  >
-                    <Activity className="w-3.5 h-3.5" />
-                    Drawdown
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartView('trade')}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                      chartView === 'trade'
-                        ? 'bg-[var(--role-surface-raised)] text-[var(--role-content)]'
-                        : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                    )}
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    Per-trade
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartView('compare')}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                      chartView === 'compare'
-                        ? 'bg-[var(--role-surface-raised)] text-[var(--role-content)]'
-                        : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
-                    )}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    Compare
-                  </button>
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] flex flex-col min-w-0">
+              {/* Header: underline tabs (the view) left, range pills right.
+                  Underline tabs on a hairline sit flatter than pill buttons
+                  and let the strip of figures below read as the same surface. */}
+              <div className="px-4 border-b border-[var(--border-color)] flex items-end justify-between gap-3 flex-wrap">
+                <div className="flex items-end gap-0 -mb-px overflow-x-auto max-w-full whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist" aria-label="Chart view">
+                  {([
+                    ['pnl', 'PnL'],
+                    ['calendar', 'Calendar'],
+                    ['drawdown', 'Drawdown'],
+                    ['trade', 'Per-trade'],
+                    ['compare', 'Compare'],
+                  ] as const).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="tab"
+                      aria-selected={chartView === k}
+                      onClick={() => setChartView(k)}
+                      className={cn(
+                        'px-3 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors',
+                        chartView === k
+                          ? 'border-[var(--accent)] text-[var(--role-content)]'
+                          : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-
-                {/* Right: PnL / Value metric toggle + time-range pills. Only
-                    the line view uses them; the other views plot fixed series. */}
                 {chartView === 'pnl' && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 py-1.5">
                     <div className="toggle-group">
                       {(['pnl', 'value'] as const).map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setHeroMetric(m)}
-                          className={cn('toggle-btn', heroMetric === m && 'active')}
-                        >
-                          {m === 'pnl' ? 'PnL' : 'Value'}
+                        <button key={m} type="button" onClick={() => setHeroMetric(m)} className={cn('toggle-btn', heroMetric === m && 'active')}>
+                          {m === 'pnl' ? 'PnL' : 'Net worth'}
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-0.5 text-[10px] uppercase tracking-wider">
+                    <div className="flex items-center rounded-[var(--radius-md)] border border-[var(--border-color)] p-0.5 text-[10px] uppercase tracking-wider font-mono">
                       {(['24h', '7d', '30d', 'all'] as const).map((r) => (
                         <button
                           key={r}
                           type="button"
                           onClick={() => setChartRange(r)}
                           className={cn(
-                            'px-2 py-1 rounded transition-colors font-mono',
+                            'px-2 py-1 rounded-[3px] transition-colors',
                             chartRange === r
                               ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]'
                               : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
@@ -2679,6 +2203,17 @@ export default function WalletPage() {
                   </div>
                 )}
               </div>
+
+              {/* The figures that belong with the curve. */}
+              <PerformanceStrip
+                series={heroPnl.data}
+                source={heroPnl.source}
+                daily={dailyPnlFromSeries}
+                margin={margin}
+                closedPositions={closedPositions}
+                analysisStats={analysisStats}
+                tradeCount={bulkClosedCount}
+              />
 
               {chartView === 'compare' ? (
                 // MEASUREMENT: coarse snapshot realized-PnL curve vs the
@@ -2883,9 +2418,31 @@ export default function WalletPage() {
                   );
                 }
 
+                // Headline: the figure the curve ends on. For a time range it is
+                // the change over that window, not the lifetime total.
+                const firstV = filtered[0]?.v ?? 0;
+                const headline = isValue
+                  ? (margin?.totalBalance ?? base + lastNet)
+                  : chartRange === 'all' ? lastNet : lastNet - firstV;
+                const headlineTone = isValue ? 'var(--role-content)' : headline >= 0 ? 'var(--pos)' : 'var(--neg)';
+                const rangeLabel = chartRange === 'all'
+                  ? (lifetimeFillVol?.truncated ? 'Cumulative' : 'Lifetime')
+                  : chartRange === '24h' ? 'Last 24h' : chartRange === '7d' ? 'Last 7 days' : 'Last 30 days';
+                const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : 'collector snapshots';
+
                 return (
-                  <div className="flex-1 p-3 min-h-[380px]">
-                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="h-full" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
+                  <div className="flex-1 px-3 pb-3 pt-3 min-h-[380px] flex flex-col">
+                    <div className="px-1 mb-2">
+                      <div className="font-mono text-[26px] leading-none font-medium tabular-nums tracking-tight" style={{ color: headlineTone }}>
+                        {isValue ? '' : headline >= 0 ? '+' : '−'}${formatNumber(Math.abs(headline), 2)}
+                      </div>
+                      <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)]">
+                        {isValue ? 'Net worth' : `${rangeLabel} PnL`} · {sourceLabel}
+                        {filtered.length > 0 && ` · from ${new Date(filtered[0].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                        {chartRange === 'all' && lifetimeFillVol?.truncated && ' · fill history capped at 1,000'}
+                      </div>
+                    </div>
+                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[300px]" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                         <defs>
@@ -2987,160 +2544,47 @@ export default function WalletPage() {
               })()}
             </div>
 
-            {/* Signals — win/loss, direction, and risk gauges as one compact
-                full-width strip (the bars kept out of the shared KPI strip).
-                Full width + PositionExposure below avoids the side-by-side
-                height mismatch that left a gap under the shorter card. */}
-            <MobileCollapse title="Signals & exposure">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {!isSystemWallet(address) ? (
-                <PerformanceCard
-                  recentWinLoss={recentWinLoss}
-                  winRate={winRate}
-                  totalTrades={bulkRow?.closed_count ?? closedPositions.length}
-                />
-              ) : (
-                <PlaceholderCard label="Performance" />
-              )}
-              {directionBias ? (
-                <BarMetricCard
-                  label="Direction Bias"
-                  value={directionBias.label}
-                  valueTone={
-                    directionBias.label === 'Very Bullish' || directionBias.label === 'Bullish' ? 'green' :
-                    directionBias.label === 'Very Bearish' || directionBias.label === 'Bearish' ? 'red' :
-                    'neutral'
-                  }
-                  barColor="bg-bulk-green"
-                  fillPct={directionBias.longPct}
-                  secondaryBarColor="bg-bulk-red"
-                  secondaryFillPct={1 - directionBias.longPct}
-                  subtitle={
-                    `${(directionBias.longPct * 100).toFixed(0)}% Long $${formatCompact(directionBias.longNotional)} · ` +
-                    `${((1 - directionBias.longPct) * 100).toFixed(0)}% Short $${formatCompact(directionBias.shortNotional)}`
-                  }
-                />
-              ) : (
-                <PlaceholderCard label="Direction Bias" subtitle="No open positions" />
-              )}
-              {distanceToLiq ? (
-                <BarMetricCard
-                  label="Distance to Liquidation"
-                  value={`${(distanceToLiq.pct * 100).toFixed(2)}%`}
-                  valueTone={distanceToLiq.pct < 0.05 ? 'red' : distanceToLiq.pct < 0.15 ? 'orange' : 'green'}
-                  barColor={distanceToLiq.pct < 0.05 ? 'bg-bulk-red' : distanceToLiq.pct < 0.15 ? 'bg-bulk-orange' : 'bg-bulk-green'}
-                  fillPct={distanceToLiq.pct}
-                  subtitle={`Closest: ${distanceToLiq.symbol}`}
-                />
-              ) : (
-                <PlaceholderCard label="Distance to Liquidation" subtitle="No open positions" />
-              )}
-              {effectiveLeverage !== null && margin ? (
-                <BarMetricCard
-                  label="Effective Leverage"
-                  value={`${effectiveLeverage.toFixed(1)}x`}
-                  valueTone={effectiveLeverage > 10 ? 'red' : effectiveLeverage > 5 ? 'orange' : 'green'}
-                  barColor={effectiveLeverage > 10 ? 'bg-bulk-red' : effectiveLeverage > 5 ? 'bg-bulk-orange' : 'bg-bulk-green'}
-                  fillPct={Math.min(effectiveLeverage / 10, 1)}
-                  subtitle={`$${formatCompact(totalNotional)} Notional · $${formatCompact(margin.totalBalance)} Equity`}
-                />
-              ) : (
-                <PlaceholderCard label="Effective Leverage" subtitle="No open positions" />
-              )}
-            </div>
-            </MobileCollapse>
-
-            {/* Position intelligence — full-width panel. A left column of
-                stats + long/short split, and the per-coin allocation filling
-                the rest, so the width is used and height stays natural. */}
-            <PositionExposure positions={data?.live?.positions ?? []} />
 
             {/* Positions panel — full width below the chart with
                 Open / Recent tab toggle. Hyperdash convention: a
                 wide table sits under the chart so the eye reads
                 chart-then-positions naturally as a top-to-bottom
                 story. The Recent tab uses a dense table format. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
-              <div className="p-3 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
-                {/* Loading state takes precedence over tabs — if BULK
-                    hasn't returned yet, show the spinner instead of
-                    tabs (which would be empty anyway). */}
+            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] flex flex-col">
+              <div className="px-4 border-b border-[var(--border-color)] flex items-end justify-between gap-3 flex-wrap">
                 {!hasLiveData && positions.length === 0 ? (
-                  <h2 className="font-semibold flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-bulk-accent animate-spin" />
+                  <h2 className="py-2.5 text-[12px] font-medium flex items-center gap-2 text-[var(--role-content-muted)]">
+                    <Loader2 className="w-3.5 h-3.5 text-[var(--accent)] animate-spin" />
                     Fetching positions…
-                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider ml-2">
-                      auto-retries every 10s
-                    </span>
+                    <span className="text-[10px] text-[var(--role-content-subtle)] uppercase tracking-wider">auto-retries every 10s</span>
                   </h2>
                 ) : (
-                  <div className="flex items-center gap-0.5 bg-[var(--bg-base)] rounded-lg p-0.5 border border-[var(--border-color)]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPositionsTab('open');
-                        setTabIsUserPicked(true);
-                      }}
-                      className={cn(
-                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                        positionsTab === 'open'
-                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      )}
-                    >
-                      <Activity className="w-3.5 h-3.5 text-bulk-green" />
-                      Open
-                      {positions.length > 0 && (
-                        <span className="text-[var(--text-tertiary)] tabular-nums">
-                          {positions.length}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPositionsTab('recent');
-                        setTabIsUserPicked(true);
-                      }}
-                      className={cn(
-                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                        positionsTab === 'recent'
-                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      )}
-                    >
-                      <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                      Recent Trades
-                      {closedPositions.length > 0 && (
-                        <span className="text-[var(--text-tertiary)] tabular-nums">
-                          {closedPositions.length}
-                        </span>
-                      )}
-                    </button>
-                    {/* Liquidations tab — surfaces the riskHistory feed
-                        (force-close events, ADL events) that used to sit
-                        as a standalone panel below the chart. Tabbing
-                        it tightens the page: the user pivots between
-                        live positions / lifetime closes / forced exits
-                        in one place. */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPositionsTab('liquidations');
-                        setTabIsUserPicked(true);
-                      }}
-                      className={cn(
-                        'px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5',
-                        positionsTab === 'liquidations'
-                          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] border border-[var(--border-color)]'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      )}
-                    >
-                      <Flame className="w-3.5 h-3.5 text-bulk-orange" />
-                      Liquidations
-                    </button>
+                  <div className="flex items-end -mb-px" role="tablist" aria-label="Positions view">
+                    {([
+                      ['open', 'Positions', positions.length],
+                      ['recent', 'Closed', closedPositions.length],
+                      ['liquidations', 'Liquidations', null],
+                    ] as const).map(([k, label, count]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        role="tab"
+                        aria-selected={positionsTab === k}
+                        onClick={() => { setPositionsTab(k); setTabIsUserPicked(true); }}
+                        className={cn(
+                          'px-3 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors inline-flex items-baseline gap-1.5',
+                          positionsTab === k
+                            ? 'border-[var(--accent)] text-[var(--role-content)]'
+                            : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
+                        )}
+                      >
+                        {label}
+                        {count !== null && count > 0 && <span className="font-mono tabular-nums text-[10px] text-[var(--role-content-subtle)]">{count}</span>}
+                      </button>
+                    ))}
                   </div>
                 )}
+                <span className="py-2 font-mono text-[11px] text-[var(--role-content-subtle)] truncate">{formatAddress(address)}</span>
               </div>
 
               {/* Panel body — unified table treatment across all three
@@ -3149,13 +2593,13 @@ export default function WalletPage() {
                   so the panel reads as a consistent surface no matter
                   which tab is active. Clicking any row in Open or
                   Recent opens the chart modal. */}
-              <div className="max-h-[480px] overflow-y-auto">
+              <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
                 {positionsTab === 'open' ? (
                   positions.length > 0 ? (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
-                          <th className="text-left font-medium px-4 py-2.5">Market</th>
+                          <th className="text-left font-medium px-4 py-2">Market</th>
                           <th className="text-right font-medium px-4 py-2.5">Size</th>
                           <th className="text-right font-medium px-4 py-2.5">Entry</th>
                           <th className="text-right font-medium px-4 py-2.5">Mark</th>
@@ -3209,7 +2653,7 @@ export default function WalletPage() {
                                   >
                                     {isLong ? 'LONG' : 'SHORT'}
                                   </span>
-                                  <span className="font-medium text-[var(--text-primary)]">{pos.symbol}</span>
+                                  <span className="font-medium whitespace-nowrap text-[var(--text-primary)]">{pos.symbol}</span>
                                   <span className="text-[var(--text-tertiary)] text-xs font-mono">{pos.leverage}x</span>
                                 </div>
                               </td>
@@ -3241,7 +2685,7 @@ export default function WalletPage() {
                                   pnlPercent >= 0 ? 'text-bulk-green/80' : 'text-bulk-red/80',
                                 )}
                               >
-                                {pnlPercent >= 0 ? '+' : ''}{formatPercent(pnlPercent)}
+                                {formatPercent(pnlPercent)}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono tabular-nums text-bulk-red hidden lg:table-cell">
                                 ${formatNumber(pos.liquidationPrice, 4)}
@@ -3338,7 +2782,7 @@ export default function WalletPage() {
                 (deposits, transfers, sub-account & multisig ops). Both are
                 supporting chronological context, so they sit at the bottom
                 side by side. */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
               <TradeTimeline closedPositions={closedPositions} />
               <ActivityFeed address={address} />
             </div>
