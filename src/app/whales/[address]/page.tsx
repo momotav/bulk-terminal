@@ -21,6 +21,7 @@ import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 import { ChartFrame } from '@/components/ChartFrame';
 import { getCoinColor } from '@/lib/coins';
+import { Sparkline } from '@/components/Sparkline';
 import { clampWicks } from '@/lib/candles';
 
 // X (Twitter) icon component
@@ -553,39 +554,6 @@ function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPo
     </div>
   );
 }
-// Trade Timeline: recent closed positions rendered as plain-language events.
-function TradeTimeline({ closedPositions }: { closedPositions: ClosedPosition[] }) {
-  const items = useMemo(() =>
-    [...closedPositions].sort((a, b) => b.closedAt - a.closedAt).slice(0, 8),
-  [closedPositions]);
-  return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-4">
-      <div className="text-[10px] tracking-normal text-[var(--text-tertiary)] font-medium mb-3 flex items-center gap-1.5">
-        <Clock className="w-3 h-3" /> Trade Timeline
-      </div>
-      {items.length ? (
-        <ol className="relative space-y-2.5 pl-4">
-          {items.map((p, i) => (
-            <li key={i} className="relative">
-              <span className="absolute -left-4 top-1.5 h-2 w-2 rounded-full" style={{ background: p.realizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }} />
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-primary)]">Closed {p.symbol.replace(/-USD$/, '')} {p.side === 'short' ? 'Short' : 'Long'}</span>
-                <span className={cn('font-mono font-semibold tabular-nums', p.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red')}>
-                  {p.realizedPnl >= 0 ? '+' : '-'}${formatCompact(Math.abs(p.realizedPnl))}
-                </span>
-              </div>
-              <div className="text-[10px] text-[var(--text-tertiary)]">
-                {new Date(p.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · held {formatDuration(p.closedAt - p.openedAt)}
-                {p.liquidated && ' · liquidated'}
-              </div>
-            </li>
-          ))}
-        </ol>
-      ) : <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">No closed trades yet</div>}
-    </div>
-  );
-}
-
 // ----------------------------------------------------------------------------
 // Dense strip primitives
 //
@@ -634,19 +602,6 @@ function StripCell({
 }
 
 /** Thin track with one fill (and an optional second fill from the right). */
-function StripBar({ pct, color, pct2, color2 }: { pct: number; color: string; pct2?: number; color2?: string }) {
-  const a = Math.max(0, Math.min(1, pct));
-  const b = pct2 !== undefined ? Math.max(0, Math.min(1, pct2)) : null;
-  return (
-    <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-[var(--role-surface-raised)]">
-      <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${a * 100}%`, background: color }} />
-      {b !== null && color2 && (
-        <div className="absolute right-0 top-0 h-full rounded-full" style={{ width: `${b * 100}%`, background: color2 }} />
-      )}
-    </div>
-  );
-}
-
 /** Label/value row for the rail ledger. Hairlines come from the parent `divide-y`. */
 function LedgerRow({
   label,
@@ -689,112 +644,6 @@ function LedgerSection({ title, aside, children }: { title: string; aside?: stri
     </section>
   );
 }
-
-// ----------------------------------------------------------------------------
-// ExposureStrip — "what is this wallet doing right now", in one panel.
-//
-// Direction · Notional/margin · Margin usage · Nearest liquidation as four
-// hairline cells, then a HOLDS row of the open markets. Absorbs what used to
-// be three separate regions (KPI row, Signals strip, Position intelligence).
-// ----------------------------------------------------------------------------
-function ExposureStrip({
-  positions,
-  margin,
-  markPrices,
-  directionBias,
-  distanceToLiq,
-  effectiveLeverage,
-  totalNotional,
-}: {
-  positions: NonNullable<WalletData['live']>['positions'];
-  margin: NonNullable<WalletData['live']>['margin'] | null | undefined;
-  markPrices: Record<string, number>;
-  directionBias: { label: string; longPct: number; longNotional: number; shortNotional: number } | null;
-  distanceToLiq: { symbol: string; pct: number } | null;
-  effectiveLeverage: number | null;
-  totalNotional: number;
-}) {
-  const open = positions.length > 0 && !!directionBias;
-  const longN = directionBias?.longNotional ?? 0;
-  const shortN = directionBias?.shortNotional ?? 0;
-  const netExposure = longN - shortN;
-  const longPct = directionBias?.longPct ?? 0;
-  // Plain-language direction, mirroring BULK's own vocabulary on the exchange.
-  const dirLabel = !open ? 'Flat'
-    : longPct >= 0.9 ? 'All long'
-    : longPct >= 0.6 ? 'Mostly long'
-    : longPct > 0.4 ? 'Balanced'
-    : longPct > 0.1 ? 'Mostly short'
-    : 'All short';
-  const dirTone: 'green' | 'red' | 'neutral' | 'muted' = !open ? 'muted' : longPct > 0.6 ? 'green' : longPct < 0.4 ? 'red' : 'neutral';
-  const dirArrow = !open ? '' : longPct > 0.6 ? ' ↗' : longPct < 0.4 ? ' ↘' : ' →';
-
-  const equity = margin?.totalBalance ?? 0;
-  const used = margin?.marginUsed ?? 0;
-  // BULK reports maintenance margin per position; when present the cell shows
-  // maintenance ÷ equity (the liquidation-relevant ratio). Otherwise it falls
-  // back to margin used ÷ equity and says so in the label.
-  const maint = positions.reduce((s, p) => s + (typeof p.maintenanceMargin === 'number' && p.maintenanceMargin > 0 ? p.maintenanceMargin : 0), 0);
-  const hasMaint = maint > 0;
-  const usagePct = equity > 0 ? (hasMaint ? maint : used) / equity : 0;
-  const usageTone: 'green' | 'orange' | 'red' | 'neutral' | 'muted' = !open ? 'muted' : usagePct >= 0.8 ? 'red' : usagePct >= 0.5 ? 'orange' : 'neutral';
-
-  const liqPos = distanceToLiq ? positions.find((p) => p.symbol === distanceToLiq.symbol) : null;
-  const liqMark = liqPos ? (markPrices[liqPos.symbol] ?? liqPos.price) : null;
-  const liqTone: 'green' | 'orange' | 'red' | 'muted' = !distanceToLiq ? 'muted' : distanceToLiq.pct < 0.05 ? 'red' : distanceToLiq.pct < 0.15 ? 'orange' : 'green';
-
-  const holds = [...positions]
-    .map((p) => ({ ...p, coin: p.symbol.replace(/-USD$/, ''), n: Math.abs((p.size || 0) * (p.price || 0)) }))
-    .sort((a, b) => b.n - a.n);
-
-  return (
-    <section className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] min-w-0">
-      <div className="flex items-baseline gap-2 px-4 pt-2.5 pb-2 border-b border-[var(--border-color)]">
-        <h2 className="t-label !text-[var(--role-content)]">Exposure</h2>
-        <span className="text-[11px] text-[var(--role-content-subtle)]">open positions now</span>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-[var(--border-color)]">
-        <StripCell label="Direction" value={`${dirLabel}${dirArrow}`} tone={dirTone}
-          sub={open
-            ? <><span style={{ color: 'var(--pos)' }}>{(longPct * 100).toFixed(0)}% long · ${formatCompact(longN)}</span><span className="mx-1.5 text-[var(--role-content-subtle)]">/</span><span style={{ color: 'var(--neg)' }}>{((1 - longPct) * 100).toFixed(0)}% short · ${formatCompact(shortN)}</span></>
-            : 'No open positions'}>
-          {open && <StripBar pct={longPct} color="var(--pos)" pct2={1 - longPct} color2="var(--neg)" />}
-        </StripCell>
-        <StripCell label="Notional / margin" value={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(2)}×` : '—'} tone={effectiveLeverage === null ? 'muted' : 'neutral'}
-          sub={open
-            ? <>${formatCompact(totalNotional)} notional on ${formatCompact(equity)} margin<br />net exposure <span style={{ color: netExposure >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{netExposure >= 0 ? '+' : '−'}${formatCompact(Math.abs(netExposure))}</span></>
-            : 'Nothing deployed'} />
-        <StripCell label={hasMaint ? 'Maintenance / margin' : 'Margin usage'} value={margin ? `${(usagePct * 100).toFixed(1)}%` : '—'} tone={usageTone}
-          sub={margin
-            ? (hasMaint
-              ? <>${formatCompact(maint)} maintenance of ${formatCompact(equity)}<br />${formatCompact(used)} in margin</>
-              : `$${formatCompact(used)} of $${formatCompact(equity)} margin`)
-            : '—'}>
-          {margin && <StripBar pct={usagePct} color={usageTone === 'red' ? 'var(--neg)' : usageTone === 'orange' ? 'var(--warn, var(--neg))' : 'var(--role-content-muted)'} />}
-        </StripCell>
-        <StripCell label="Nearest liq. price" value={distanceToLiq ? `${(distanceToLiq.pct * 100).toFixed(1)}%` : '—'} tone={liqTone}
-          sub={distanceToLiq && liqPos
-            ? <>{liqPos.symbol} <span style={{ color: liqPos.size > 0 ? 'var(--pos)' : 'var(--neg)' }}>{liqPos.size > 0 ? 'long' : 'short'}</span><br />liq. {formatNumber(liqPos.liquidationPrice, 2)} · mark {liqMark != null ? formatNumber(liqMark, 2) : '—'}</>
-            : 'No liquidation exposure'} />
-      </div>
-      {holds.length > 0 && (
-        <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap px-4 py-2 border-t border-[var(--border-color)]">
-          <span className="t-label">Holds</span>
-          {holds.map((p) => (
-            <span key={p.symbol} className="inline-flex items-center gap-1.5 text-[12px]">
-              <span className="h-2 w-2 rounded-full" style={{ background: getCoinColor(p.coin) }} />
-              <span className="font-medium text-[var(--role-content)]">{p.symbol}</span>
-              <span style={{ color: p.size > 0 ? 'var(--pos)' : 'var(--neg)' }}>{p.size > 0 ? 'long' : 'short'}</span>
-              <span className="font-mono tabular-nums text-[var(--role-content-muted)]">${formatCompact(p.n)}</span>
-              <span className="font-mono text-[10px] text-[var(--role-content-subtle)]">{p.leverage}×</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ----------------------------------------------------------------------------
 // PerformanceStrip — the numbers that belong WITH the PnL curve.
 //
@@ -811,6 +660,7 @@ function PerformanceStrip({
   closedPositions,
   analysisStats,
   tradeCount,
+  compact = false,
 }: {
   series: { t: number; v: number }[];
   source: 'reconstructed' | 'realized' | 'snapshot';
@@ -819,6 +669,8 @@ function PerformanceStrip({
   closedPositions: ClosedPosition[];
   analysisStats: { closedWinRate: number | null; longestStreak: number };
   tradeCount: number;
+  /** Cockpit mode: the six figures on one line, the split on the next. */
+  compact?: boolean;
 }) {
   const m = useMemo(() => {
     const last = series.length ? series[series.length - 1].v : 0;
@@ -883,6 +735,35 @@ function PerformanceStrip({
   const trading = margin ? margin.realizedPnl - fees - funding + margin.unrealizedPnl : null;
   const sourceLabel = source === 'reconstructed' ? 'BULK fills + 1h marks' : source === 'realized' ? 'BULK fills, realized only' : 'collector snapshots';
 
+  if (compact) {
+    const F = ({ k, v, tone, title }: { k: string; v: string; tone: 'green' | 'red' | 'neutral' | 'muted'; title?: string }) => (
+      <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
+        <span className="t-label">{k}</span>
+        <span className="font-mono text-[12.5px] font-medium tabular-nums" style={{ color: tone === 'green' ? 'var(--pos)' : tone === 'red' ? 'var(--neg)' : tone === 'muted' ? 'var(--role-content-subtle)' : 'var(--role-content)' }}>{v}</span>
+      </span>
+    );
+    return (
+      <div className="shrink-0 border-t border-[var(--border-color)] px-3 py-1.5 flex flex-col gap-1 text-[11px]">
+        <div className="flex items-center gap-x-4 gap-y-1 flex-wrap">
+          <F k="Return" v={m.ret !== null ? pct(m.ret) : '—'} tone={m.ret === null ? 'muted' : m.ret >= 0 ? 'green' : 'red'} title={since ? `since ${since}, on starting equity` : undefined} />
+          <F k="Drawdown" v={m.dd > 0 ? `−${(m.dd * 100).toFixed(2)}%` : series.length >= 2 ? '0.00%' : '—'} tone={m.dd > 0 ? 'red' : 'muted'} title={m.dd > 0 ? `${fmtT(m.ddFrom)} → ${fmtT(m.ddTo)}` : undefined} />
+          <F k="Sharpe" v={m.sharpe !== null ? m.sharpe.toFixed(2) : `— ${Math.min(m.dayCount, 14)}/14d`} tone={m.sharpe === null ? 'muted' : m.sharpe >= 1 ? 'green' : m.sharpe < 0 ? 'red' : 'neutral'} title="Annualised from daily returns on running equity; needs 14 complete days" />
+          <F k="Best" v={m.best && m.best[1] > 0 ? `${usd(m.best[1])} ${fmtDay(m.best[0])}` : '—'} tone={m.best && m.best[1] > 0 ? 'green' : 'muted'} />
+          <F k="Worst" v={m.worst && m.worst[1] < 0 ? `${usd(m.worst[1])} ${fmtDay(m.worst[0])}` : '—'} tone={m.worst && m.worst[1] < 0 ? 'red' : 'muted'} />
+          <F k="Up days" v={totalDays ? `${m.up}/${totalDays}` : '—'} tone={totalDays ? 'neutral' : 'muted'} />
+          <span className="ml-auto text-[10px] text-[var(--role-content-subtle)] whitespace-nowrap">{sourceLabel}{since ? ` · since ${since}` : ''}</span>
+        </div>
+        <div className="flex items-center gap-x-4 gap-y-1 flex-wrap">
+          <F k="Trading" v={trading !== null ? usd(trading) : '—'} tone={trading === null ? 'muted' : trading >= 0 ? 'green' : 'red'} title="Lifetime: realized − fees − funding + unrealized" />
+          <F k="Funding" v={margin ? usd(funding) : '—'} tone={!margin ? 'muted' : funding >= 0 ? 'green' : 'red'} />
+          <F k="Fees" v={margin ? usd(fees) : '—'} tone={!margin ? 'muted' : fees >= 0 ? 'green' : 'red'} />
+          <F k="Profit factor" v={m.profitFactor === null ? '—' : m.profitFactor === Infinity ? '∞' : m.profitFactor.toFixed(2)} tone={m.profitFactor === null ? 'muted' : 'neutral'} />
+          <span className="ml-auto text-[10px] text-[var(--role-content-subtle)] whitespace-nowrap">lifetime counters · this account only</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="grid grid-cols-3 lg:grid-cols-6 divide-x divide-y lg:divide-y-0 divide-[var(--border-color)] border-b border-[var(--border-color)]">
@@ -928,6 +809,303 @@ function PerformanceStrip({
         <span className="ml-auto text-[var(--role-content-subtle)]">{sourceLabel}{since ? ` · since ${since}` : ''} · this account only</span>
       </div>
     </>
+  );
+}
+
+// ============================================================================
+// TRADER TERMINAL
+//
+// The wallet page is a single-viewport cockpit, not a scrolling dashboard:
+//   masthead  — who this is, in one computed sentence
+//   ticker    — the "now" numbers in one line
+//   panes     — ledger | curve (+ position bands) | positions (keyboard-driven)
+//   tape      — the live narrative of what the wallet just did
+// Everything fits ≥1024px without scrolling; each pane scrolls inside itself.
+// Below lg it stacks in the same order and scrolls normally.
+// ============================================================================
+
+type OpenPos = NonNullable<WalletData['live']>['positions'][number];
+
+/** One figure in the ticker line. */
+function Tick({ k, v, tone = 'neutral', title }: { k: string; v: ReactNode; tone?: 'green' | 'red' | 'orange' | 'neutral' | 'muted'; title?: string }) {
+  const color =
+    tone === 'green' ? 'var(--pos)' : tone === 'red' ? 'var(--neg)' : tone === 'orange' ? 'var(--warn, var(--neg))' :
+    tone === 'muted' ? 'var(--role-content-subtle)' : 'var(--role-content)';
+  return (
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
+      <span className="t-label">{k}</span>
+      <span className="font-mono text-[13px] font-medium tabular-nums" style={{ color }}>{v}</span>
+    </span>
+  );
+}
+
+/**
+ * Who this trader is, as one factual sentence built only from clauses the
+ * data supports. No adjectives the numbers didn't earn.
+ */
+function buildVerdict(args: {
+  fills: WalletFill[];
+  address: string;
+  style: string;
+  leverage: number | null;
+  longPct: number | null;
+  openCount: number;
+  trading: number | null;
+  fees: number | null;
+  liqs: number;
+  cohort: string;
+}): string {
+  const { fills, address, style, leverage, longPct, openCount, trading, fees, liqs, cohort } = args;
+  const parts: string[] = [];
+  // Role: maker vs taker from the loaded fills.
+  const makerShare = fills.length ? fills.filter((f) => f.maker === address).length / fills.length : null;
+  const byMarket = new Map<string, number>();
+  for (const f of fills) byMarket.set(f.symbol, (byMarket.get(f.symbol) ?? 0) + Math.abs(f.size) * f.price);
+  const top = [...byMarket.entries()].sort((a, b) => b[1] - a[1])[0];
+  const totalVol = [...byMarket.values()].reduce((s, v) => s + v, 0);
+  const lead = top && totalVol > 0 ? `${top[0].replace(/-USD$/, '')}${top[1] / totalVol >= 0.5 ? '-led' : '-leaning'}` : null;
+  const role = makerShare === null ? null : makerShare >= 0.8 ? 'maker' : makerShare <= 0.2 ? 'taker' : 'mixed-flow';
+  const head = [style !== 'Unknown' ? style.toLowerCase() : null, lead, role ? `${role} across ${byMarket.size} market${byMarket.size === 1 ? '' : 's'}` : null].filter(Boolean).join(' ');
+  if (head) parts.push(head.charAt(0).toUpperCase() + head.slice(1));
+  if (openCount > 0 && leverage !== null && longPct !== null) {
+    const bias = longPct >= 0.6 ? 'net long' : longPct <= 0.4 ? 'net short' : 'balanced';
+    parts.push(`${bias} at ${leverage.toFixed(1)}× across ${openCount} open`);
+  } else if (openCount === 0) parts.push('flat right now');
+  if (makerShare !== null && fills.length >= 50) parts.push(`${Math.round(makerShare * 100)}% maker fills`);
+  if (trading !== null && fees !== null && (Math.abs(trading) > 1 || Math.abs(fees) > 1)) {
+    const t = `${trading >= 0 ? '+' : '−'}$${formatCompact(Math.abs(trading))} trading`;
+    const f = fees >= 0 ? `+$${formatCompact(fees)} rebates` : `−$${formatCompact(Math.abs(fees))} fees`;
+    parts.push(`${t}, ${f}`);
+  }
+  if (liqs > 0) parts.push(`${liqs.toLocaleString('en-US')} liquidation${liqs === 1 ? '' : 's'}`);
+  if (parts.length === 0) parts.push(`${cohort} wallet with no recorded trading yet`);
+  return parts.join(' · ');
+}
+
+/**
+ * Right pane: the live list. One row per open position with a 24h price
+ * sparkline oriented to the position's side, keyboard-navigable (j/k, ↵
+ * opens the chart, s opens the share card, esc clears). Tabs swap the list
+ * for closed trades, liquidations and the account activity feed.
+ */
+function PositionsPane({
+  address,
+  positions,
+  markPrices,
+  klinesBySymbol,
+  openTimes,
+  closedPositions,
+  tab,
+  onTab,
+  selected,
+  onSelect,
+  onOpenChart,
+  onShare,
+  onSelectClosed,
+  loading,
+}: {
+  address: string;
+  positions: OpenPos[];
+  markPrices: Record<string, number>;
+  klinesBySymbol: Record<string, Candle[]>;
+  openTimes: Record<string, PositionOpenInfo | null>;
+  closedPositions: ClosedPosition[];
+  tab: 'open' | 'recent' | 'liquidations' | 'activity';
+  onTab: (t: 'open' | 'recent' | 'liquidations' | 'activity') => void;
+  selected: number;
+  onSelect: (i: number) => void;
+  onOpenChart: (p: OpenPos) => void;
+  onShare: (symbol: string) => void;
+  onSelectClosed: (p: ClosedPosition) => void;
+  loading: boolean;
+}) {
+  const rows = useMemo(() => [...positions].sort((a, b) => Math.abs(b.notional || 0) - Math.abs(a.notional || 0)), [positions]);
+  return (
+    <section className="flex flex-col min-h-0 min-w-0 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)]" aria-label="Positions">
+      <div className="px-3 border-b border-[var(--border-color)] flex items-end justify-between gap-2 shrink-0">
+        <div className="flex items-end -mb-px overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+          {([
+            ['open', 'Open', positions.length],
+            ['recent', 'Closed', closedPositions.length],
+            ['liquidations', 'Liqs', null],
+            ['activity', 'Activity', null],
+          ] as const).map(([k, label, count]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => onTab(k)}
+              className={cn('px-2.5 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors inline-flex items-baseline gap-1.5 whitespace-nowrap',
+                tab === k ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]')}>
+              {label}{count !== null && count > 0 && <span className="font-mono tabular-nums text-[10px] text-[var(--role-content-subtle)]">{count}</span>}
+            </button>
+          ))}
+        </div>
+        {tab === 'open' && rows.length > 0 && (
+          <span className="hidden xl:inline pb-2 font-mono text-[10px] text-[var(--role-content-subtle)] whitespace-nowrap">j/k · ↵ chart · s share</span>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        {tab === 'open' ? (
+          loading && rows.length === 0 ? (
+            <div className="p-4 text-[12px] text-[var(--role-content-muted)] flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />Fetching positions…</div>
+          ) : rows.length === 0 ? (
+            <div className="p-6 text-center text-[12px] text-[var(--role-content-subtle)]">Flat — no open positions</div>
+          ) : (
+            <ul className="divide-y divide-[var(--role-line-subtle)]" role="listbox" aria-label="Open positions">
+              {rows.map((p, i) => {
+                const isLong = p.size > 0;
+                const mark = markPrices[p.symbol] || p.price;
+                const notional = Math.abs(p.size * mark);
+                const pnlPct = notional ? (p.unrealizedPnl / notional) * 100 : 0;
+                const liqDist = p.liquidationPrice && mark ? Math.max(0, (isLong ? (mark - p.liquidationPrice) / mark : (p.liquidationPrice - mark) / mark)) : null;
+                const spark = (klinesBySymbol[p.symbol] ?? []).slice(-24).map((c) => c.c);
+                const opened = openTimes[p.symbol];
+                const sel = i === selected;
+                return (
+                  <li key={p.symbol} role="option" aria-selected={sel}
+                    onMouseEnter={() => onSelect(i)}
+                    onClick={() => { onSelect(i); onOpenChart(p); }}
+                    className={cn('relative flex flex-col gap-1 px-3 py-2 cursor-pointer transition-colors',
+                      sel ? 'bg-[var(--role-surface-raised)]' : 'hover:bg-[var(--role-surface-raised)]/60')}>
+                    {sel && <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-[var(--accent)]" aria-hidden />}
+                    {/* Line 1: side · market · leverage ……… notional · uPnL */}
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <span className={cn('w-[38px] shrink-0 text-center py-0.5 rounded-sm text-[9px] font-semibold tracking-wider leading-none', isLong ? 'bg-bulk-green/15 text-bulk-green' : 'bg-bulk-red/15 text-bulk-red')}>{isLong ? 'LONG' : 'SHORT'}</span>
+                      <span className="font-medium text-[13px] text-[var(--role-content)] whitespace-nowrap">{p.symbol.replace(/-USD$/, '')}</span>
+                      <span className="font-mono text-[10px] text-[var(--role-content-subtle)]">{p.leverage}×</span>
+                      <span className="ml-auto font-mono text-[11px] tabular-nums text-[var(--role-content-muted)] whitespace-nowrap">${formatCompact(notional)}</span>
+                      <span className="w-[76px] text-right font-mono text-[13px] font-medium tabular-nums whitespace-nowrap" style={{ color: p.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+                        {p.unrealizedPnl >= 0 ? '+' : '−'}${formatNumber(Math.abs(p.unrealizedPnl), 2)}
+                      </span>
+                    </div>
+                    {/* Line 2: entry→mark · liq distance · age ……… sparkline · % */}
+                    <div className="flex items-center gap-2 min-w-0 font-mono text-[10px] tabular-nums text-[var(--role-content-subtle)]">
+                      <span className="whitespace-nowrap truncate">{formatNumber(p.price, p.price < 1 ? 4 : p.price < 100 ? 2 : 0)} → {formatNumber(mark, mark < 1 ? 4 : mark < 100 ? 2 : 0)}</span>
+                      {liqDist !== null && <span className="whitespace-nowrap" style={{ color: liqDist < 0.05 ? 'var(--neg)' : liqDist < 0.15 ? 'var(--warn, var(--neg))' : undefined }}>liq {(liqDist * 100).toFixed(1)}%</span>}
+                      {opened && <span className="whitespace-nowrap">{formatDuration(Date.now() - opened.openedAt)}</span>}
+                      <span className="ml-auto flex items-center gap-2">
+                        <span className="w-14 h-5 hidden sm:block" aria-hidden>
+                          {spark.length >= 2 && <Sparkline data={spark} width={56} height={20} color={p.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)'} />}
+                        </span>
+                        <span className="w-[52px] text-right whitespace-nowrap" style={{ color: p.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{formatPercent(pnlPct)}</span>
+                        <button type="button" title="Share card" aria-label={`Share ${p.symbol}`} onClick={(e) => { e.stopPropagation(); onShare(p.symbol); }}
+                          className="p-0.5 -mr-1 rounded text-[var(--role-content-subtle)] hover:text-[var(--accent)] transition-colors">
+                          <ImageIcon className="w-3 h-3" />
+                        </button>
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : tab === 'recent' ? (
+          <ClosedPositionsList address={address} provided={closedPositions} limit={100} density="table" onSelect={onSelectClosed} />
+        ) : tab === 'liquidations' ? (
+          <RiskEventsList address={address} bare />
+        ) : (
+          <ActivityFeed address={address} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Position bands under the curve: one thin bar per open position from the
+ * moment it opened to now, on the SAME time axis as the visible chart, so you
+ * can read "this leg of the curve happened while BTC was open" directly.
+ */
+function PositionBands({ positions, openTimes, t0, t1, selectedSymbol }: {
+  positions: OpenPos[]; openTimes: Record<string, PositionOpenInfo | null>; t0: number; t1: number; selectedSymbol?: string | null;
+}) {
+  const span = Math.max(1, t1 - t0);
+  const bands = positions
+    .map((p) => ({ p, open: openTimes[p.symbol]?.openedAt ?? null }))
+    .filter((b): b is { p: OpenPos; open: number } => b.open !== null && b.open <= t1)
+    .sort((a, b) => a.open - b.open);
+  if (bands.length === 0) return null;
+  return (
+    <div className="px-3 pb-1.5 pt-1 flex flex-col gap-[2px] shrink-0 border-t border-[var(--role-line-subtle)]" aria-label="Open positions on the time axis" title="When each open position was opened, on the curve's time axis">
+      {bands.map(({ p, open }) => {
+        const left = Math.max(0, (open - t0) / span) * 100;
+        const isLong = p.size > 0;
+        const sel = selectedSymbol === p.symbol;
+        const labelBefore = left >= 10;
+        return (
+          <div key={p.symbol} className="relative h-[7px] w-full" title={`${p.symbol} ${isLong ? 'long' : 'short'} since ${new Date(open).toLocaleString('en-US')}`}>
+            <div className="absolute top-[3px] h-[2px] rounded-full" style={{ left: `${left}%`, right: 0, background: isLong ? 'var(--pos)' : 'var(--neg)', opacity: sel ? 1 : 0.5 }} />
+            <span className="absolute top-[-1px] font-mono text-[8px] leading-[9px] tabular-nums whitespace-nowrap"
+              style={labelBefore
+                ? { right: `calc(${100 - left}% + 4px)`, color: sel ? 'var(--role-content)' : 'var(--role-content-subtle)' }
+                : { left: `calc(${left}% + 4px)`, color: sel ? 'var(--role-content)' : 'var(--role-content-subtle)', background: 'var(--bg-muted)', paddingInline: 2 }}>
+              {p.symbol.replace(/-USD$/, '')}{open < t0 ? ' ←' : ''}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The bottom tape: what the wallet just did, newest first, one line each. */
+type TapeEvent = { t: number; kind: 'open' | 'close' | 'liq'; text: string; amount?: number };
+function buildTape(closed: ClosedPosition[], positions: OpenPos[], openTimes: Record<string, PositionOpenInfo | null>, limit = 40): TapeEvent[] {
+  const ev: TapeEvent[] = [];
+  for (const p of closed) {
+    ev.push({
+      t: p.closedAt,
+      kind: p.liquidated ? 'liq' : 'close',
+      text: `${p.liquidated ? 'liquidated' : 'closed'} ${p.symbol.replace(/-USD$/, '')} ${p.side} · held ${formatDuration(Math.max(0, p.closedAt - p.openedAt))}`,
+      amount: p.realizedPnl,
+    });
+  }
+  for (const p of positions) {
+    const o = openTimes[p.symbol];
+    if (o) ev.push({ t: o.openedAt, kind: 'open', text: `opened ${p.symbol.replace(/-USD$/, '')} ${p.size > 0 ? 'long' : 'short'} · $${formatCompact(Math.abs(p.size * p.price))} at ${p.leverage}×` });
+  }
+  return ev.sort((a, b) => b.t - a.t).slice(0, limit);
+}
+
+function Tape({ events, expanded, onToggle }: { events: TapeEvent[]; expanded: boolean; onToggle: () => void }) {
+  const fmt = (t: number) => {
+    const d = new Date(t);
+    const today = new Date().toDateString() === d.toDateString();
+    return today ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+  const glyph = (k: TapeEvent['kind']) => k === 'open' ? '●' : k === 'liq' ? '⚠' : '○';
+  const color = (e: TapeEvent) => e.kind === 'liq' ? 'var(--neg)' : e.amount === undefined ? 'var(--role-content-muted)' : e.amount >= 0 ? 'var(--pos)' : 'var(--neg)';
+  return (
+    <section className={cn('bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] min-w-0 flex flex-col', expanded ? 'max-h-[40vh]' : '')} aria-label="Tape">
+      <div className="flex items-center gap-3 px-3 h-8 shrink-0">
+        <button type="button" onClick={onToggle} className="inline-flex items-center gap-1.5 t-label !text-[var(--role-content)] hover:text-[var(--accent)] transition-colors" aria-expanded={expanded}>
+          Tape <span className="text-[var(--role-content-subtle)]">{expanded ? '▴' : '▸'}</span>
+        </button>
+        {events.length === 0 ? (
+          <span className="text-[11px] text-[var(--role-content-subtle)]">Nothing recorded yet</span>
+        ) : !expanded ? (
+          <div className="flex-1 min-w-0 flex items-center gap-5 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden text-[11px]">
+            {events.slice(0, 12).map((e, i) => (
+              <span key={i} className="inline-flex items-baseline gap-1.5 shrink-0">
+                <span className="font-mono text-[10px] text-[var(--role-content-subtle)] tabular-nums">{fmt(e.t)}</span>
+                <span style={{ color: color(e) }}>{glyph(e.kind)}</span>
+                <span className="text-[var(--role-content-muted)]">{e.text}</span>
+                {e.amount !== undefined && <span className="font-mono font-medium tabular-nums" style={{ color: color(e) }}>{e.amount >= 0 ? '+' : '−'}${formatCompact(Math.abs(e.amount))}</span>}
+              </span>
+            ))}
+          </div>
+        ) : <span className="text-[11px] text-[var(--role-content-subtle)]">{events.length} events</span>}
+      </div>
+      {expanded && events.length > 0 && (
+        <ol className="overflow-y-auto border-t border-[var(--border-color)] divide-y divide-[var(--role-line-subtle)] text-[12px]">
+          {events.map((e, i) => (
+            <li key={i} className="flex items-baseline gap-3 px-3 py-1.5">
+              <span className="font-mono text-[10px] text-[var(--role-content-subtle)] tabular-nums w-[88px] shrink-0">{fmt(e.t)}</span>
+              <span style={{ color: color(e) }}>{glyph(e.kind)}</span>
+              <span className="text-[var(--role-content-muted)] min-w-0 truncate">{e.text}</span>
+              {e.amount !== undefined && <span className="ml-auto font-mono font-medium tabular-nums shrink-0" style={{ color: color(e) }}>{e.amount >= 0 ? '+' : '−'}${formatNumber(Math.abs(e.amount), 2)}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -1007,7 +1185,10 @@ export default function WalletPage() {
   // can flick between the two with the segmented control in the panel
   // header. Replaces the older two-panel stacked layout that wasted
   // vertical space.
-  const [positionsTab, setPositionsTab] = useState<'open' | 'recent' | 'liquidations'>('open');
+  const [positionsTab, setPositionsTab] = useState<'open' | 'recent' | 'liquidations' | 'activity'>('open');
+  // Terminal: keyboard-selected row in the positions pane, and the tape fold.
+  const [selectedPos, setSelectedPos] = useState(-1);
+  const [tapeOpen, setTapeOpen] = useState(false);
   // PnL History chart: switch between the line chart ('pnl') and a
   // day-by-day P&L heatmap calendar ('calendar'). Hyperdash signature
   // pattern — gives the user two complementary views of the same data
@@ -1895,6 +2076,69 @@ export default function WalletPage() {
       />
     ) : undefined;
 
+  // ── Terminal derivations ─────────────────────────────────────────────────
+  const sortedPositions = useMemo(() => [...positions].sort((a, b) => Math.abs(b.notional || 0) - Math.abs(a.notional || 0)), [positions]);
+  const selectedSymbol = selectedPos >= 0 ? sortedPositions[selectedPos]?.symbol ?? null : null;
+  const maintTotal = positions.reduce((s, p) => s + (typeof p.maintenanceMargin === 'number' && p.maintenanceMargin > 0 ? p.maintenanceMargin : 0), 0);
+  const verdict = useMemo(() => buildVerdict({
+    fills: allFills,
+    address,
+    style: analysisStats.tradingStyle,
+    leverage: effectiveLeverage,
+    longPct: directionBias?.longPct ?? null,
+    openCount: positions.length,
+    trading: margin ? margin.realizedPnl - (margin.fees ?? 0) - (margin.funding ?? 0) + margin.unrealizedPnl : null,
+    fees: margin?.fees ?? null,
+    liqs: tracked?.total_liquidations || 0,
+    cohort: analysisStats.sizeCohort,
+  }), [allFills, address, analysisStats.tradingStyle, analysisStats.sizeCohort, effectiveLeverage, directionBias?.longPct, positions.length, margin, tracked?.total_liquidations]);
+  // Visible time window of the curve, so the position bands share its axis.
+  const visibleRange = useMemo(() => {
+    if (heroPnl.data.length === 0) return null;
+    const windowMs = chartRange === '24h' ? 86_400_000 : chartRange === '7d' ? 7 * 86_400_000 : chartRange === '30d' ? 30 * 86_400_000 : Infinity;
+    const first = chartRange === 'all' ? heroPnl.data[0].t : (heroPnl.data.find((p) => p.t >= Date.now() - windowMs)?.t ?? null);
+    return first === null ? null : { t0: first, t1: Date.now() };
+  }, [heroPnl.data, chartRange]);
+  const tapeEvents = useMemo(() => buildTape(closedPositions, positions, positionOpenTimes), [closedPositions, positions, positionOpenTimes]);
+
+  const openLiveChart = (pos: OpenPos) => {
+    const isLong = pos.size > 0;
+    const markPrice = markPrices[pos.symbol] || 0;
+    setChartPosition({
+      kind: 'live', walletAddress: address, symbol: pos.symbol, side: isLong ? 'long' : 'short',
+      entryPrice: pos.price, markPrice: markPrice || pos.price, liquidationPrice: pos.liquidationPrice,
+      size: Math.abs(pos.size), leverage: pos.leverage, unrealizedPnl: pos.unrealizedPnl,
+    });
+  };
+  const openClosedChart = (p: ClosedPosition) => setChartPosition({
+    kind: 'closed', walletAddress: address, symbol: p.symbol, side: p.side, entryPrice: p.openPrice, closePrice: p.closePrice,
+    size: p.size, leverage: p.leverage, realizedPnl: p.realizedPnl, fees: p.fees, funding: p.funding,
+    openedAt: p.openedAt, closedAt: p.closedAt, liquidated: p.liquidated,
+  });
+
+  // Keyboard: j/k move the positions selection, ↵ opens its chart, s its share
+  // card, 1–4 set the range, esc clears. Ignored while typing or in a modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (chartPosition || cardData || e.metaKey || e.ctrlKey || e.altKey) return;
+      const n = sortedPositions.length;
+      if (e.key === 'j' || e.key === 'ArrowDown') { if (n) { e.preventDefault(); setPositionsTab('open'); setSelectedPos((i) => (i + 1) % n); } }
+      else if (e.key === 'k' || e.key === 'ArrowUp') { if (n) { e.preventDefault(); setPositionsTab('open'); setSelectedPos((i) => (i <= 0 ? n - 1 : i - 1)); } }
+      else if (e.key === 'Enter') { const p = selectedPos >= 0 ? sortedPositions[selectedPos] : null; if (p) { e.preventDefault(); openLiveChart(p); } }
+      else if (e.key === 's') { const p = selectedPos >= 0 ? sortedPositions[selectedPos] : null; if (p) { e.preventDefault(); openShareCard(p.symbol); } }
+      else if (e.key === 'Escape') setSelectedPos(-1);
+      else if (e.key === '1') setChartRange('24h');
+      else if (e.key === '2') setChartRange('7d');
+      else if (e.key === '3') setChartRange('30d');
+      else if (e.key === '4') setChartRange('all');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedPositions, selectedPos, chartPosition, cardData]);
+
   // The PnL chart's candles load after the fills. It's "ready" once we have
   // candles, OR once we know the wallet genuinely has no fills to chart.
   const klinesReady = Object.values(klinesBySymbol).some((c) => c.length > 0) || (fillsDone && allFills.length === 0);
@@ -1918,303 +2162,158 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out]">
+    <div className="flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out] lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden">
       {cardData && <TradeShareCard data={cardData} onClose={() => setCardData(null)} />}
-      <main className="flex-1 w-full px-3 sm:px-4 py-3">
-        {/* Page-level width: capped at 1600px and centered. Edge-to-edge
-            felt right at 1280px but looks unbounded on 4K / ultrawide
-            displays where the chart stretches to ~3000px and reads as
-            empty whitespace. The 1600px cap matches the dashboard
-            sidebar convention used by peer trading dashboards (e.g.
-            Hyperdash) - wide enough that left rail + main both breathe,
-            narrow enough that lines of stat rows aren't visually broken
-            by their own length. */}
-        <div className="max-w-[1600px] mx-auto">
-        <Link 
-          href="/whales"
-          className="inline-flex items-center gap-1.5 text-[12px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)] mb-2.5 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Whale Tracker
-        </Link>
-
+      <main className="flex-1 min-h-0 w-full px-3 sm:px-4 pt-2.5 pb-3 flex flex-col">
         {error && !hasTrackedData ? (
-          <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-8 text-center">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-bulk-red opacity-50" />
-            <h2 className="text-xl font-bold mb-2">Wallet Not Found</h2>
-            <p className="text-[var(--text-secondary)] mb-4">{error}</p>
-            <Link href="/whales" className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-accent rounded-[var(--radius-md)]" style={{ color: 'var(--accent-text)' }}>
-              <ArrowLeft className="w-4 h-4" />
-              Go Back
+          <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-8 text-center max-w-xl mx-auto mt-8">
+            <AlertCircle className="w-10 h-10 mx-auto mb-3 text-bulk-red opacity-60" />
+            <h2 className="text-lg font-medium mb-1">Wallet not found</h2>
+            <p className="text-[13px] text-[var(--role-content-muted)] mb-4">{error}</p>
+            <Link href="/whales" className="inline-flex items-center gap-2 h-8 px-3 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] hover:bg-[var(--role-surface-raised)] transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Whale Tracker
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-2">
-            {/* ──────────────────────────────────────────────────────
-                LEFT RAIL - identity + headline value + Overview list +
-                Analysis list. Mirrors Hyperdash's wallet view sidebar:
-                thin vertical strip of identity and stats that frames
-                the main content area without competing with it for
-                visual weight.
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
 
-                Stacks above the main column on lg: breakpoint and below
-                (mobile/tablet), so phones see a normal vertical scroll
-                with all the rail content at the top.
-                ────────────────────────────────────────────────────── */}
-            <aside className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] px-4 pt-3 pb-2 flex flex-col lg:self-start lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
-              {/* The rail is a LEDGER: identity, the one headline figure, then
-                  dense label/value rows under small kickers. Nothing in it
-                  competes with the main column for weight — the old 56px
-                  avatar and full-width accent Follow pill were the loudest
-                  things on the page and said the least. */}
-
-              {/* Identity — avatar + name + address on one row. */}
-              <div className="flex items-start gap-3">
+            {/* ── MASTHEAD — who this is, in one line. ───────────────────── */}
+            <header className="shrink-0 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)]">
+              <div className="flex items-center gap-3 px-3 py-2 min-w-0 flex-wrap lg:flex-nowrap">
+                <Link href="/whales" className="shrink-0 p-1 -ml-1 rounded text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors" title="Whale Tracker" aria-label="Back to Whale Tracker">
+                  <ArrowLeft className="w-4 h-4" />
+                </Link>
                 {twitterAvatar ? (
-                  <img
-                    src={twitterAvatar}
-                    alt=""
-                    width={40}
-                    height={40}
-                    loading="eager"
-                    decoding="async"
-                    className="w-10 h-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary-20)]/40 object-cover shrink-0"
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                  />
+                  <img src={twitterAvatar} alt="" width={28} height={28} loading="eager" decoding="async"
+                    className="w-7 h-7 rounded-full border border-[var(--border-color)] object-cover shrink-0"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-[var(--role-surface-raised)] border border-[var(--border-color)] flex items-center justify-center shrink-0">
-                    <Wallet className="w-4 h-4 text-[var(--role-content-muted)]" />
-                  </div>
+                  <span className="w-7 h-7 rounded-full bg-[var(--role-surface-raised)] border border-[var(--border-color)] grid place-items-center shrink-0"><Wallet className="w-3.5 h-3.5 text-[var(--role-content-muted)]" /></span>
                 )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <h1 className="font-mono text-[15px] font-medium text-[var(--role-content)] truncate">
-                      {displayName || formatAddress(address)}
-                    </h1>
-                    {isOwnWallet && (
-                      <span className="shrink-0 px-1 py-px text-[9px] font-medium uppercase tracking-wider rounded-sm bg-[var(--accent)]/15 text-[var(--accent)]">You</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 min-w-0 mt-0.5">
-                    <span className="font-mono text-[11px] text-[var(--role-content-subtle)] truncate" title={address}>{address}</span>
-                    <button onClick={copyAddress} className="p-0.5 shrink-0 rounded hover:bg-[var(--role-surface-raised)] transition-colors" title="Copy address" aria-label="Copy address">
-                      {copied ? <Check className="w-3 h-3 text-bulk-green" /> : <Copy className="w-3 h-3 text-[var(--role-content-subtle)]" />}
-                    </button>
-                  </div>
+                <div className="min-w-0 flex items-baseline gap-2">
+                  <h1 className="font-mono text-[15px] font-medium text-[var(--role-content)] whitespace-nowrap">{displayName || formatAddress(address)}</h1>
+                  <button onClick={copyAddress} className="inline-flex items-center gap-1 font-mono text-[11px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)] transition-colors" title={address}>
+                    <span className="hidden md:inline">{address.slice(0, 10)}…{address.slice(-6)}</span>
+                    {copied ? <Check className="w-3 h-3 text-bulk-green" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                  {isOwnWallet && <span className="px-1 py-px text-[9px] font-medium uppercase tracking-wider rounded-sm bg-[var(--accent)]/15 text-[var(--accent)]">You</span>}
                   {twitterHandle && (
-                    <a href={`https://twitter.com/${twitterHandle}`} target="_blank" rel="noopener noreferrer"
-                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
-                      <XIcon className="w-2.5 h-2.5" />@{twitterHandle}
-                    </a>
+                    <a href={`https://twitter.com/${twitterHandle}`} target="_blank" rel="noopener noreferrer" className="hidden xl:inline-flex items-center gap-1 text-[11px] text-[var(--role-content-subtle)] hover:text-[var(--role-content)]"><XIcon className="w-2.5 h-2.5" />@{twitterHandle}</a>
                   )}
                 </div>
-              </div>
-
-              {/* Actions — one quiet row. Follow stays the primary verb but at
-                  the size of the row, not a billboard. */}
-              <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                {!isOwnWallet && (
-                  <button
-                    onClick={toggleFollow}
-                    disabled={followLoading}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] font-medium border transition-colors disabled:opacity-50',
-                      isFollowing
-                        ? 'border-[var(--accent)]/40 text-[var(--accent)] bg-[var(--accent)]/10 hover:bg-[var(--accent)]/15'
-                        : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110'
-                    )}
-                  >
-                    {followLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : isFollowing ? <StarOff className="w-3 h-3" /> : <Star className="w-3 h-3" />}
-                    {isFollowing ? 'Following' : 'Follow'}
-                  </button>
-                )}
-                {canClaimWallet && (
-                  <button onClick={handleClaimWallet} disabled={claimLoading}
-                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] font-medium border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors disabled:opacity-50">
-                    {claimLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
-                    This is my wallet
-                  </button>
-                )}
-                {isClaimedWallet && (
-                  <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--accent)]/30 text-[var(--accent)]">
-                    <UserCheck className="w-3 h-3" />Claimed
-                  </span>
-                )}
-                <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
-                  Explorer <ExternalLink className="w-3 h-3" />
-                </a>
-                <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
-                  Solscan <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-
-              {/* Standing — rank + hierarchy, contextual facts. */}
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                {isSystemWallet(address) ? (
-                  <div className="inline-flex items-center gap-1.5 self-start px-2 py-1 rounded-[var(--radius-md)] text-[11px] border border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]"
-                    title="This wallet is operated by the BULK exchange protocol">
-                    <Shield className="w-3 h-3" /><span className="font-medium">BULK System</span>
-                  </div>
-                ) : (
-                  <BulkRankBadge address={address} />
-                )}
-                <AccountHierarchy address={address} />
-              </div>
-
-              {/* Net worth — THE headline figure of the rail. */}
-              <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                <div className="flex items-baseline justify-between">
-                  <span className="t-label">Net worth</span>
-                  {hasLiveData && <span className="text-[10px] text-[var(--role-content-subtle)]">BULK · live</span>}
+                {/* The verdict: one computed sentence. The thing no other tracker says. */}
+                <p className="min-w-0 flex-1 basis-full lg:basis-auto text-[12.5px] leading-snug text-[var(--role-content-muted)] lg:truncate order-last lg:order-none" title={verdict}>
+                  <span className="text-[var(--role-content-subtle)] mr-1.5">▸</span>{verdict}
+                </p>
+                <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                  {isSystemWallet(address) ? (
+                    <span className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[var(--radius-md)] text-[11px] border border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]" title="Operated by the BULK exchange protocol"><Shield className="w-3 h-3" />BULK System</span>
+                  ) : <BulkRankBadge address={address} />}
+                  <AccountHierarchy address={address} />
+                  {!isOwnWallet && (
+                    <button onClick={toggleFollow} disabled={followLoading}
+                      className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] font-medium border transition-colors disabled:opacity-50',
+                        isFollowing ? 'border-[var(--accent)]/40 text-[var(--accent)] bg-[var(--accent)]/10 hover:bg-[var(--accent)]/15' : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110')}>
+                      {followLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : isFollowing ? <StarOff className="w-3 h-3" /> : <Star className="w-3 h-3" />}
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  )}
+                  {canClaimWallet && (
+                    <button onClick={handleClaimWallet} disabled={claimLoading} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-md)] text-[12px] border border-[var(--border-color)] hover:bg-[var(--role-surface-raised)] transition-colors disabled:opacity-50">
+                      {claimLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}Claim
+                    </button>
+                  )}
+                  {isClaimedWallet && <span className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[var(--radius-md)] text-[11px] border border-[var(--accent)]/30 text-[var(--accent)]"><UserCheck className="w-3 h-3" />Claimed</span>}
+                  <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 h-7 px-2 rounded-[var(--radius-md)] text-[11px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors" title="BULK explorer">Explorer<ExternalLink className="w-3 h-3" /></a>
+                  <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer" className="hidden sm:inline-flex items-center gap-1 h-7 px-2 rounded-[var(--radius-md)] text-[11px] border border-[var(--border-color)] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">Solscan<ExternalLink className="w-3 h-3" /></a>
                 </div>
-                <div className="mt-1 font-mono text-[28px] leading-none font-medium tabular-nums tracking-tight text-[var(--role-content)]">
-                  {margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'}
-                </div>
-                <div className="mt-2.5 grid grid-cols-2 divide-x divide-[var(--border-color)] border border-[var(--border-color)] rounded-[var(--radius-md)]">
-                  <div className="px-2.5 py-2 min-w-0" title={totalPnlTooltip ? undefined : 'Net realized PnL (after fees and funding)'}>
-                    <div className="t-label">PnL</div>
-                    <div className="mt-0.5 font-mono text-[15px] font-medium tabular-nums truncate" style={{ color: bulkRealizedPnL >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-                      {bulkRealizedPnL >= 0 ? '+' : '−'}${formatNumber(Math.abs(bulkRealizedPnL), 2)}
-                    </div>
-                  </div>
-                  <div className="px-2.5 py-2 min-w-0">
-                    <div className="t-label">Unrealized</div>
-                    <div className="mt-0.5 font-mono text-[15px] font-medium tabular-nums truncate" style={{ color: !margin ? 'var(--role-content-subtle)' : margin.unrealizedPnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-                      {margin ? `${margin.unrealizedPnl >= 0 ? '+' : '−'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'}
-                    </div>
-                  </div>
-                </div>
-                {margin && (
-                  <div className="mt-1.5 text-[11px] text-[var(--role-content-subtle)] font-mono tabular-nums truncate">
-                    ${formatCompact(margin.availableBalance)} available · ${formatCompact(margin.marginUsed)} in margin
-                  </div>
-                )}
               </div>
 
-              <div className="mt-1 border-t border-[var(--border-color)]">
+              {/* ── TICKER — the "now" numbers in one line. ────────────────── */}
+              <div className="flex items-center gap-x-5 gap-y-1.5 px-3 py-1.5 border-t border-[var(--border-color)] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <Tick k="Net worth" v={margin ? `$${formatNumber(margin.totalBalance, 2)}` : '—'} tone={margin ? 'neutral' : 'muted'} />
+                <Tick k="PnL" v={`${bulkRealizedPnL >= 0 ? '+' : '−'}$${formatNumber(Math.abs(bulkRealizedPnL), 2)}`} tone={bulkRealizedPnL >= 0 ? 'green' : 'red'} title="Net realized PnL after fees and funding" />
+                <Tick k="uPnL" v={margin ? `${margin.unrealizedPnl >= 0 ? '+' : '−'}$${formatNumber(Math.abs(margin.unrealizedPnl), 2)}` : '—'} tone={!margin ? 'muted' : margin.unrealizedPnl >= 0 ? 'green' : 'red'} />
+                <span className="h-4 w-px bg-[var(--border-color)] shrink-0" aria-hidden />
+                <Tick k="Bias" v={directionBias ? `${(directionBias.longPct * 100).toFixed(0)}% long` : 'flat'} tone={!directionBias ? 'muted' : directionBias.longPct > 0.6 ? 'green' : directionBias.longPct < 0.4 ? 'red' : 'neutral'}
+                  title={directionBias ? `$${formatCompact(directionBias.longNotional)} long · $${formatCompact(directionBias.shortNotional)} short` : undefined} />
+                <Tick k="Lev" v={effectiveLeverage !== null ? `${effectiveLeverage.toFixed(1)}×` : '—'} tone={effectiveLeverage === null ? 'muted' : effectiveLeverage > 10 ? 'red' : effectiveLeverage > 5 ? 'orange' : 'neutral'}
+                  title={margin ? `$${formatCompact(totalNotional)} notional on $${formatCompact(margin.totalBalance)}` : undefined} />
+                <Tick k={maintTotal > 0 ? 'Maint' : 'Margin'} v={margin && margin.totalBalance > 0 ? `${(((maintTotal > 0 ? maintTotal : margin.marginUsed) / margin.totalBalance) * 100).toFixed(1)}%` : '—'}
+                  tone={!margin ? 'muted' : (maintTotal > 0 ? maintTotal : margin.marginUsed) / Math.max(1, margin.totalBalance) >= 0.8 ? 'red' : 'neutral'}
+                  title={margin ? (maintTotal > 0 ? `$${formatCompact(maintTotal)} maintenance · $${formatCompact(margin.marginUsed)} used of $${formatCompact(margin.totalBalance)}` : `$${formatCompact(margin.marginUsed)} used of $${formatCompact(margin.totalBalance)}`) : undefined} />
+                <Tick k="Liq" v={distanceToLiq ? `${(distanceToLiq.pct * 100).toFixed(1)}% ${distanceToLiq.symbol.replace(/-USD$/, '')}` : '—'} tone={!distanceToLiq ? 'muted' : distanceToLiq.pct < 0.05 ? 'red' : distanceToLiq.pct < 0.15 ? 'orange' : 'green'} title="Nearest liquidation, distance from mark" />
+                <span className="h-4 w-px bg-[var(--border-color)] shrink-0" aria-hidden />
+                <Tick k="Open" v={String(positions.length)} tone={positions.length ? 'neutral' : 'muted'} />
+                <Tick k="Net exp." v={directionBias ? `${directionBias.longNotional - directionBias.shortNotional >= 0 ? '+' : '−'}$${formatCompact(Math.abs(directionBias.longNotional - directionBias.shortNotional))}` : '—'} tone={!directionBias ? 'muted' : directionBias.longNotional >= directionBias.shortNotional ? 'green' : 'red'} />
+                {hasLiveData && <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-[var(--role-content-subtle)] whitespace-nowrap"><span className="h-1.5 w-1.5 rounded-full bg-[var(--pos)]" />BULK live · 10s</span>}
+              </div>
+            </header>
+
+            {/* ── PANES — ledger | curve | positions ─────────────────────── */}
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[232px_minmax(0,1fr)_300px] xl:grid-cols-[248px_minmax(0,1fr)_340px] gap-2">
+
+              {/* LEDGER */}
+              <aside className="order-3 lg:order-1 min-h-0 bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] px-3 pt-1 pb-2 lg:overflow-y-auto" aria-label="Ledger">
+                <LedgerSection title="Account">
+                  <LedgerRow label="Available" value={margin ? `$${formatCompact(margin.availableBalance)}` : '—'} tone={margin ? 'neutral' : 'muted'} />
+                  <LedgerRow label="In margin" value={margin ? `$${formatCompact(margin.marginUsed)}` : '—'} tone={margin ? 'neutral' : 'muted'} />
+                  <LedgerRow label="Notional" value={positions.length ? `$${formatCompact(totalNotional)}` : '—'} tone={positions.length ? 'neutral' : 'muted'} />
+                </LedgerSection>
                 <LedgerSection title="Fees & volume" aside={lifetimeFillVol?.truncated ? 'fills capped' : undefined}>
                   <LedgerRow label="Volume" hint="lifetime" value={`$${formatCompact(bulkVolume)}`} />
                   <LedgerRow label="Volume" hint="7d" value={volByWindow ? `$${formatCompact(volByWindow.d7)}` : '—'} tone={volByWindow ? 'neutral' : 'muted'} />
                   <LedgerRow label="Volume" hint="30d" value={volByWindow ? `$${formatCompact(volByWindow.d30)}` : '—'} tone={volByWindow ? 'neutral' : 'muted'} />
                   <LedgerRow label="Net fees" value={lifetimeFees !== null ? `${lifetimeFees > 0 ? '+' : lifetimeFees < 0 ? '−' : ''}$${formatCompact(Math.abs(lifetimeFees))}` : '—'}
-                    tone={lifetimeFees === null ? 'muted' : lifetimeFees > 0 ? 'green' : lifetimeFees < 0 ? 'red' : 'neutral'}
-                    title="BULK lifetime fee counter: negative when paid, positive when net rebates" />
-                  <LedgerRow label="Funding" value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '−'}$${formatCompact(Math.abs(lifetimeFunding))}` : '—'}
-                    tone={lifetimeFunding === null ? 'muted' : lifetimeFunding >= 0 ? 'green' : 'red'} />
+                    tone={lifetimeFees === null ? 'muted' : lifetimeFees > 0 ? 'green' : lifetimeFees < 0 ? 'red' : 'neutral'} title="BULK lifetime fee counter: negative when paid, positive when net rebates" />
+                  <LedgerRow label="Funding" value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '−'}$${formatCompact(Math.abs(lifetimeFunding))}` : '—'} tone={lifetimeFunding === null ? 'muted' : lifetimeFunding >= 0 ? 'green' : 'red'} />
                   <LedgerRow label="Maker fills" hint={allFills.length ? `${allFills.length} loaded` : undefined}
-                    value={allFills.length ? `${Math.round((allFills.filter((f) => f.maker === address).length / allFills.length) * 100)}%` : '—'}
-                    tone={allFills.length ? 'neutral' : 'muted'} title="Share of loaded fills where this wallet was the maker" />
+                    value={allFills.length ? `${Math.round((allFills.filter((f) => f.maker === address).length / allFills.length) * 100)}%` : '—'} tone={allFills.length ? 'neutral' : 'muted'} />
                   <LedgerRow label="Avg fill" value={allFills.length ? `$${formatCompact(allFills.reduce((s, f) => s + Math.abs(f.size) * f.price, 0) / allFills.length)}` : '—'} tone={allFills.length ? 'neutral' : 'muted'} />
                 </LedgerSection>
-
-                <LedgerSection title="Analysis">
-                  <LedgerRow label="Closed trades" value={String(bulkClosedCount)} />
+                <LedgerSection title="Record">
+                  <LedgerRow label="Closed trades" value={bulkClosedCount.toLocaleString('en-US')} />
+                  <LedgerRow label="Win rate" value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(0)}%` : '—'} tone={analysisStats.closedWinRate === null ? 'muted' : analysisStats.closedWinRate >= 0.5 ? 'green' : 'red'} />
+                  <LedgerRow label="Win streak" value={analysisStats.longestStreak ? String(analysisStats.longestStreak) : '—'} tone={analysisStats.longestStreak ? 'neutral' : 'muted'} />
                   <LedgerRow label="Liquidations" value={String(tracked?.total_liquidations || 0)} tone={(tracked?.total_liquidations || 0) > 0 ? 'red' : 'neutral'} />
                   {analysisStats.tradingStyle !== 'Unknown' && <LedgerRow label="Style" value={analysisStats.tradingStyle} />}
                   <LedgerRow label="PnL cohort" value={analysisStats.pnlCohort.label} tone={analysisStats.pnlCohort.tone} />
                   <LedgerRow label="Size cohort" value={analysisStats.sizeCohort} />
                 </LedgerSection>
-              </div>
-            </aside>
+              </aside>
 
-            {/* ──────────────────────────────────────────────────────
-                MAIN COLUMN - top strip, chart, positions, risk events,
-                activity. The bulk of the page content lives here in a
-                vertical stack so each block gets the full main-column
-                width.
-                ────────────────────────────────────────────────────── */}
-            <div className="flex flex-col gap-2 min-w-0">
-
-            {/* Exposure — "right now" in one panel: direction, leverage,
-                margin usage, nearest liquidation, holdings. Replaces the
-                KPI sparkline row + Signals strip + Position intelligence,
-                which spread the same idea across three regions. */}
-            <ExposureStrip
-              positions={positions}
-              margin={margin}
-              markPrices={markPrices}
-              directionBias={directionBias}
-              distanceToLiq={distanceToLiq}
-              effectiveLeverage={effectiveLeverage}
-              totalNotional={totalNotional}
-            />
-
-            {/* Hero — the wallet's story as one big, full-width PnL /
-                account-value curve. This is the page's visual anchor; the
-                Daily / Drawdown / Per-trade views ride along as chart tabs. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] flex flex-col min-w-0">
-              {/* Header: underline tabs (the view) left, range pills right.
-                  Underline tabs on a hairline sit flatter than pill buttons
-                  and let the strip of figures below read as the same surface. */}
-              <div className="px-4 border-b border-[var(--border-color)] flex items-end justify-between gap-3 flex-wrap">
-                <div className="flex items-end gap-0 -mb-px overflow-x-auto max-w-full whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist" aria-label="Chart view">
-                  {([
-                    ['pnl', 'PnL'],
-                    ['calendar', 'Calendar'],
-                    ['drawdown', 'Drawdown'],
-                    ['trade', 'Per-trade'],
-                    ['compare', 'Compare'],
-                  ] as const).map(([k, label]) => (
-                    <button
-                      key={k}
-                      type="button"
-                      role="tab"
-                      aria-selected={chartView === k}
-                      onClick={() => setChartView(k)}
-                      className={cn(
-                        'px-3 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors',
-                        chartView === k
-                          ? 'border-[var(--accent)] text-[var(--role-content)]'
-                          : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {chartView === 'pnl' && (
-                  <div className="flex items-center gap-2 py-1.5">
-                    <div className="toggle-group">
-                      {(['pnl', 'value'] as const).map((m) => (
-                        <button key={m} type="button" onClick={() => setHeroMetric(m)} className={cn('toggle-btn', heroMetric === m && 'active')}>
-                          {m === 'pnl' ? 'PnL' : 'Net worth'}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center rounded-[var(--radius-md)] border border-[var(--border-color)] p-0.5 text-[10px] uppercase tracking-wider font-mono">
-                      {(['24h', '7d', '30d', 'all'] as const).map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setChartRange(r)}
-                          className={cn(
-                            'px-2 py-1 rounded-[3px] transition-colors',
-                            chartRange === r
-                              ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]'
-                              : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
-                          )}
-                        >
-                          {r}
-                        </button>
-                      ))}
-                    </div>
+              {/* CURVE */}
+              <section className="order-1 lg:order-2 min-h-0 min-w-0 flex flex-col bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)]" aria-label="PnL curve">
+                <div className="px-3 border-b border-[var(--border-color)] flex items-end justify-between gap-3 flex-wrap shrink-0">
+                  <div className="flex items-end -mb-px overflow-x-auto max-w-full whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist" aria-label="Chart view">
+                    {([['pnl', 'PnL'], ['calendar', 'Calendar'], ['drawdown', 'Drawdown'], ['trade', 'Per-trade'], ['compare', 'Compare']] as const).map(([k, label]) => (
+                      <button key={k} type="button" role="tab" aria-selected={chartView === k} onClick={() => setChartView(k)}
+                        className={cn('px-2.5 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors',
+                          chartView === k ? 'border-[var(--accent)] text-[var(--role-content)]' : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]')}>
+                        {label}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
+                  {chartView === 'pnl' && (
+                    <div className="flex items-center gap-2 py-1.5">
+                      <div className="toggle-group">
+                        {(['pnl', 'value'] as const).map((m) => (
+                          <button key={m} type="button" onClick={() => setHeroMetric(m)} className={cn('toggle-btn', heroMetric === m && 'active')}>{m === 'pnl' ? 'PnL' : 'Net worth'}</button>
+                        ))}
+                      </div>
+                      <div className="flex items-center rounded-[var(--radius-md)] border border-[var(--border-color)] p-0.5 text-[10px] uppercase tracking-wider font-mono" title="1–4 on the keyboard">
+                        {(['24h', '7d', '30d', 'all'] as const).map((r) => (
+                          <button key={r} type="button" onClick={() => setChartRange(r)}
+                            className={cn('px-2 py-1 rounded-[3px] transition-colors', chartRange === r ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]')}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-              {/* The figures that belong with the curve. */}
-              <PerformanceStrip
-                series={heroPnl.data}
-                source={heroPnl.source}
-                daily={dailyPnlFromSeries}
-                margin={margin}
-                closedPositions={closedPositions}
-                analysisStats={analysisStats}
-                tradeCount={bulkClosedCount}
-              />
-
+                <div className="flex-1 min-h-0 flex flex-col lg:overflow-y-auto">
               {chartView === 'compare' ? (
                 // MEASUREMENT: coarse snapshot realized-PnL curve vs the
                 // fills-reconstructed one, overlaid. Both are cumulative
@@ -2431,7 +2530,7 @@ export default function WalletPage() {
                 const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : 'collector snapshots';
 
                 return (
-                  <div className="flex-1 px-3 pb-3 pt-3 min-h-[380px] flex flex-col">
+                  <div className="flex-1 px-3 pb-2 pt-3 min-h-[260px] flex flex-col">
                     <div className="px-1 mb-2">
                       <div className="font-mono text-[26px] leading-none font-medium tabular-nums tracking-tight" style={{ color: headlineTone }}>
                         {isValue ? '' : headline >= 0 ? '+' : '−'}${formatNumber(Math.abs(headline), 2)}
@@ -2442,7 +2541,7 @@ export default function WalletPage() {
                         {chartRange === 'all' && lifetimeFillVol?.truncated && ' · fill history capped at 1,000'}
                       </div>
                     </div>
-                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[300px]" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
+                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[220px]" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                         <defs>
@@ -2542,254 +2641,52 @@ export default function WalletPage() {
                   </div>
                 );
               })()}
-            </div>
+                </div>
 
-
-            {/* Positions panel — full width below the chart with
-                Open / Recent tab toggle. Hyperdash convention: a
-                wide table sits under the chart so the eye reads
-                chart-then-positions naturally as a top-to-bottom
-                story. The Recent tab uses a dense table format. */}
-            <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-[var(--radius-md)] flex flex-col">
-              <div className="px-4 border-b border-[var(--border-color)] flex items-end justify-between gap-3 flex-wrap">
-                {!hasLiveData && positions.length === 0 ? (
-                  <h2 className="py-2.5 text-[12px] font-medium flex items-center gap-2 text-[var(--role-content-muted)]">
-                    <Loader2 className="w-3.5 h-3.5 text-[var(--accent)] animate-spin" />
-                    Fetching positions…
-                    <span className="text-[10px] text-[var(--role-content-subtle)] uppercase tracking-wider">auto-retries every 10s</span>
-                  </h2>
-                ) : (
-                  <div className="flex items-end -mb-px" role="tablist" aria-label="Positions view">
-                    {([
-                      ['open', 'Positions', positions.length],
-                      ['recent', 'Closed', closedPositions.length],
-                      ['liquidations', 'Liquidations', null],
-                    ] as const).map(([k, label, count]) => (
-                      <button
-                        key={k}
-                        type="button"
-                        role="tab"
-                        aria-selected={positionsTab === k}
-                        onClick={() => { setPositionsTab(k); setTabIsUserPicked(true); }}
-                        className={cn(
-                          'px-3 pt-2.5 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] border-b-2 transition-colors inline-flex items-baseline gap-1.5',
-                          positionsTab === k
-                            ? 'border-[var(--accent)] text-[var(--role-content)]'
-                            : 'border-transparent text-[var(--role-content-subtle)] hover:text-[var(--role-content-muted)]'
-                        )}
-                      >
-                        {label}
-                        {count !== null && count > 0 && <span className="font-mono tabular-nums text-[10px] text-[var(--role-content-subtle)]">{count}</span>}
-                      </button>
-                    ))}
-                  </div>
+                {chartView === 'pnl' && visibleRange && (
+                  <PositionBands positions={positions} openTimes={positionOpenTimes} t0={visibleRange.t0} t1={visibleRange.t1} selectedSymbol={selectedSymbol} />
                 )}
-                <span className="py-2 font-mono text-[11px] text-[var(--role-content-subtle)] truncate">{formatAddress(address)}</span>
-              </div>
 
-              {/* Panel body — unified table treatment across all three
-                  tabs. Open positions, closed positions, and risk
-                  events all render as dense single-row-per-item tables
-                  so the panel reads as a consistent surface no matter
-                  which tab is active. Clicking any row in Open or
-                  Recent opens the chart modal. */}
-              <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
-                {positionsTab === 'open' ? (
-                  positions.length > 0 ? (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-color)]">
-                          <th className="text-left font-medium px-4 py-2">Market</th>
-                          <th className="text-right font-medium px-4 py-2.5">Size</th>
-                          <th className="text-right font-medium px-4 py-2.5">Entry</th>
-                          <th className="text-right font-medium px-4 py-2.5">Mark</th>
-                          <th className="text-right font-medium px-4 py-2.5">PnL</th>
-                          <th className="text-right font-medium px-4 py-2.5 hidden md:table-cell">PnL %</th>
-                          <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Liq</th>
-                          <th className="text-right font-medium px-4 py-2.5 hidden xl:table-cell" title="Maintenance-margin requirement for this position (BULK portfolio margin)">Maint.</th>
-                          <th className="text-right font-medium px-4 py-2.5 hidden xl:table-cell" title="Share of the account's total portfolio risk (BULK)">Risk</th>
-                          <th className="text-right font-medium px-4 py-2.5 hidden lg:table-cell">Opened</th>
-                          <th className="text-right font-medium px-4 py-2.5 w-px"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-color)]">
-                        {positions.map((pos, i) => {
-                          const isLong = pos.size > 0;
-                          const pnlPercent = pos.notional
-                            ? (pos.unrealizedPnl / Math.abs(pos.notional)) * 100
-                            : 0;
-                          const markPrice = markPrices[pos.symbol] || 0;
-                          const openInfo = positionOpenTimes[pos.symbol];
-                          const ago = openInfo ? Date.now() - openInfo.openedAt : null;
-                          return (
-                            <tr
-                              key={i}
-                              className="cursor-pointer hover:bg-[var(--bg-secondary-20)]/30 transition-colors"
-                              onClick={() =>
-                                setChartPosition({
-                                  kind: 'live',
-                                  walletAddress: address,
-                                  symbol: pos.symbol,
-                                  side: isLong ? 'long' : 'short',
-                                  entryPrice: pos.price,
-                                  markPrice: markPrice || pos.price,
-                                  liquidationPrice: pos.liquidationPrice,
-                                  size: Math.abs(pos.size),
-                                  leverage: pos.leverage,
-                                  unrealizedPnl: pos.unrealizedPnl,
-                                })
-                              }
-                            >
-                              {/* Market cell — side badge + symbol + leverage chip. */}
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={cn(
-                                      'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider',
-                                      isLong
-                                        ? 'bg-bulk-green/15 text-bulk-green'
-                                        : 'bg-bulk-red/15 text-bulk-red',
-                                    )}
-                                  >
-                                    {isLong ? 'LONG' : 'SHORT'}
-                                  </span>
-                                  <span className="font-medium whitespace-nowrap text-[var(--text-primary)]">{pos.symbol}</span>
-                                  <span className="text-[var(--text-tertiary)] text-xs font-mono">{pos.leverage}x</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
-                                {formatNumber(Math.abs(pos.size), 4)}
-                              </td>
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
-                                ${formatNumber(pos.price, 4)}
-                              </td>
-                              {/* Mark — colored to indicate live-data
-                                  status. Blue accent stays consistent
-                                  with the original card rendering. */}
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-primary)]">
-                                ${formatNumber(markPrice, 4)}
-                              </td>
-                              <td className="px-4 py-2.5 text-right">
-                                <span
-                                  className={cn(
-                                    'font-bold font-mono tabular-nums',
-                                    pos.unrealizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red',
-                                  )}
-                                >
-                                  {pos.unrealizedPnl >= 0 ? '+' : '-'}${formatNumber(Math.abs(pos.unrealizedPnl), 2)}
-                                </span>
-                              </td>
-                              <td
-                                className={cn(
-                                  'px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell',
-                                  pnlPercent >= 0 ? 'text-bulk-green/80' : 'text-bulk-red/80',
-                                )}
-                              >
-                                {formatPercent(pnlPercent)}
-                              </td>
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-bulk-red hidden lg:table-cell">
-                                ${formatNumber(pos.liquidationPrice, 4)}
-                              </td>
-                              {/* Maintenance margin (USD) — documented BULK
-                                  portfolio-margin field. */}
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)] hidden xl:table-cell">
-                                {typeof pos.maintenanceMargin === 'number' && pos.maintenanceMargin > 0
-                                  ? `$${formatCompact(pos.maintenanceMargin)}`
-                                  : '-'}
-                              </td>
-                              {/* Risk allocation — documented as a 0–1 fraction
-                                  of portfolio risk. Guard against out-of-range
-                                  values (seen on degenerate system accounts). */}
-                              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[var(--text-secondary)] hidden xl:table-cell">
-                                {typeof pos.riskAllocation === 'number' && pos.riskAllocation >= 0 && pos.riskAllocation <= 1
-                                  ? `${(pos.riskAllocation * 100).toFixed(1)}%`
-                                  : '-'}
-                              </td>
-                              <td className="px-4 py-2.5 text-right text-xs text-[var(--text-tertiary)] tabular-nums whitespace-nowrap hidden lg:table-cell">
-                                {ago !== null ? `${formatDuration(ago)} ago` : '-'}
-                              </td>
-                              {/* Per-row share — copies a deep link to this
-                                  wallet + asset. stopPropagation so it
-                                  doesn't also fire the row's open-chart
-                                  click. Mirrors Hyperdash's per-position
-                                  share affordance. */}
-                              <td className="px-2 py-2.5 text-right">
-                                <button
-                                  type="button"
-                                  title="Open share card"
-                                  onClick={(e) => { e.stopPropagation(); openShareCard(pos.symbol); }}
-                                  className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--bg-secondary-20)]/40 transition-colors"
-                                >
-                                  <ImageIcon className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    // "Open" tab selected but no open positions exist.
-                    <div className="p-8 text-center text-[var(--text-tertiary)]">
-                      <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                      <p>No open positions</p>
-                      <p className="text-xs mt-1">
-                        Switch to Recent Trades to see closed positions
-                      </p>
-                    </div>
-                  )
-                ) : positionsTab === 'recent' ? (
-                  // "Recent" tab — closed-position table. Fed the page's own
-                  // polled closedPositions (resilient, last-good cached) rather
-                  // than letting the list fire its own fragile one-shot fetch
-                  // that showed "no trades" on a single transient hiccup.
-                  <ClosedPositionsList
-                    address={address}
-                    provided={closedPositions}
-                    limit={50}
-                    density="table"
-                    onSelect={(p) =>
-                      setChartPosition({
-                        kind: 'closed',
-                        walletAddress: address,
-                        symbol: p.symbol,
-                        side: p.side,
-                        entryPrice: p.openPrice,
-                        closePrice: p.closePrice,
-                        size: p.size,
-                        leverage: p.leverage,
-                        realizedPnl: p.realizedPnl,
-                        fees: p.fees,
-                        funding: p.funding,
-                        openedAt: p.openedAt,
-                        closedAt: p.closedAt,
-                        liquidated: p.liquidated,
-                      })
-                    }
-                  />
-                ) : (
-                  // "Liquidations" tab — riskHistory feed. RiskEventsList
-                  // brings its own internal "Show N more" toggle so we
-                  // don't need pagination wrappers here. `bare` mode
-                  // skips the component's own card chrome since we're
-                  // already inside the positions panel card.
-                  <RiskEventsList address={address} bare />
-                )}
+                {/* The figures that belong with the curve, one line. */}
+                <PerformanceStrip
+                  series={heroPnl.data}
+                  source={heroPnl.source}
+                  daily={dailyPnlFromSeries}
+                  margin={margin}
+                  closedPositions={closedPositions}
+                  analysisStats={analysisStats}
+                  tradeCount={bulkClosedCount}
+                  compact
+                />
+              </section>
+
+              {/* POSITIONS */}
+              <div className="order-2 lg:order-3 min-h-0 min-w-0 flex flex-col">
+                <PositionsPane
+                  address={address}
+                  positions={positions}
+                  markPrices={markPrices}
+                  klinesBySymbol={klinesBySymbol}
+                  openTimes={positionOpenTimes}
+                  closedPositions={closedPositions}
+                  tab={positionsTab}
+                  onTab={(t) => { setPositionsTab(t); setTabIsUserPicked(true); }}
+                  selected={selectedPos}
+                  onSelect={setSelectedPos}
+                  onOpenChart={openLiveChart}
+                  onShare={openShareCard}
+                  onSelectClosed={openClosedChart}
+                  loading={!hasLiveData}
+                />
               </div>
             </div>
 
-            {/* Trade timeline (recent closes) + protocol activity feed
-                (deposits, transfers, sub-account & multisig ops). Both are
-                supporting chronological context, so they sit at the bottom
-                side by side. */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-              <TradeTimeline closedPositions={closedPositions} />
-              <ActivityFeed address={address} />
+            {/* ── TAPE ───────────────────────────────────────────────────── */}
+            <div className="shrink-0">
+              <Tape events={tapeEvents} expanded={tapeOpen} onToggle={() => setTapeOpen((o) => !o)} />
             </div>
-            </div>{/* end main-column wrapper */}
           </div>
         )}
-        </div>{/* end max-width container */}
       </main>
 
       {/* Position-detail chart modal — opened by clicking a position card.
