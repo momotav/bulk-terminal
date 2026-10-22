@@ -303,6 +303,15 @@ export interface WalletData {
     positions_count: number;
     total_notional: number;
   }>;
+  /** Collector snapshots of BULK's counters (net realized PnL, unrealized PnL,
+   *  net worth), one per 15-min bucket, oldest first. Long-range source for
+   *  the PnL curve; `total_balance` is null on rows older than 2026-10-22. */
+  snapshots?: Array<{
+    timestamp: string;
+    pnl: number;
+    unrealized_pnl: number;
+    total_balance: number | null;
+  }>;
 }
 
 // NEW: Types for calculated Open Interest

@@ -1411,41 +1411,81 @@ export default function WalletPage() {
   // snapshot curve (wallets with no fills, or before fills load). Each point is
   // {t: ms, v: cumulative total PnL}. The chart's Value toggle anchors this to
   // the live balance for an equity curve.
+  const snapshots = data?.snapshots ?? [];
   const heroPnl = useMemo(() => {
-    // Collector snapshots: total PnL (realized + unrealized counters) recorded
-    // every few minutes since we first saw the wallet. Same basis as the
-    // fills curve's endpoint, so the two can be joined.
-    const snap = history
-      .map((h) => ({
-        t: new Date(h.timestamp).getTime(),
-        v: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0),
-      }))
+    const toPts = (rows: Array<{ timestamp: string; pnl: number; unrealized_pnl: number }>) => rows
+      .map((h) => ({ t: new Date(h.timestamp).getTime(), v: (parseFloat(String(h.pnl)) || 0) + (parseFloat(String(h.unrealized_pnl)) || 0) }))
       .filter((p) => Number.isFinite(p.t))
       .sort((a, b) => a.t - b.t);
-
-    // Best inside the fill window: fills + klines continuous total PnL; else the
-    // fills-only realized curve. Both start at the EARLIEST LOADED FILL — and
-    // the fill fetch is capped at 1,000, so for a busy wallet that window is a
-    // day or two. The collector history reaches back weeks, so STITCH: snapshot
-    // points before the fill window, the fine-grained curve inside it. The
-    // older segment is shifted by the small gap at the seam so the curve is
-    // continuous (its shape is what matters; the level near "now" is the
-    // fill-calibrated one).
+    // Three sources, finest first:
+    //  fine  — fills + 1h marks (or fills-only realized) inside the loaded
+    //          fill window, which the 1,000-fill cap keeps to a day or two
+    //          for a busy wallet;
+    //  snaps — the collector's counter snapshots (net realized + unrealized),
+    //          15-min resolution, as far back as it has followed the wallet;
+    //  log   — BULK's closed-position log, cumulative GROSS realized per
+    //          close (no unrealized), up to its 5,000-close cap.
+    // Each coarser source only fills time BEFORE the finer one starts, and is
+    // shifted by the gap at the seam so the curve is continuous: its shape is
+    // the information; the level near "now" is the fill-calibrated one.
     const fine: { t: number; v: number }[] =
       continuousPnl.length >= 2 ? continuousPnl
       : reconstructedRealized.length >= 2 ? reconstructedRealized.map((p) => ({ t: p.t, v: p.v }))
       : [];
-    const fineSource = continuousPnl.length >= 2 ? 'reconstructed' as const : 'realized' as const;
-    if (fine.length === 0) return { data: snap, source: 'snapshot' as const, stitched: false };
+    const snaps = toPts(snapshots);
+    const log = toPts(history);
+    const sources: Array<{ pts: { t: number; v: number }[]; name: 'reconstructed' | 'realized' | 'snapshot' | 'log' }> = [
+      { pts: fine, name: continuousPnl.length >= 2 ? 'reconstructed' : 'realized' },
+      { pts: snaps, name: 'snapshot' },
+      { pts: log, name: 'log' },
+    ];
+    let curve: { t: number; v: number }[] = [];
+    let source: 'reconstructed' | 'realized' | 'snapshot' | 'log' = 'log';
+    let stitched = false;
+    for (const src of sources) {
+      if (src.pts.length < 2) continue;
+      if (curve.length === 0) { curve = src.pts; source = src.name; continue; }
+      const seamT = curve[0].t;
+      const older = src.pts.filter((p) => p.t < seamT - 60_000);
+      if (older.length < 2) continue;
+      const offset = curve[0].v - older[older.length - 1].v;
+      curve = [...older.map((p) => ({ t: p.t, v: p.v + offset })), ...curve];
+      stitched = true;
+    }
+    return { data: curve, source, stitched };
+  }, [continuousPnl, reconstructedRealized, snapshots, history]);
 
-    const seamT = fine[0].t;
-    const older = snap.filter((p) => p.t < seamT - 60_000);
-    if (older.length < 2) return { data: fine, source: fineSource, stitched: false };
-    const seamSnap = older[older.length - 1].v;
-    const offset = fine[0].v - seamSnap;
-    const shifted = older.map((p) => ({ t: p.t, v: p.v + offset }));
-    return { data: [...shifted, ...fine], source: fineSource, stitched: true };
-  }, [continuousPnl, reconstructedRealized, history]);
+  // Time-weighted return, the way a fund reports it: chain the return of each
+  // snapshot interval, where return = ΔPnL ÷ net worth at the start of the
+  // interval. Net worth that moved WITHOUT PnL explaining it is a deposit or
+  // withdrawal; it is weighted at the interval's midpoint (a snapshot can't
+  // say when it landed), and an interval that such a transfer could swing by
+  // more than 0.25pt is skipped rather than guessed. Needs net worth on the
+  // snapshots, which the collector records since 2026-10-22 — null until then.
+  const twr = useMemo(() => {
+    const rows = snapshots
+      .filter((r) => r.total_balance !== null && Number.isFinite(r.total_balance))
+      .map((r) => ({ t: new Date(r.timestamp).getTime(), pnl: (r.pnl || 0) + (r.unrealized_pnl || 0), nw: r.total_balance as number }))
+      .sort((a, b) => a.t - b.t);
+    if (rows.length < 2) return null;
+    let index = 1, peak = 1, dd = 0, measured = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const dPnl = rows[i].pnl - rows[i - 1].pnl;
+      const transfer = rows[i].nw - rows[i - 1].nw - dPnl;
+      const denom = rows[i - 1].nw + transfer / 2;
+      if (denom <= 0) continue;
+      const r = dPnl / denom;
+      // Timing ambiguity of the transfer: the return could differ by up to
+      // |dPnl × transfer / denom²|; skip the interval when that is material.
+      const ambiguity = Math.abs(dPnl * transfer) / (denom * denom);
+      if (ambiguity > 0.0025 && ambiguity > Math.abs(r) / 10) continue;
+      index *= 1 + r; measured++;
+      if (index > peak) peak = index;
+      dd = Math.max(dd, (peak - index) / peak);
+    }
+    if (measured < 2) return null;
+    return { ret: index - 1, drawdown: dd, from: rows[0].t, intervals: measured };
+  }, [snapshots]);
 
   const dailyPnlFromSeries = useMemo<Map<string, number> | null>(() => {
     // Daily change of the STITCHED total-PnL curve (collector snapshots before
@@ -1761,6 +1801,13 @@ export default function WalletPage() {
   // Max drawdown of EQUITY (starting equity + cumulative PnL), peak → trough.
   // The old realized-only figure divided by a tiny early peak and printed
   // nonsense like 156%; equity-based is what a trader means by drawdown.
+  const simpleReturn = useMemo(() => {
+    const series = heroPnl.data;
+    if (series.length < 2 || !margin) return null;
+    const last = series[series.length - 1].v;
+    const base = margin.totalBalance - last;
+    return base > 0 ? last / base : null;
+  }, [heroPnl.data, margin]);
   const equityDrawdown = useMemo(() => {
     const series = heroPnl.data;
     if (series.length < 2 || !margin) return null;
@@ -1899,6 +1946,9 @@ export default function WalletPage() {
                 <h2 className="text-[15px] font-medium text-[var(--role-content)] mb-2">Performance</h2>
                 <Row label="Closed trades" value={bulkClosedCount.toLocaleString('en-US')} />
                 <Row label="Win rate" value={analysisStats.closedWinRate !== null ? `${(analysisStats.closedWinRate * 100).toFixed(1)}%` : '—'} tone={analysisStats.closedWinRate === null ? 'muted' : analysisStats.closedWinRate >= 0.5 ? 'green' : 'red'} />
+                <Row label="Return" value={twr ? `${twr.ret >= 0 ? '+' : '−'}${(Math.abs(twr.ret) * 100).toFixed(2)}%` : simpleReturn !== null ? `${simpleReturn >= 0 ? '+' : '−'}${(Math.abs(simpleReturn) * 100).toFixed(2)}%` : '—'}
+                  tone={twr ? (twr.ret >= 0 ? 'green' : 'red') : simpleReturn !== null ? (simpleReturn >= 0 ? 'green' : 'red') : 'muted'}
+                  title={twr ? `Time-weighted, chained snapshot to snapshot since ${new Date(twr.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; deposits and withdrawals excluded` : 'PnL over the equity the curve started on (today\'s balance minus PnL since); a deposit or withdrawal in between shifts it'} />
                 <Row label="Max drawdown" value={equityDrawdown !== null ? `${(equityDrawdown * 100).toFixed(2)}%` : '—'} tone={equityDrawdown === null ? 'muted' : equityDrawdown >= 0.5 ? 'red' : 'neutral'} title="Largest fall of equity below an earlier high on the PnL curve" />
                 <Row label="Fees" value={lifetimeFees !== null ? `${lifetimeFees > 0 ? '+' : lifetimeFees < 0 ? '−' : ''}$${formatNumber(Math.abs(lifetimeFees), 2)}` : '—'} tone={lifetimeFees === null ? 'muted' : 'neutral'} />
                 <Row label="Funding" value={lifetimeFunding !== null ? `${lifetimeFunding >= 0 ? '+' : '−'}$${formatNumber(Math.abs(lifetimeFunding), 2)}` : '—'} tone={lifetimeFunding === null ? 'muted' : lifetimeFunding >= 0 ? 'green' : 'red'} />
@@ -2159,7 +2209,7 @@ export default function WalletPage() {
                 const rangeLabel = chartRange === 'all'
                   ? (lifetimeFillVol?.truncated && !heroPnl.stitched ? 'Cumulative' : 'Lifetime')
                   : chartRange === '24h' ? 'Last 24h' : chartRange === '7d' ? 'Last 7 days' : 'Last 30 days';
-                const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : 'collector snapshots';
+                const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : heroPnl.source === 'snapshot' ? 'collector snapshots' : 'BULK closed-position log';
 
                 return (
                   <div className="flex-1 px-5 pb-3 pt-5 min-h-[360px] flex flex-col">
