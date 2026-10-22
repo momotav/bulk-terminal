@@ -201,7 +201,11 @@ function PnlCalendarHeatmap({ closedPositions, dailyOverride, compact = false }:
   // Wallets with only OPEN positions have no closed trades, so instead of a dead
   // "No trade history" we fall back to a daily PnL derived from the reconstructed
   // (mark-to-market) curve, passed in as dailyOverride.
-  const useOverride = closedPositions.length === 0 && !!dailyOverride && dailyOverride.size > 0;
+  // Prefer the series-derived daily PnL whenever it covers MORE days than the
+  // loaded closes do (the closes are capped at 200 — one day for a busy
+  // wallet — while the series reaches back to the first collector snapshot).
+  const closedDays = new Set(closedPositions.filter((p) => p.closedAt > 0).map((p) => { const d = new Date(p.closedAt); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; })).size;
+  const useOverride = !!dailyOverride && dailyOverride.size > 0 && (closedPositions.length === 0 || dailyOverride.size > closedDays);
 
   if (closedPositions.length === 0 && !useOverride) {
     return (
@@ -444,7 +448,7 @@ function PnlCalendarHeatmap({ closedPositions, dailyOverride, compact = false }:
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={dailyBars} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
               <XAxis dataKey="label" tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
-              <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
+              <YAxis tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`} tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
               <ReferenceLine y={0} stroke="var(--border-color)" />
               <Tooltip
                 cursor={{ fill: 'var(--text-primary)', opacity: 0.05 }}
@@ -547,7 +551,7 @@ function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPo
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <XAxis dataKey="i" tick={false} axisLine={{ stroke: 'var(--border-color)' }} />
-            <YAxis tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
+            <YAxis tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`} tick={{ fill: '#666', fontSize: 10 }} axisLine={{ stroke: 'var(--border-color)' }} />
             <Tooltip
               cursor={{ fill: 'var(--text-tertiary)', fillOpacity: 0.1 }}
               contentStyle={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 8 }}
@@ -1377,24 +1381,6 @@ export default function WalletPage() {
   // Daily PnL derived from the reconstructed cumulative curve — the day-over-day
   // change in total PnL. Lets the Daily calendar work for wallets with only OPEN
   // positions (no closed trades) via mark-to-market, instead of a dead panel.
-  const dailyPnlFromSeries = useMemo<Map<string, number> | null>(() => {
-    const src = continuousPnl.length >= 2
-      ? continuousPnl
-      : reconstructedRealized.map((p) => ({ t: p.t, v: p.v }));
-    if (src.length < 2) return null;
-    // Last cumulative value seen on each local calendar day.
-    const lastByDay = new Map<string, number>();
-    for (const p of src) {
-      const d = new Date(p.t);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      lastByDay.set(key, p.v);
-    }
-    const days = Array.from(lastByDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    const out = new Map<string, number>();
-    let prev = 0;
-    for (const [key, v] of days) { out.set(key, v - prev); prev = v; }
-    return out;
-  }, [continuousPnl, reconstructedRealized]);
 
 
   // Reconstruct and open the share card for a market's current instance.
@@ -1426,17 +1412,9 @@ export default function WalletPage() {
   // {t: ms, v: cumulative total PnL}. The chart's Value toggle anchors this to
   // the live balance for an equity curve.
   const heroPnl = useMemo(() => {
-    // Best: fills + klines continuous total-PnL (realized + marked unrealized).
-    if (continuousPnl.length >= 2) {
-      return { data: continuousPnl, source: 'reconstructed' as const };
-    }
-    // Fallback: the fills-only realized-PnL curve — exactly the dev's method
-    // (walk the account's fills, book realized PnL per closing fill). This needs
-    // no klines, so it still gives a real multi-point curve when the kline mark
-    // isn't available, instead of collapsing to the single snapshot point.
-    if (reconstructedRealized.length >= 2) {
-      return { data: reconstructedRealized.map((p) => ({ t: p.t, v: p.v })), source: 'realized' as const };
-    }
+    // Collector snapshots: total PnL (realized + unrealized counters) recorded
+    // every few minutes since we first saw the wallet. Same basis as the
+    // fills curve's endpoint, so the two can be joined.
     const snap = history
       .map((h) => ({
         t: new Date(h.timestamp).getTime(),
@@ -1444,8 +1422,50 @@ export default function WalletPage() {
       }))
       .filter((p) => Number.isFinite(p.t))
       .sort((a, b) => a.t - b.t);
-    return { data: snap, source: 'snapshot' as const };
+
+    // Best inside the fill window: fills + klines continuous total PnL; else the
+    // fills-only realized curve. Both start at the EARLIEST LOADED FILL — and
+    // the fill fetch is capped at 1,000, so for a busy wallet that window is a
+    // day or two. The collector history reaches back weeks, so STITCH: snapshot
+    // points before the fill window, the fine-grained curve inside it. The
+    // older segment is shifted by the small gap at the seam so the curve is
+    // continuous (its shape is what matters; the level near "now" is the
+    // fill-calibrated one).
+    const fine: { t: number; v: number }[] =
+      continuousPnl.length >= 2 ? continuousPnl
+      : reconstructedRealized.length >= 2 ? reconstructedRealized.map((p) => ({ t: p.t, v: p.v }))
+      : [];
+    const fineSource = continuousPnl.length >= 2 ? 'reconstructed' as const : 'realized' as const;
+    if (fine.length === 0) return { data: snap, source: 'snapshot' as const, stitched: false };
+
+    const seamT = fine[0].t;
+    const older = snap.filter((p) => p.t < seamT - 60_000);
+    if (older.length < 2) return { data: fine, source: fineSource, stitched: false };
+    const seamSnap = older[older.length - 1].v;
+    const offset = fine[0].v - seamSnap;
+    const shifted = older.map((p) => ({ t: p.t, v: p.v + offset }));
+    return { data: [...shifted, ...fine], source: fineSource, stitched: true };
   }, [continuousPnl, reconstructedRealized, history]);
+
+  const dailyPnlFromSeries = useMemo<Map<string, number> | null>(() => {
+    // Daily change of the STITCHED total-PnL curve (collector snapshots before
+    // the fill window, fills+marks inside it), so the calendar covers every
+    // recorded day — not just the days the last 200 closes happen to land on.
+    const src = heroPnl.data;
+    if (src.length < 2) return null;
+    // Last cumulative value seen on each local calendar day.
+    const lastByDay = new Map<string, number>();
+    for (const p of src) {
+      const d = new Date(p.t);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      lastByDay.set(key, p.v);
+    }
+    const days = Array.from(lastByDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const out = new Map<string, number>();
+    let prev: number | null = null;
+    for (const [key, v] of days) { if (prev !== null) out.set(key, v - prev); prev = v; }
+    return out;
+  }, [heroPnl.data]);
 
   // Get the most recent PnL from history (snapshots) - this matches the chart
   const latestSnapshot = history.length > 0 ? history[history.length - 1] : null;
@@ -1965,7 +1985,7 @@ export default function WalletPage() {
                             axisLine={{ stroke: 'var(--border-color)' }}
                           />
                           <YAxis
-                            tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
+                            tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`}
                             tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                             axisLine={{ stroke: 'var(--border-color)' }}
                             domain={['auto', 'auto']}
@@ -2137,7 +2157,7 @@ export default function WalletPage() {
                   : chartRange === 'all' ? lastNet : lastNet - firstV;
                 const headlineTone = isValue ? 'var(--role-content)' : headline >= 0 ? 'var(--pos)' : 'var(--neg)';
                 const rangeLabel = chartRange === 'all'
-                  ? (lifetimeFillVol?.truncated ? 'Cumulative' : 'Lifetime')
+                  ? (lifetimeFillVol?.truncated && !heroPnl.stitched ? 'Cumulative' : 'Lifetime')
                   : chartRange === '24h' ? 'Last 24h' : chartRange === '7d' ? 'Last 7 days' : 'Last 30 days';
                 const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : 'collector snapshots';
 
@@ -2148,8 +2168,9 @@ export default function WalletPage() {
                         {isValue ? '' : headline >= 0 ? '+' : '−'}${formatNumber(Math.abs(headline), 2)}
                       </div>
                       <div className="mt-2 text-[13px] text-[var(--role-content-muted)]" title={`${sourceLabel}${filtered.length > 0 ? ` · from ${new Date(filtered[0].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`}>
-                        {chartRange === 'all' ? (lifetimeFillVol?.truncated ? 'Since the earliest loaded fill' : 'All time') : rangeLabel}
-                        {chartRange === 'all' && lifetimeFillVol?.truncated && <span className="text-[var(--role-content-subtle)]"> · history capped at 1,000 fills</span>}
+                        {chartRange === 'all' ? (lifetimeFillVol?.truncated && !heroPnl.stitched ? 'Since the earliest loaded fill' : 'All time') : rangeLabel}
+                        {chartRange === 'all' && heroPnl.stitched && filtered.length > 0 && <span className="text-[var(--role-content-subtle)]"> · recorded since {new Date(filtered[0].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
+                        {chartRange === 'all' && lifetimeFillVol?.truncated && !heroPnl.stitched && <span className="text-[var(--role-content-subtle)]"> · history capped at 1,000 fills</span>}
                       </div>
                     </div>
                     <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[260px]" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
@@ -2179,6 +2200,8 @@ export default function WalletPage() {
                         <XAxis
                           dataKey="timestamp"
                           ticks={dayTicks}
+                          interval="preserveStartEnd"
+                          minTickGap={56}
                           tickFormatter={(ts) => {
                             const d = new Date(ts);
                             return chartRange === '24h'
@@ -2189,7 +2212,7 @@ export default function WalletPage() {
                           axisLine={{ stroke: 'var(--border-color)' }}
                         />
                         <YAxis
-                          tickFormatter={(v) => `$${formatCompact(Math.abs(v))}`}
+                          tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`}
                           tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
                           axisLine={{ stroke: 'var(--border-color)' }}
                           domain={['auto', 'auto']}
