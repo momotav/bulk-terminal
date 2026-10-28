@@ -953,7 +953,11 @@ export default function WalletPage() {
           userApi.getWalletProfile(address).catch(() => ({ profile: null })),
           // null (not { positions: [] }) on failure so a THROWN fetch (network /
           // 429) is distinguishable from a genuine empty.
-          wallet.getClosedPositions(address, { limit: 200 }).catch(() => null),
+          // Full history: BULK returns every closed position in one response
+          // (thousands of rows back to mainnet launch). The old limit of 200 cut
+          // a seven-week record down to days, which skewed win rate, profit
+          // factor, streaks and the daily-PnL calendar.
+          wallet.getClosedPositions(address, { limit: 10000 }).catch(() => null),
         ]);
 
         setData(walletResult);
@@ -2390,7 +2394,7 @@ export default function WalletPage() {
                       <div className="p-6 text-[13px] text-[var(--role-content-muted)] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />Fetching positions…</div>
                     ) : <PositionsTable positions={positions} markPrices={markPrices} openTimes={positionOpenTimes} onOpen={openLiveChart} onShare={openShareCard} />
                   ) : positionsTab === 'recent' ? (
-                    <ClosedPositionsList address={address} provided={closedPositions} limit={100} density="table" onSelect={openClosedChart} />
+                    <ClosedPositionsList address={address} provided={closedPositions} limit={1000} density="table" onSelect={openClosedChart} />
                   ) : positionsTab === 'liquidations' ? (
                     <RiskEventsList address={address} bare />
                   ) : (
