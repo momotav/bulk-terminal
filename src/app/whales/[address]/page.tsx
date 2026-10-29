@@ -371,6 +371,31 @@ function PnlCalendarHeatmap({ closedPositions, dailyOverride, compact = false }:
             -${formatCompact(Math.abs(worstDay))}
           </span>
         </div>
+        {/* Streaks live here rather than in their own card: they answer the
+            same question the grid does — how consistent is this trader — so
+            splitting them across two surfaces made the reader compare across
+            a gap. `streaks` is hoisted, defined further down this file. */}
+        {(() => {
+          const st = streaks(closedPositions);
+          if (!st.longest && !st.current) return null;
+          return (
+            <>
+              <div>
+                <span className="text-[var(--text-tertiary)]">Longest Streak </span>
+                <span className="text-bulk-green font-mono font-semibold tabular-nums">{st.longest || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[var(--text-tertiary)]">Current </span>
+                <span
+                  className="font-mono font-semibold tabular-nums"
+                  style={{ color: st.current ? (st.currentWin ? 'var(--pos)' : 'var(--neg)') : 'var(--role-content-subtle)' }}
+                >
+                  {st.current ? `${st.current} ${st.currentWin ? 'W' : 'L'}` : '—'}
+                </span>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
@@ -380,7 +405,11 @@ function PnlCalendarHeatmap({ closedPositions, dailyOverride, compact = false }:
           corner, not giant blocks. The panel scrolls horizontally if a
           very long history overflows. */}
       <div className={cn("flex flex-col gap-6", !compact && "lg:flex-row lg:items-stretch")}>
-      <div className="shrink-0">
+      {/* The grid keeps fixed-size cells (GitHub-contributions model), so on a
+          narrow screen it is wider than the card. Scroll it rather than letting
+          it clip — a cut-off calendar reads as broken, not as "more to the
+          right". */}
+      <div className="shrink-0 max-w-full overflow-x-auto [scrollbar-width:thin]">
         <div className="inline-flex items-start gap-2">
           {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
           <div className="flex flex-col shrink-0 pr-1" style={{ gap: GAP }}>
@@ -612,7 +641,11 @@ function Card({ title, right, children, className, bodyClassName }: { title?: Re
           {right}
         </div>
       )}
-      <div className={cn('flex-1 min-h-0', bodyClassName)}>{children}</div>
+      {/* min-w-0 is load-bearing: without it a wide child (the positions table,
+          the calendar's week columns) grows the card instead of scrolling
+          inside its own overflow container, and the overflow propagates all the
+          way up — the mobile page measured 847px against a 420px viewport. */}
+      <div className={cn('flex-1 min-h-0 min-w-0', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -1801,7 +1834,6 @@ export default function WalletPage() {
       />
     ) : undefined;
 
-  const streakInfo = useMemo(() => streaks(closedPositions), [closedPositions]);
   // Max drawdown of EQUITY (starting equity + cumulative PnL), peak → trough.
   // The old realized-only figure divided by a tiny early peak and printed
   // nonsense like 156%; equity-based is what a trader means by drawdown.
@@ -1876,7 +1908,7 @@ export default function WalletPage() {
             <Link href="/whales" className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-[14px] border border-[var(--border-color)] hover:bg-[var(--role-surface-raised)] transition-colors"><ArrowLeft className="w-4 h-4" /> Whale Tracker</Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-3 items-start">
 
             {/* ── RAIL ─────────────────────────────────────────────────── */}
             <aside className="flex flex-col gap-3 lg:sticky lg:top-4">
@@ -1965,8 +1997,10 @@ export default function WalletPage() {
             {/* ── MAIN ─────────────────────────────────────────────────── */}
             <div className="flex flex-col gap-3 min-w-0">
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,452px)] gap-3">
-                {/* Account value / PnL */}
+              {/* One card, several views: Account value / PnL / Calendar /
+                  Drawdown / Per-trade. The calendar used to sit in its own card
+                  beside this one, which split attention between two surfaces
+                  showing the same thing at different resolutions. */}
                 <Card
                   title={
                     <div className="flex items-center gap-1 -ml-2 overflow-x-auto max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist">
@@ -1978,7 +2012,7 @@ export default function WalletPage() {
                           {chartView === 'pnl' && heroMetric === m && <span className="absolute left-2 right-2 -bottom-[5px] h-[2px] rounded-full bg-[var(--accent)]" />}
                         </button>
                       ))}
-                      {([['drawdown', 'Drawdown'], ['trade', 'Per-trade']] as const).map(([v, label]) => (
+                      {([['calendar', 'Calendar'], ['drawdown', 'Drawdown'], ['trade', 'Per-trade']] as const).map(([v, label]) => (
                         <button key={v} type="button" role="tab" aria-selected={chartView === v} onClick={() => setChartView(v)}
                           className={cn('relative px-2 py-1 text-[15px] font-medium transition-colors', chartView === v ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
                           {label}
@@ -2088,7 +2122,10 @@ export default function WalletPage() {
                   )}
                 </div>
               ) : chartView === 'calendar' ? (
-                <div className="min-h-[360px]">
+                <div className="flex-1 min-h-[360px] flex flex-col">
+                  {/* Full-size calendar: the card is the full column width now,
+                      so the 36px grid plus its daily-PnL bars fill it, rather
+                      than the compact grid stranding half the card empty. */}
                   <PnlCalendarHeatmap closedPositions={closedPositions} dailyOverride={dailyPnlFromSeries} />
                 </div>
               ) : chartView === 'drawdown' ? (
@@ -2227,7 +2264,7 @@ export default function WalletPage() {
                         {chartRange === 'all' && lifetimeFillVol?.truncated && !heroPnl.stitched && <span className="text-[var(--role-content-subtle)]"> · history capped at 1,000 fills</span>}
                       </div>
                     </div>
-                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[260px]" yLabel={isValue ? 'Account value (USD)' : 'Cumulative PnL (USD)'} walletAddress={address}>
+                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[260px]" walletAddress={address}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                         <defs>
@@ -2341,28 +2378,14 @@ export default function WalletPage() {
                   </div>
                 </Card>
 
-                {/* Daily performance */}
-                <Card title="Daily performance" right={<span className="text-[12px] text-[var(--role-content-subtle)]">closed-trade PnL by day</span>} bodyClassName="flex flex-col">
-                  <div className="flex-1 min-h-[220px]">
-                    <PnlCalendarHeatmap closedPositions={closedPositions} dailyOverride={dailyPnlFromSeries} compact />
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-[var(--border-color)] border-t border-[var(--border-color)]">
-                    <Metric className="px-5 py-4" label="Longest win streak" value={streakInfo.longest ? `${streakInfo.longest} trade${streakInfo.longest === 1 ? '' : 's'}` : '—'} tone={streakInfo.longest ? 'green' : 'muted'}
-                      sub={streakInfo.longest ? `${new Date(streakInfo.bestFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(streakInfo.bestTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'no closed trades yet'} />
-                    <Metric className="px-5 py-4" label="Current streak" value={streakInfo.current ? `${streakInfo.current} ${streakInfo.currentWin ? 'win' : 'loss'}${streakInfo.current === 1 ? '' : streakInfo.currentWin ? 's' : 'es'}` : '—'} tone={!streakInfo.current ? 'muted' : streakInfo.currentWin ? 'green' : 'red'}
-                      sub={streakInfo.current ? 'consecutive closed trades' : undefined} />
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-3 items-start">
                 {/* Risk */}
                 <Card title="Risk" bodyClassName="flex flex-col divide-y divide-[var(--border-color)]">
-                  <Metric className="px-5 py-5 flex-1 justify-center" label="Distance to liquidation" value={distanceToLiq ? `${(distanceToLiq.pct * 100).toFixed(2)}%` : '—'}
+                  <Metric className="px-5 py-5" label="Distance to liquidation" value={distanceToLiq ? `${(distanceToLiq.pct * 100).toFixed(2)}%` : '—'}
                     tone={!distanceToLiq ? 'muted' : distanceToLiq.pct < 0.05 ? 'red' : distanceToLiq.pct < 0.15 ? 'orange' : 'green'}
                     bar={distanceToLiq ? { pct: distanceToLiq.pct, color: distanceToLiq.pct < 0.05 ? 'var(--neg)' : distanceToLiq.pct < 0.15 ? 'var(--warn, var(--neg))' : 'var(--pos)' } : null}
                     sub={distanceToLiq ? `Closest: ${distanceToLiq.symbol}` : 'No open positions'} />
-                  <Metric className="px-5 py-5 flex-1 justify-center" label="Direction bias" value={directionBias ? directionBias.label : '—'}
+                  <Metric className="px-5 py-5" label="Direction bias" value={directionBias ? directionBias.label : '—'}
                     tone={!directionBias ? 'muted' : directionBias.longPct > 0.6 ? 'green' : directionBias.longPct < 0.4 ? 'red' : 'neutral'}
                     bar={directionBias ? { pct: directionBias.longPct, color: 'var(--pos)' } : null}
                     sub={directionBias ? `${(directionBias.longPct * 100).toFixed(0)}% long $${formatCompact(directionBias.longNotional)} · ${((1 - directionBias.longPct) * 100).toFixed(0)}% short $${formatCompact(directionBias.shortNotional)}` : 'No open positions'} />
@@ -2375,7 +2398,9 @@ export default function WalletPage() {
 
               {/* Tabbed table */}
               <Card bodyClassName="flex flex-col">
-                <div className="px-5 border-b border-[var(--border-color)] flex items-end gap-1" role="tablist">
+                {/* Four tabs don't fit a phone, and a tab row that silently
+                    overflows pushes the whole page wider. Scroll it instead. */}
+                <div className="px-5 border-b border-[var(--border-color)] flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist">
                   {([
                     ['open', `Positions (${positions.length})`],
                     ['recent', `Closed (${closedPositions.length})`],
