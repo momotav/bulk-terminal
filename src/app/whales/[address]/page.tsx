@@ -536,7 +536,10 @@ function DrawdownChart({ history, address }: { history: WalletData['history']; a
   }, [data]);
   if (!history.length) return <ChartEmpty label="No history data yet" />;
   return (
-    <div className="flex-1 p-4 min-h-[420px]">
+    // Explicit height, not min-h: ChartFrame's h-full and recharts'
+    // height:100% both resolve against a DEFINITE parent height, and a
+    // min-height alone leaves that auto — the plot then renders at 0px.
+    <div className="p-4 h-[360px] sm:h-[440px]">
       <ChartFrame title="Drawdown" className="h-full" yLabel="Drawdown (USD)" walletAddress={address}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
@@ -575,7 +578,7 @@ function PerTradeChart({ closedPositions, address }: { closedPositions: ClosedPo
   [closedPositions]);
   if (!data.length) return <ChartEmpty label="No closed trades yet" />;
   return (
-    <div className="flex-1 p-4 min-h-[420px]">
+    <div className="p-4 h-[360px] sm:h-[440px]">
       <ChartFrame title="Per-Trade PnL" className="h-full" yLabel="Trade PnL (USD)" walletAddress={address}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
@@ -2253,7 +2256,7 @@ export default function WalletPage() {
                 const sourceLabel = heroPnl.source === 'reconstructed' ? 'BULK fills + 1h marks' : heroPnl.source === 'realized' ? 'realized only' : heroPnl.source === 'snapshot' ? 'collector snapshots' : 'BULK closed-position log';
 
                 return (
-                  <div className="flex-1 px-5 pb-3 pt-5 min-h-[360px] flex flex-col">
+                  <div className="px-5 pb-3 pt-5 flex flex-col">
                     <div className="mb-3">
                       <div className="font-mono text-[30px] leading-none font-medium tabular-nums tracking-tight" style={{ color: headlineTone }}>
                         {isValue ? '' : headline >= 0 ? '+' : '−'}${formatNumber(Math.abs(headline), 2)}
@@ -2264,7 +2267,12 @@ export default function WalletPage() {
                         {chartRange === 'all' && lifetimeFillVol?.truncated && !heroPnl.stitched && <span className="text-[var(--role-content-subtle)]"> · history capped at 1,000 fills</span>}
                       </div>
                     </div>
-                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="flex-1 min-h-[260px]" walletAddress={address}>
+                    {/* Explicit height, not flex-1: recharts' ResponsiveContainer is
+                        height:100%, which needs a DEFINITE height somewhere up the
+                        chain. This card used to be a grid item (grid items stretch,
+                        so it had one); once it became a plain block the chain
+                        resolved to auto and the plot rendered at 0px. */}
+                    <ChartFrame title={isValue ? 'Account value' : 'PnL history'} className="h-[320px] sm:h-[400px]" walletAddress={address}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 18, bottom: 4, left: 4 }}>
                         <defs>
