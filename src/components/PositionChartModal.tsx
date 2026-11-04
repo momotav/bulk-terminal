@@ -5,7 +5,8 @@ import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickDa
 import Link from 'next/link';
 import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
-import { annotateFills, buildTradeLifecycle } from '@/lib/positionWalk';
+import { annotateFills, buildTradeLifecycle, closedTradeLifecycle, type TradeLifecycle } from '@/lib/positionWalk';
+import { anchorFills } from '@/lib/walletMetrics';
 import { clampWicks } from '@/lib/candles';
 import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
 import { LogoLoader } from '@/components/LogoLoader';
@@ -293,7 +294,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     setFills(null);
 
     wallet
-      .getFills(position.walletAddress, { symbol: position.symbol, limit: 500 })
+      .getFills(position.walletAddress, { symbol: position.symbol, limit: 40000, lite: true })
       .then((res) => {
         if (cancelled) return;
         setFills(res.fills || []);
@@ -350,24 +351,47 @@ export function PositionChartModal({ position, onClose }: Props) {
   const shareCardData = useMemo<ShareCardData | null>(() => {
     if (!position || !fills) return null;
     const coin = position.symbol.replace(/-USD$/, '');
-    // closed → every fill up to the close (buildTradeLifecycle slices to the
-    // real open); live → all fills (latest instance).
-    const tf = position.kind === 'closed' ? fills.filter((f) => f.timestamp <= position.closedAt + 2000) : fills;
-    const mark = position.kind === 'live' ? (liveMark ?? position.markPrice) : null;
-    const liqPrice = position.kind === 'live' ? position.liquidationPrice : null;
-    const life = buildTradeLifecycle(tf, plottedCandles, {
-      markPrice: mark, leverage: position.leverage ?? 0, liqPrice,
-    });
-    if (!life) return null;
-    const lastPrice = life.isOpen ? mark : (life.events.length ? life.events[life.events.length - 1].price : mark);
-    return {
+    const shared = {
       address: position.walletAddress, symbol: position.symbol, coin,
-      side: life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
-      avgEntry: life.avgEntry, size: life.peakSize, leverage: position.leverage ?? 0,
-      markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: life.finalPnl,
+    };
+    const series = (life: TradeLifecycle) => ({
       events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
       pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
       liqCurve: life.liqCurve,
+    });
+
+    // The card's facts are BULK's, so they always match the row that opened it.
+    // Fills only supply the markers and the journey between them.
+    if (position.kind === 'closed') {
+      const life = closedTradeLifecycle(
+        {
+          side: position.side, size: position.size, openPrice: position.entryPrice, closePrice: position.closePrice,
+          openedAt: position.openedAt, closedAt: position.closedAt, realizedPnl: position.realizedPnl, liquidated: position.liquidated,
+        },
+        position.symbol,
+        fills.filter((f) => f.timestamp <= position.closedAt + 2000),
+        plottedCandles,
+        { markPrice: null, leverage: position.leverage ?? 0 },
+      );
+      return {
+        ...shared, ...series(life),
+        side: position.side, isOpen: false, openedAt: life.openedAt, closedAt: position.closedAt,
+        avgEntry: position.entryPrice, size: Math.abs(position.size), leverage: position.leverage ?? 0,
+        markPrice: null, exitPrice: position.closePrice, pnl: position.realizedPnl,
+      };
+    }
+
+    const mark = liveMark ?? position.markPrice;
+    const signedSize = position.side === 'long' ? Math.abs(position.size) : -Math.abs(position.size);
+    const life = buildTradeLifecycle(anchorFills(fills, signedSize, position.entryPrice).fills, plottedCandles, {
+      markPrice: mark, leverage: position.leverage ?? 0, liqPrice: position.liquidationPrice,
+    });
+    if (!life) return null;
+    return {
+      ...shared, ...series(life),
+      side: position.side, isOpen: true, openedAt: life.openedAt, closedAt: null,
+      avgEntry: position.entryPrice, size: Math.abs(position.size), leverage: Number((position.leverage ?? 0).toFixed(1)),
+      markPrice: mark, exitPrice: mark, pnl: position.unrealizedPnl,
     };
   }, [position, fills, plottedCandles, liveMark]);
 

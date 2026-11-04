@@ -624,3 +624,68 @@ export function realizedPnlSeries(fills: WalletFill[]): RealizedPnlPoint[] {
 
   return points;
 }
+
+/** The fields of a BULK closed-position record the lifecycle needs. */
+export interface ClosedRecord {
+  side: 'long' | 'short';
+  size: number;
+  openPrice: number;
+  closePrice: number;
+  openedAt: number;
+  closedAt: number;
+  realizedPnl: number;
+  liquidated?: boolean;
+}
+
+// Build a TradeLifecycle straight from a BULK closed-position record, so a pinned
+// CLOSED trade shows exactly what the wallet row linked to. Needed for wallets
+// whose net position never flattens (high-frequency scalpers): fills-recon can't
+// isolate a single lot there, but BULK's record carries the lot's authoritative
+// realized PnL / entry / exit / size. Two events (open → close) + a 2-point PnL
+// curve (0 → realized) is all the downstream UI needs.
+function lifecycleFromClosedRecord(cp: ClosedRecord, symbol: string): TradeLifecycle {
+  const size = Math.abs(cp.size);
+  const signedOpen = cp.side === 'long' ? size : -size;
+  const openEvent: TradeEventPoint = {
+    t: cp.openedAt, action: 'open', actionLabel: cp.side === 'long' ? 'Opened long' : 'Opened short',
+    price: cp.openPrice, sizeDelta: signedOpen, positionAfter: signedOpen, realizedDelta: 0,
+  };
+  const closeEvent: TradeEventPoint = {
+    t: cp.closedAt, action: 'close', actionLabel: cp.liquidated ? 'Liquidated' : 'Closed',
+    price: cp.closePrice, sizeDelta: -signedOpen, positionAfter: 0, realizedDelta: cp.realizedPnl,
+  };
+  return {
+    symbol, side: cp.side, openedAt: cp.openedAt, closedAt: cp.closedAt, isOpen: false,
+    openPrice: cp.openPrice, avgEntry: cp.openPrice, peakSize: size, currentSize: 0,
+    events: [openEvent, closeEvent],
+    pnlCurve: [
+      { t: cp.openedAt, pnl: 0, realized: 0, price: cp.openPrice },
+      { t: cp.closedAt, pnl: cp.realizedPnl, realized: cp.realizedPnl, price: cp.closePrice },
+    ],
+    liqCurve: [],
+    realizedTotal: cp.realizedPnl, peakPnl: Math.max(0, cp.realizedPnl),
+    troughPnl: Math.min(0, cp.realizedPnl), finalPnl: cp.realizedPnl,
+  };
+}
+
+/**
+ * The lifecycle of a closed trade, with BULK's record as the authority. Replaying
+ * fills gives the markers and the journey, but it starts from flat, so history
+ * that is cut short leaves the running size off by whatever was missed: the trade
+ * then never closes, the last sell reads as a reduce, and the phantom remainder is
+ * valued at today's price. A replay that doesn't close on the record's PnL is
+ * discarded for the record itself.
+ */
+export function closedTradeLifecycle(
+  record: ClosedRecord,
+  symbol: string,
+  fills: WalletFill[],
+  candles: OHLC[],
+  opts: { markPrice?: number | null; leverage?: number } = {},
+): TradeLifecycle {
+  const replay = fills.length ? buildTradeLifecycle(fills, candles, { ...opts, liqPrice: null }) : null;
+  const tolerance = Math.max(1, Math.abs(record.realizedPnl) * 0.1);
+  return replay && !replay.isOpen && Math.abs(replay.finalPnl - record.realizedPnl) <= tolerance
+    ? replay
+    : lifecycleFromClosedRecord(record, symbol);
+}

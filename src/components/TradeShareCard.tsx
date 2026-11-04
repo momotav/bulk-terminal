@@ -552,7 +552,8 @@ export function TradeShareCard({ data, onClose }: Props) {
         ? ['Margin', `$${formatCompact(margin)}`]
         : ['Size', `$${formatCompact(notional)}`],
       ['Avg. entry', px(avgEntry)],
-      [isOpen ? 'Current' : 'Exit', px(price)],
+      // `price` follows the chart, which runs past the close, so it isn't the exit.
+      [isOpen ? 'Current' : 'Exit', px(!isOpen && data.exitPrice != null ? data.exitPrice : price)],
     ];
     stats.forEach(([label, val], i) => {
       const x = gx0 + gw * i;
@@ -568,7 +569,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillText('bulkstats.com', W / 2, footCy);
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
-  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
+  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.exitPrice, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
 
   // One smooth replay pass (steady scroll) → resolves after a short end-hold.
   const play = useCallback((): Promise<void> => {

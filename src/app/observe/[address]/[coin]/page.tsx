@@ -19,7 +19,7 @@ import {
   CandlestickChart, Activity, Wallet, ListOrdered, Flag, Plus, Minus, ArrowUpRight, ArrowDownRight, type LucideIcon,
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
-import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
+import { buildTradeLifecycle, closedTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
 import { anchorFills } from '@/lib/walletMetrics';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
@@ -86,7 +86,7 @@ export default function ObserveTradePage() {
       if (toMs > 0) {
         for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
           try {
-            const r = await wallet.getClosedPositions(address, { symbol: `${coin}-USD`, limit: 1000 });
+            const r = await wallet.getClosedPositions(address, { symbol: `${coin}-USD`, limit: 10000 });
             cp = r.positions || [];
             if (cp.length > 0) break;
           } catch { /* transient — retry */ }
@@ -191,16 +191,7 @@ export default function ObserveTradePage() {
     // lots where fills can't cleanly isolate the trade (the original reason this
     // path existed — fills merge into the live book there).
     if (pinnedRecord) {
-      if (tradeFills.length) {
-        const l = buildTradeLifecycle(tradeFills, candles, {
-          markPrice, leverage: maxLeverage, liqPrice: null,
-        });
-        if (l) {
-          const tol = Math.max(1, Math.abs(pinnedRecord.realizedPnl) * 0.1);
-          if (Math.abs(l.finalPnl - pinnedRecord.realizedPnl) <= tol) return l;
-        }
-      }
-      return lifecycleFromClosedRecord(pinnedRecord, symbol);
+      return closedTradeLifecycle(pinnedRecord, symbol, tradeFills, candles, { markPrice, leverage: maxLeverage });
     }
     // Candles are fetched inside TradeCandlePanel; the journey curve is built
     // against the same candle set once it arrives (see candleCache below).
@@ -374,7 +365,7 @@ export default function ObserveTradePage() {
             size: life.peakSize,
             leverage: liveLeverage || 0,
             markPrice,
-            exitPrice: life.isOpen ? markPrice : lastPrice,
+            exitPrice: life.isOpen ? markPrice : (pinnedRecord?.closePrice ?? lastPrice),
             pnl: displayPnl,
             events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
             pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
@@ -574,37 +565,6 @@ function TermPanel({ title, icon: Icon, right, children }: { title: string; icon
 }
 
 // LABEL ............ value row for the position readout.
-// Build a TradeLifecycle straight from a BULK closed-position record, so a pinned
-// CLOSED trade shows exactly what the wallet row linked to. Needed for wallets
-// whose net position never flattens (high-frequency scalpers): fills-recon can't
-// isolate a single lot there, but BULK's record carries the lot's authoritative
-// realized PnL / entry / exit / size. Two events (open → close) + a 2-point PnL
-// curve (0 → realized) is all the downstream UI needs.
-function lifecycleFromClosedRecord(cp: ClosedPosition, symbol: string): TradeLifecycle {
-  const size = Math.abs(cp.size);
-  const signedOpen = cp.side === 'long' ? size : -size;
-  const openEvent: TradeEventPoint = {
-    t: cp.openedAt, action: 'open', actionLabel: cp.side === 'long' ? 'Opened long' : 'Opened short',
-    price: cp.openPrice, sizeDelta: signedOpen, positionAfter: signedOpen, realizedDelta: 0,
-  };
-  const closeEvent: TradeEventPoint = {
-    t: cp.closedAt, action: 'close', actionLabel: cp.liquidated ? 'Liquidated' : 'Closed',
-    price: cp.closePrice, sizeDelta: -signedOpen, positionAfter: 0, realizedDelta: cp.realizedPnl,
-  };
-  return {
-    symbol, side: cp.side, openedAt: cp.openedAt, closedAt: cp.closedAt, isOpen: false,
-    openPrice: cp.openPrice, avgEntry: cp.openPrice, peakSize: size, currentSize: 0,
-    events: [openEvent, closeEvent],
-    pnlCurve: [
-      { t: cp.openedAt, pnl: 0, realized: 0, price: cp.openPrice },
-      { t: cp.closedAt, pnl: cp.realizedPnl, realized: cp.realizedPnl, price: cp.closePrice },
-    ],
-    liqCurve: [],
-    realizedTotal: cp.realizedPnl, peakPnl: Math.max(0, cp.realizedPnl),
-    troughPnl: Math.min(0, cp.realizedPnl), finalPnl: cp.realizedPnl,
-  };
-}
-
 function DataRow({ label, value, valueClass, hint }: { label: string; value: string; valueClass?: string; hint?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 py-2 text-[13px] last:border-b-0">
