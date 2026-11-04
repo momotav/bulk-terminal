@@ -15,6 +15,7 @@ import { CoinSelector } from '@/components/CoinSelector';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { OI_SIDE_FACTOR } from '@/hooks/useTickers';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useAssetClass } from '@/hooks/useAssetClass';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -828,13 +829,19 @@ export default function AnalyticsPage() {
   // This is what lets us migrate incrementally — if a chart's API response is
   // already additive, we use row.coins directly; if it's still legacy-shape,
   // we fall back to adaptLegacyRow which rebuilds the dict from top-level keys.
+  //
+  // This is ALSO where the site-wide All / Crypto / Stocks filter applies:
+  // every chart on this page reads its per-coin values through coinsFromRow,
+  // so dropping out-of-class coins here narrows the bars, the "Other" bucket
+  // and every cumulative line in one place.
+  const { filterDict } = useAssetClass();
   const coinsFromRow = useCallback((row: ChartData): Record<string, number> => {
     if (row.coins && typeof row.coins === 'object') {
-      return row.coins as Record<string, number>;
+      return filterDict(row.coins as Record<string, number>);
     }
     const adapted = adaptLegacyRow(row as Record<string, unknown>);
-    return adapted.coins;
-  }, []);
+    return filterDict(adapted.coins);
+  }, [filterDict]);
 
   // Apply coin filter → produce bucketed chart rows → attach cumulative total.
   //

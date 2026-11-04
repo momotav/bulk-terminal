@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/api';
-import { DEFAULT_COINS, getCoinColor } from '@/lib/coins';
+import { getCoinColor } from '@/lib/coins';
 import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { AssetClassToggle } from '@/components/AssetClassToggle';
 
 /**
  * Single-select sibling to <CoinSelector>.
@@ -45,7 +46,8 @@ export function CoinPicker({
   includeAllOption,
   ariaLabel,
 }: CoinPickerProps) {
-  const { coins: liveCoins, loading } = useAvailableCoins();
+  // `liveCoins` / `defaults` are already narrowed to the site-wide asset class.
+  const { coins: liveCoins, loading, defaults, assetClass } = useAvailableCoins();
   const coins = coinsProp ?? liveCoins;
 
   // Self-heal on network switch: if the currently-selected coin isn't in the
@@ -58,11 +60,11 @@ export function CoinPicker({
     if (loading || coins.length === 0) return;
     if (value === 'ALL') return;
     if (!coins.includes(value)) {
-      const fallback = (DEFAULT_COINS as readonly string[]).find((c) => coins.includes(c)) ?? coins[0];
+      const fallback = defaults.find((c) => coins.includes(c)) ?? coins[0];
       onChange(fallback);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availKey, loading]);
+  }, [availKey, loading, assetClass]);
 
   // Open/close + search + outside-click close.
   const [open, setOpen] = useState(false);
@@ -87,11 +89,11 @@ export function CoinPicker({
   const searchLower = search.trim().toLowerCase();
   const matchesSearch = (c: string) => searchLower === '' || c.toLowerCase().includes(searchLower);
 
-  const defaultsInDropdown = (DEFAULT_COINS as readonly string[])
+  const defaultsInDropdown = defaults
     .filter(c => coins.includes(c))
     .filter(matchesSearch);
   const othersInDropdown = coins
-    .filter(c => !(DEFAULT_COINS as readonly string[]).includes(c))
+    .filter(c => !defaults.includes(c))
     .filter(matchesSearch);
 
   const pick = (coin: string) => {
@@ -104,7 +106,10 @@ export function CoinPicker({
   const triggerColor = value === 'ALL' ? 'var(--text-tertiary)' : getCoinColor(value);
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
+    <div className="relative inline-flex items-center gap-2" ref={dropdownRef}>
+      {/* Site-wide All / Crypto / Stocks filter — same control as in
+          <CoinSelector>, so single-select views narrow with the rest. */}
+      <AssetClassToggle />
       {/* Trigger button — same visual language as <CoinSelector>'s dropdown
           trigger so the site feels consistent. */}
       <button

@@ -12,6 +12,7 @@
 // hand when it overflows instead.
 
 import { type BulkTicker, formatPrice } from '@/hooks/useTickers';
+import { useAssetClass } from '@/hooks/useAssetClass';
 import { AnimatedNumber } from './AnimatedNumber';
 import { CoinIcon } from './CoinIcon';
 
@@ -23,19 +24,22 @@ interface MarketTickerProps {
 }
 
 export function MarketTicker({ tickers, loading }: MarketTickerProps) {
+  // Site-wide All / Crypto / Stocks filter — the tape narrows with the rest.
+  const { isIn } = useAssetClass();
   if (loading) {
     return (
       <div className="h-[34px] animate-pulse rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)]" />
     );
   }
 
-  if (tickers.length === 0) return null;
+  const visible = tickers.filter((t) => isIn(t.symbol));
+  if (visible.length === 0) return null;
 
   // Stable display order. The shared hook sorts by volume, and that ranking
   // can flip between polls — which makes ticker items jump sideways as they
   // swap places. Sorting the strip by symbol instead pins each market in a
   // fixed spot so only the numbers ever move, never the layout.
-  const ordered = [...tickers].sort((a, b) => a.symbol.localeCompare(b.symbol));
+  const ordered = [...visible].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
   return (
     // `relative` so the edge-fade masks can sit over the scrolling row — they

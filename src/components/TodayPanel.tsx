@@ -12,6 +12,8 @@ import { AnimatedNumber } from './AnimatedNumber';
 import { analytics, cn, formatCompact } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { useAssetClass } from '@/hooks/useAssetClass';
+import { openInterestUsd, type BulkTicker } from '@/hooks/useTickers';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -21,10 +23,30 @@ type Sparklines = Record<'volume24h' | 'openInterest' | 'activeTraders' | 'liqui
 const fmtUsd = (n: number) => `$${formatCompact(n)}`;
 const fmtCount = (n: number) => Math.round(n).toLocaleString();
 
-export function TodayPanel() {
+export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
   const { network } = useCurrentNetwork();
   const [stats, setStats] = useState<{ openInterest: number; activeTraders: number } | null>(null);
   const [sparks, setSparks] = useState<Sparklines | null>(null);
+
+  // Site-wide All / Crypto / Stocks filter. exchange-stats is exchange-wide,
+  // so narrowed to a class the two mini cards are rebuilt from the live
+  // tickers: OI = Σ per-market OI (two-sided via openInterestUsd), and the
+  // "Active Traders" card becomes the class's share of 24h volume — a
+  // per-class distinct-trader count isn't available without overcounting
+  // wallets that trade several markets, so we don't fake one.
+  const { narrowed, isIn, label: classLabel } = useAssetClass();
+  const classStats = useMemo(() => {
+    if (!narrowed) return null;
+    const mine = tickers.filter((t) => isIn(t.symbol));
+    const vol = mine.reduce((s, t) => s + (t.quoteVolume || 0), 0);
+    const volAll = tickers.reduce((s, t) => s + (t.quoteVolume || 0), 0);
+    return {
+      oi: mine.reduce((s, t) => s + openInterestUsd(t), 0),
+      share: volAll > 0 ? (vol / volAll) * 100 : 0,
+      markets: mine.length,
+      active: mine.filter((t) => (t.quoteVolume || 0) > 0).length,
+    };
+  }, [tickers, narrowed, isIn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,20 +71,41 @@ export function TodayPanel() {
     <div className="flex flex-col gap-3 lg:h-full">
       {/* Two metric cards — a compact fixed height, same-size chart backdrop. */}
       <div className="grid grid-cols-2 gap-3 flex-none h-[140px] lg:h-[158px]">
-        <MetricMiniCard
-          label="Open Interest"
-          value={stats?.openInterest ?? null}
-          format={fmtUsd}
-          spark={sparks?.openInterest}
-          color="var(--role-signal-info)"
-        />
-        <MetricMiniCard
-          label="Active Traders"
-          value={stats?.activeTraders ?? null}
-          format={fmtCount}
-          spark={sparks?.activeTraders}
-          color="var(--accent)"
-        />
+        {classStats ? (
+          <>
+            <MetricMiniCard
+              label={`Open Interest · ${classLabel}`}
+              value={tickers.length > 0 ? classStats.oi : null}
+              format={fmtUsd}
+              color="var(--role-signal-info)"
+              sub={`${classStats.markets} market${classStats.markets === 1 ? '' : 's'} · ${classStats.active} active`}
+            />
+            <MetricMiniCard
+              label={`${classLabel} · share of 24h volume`}
+              value={tickers.length > 0 ? classStats.share : null}
+              format={(n) => `${n.toFixed(1)}%`}
+              color="var(--accent)"
+              sub="of exchange-wide volume"
+            />
+          </>
+        ) : (
+          <>
+            <MetricMiniCard
+              label="Open Interest"
+              value={stats?.openInterest ?? null}
+              format={fmtUsd}
+              spark={sparks?.openInterest}
+              color="var(--role-signal-info)"
+            />
+            <MetricMiniCard
+              label="Active Traders"
+              value={stats?.activeTraders ?? null}
+              format={fmtCount}
+              spark={sparks?.activeTraders}
+              color="var(--accent)"
+            />
+          </>
+        )}
       </div>
       <div className="flex flex-col lg:min-h-0 lg:flex-1">
         <RevenueCard />
@@ -71,8 +114,10 @@ export function TodayPanel() {
   );
 }
 
-function MetricMiniCard({ label, value, format, spark, color }: {
+function MetricMiniCard({ label, value, format, spark, color, sub }: {
   label: string; value: number | null; format: (n: number) => string; spark?: Spark; color: string;
+  /** Optional caption under the number — used instead of the 24h change when there's no sparkline. */
+  sub?: string;
 }) {
   const data = useMemo(() => (spark?.series ?? []).map((v, i) => ({ i, v })), [spark]);
   const change = spark?.changePct ?? null;
@@ -111,6 +156,9 @@ function MetricMiniCard({ label, value, format, spark, color }: {
               {change >= 0 ? '+' : ''}{change.toFixed(2)}%
             </span>
           </div>
+        )}
+        {sub && (change == null || !Number.isFinite(change)) && (
+          <div className="mt-1.5 truncate text-[12px] text-[var(--role-content-subtle)]">{sub}</div>
         )}
       </div>
     </div>

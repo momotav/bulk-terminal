@@ -45,10 +45,10 @@ export default function HomePage() {
             card, ASXN-style. On mobile the right panel grows naturally (so the
             revenue chart has room); on lg it matches the hero height. */}
         <div className="min-h-[360px] lg:min-h-[440px]">
-          <VolumeHero />
+          <VolumeHero tickers={tickers} />
         </div>
         <div className="lg:min-h-[440px]">
-          <TodayPanel />
+          <TodayPanel tickers={tickers} />
         </div>
       </div>
 

@@ -37,6 +37,97 @@ export const DEFAULT_COINS = ['BTC', 'ETH', 'SOL'] as const;
  */
 export const HIDDEN_COINS: readonly string[] = ['XAU'];
 
+// ---- Asset classes --------------------------------------------------------
+//
+// BULK listed its first stock perps (NVDA, TSLA, MSTR, …) on 2026-11-01. Its
+// /exchangeInfo carries NO asset-class field — a stock record is shaped
+// exactly like BTC's — so the crypto/stock split is OURS, curated here. The
+// backend's /exchange-info proxy stamps the same classification onto each
+// market (`assetClass`) from an identical list, and the frontend trusts that
+// when present; this table is the fallback so the split keeps working even if
+// the backend is behind.
+//
+// PAXG (tokenised gold) is deliberately classed as crypto: it's an on-chain
+// token, and a one-coin "commodities" group would look thin. Revisit if BULK
+// lists more metals.
+//
+// Stocks on BULK trade 24/7 (continuous hourly candles through the weekend,
+// verified on NVDA), so no market-hours special-casing is needed anywhere.
+
+export type AssetClass = 'all' | 'crypto' | 'stock';
+
+export const ASSET_CLASSES: readonly { key: AssetClass; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'crypto', label: 'Crypto' },
+  { key: 'stock', label: 'Stocks' },
+];
+
+/** Base symbols BULK lists that are equities (or equity-like, e.g. SPACEX). */
+export const STOCK_COINS: readonly string[] = [
+  'NVDA', 'TSLA', 'MSTR', 'MU', 'SNDK', 'SKHYNIX', 'CRCL', 'SPACEX',
+];
+
+/** Human names for the tickers — shown as a hint in pickers and the markets table. */
+export const STOCK_NAMES: Record<string, string> = {
+  NVDA: 'NVIDIA',
+  TSLA: 'Tesla',
+  MSTR: 'Strategy',
+  MU: 'Micron',
+  SNDK: 'Sandisk',
+  SKHYNIX: 'SK hynix',
+  CRCL: 'Circle',
+  SPACEX: 'SpaceX',
+};
+
+const STOCK_SET = new Set(STOCK_COINS);
+
+/** Normalise "nvda-usd" / "NVDA-USD" / "NVDA" → "NVDA". */
+export const baseCoin = (symbol: string): string => symbol.replace(/-USD$/i, '').toUpperCase();
+
+/** Which group a coin belongs to. Anything not in STOCK_COINS is crypto. */
+export function coinClass(coin: string): Exclude<AssetClass, 'all'> {
+  return STOCK_SET.has(baseCoin(coin)) ? 'stock' : 'crypto';
+}
+
+/** True when `coin` should be visible under the given class filter. */
+export function inAssetClass(coin: string, cls: AssetClass): boolean {
+  return cls === 'all' || coinClass(coin) === cls;
+}
+
+/**
+ * Default pills per class. "All" keeps the historical BTC/ETH/SOL trio;
+ * "Stocks" uses the three busiest stock perps as of listing week.
+ */
+export const DEFAULT_COINS_BY_CLASS: Record<AssetClass, readonly string[]> = {
+  all: DEFAULT_COINS,
+  crypto: DEFAULT_COINS,
+  stock: ['SNDK', 'MU', 'NVDA'],
+};
+
+export const defaultCoinsFor = (cls: AssetClass): readonly string[] => DEFAULT_COINS_BY_CLASS[cls];
+
+/**
+ * Drop every key of a per-coin dict that falls outside the class. This is the
+ * ONE chokepoint pages use to make every chart class-aware: filter the raw
+ * `coins` dict before bucketing, and the enabled series, the "Other" sum and
+ * every cumulative line all follow automatically.
+ */
+export function filterCoinsByClass<T>(dict: Record<string, T>, cls: AssetClass): Record<string, T> {
+  if (cls === 'all') return dict;
+  const out: Record<string, T> = {};
+  for (const [coin, v] of Object.entries(dict)) {
+    if (inAssetClass(coin, cls)) out[coin] = v;
+  }
+  return out;
+}
+
+/** Sum of the finite numeric values in a per-coin dict. */
+export function sumCoins(dict: Record<string, unknown>): number {
+  let s = 0;
+  for (const v of Object.values(dict)) if (typeof v === 'number' && isFinite(v)) s += v;
+  return s;
+}
+
 /**
  * Special aggregate bucket name. Used both as a series key in chart data and
  * as a toggle pill label. "Other" is shown alongside the default 3 coins and
@@ -73,6 +164,18 @@ export const COIN_COLORS: Record<string, string> = {
   DOGE: 'var(--coin-4)',
   FARTCOIN: 'var(--coin-6)',
   HYPE: 'var(--coin-7)',
+
+  // Stock perps (listed 2026-11). The three "Stocks" defaults get the most
+  // separated hues so the default stack reads cleanly; the rest are spread
+  // across the remaining ramp.
+  SNDK: 'var(--coin-8)',
+  MU: 'var(--coin-6)',
+  NVDA: 'var(--coin-2)',
+  TSLA: 'var(--coin-4)',
+  MSTR: 'var(--coin-7)',
+  SKHYNIX: 'var(--coin-1)',
+  CRCL: 'var(--coin-3)',
+  SPACEX: 'var(--coin-5)',
 
   // Aggregate bucket — neutral so it doesn't compete with named series.
   [OTHER_KEY]: 'var(--coin-other)',

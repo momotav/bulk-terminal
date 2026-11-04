@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { AssetClass } from '@/lib/coins';
 
 type Theme = 'dark' | 'light';
 export type TimeFrame = '24h' | '7d' | '30d' | 'all';
@@ -64,6 +65,12 @@ interface AppState {
   timeframe: TimeFrame;
   setTimeframe: (tf: TimeFrame) => void;
 
+  // Site-wide market-class filter (All / Crypto / Stocks). One global value so
+  // every chart, picker and table agrees; the pill group that sets it is
+  // rendered inside every coin picker, so it can be flipped from any chart.
+  assetClass: AssetClass;
+  setAssetClass: (cls: AssetClass) => void;
+
   logout: () => void;
 }
 
@@ -100,6 +107,9 @@ export const useStore = create<AppState>()(
       timeframe: '24h',
       setTimeframe: (timeframe) => set({ timeframe }),
 
+      assetClass: 'all',
+      setAssetClass: (assetClass) => set({ assetClass }),
+
       logout: () => set({
         user: null,
         isAuthenticated: false,
@@ -110,9 +120,10 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'bulk-stats-storage',
-      partialize: (state) => ({ 
+      partialize: (state) => ({
         theme: state.theme,
         selectedSymbol: state.selectedSymbol,
+        assetClass: state.assetClass,
       }),
     }
   )

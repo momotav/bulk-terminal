@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { request } from '@/lib/api';
-import { DEFAULT_COINS, HIDDEN_COINS } from '@/lib/coins';
+import { HIDDEN_COINS, coinClass, type AssetClass } from '@/lib/coins';
 import { useCurrentNetwork } from './useCurrentNetwork';
+import { useAssetClass } from './useAssetClass';
 import type { NetworkId } from '@/lib/network';
 
 /**
@@ -15,6 +16,12 @@ export interface MarketInfo {
   symbol: string;
   /** Base asset without the -USD suffix (e.g. "BTC"). Used as the coin key. */
   coin: string;
+  /**
+   * 'crypto' | 'stock', stamped by the backend from its curated list. Optional
+   * because older backends don't send it — we fall back to the frontend's own
+   * STOCK_COINS table via `coinClass()`.
+   */
+  assetClass?: Exclude<AssetClass, 'all'>;
   quoteAsset: string;
   status: string;
   maxLeverage: number;
@@ -30,10 +37,18 @@ interface ExchangeInfoResponse {
 }
 
 export interface UseAvailableCoinsResult {
-  /** Array of all coin keys (just the bases: "BTC", "ETH", ...). */
+  /** Coin keys visible under the current asset-class filter ("BTC", "ETH", …). */
   coins: string[];
-  /** Full market metadata list, indexed by order returned from BULK. */
+  /** Market metadata for the visible coins, in BULK's listing order. */
   markets: MarketInfo[];
+  /** Every (non-hidden) market regardless of the class filter. */
+  allMarkets: MarketInfo[];
+  /** Market counts per class — for "23 crypto · 8 stocks" captions. */
+  counts: Record<AssetClass, number>;
+  /** The active class filter, re-exported for convenience. */
+  assetClass: AssetClass;
+  /** Default pills for the active class (BTC/ETH/SOL or SNDK/MU/NVDA). */
+  defaults: readonly string[];
   /** True while the first fetch is in flight. */
   loading: boolean;
   /** Non-null if the fetch failed; the hook falls back to DEFAULT_COINS in that case. */
@@ -116,13 +131,25 @@ export function useAvailableCoins(): UseAvailableCoinsResult {
   // appear in pickers, dropdowns, chart toggles, or the treemap. One
   // centralized filter means no consumer has to remember to exclude them.
   const hiddenSet = new Set(HIDDEN_COINS);
-  const visibleMarkets = markets.filter(m => !hiddenSet.has(m.coin));
+  const allMarkets = markets.filter(m => !hiddenSet.has(m.coin));
+
+  // Then the site-wide All / Crypto / Stocks filter. Trust the backend's
+  // stamp when it sent one; otherwise classify locally. Doing it HERE means
+  // every picker, chart toggle, treemap and map narrows automatically.
+  const { assetClass, defaults } = useAssetClass();
+  const classOf = (m: MarketInfo) =>
+    m.assetClass === 'stock' || m.assetClass === 'crypto' ? m.assetClass : coinClass(m.coin);
+  const counts: Record<AssetClass, number> = { all: allMarkets.length, crypto: 0, stock: 0 };
+  for (const m of allMarkets) counts[classOf(m)] += 1;
+  const visibleMarkets = assetClass === 'all'
+    ? allMarkets
+    : allMarkets.filter((m) => classOf(m) === assetClass);
 
   // Extract just the coin keys, preserving BULK's ordering. If the fetch
-  // failed and we have nothing, fall back to the defaults.
+  // failed and we have nothing, fall back to the class's defaults.
   const coins = visibleMarkets.length > 0
     ? visibleMarkets.map((m) => m.coin)
-    : ([...DEFAULT_COINS] as string[]);
+    : ([...defaults] as string[]);
 
-  return { coins, markets: visibleMarkets, loading, error };
+  return { coins, markets: visibleMarkets, allMarkets, counts, assetClass, defaults, loading, error };
 }

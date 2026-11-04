@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/api';
 import {
-  DEFAULT_COINS,
   OTHER_KEY,
   getCoinColor,
 } from '@/lib/coins';
 import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { AssetClassToggle } from '@/components/AssetClassToggle';
 
 /**
  * Reusable coin selector that matches the Hyperliquid layout:
@@ -63,7 +63,9 @@ export interface CoinSelectorProps {
 }
 
 export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOther }: CoinSelectorProps) {
-  const { coins: allCoins, loading } = useAvailableCoins();
+  // `allCoins` and `defaults` are already narrowed to the site-wide asset
+  // class (All / Crypto / Stocks) — see useAvailableCoins.
+  const { coins: allCoins, loading, defaults, assetClass } = useAvailableCoins();
   const enabledSet = new Set(enabled);
 
   // Self-heal on network switch: when the available-coin list changes (e.g.
@@ -76,11 +78,20 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   const availKey = allCoins.join(',');
   useEffect(() => {
     if (loading) return;
-    const valid = new Set<string>([...allCoins, OTHER_KEY, ...DEFAULT_COINS]);
+    const valid = new Set<string>([...allCoins, OTHER_KEY, ...defaults]);
     const pruned = enabled.filter((c) => valid.has(c));
+    // Asset-class flip (e.g. Crypto → Stocks) prunes EVERY selected coin
+    // (BTC/ETH/SOL aren't stocks). Rather than leave the chart blank, seed
+    // the new class's defaults — keeping "Other" if it was on.
+    const hadCoin = enabled.some((c) => c !== OTHER_KEY);
+    const hasCoin = pruned.some((c) => c !== OTHER_KEY);
+    if (hadCoin && !hasCoin) {
+      onChange([...defaults, ...(enabledSet.has(OTHER_KEY) ? [OTHER_KEY] : [])]);
+      return;
+    }
     if (pruned.length !== enabled.length) onChange(pruned);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availKey, loading]);
+  }, [availKey, loading, assetClass]);
 
   // Count coins toward the `maxCount` cap — Others and extra pills don't count.
   const coinCount = enabled.filter(c => c !== OTHER_KEY).length;
@@ -115,9 +126,9 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   //
   // Order: defaults first (stable), then user-added in BULK's listing order.
   const visiblePillCoins: string[] = [
-    ...DEFAULT_COINS,
+    ...defaults,
     ...allCoins.filter(
-      (c) => !(DEFAULT_COINS as readonly string[]).includes(c) && enabledSet.has(c)
+      (c) => !defaults.includes(c) && enabledSet.has(c)
     ),
   ];
 
@@ -128,9 +139,9 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   const matchesSearch = (coin: string) =>
     searchLower === '' || coin.toLowerCase().includes(searchLower);
 
-  const defaultsInDropdown = (DEFAULT_COINS as readonly string[]).filter(matchesSearch);
+  const defaultsInDropdown = defaults.filter(matchesSearch);
   const othersInDropdown = allCoins
-    .filter((c) => !(DEFAULT_COINS as readonly string[]).includes(c))
+    .filter((c) => !defaults.includes(c))
     .filter(matchesSearch);
 
   // Count for the "N coins selected" trigger — everything the user has on
@@ -175,6 +186,9 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
           `items-start` on the parent keeps pills left-aligned and prevents
           a single standalone pill from stretching full-width. */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* Site-wide All / Crypto / Stocks filter. Lives in every selector so
+            it can be flipped from any chart; every chart follows. */}
+        <AssetClassToggle />
         {visiblePillCoins.map((coin) => (
           <CoinPill
             key={coin}

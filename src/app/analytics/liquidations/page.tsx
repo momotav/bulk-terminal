@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
+import { useAssetClass } from '@/hooks/useAssetClass';
 import { HIDDEN_COINS } from '@/lib/coins';
 import { ChartFrame } from '@/components/ChartFrame';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -276,12 +277,16 @@ function LiquidationTreemap({
 
   // Group raw liquidation events by symbol. Each cell's color is determined
   // by which side (long vs short) has more cumulative liquidation value.
+  // Site-wide All / Crypto / Stocks filter — cells outside the class are
+  // dropped, so the treemap (and its total) narrows with every other chart.
+  const { isIn } = useAssetClass();
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
     const hiddenSet = new Set(HIDDEN_COINS);
     for (const item of data) {
       // Drop hidden symbols (e.g. XAU) so they don't appear as treemap cells.
       if (hiddenSet.has(item.symbol)) continue;
+      if (!isIn(item.symbol)) continue;
       if (!groups[item.symbol]) groups[item.symbol] = { long: 0, short: 0, total: 0 };
       if (item.side === 'long') groups[item.symbol].long += item.value;
       else groups[item.symbol].short += item.value;
@@ -298,7 +303,7 @@ function LiquidationTreemap({
       }))
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [data]);
+  }, [data, isIn]);
 
   const total = useMemo(
     () => treemapItems.reduce((sum, item) => sum + item.value, 0),
@@ -678,6 +683,10 @@ export default function LiquidationsPage() {
   const [marketPeriod, setMarketPeriod] = useState('all');
   const [selectedCoin, setSelectedCoin] = useState('BTC');
   const [featuredFilter, setFeaturedFilter] = useState('ALL');
+  // Site-wide All / Crypto / Stocks filter: when the feed is unfocused
+  // ("ALL") it still narrows to the class, so Stocks mode shows only stock
+  // liquidations. (Focused on one coin, the picker already self-heals.)
+  const { isIn: inClass } = useAssetClass();
   const [chartRange, setChartRange] = useState({ start: 0, end: 100 });
   
   // Data state
@@ -1056,7 +1065,7 @@ export default function LiquidationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {featuredData.data.map((liq: any) => (
+                {featuredData.data.filter((liq: any) => inClass(String(liq.symbol ?? liq.coin ?? liq.market ?? ''))).map((liq: any) => (
                   <tr key={liq.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-base)] transition-colors">
                     <td className="py-3 md:py-4">
                       <div className="flex items-center gap-2 md:gap-3">

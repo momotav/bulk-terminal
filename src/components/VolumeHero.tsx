@@ -3,30 +3,39 @@
 // VolumeHero — the landing page's lead card (ASXN/Hyperliquid style): a big
 // volume headline (24h ↔ all-time) over a per-coin stacked volume-history chart
 // with a continuous cumulative line, a bar/line/area switcher, and timeframe
-// pills. Fixed BTC/ETH/SOL/Other stacks (no coin selector). The cumulative line
+// pills. Fixed default/Other stacks (no coin selector). The cumulative line
 // comes straight from the backend, which anchors it to all-time − window volume,
 // so it always starts at (total volume − this window's volume) and ends at the
 // true all-time total.
+//
+// Asset classes: the site-wide All / Crypto / Stocks filter applies here too.
+// Narrowed, the stacks become that class's defaults (SNDK/MU/NVDA for stocks),
+// the 24h headline is the sum of the class's per-market 24h volume from the
+// live tickers (BULK's own rolling 24h, not since-midnight), the all-time
+// headline is the class's share of the daily history, and the cumulative line
+// is re-anchored the same way the backend does it (all-time − window).
 
 import { useEffect, useMemo, useState } from 'react';
 import { Area, Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { BarChart3, Activity, TrendingUp } from 'lucide-react';
 import { AnimatedNumber } from './AnimatedNumber';
+import { AssetClassToggle } from './AssetClassToggle';
 import { analytics, cn, formatCompact, type ChartData } from '@/lib/api';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { getCoinColor, OTHER_KEY, adaptLegacyRow } from '@/lib/coins';
+import { useAssetClass } from '@/hooks/useAssetClass';
+import type { BulkTicker } from '@/hooks/useTickers';
+import { getCoinColor, OTHER_KEY, adaptLegacyRow, sumCoins } from '@/lib/coins';
 
 const CUMULATIVE_COLOR = 'var(--accent)';
-// Fixed stacks, bottom→top (BTC ends up on top, Other above it).
-const STACK = ['SOL', 'ETH', 'BTC', OTHER_KEY] as const;
 
+const ALL_HOURS = 8760 * 3;
 const RANGES: { label: string; hours: number }[] = [
   { label: '1D', hours: 24 },
   { label: '1W', hours: 168 },
   { label: '1M', hours: 720 },
   { label: '3M', hours: 2160 },
-  { label: 'ALL', hours: 8760 * 3 },
+  { label: 'ALL', hours: ALL_HOURS },
 ];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
@@ -35,15 +44,21 @@ const fmtUsd = (n: number): string => `$${formatCompact(n)}`;
 const coinsFromRow = (row: ChartData): Record<string, number> =>
   (row.coins && typeof row.coins === 'object') ? (row.coins as Record<string, number>) : adaptLegacyRow(row as Record<string, unknown>).coins;
 
-export function VolumeHero() {
+export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
+  const { narrowed, defaults, filterDict, isIn, label: classLabel } = useAssetClass();
   const [hours, setHours] = useState(24);
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
   const [headlineMode, setHeadlineMode] = useState<'24h' | 'all'>('24h');
   const [rows, setRows] = useState<ChartData[]>([]);
+  const [allRows, setAllRows] = useState<ChartData[]>([]);
   const [vol24h, setVol24h] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Fixed stacks, bottom→top: the class defaults reversed (so the first
+  // default — BTC, or SNDK — ends up on top) with Other above it.
+  const stack = useMemo(() => [...[...defaults].reverse(), OTHER_KEY], [defaults]);
 
   // Headline 24h number (true rolling window from exchange-stats).
   useEffect(() => {
@@ -68,25 +83,66 @@ export function VolumeHero() {
     return () => { cancelled = true; };
   }, [hours, network]);
 
-  // Shape rows to fixed BTC/ETH/SOL/Other stacks; keep the backend's Cumulative
-  // verbatim so the line starts at (all-time − window) and ends at all-time.
-  const data = useMemo(() => rows.map((r) => {
-    const dict = coinsFromRow(r);
-    const btc = dict.BTC || 0, eth = dict.ETH || 0, sol = dict.SOL || 0;
-    const total = typeof (r as any).total === 'number' ? (r as any).total : (btc + eth + sol + Object.entries(dict).reduce((s, [k, v]) => (['BTC', 'ETH', 'SOL'].includes(k) ? s : s + (v || 0)), 0));
-    const other = Math.max(0, total - btc - eth - sol);
-    return { timestamp: r.timestamp, BTC: btc, ETH: eth, SOL: sol, [OTHER_KEY]: other, total, Cumulative: Number((r as any).Cumulative) || 0 };
-  }), [rows]);
+  // Narrowed to a class we need the FULL daily history too: the backend's
+  // Cumulative and all-time total are exchange-wide, so the class versions are
+  // rebuilt here from the per-coin dicts (all-time − window, like the backend).
+  useEffect(() => {
+    if (!narrowed) { setAllRows([]); return; }
+    let cancelled = false;
+    analytics.getVolumeFromBulkAPI(ALL_HOURS)
+      .then((d) => { if (!cancelled) setAllRows(Array.isArray(d) ? d : []); })
+      .catch(() => { if (!cancelled) setAllRows([]); });
+    return () => { cancelled = true; };
+  }, [narrowed, network]);
 
-  const allTimeTotal = data.length > 0 ? data[data.length - 1].Cumulative : 0;
-  const headlineValue = headlineMode === 'all' ? allTimeTotal : (vol24h ?? 0);
-  const headlineReady = headlineMode === 'all' ? data.length > 0 : vol24h != null;
+  // Class 24h headline: sum of the class's per-market rolling-24h quote volume.
+  const classVol24h = useMemo(() => {
+    if (!narrowed) return null;
+    return tickers.filter((t) => isIn(t.symbol)).reduce((s, t) => s + (t.quoteVolume || 0), 0);
+  }, [tickers, narrowed, isIn]);
+
+  // Shape rows to fixed default/Other stacks. Exchange-wide: keep the backend's
+  // total + Cumulative verbatim. Narrowed: everything from the filtered dicts.
+  const { data, allTimeTotal } = useMemo(() => {
+    const classTotal = (r: ChartData) => sumCoins(filterDict(coinsFromRow(r)));
+    const allTotal = narrowed ? allRows.reduce((s, r) => s + classTotal(r), 0) : 0;
+    let cumulative = 0;
+    if (narrowed) {
+      const windowTotal = rows.reduce((s, r) => s + classTotal(r), 0);
+      cumulative = Math.max(0, allTotal - windowTotal);
+    }
+    const shaped = rows.map((r) => {
+      const dict = filterDict(coinsFromRow(r));
+      const total = narrowed
+        ? sumCoins(dict)
+        : (typeof (r as any).total === 'number' ? (r as any).total : sumCoins(dict));
+      const out: Record<string, number | string> = { timestamp: r.timestamp, total };
+      let named = 0;
+      for (const c of defaults) { const v = dict[c] || 0; out[c] = v; named += v; }
+      out[OTHER_KEY] = Math.max(0, total - named);
+      if (narrowed) { cumulative += total; out.Cumulative = cumulative; }
+      else out.Cumulative = Number((r as any).Cumulative) || 0;
+      return out;
+    });
+    const last = shaped[shaped.length - 1];
+    return {
+      data: shaped,
+      allTimeTotal: narrowed ? allTotal : (last ? Number(last.Cumulative) : 0),
+    };
+  }, [rows, allRows, narrowed, defaults, filterDict]);
+
+  const headlineValue = headlineMode === 'all'
+    ? allTimeTotal
+    : (narrowed ? (classVol24h ?? 0) : (vol24h ?? 0));
+  const headlineReady = headlineMode === 'all'
+    ? (narrowed ? allRows.length > 0 : data.length > 0)
+    : (narrowed ? tickers.length > 0 : vol24h != null);
 
   const changePct = useMemo(() => {
     if (data.length < 2) return null;
-    const prev = data[data.length - 2].total;
+    const prev = Number(data[data.length - 2].total);
     if (!prev) return null;
-    return ((data[data.length - 1].total - prev) / prev) * 100;
+    return ((Number(data[data.length - 1].total) - prev) / prev) * 100;
   }, [data]);
 
   const fmtAxis = (ts: string) => {
@@ -121,6 +177,11 @@ export function VolumeHero() {
                 {m === '24h' ? '24h Volume' : 'Total Volume'}
               </button>
             ))}
+            {narrowed && (
+              <span className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                {classLabel}
+              </span>
+            )}
           </div>
           <div className="mt-1 flex items-baseline gap-2.5">
             <span className="text-[34px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[40px]">
@@ -134,10 +195,11 @@ export function VolumeHero() {
             {headlineMode === 'all' && <span className="text-[13px] font-medium text-[var(--role-content-subtle)]">all-time</span>}
           </div>
         </div>
-        {/* Toolbar. JSX order is chart-type then timeframe. On mobile we
-            flex-col-reverse so the timeframe pills land ON TOP and the chart-type
-            icons sit under them; from sm up it's the normal side-by-side row. */}
+        {/* Toolbar. JSX order is class toggle, chart-type, timeframe. On mobile
+            we flex-col-reverse so the timeframe pills land ON TOP; from sm up
+            it's the normal side-by-side row. */}
         <div className="flex flex-col-reverse items-end gap-1.5 shrink-0 sm:flex-row sm:items-center sm:gap-2">
+          <AssetClassToggle />
           <div className="flex items-center gap-0.5 rounded-lg bg-[var(--role-surface-raised)]/60 p-0.5">
             {([
               { key: 'bar', Icon: BarChart3, label: 'Bars' },
@@ -196,7 +258,7 @@ export function VolumeHero() {
                 labelFormatter={(t) => fmtLabel(t as string)}
                 formatter={(v: number, n: string) => [`$${formatCompact(Number(v))}`, n === OTHER_KEY ? 'Other' : n]}
               />
-              {chartType === 'bar' && STACK.map((coin, i, arr) => (
+              {chartType === 'bar' && stack.map((coin, i, arr) => (
                 <Bar key={coin} yAxisId="left" dataKey={coin} name={coin === OTHER_KEY ? 'Other' : coin} stackId="v" fill={getCoinColor(coin)} maxBarSize={48}
                   radius={i === arr.length - 1 ? [2, 2, 0, 0] : undefined} isAnimationActive animationDuration={600} animationEasing="ease-out" />
               ))}

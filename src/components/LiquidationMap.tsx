@@ -17,9 +17,9 @@ import { analytics, cn, formatCompact, type Candle } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
-const COINS = ['BTC', 'ETH', 'SOL', 'HYPE', 'PUMP', 'ZEC'];
 const GRAN = { fine: 140, medium: 80, coarse: 40 } as const;
 type Gran = keyof typeof GRAN;
 
@@ -32,6 +32,16 @@ export function LiquidationMap({ lockedCoin, embedded }: { lockedCoin?: string; 
   const isMobile = useIsMobile();
   const [coin, setCoin] = useState(lockedCoin ?? 'BTC');
   useEffect(() => { if (lockedCoin) setCoin(lockedCoin); }, [lockedCoin]);
+  // Coin tabs = the live market list, narrowed by the site-wide
+  // All / Crypto / Stocks filter (so flipping to Stocks shows stock tabs).
+  // Self-heal when the current coin drops out of the list (class flip).
+  const { coins: COINS, defaults, loading: coinsLoading } = useAvailableCoins();
+  const coinsKey = COINS.join(',');
+  useEffect(() => {
+    if (lockedCoin || coinsLoading || COINS.length === 0) return;
+    if (!COINS.includes(coin)) setCoin(defaults.find((c) => COINS.includes(c)) ?? COINS[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coinsKey, coinsLoading, lockedCoin]);
   const [mode, setMode] = useState<'profile' | 'heatmap'>('profile');
   const [gran, setGran] = useState<Gran>('medium');
   const [denom, setDenom] = useState<'coin' | 'usd'>('usd');

@@ -29,6 +29,11 @@ const LOCAL: Record<string, string> = {
   MON: '/coins/MON.png', NEAR: '/coins/NEAR.png', PUMP: '/coins/PUMP.png', SUI: '/coins/SUI.png', TAO: '/coins/TAO.png',
   XAU: '/coins/XAU.png', ZEC: '/coins/ZEC.png', DOGE: '/coins/DOGE.png', AAVE: '/coins/AAVE.png',
   PAXG: '/coins/PAXG.png',
+  // Stock perps (listed 2026-11). NVDA/TSLA/MSTR/MU/SNDK are real company
+  // marks; SKHYNIX/CRCL/SPACEX had no public logo source so they're simple
+  // hand-drawn SVG marks — swap in the real ones whenever we get them.
+  NVDA: '/coins/NVDA.png', TSLA: '/coins/TSLA.png', MSTR: '/coins/MSTR.png', MU: '/coins/MU.png',
+  SNDK: '/coins/SNDK.png', SKHYNIX: '/coins/SKHYNIX.svg', CRCL: '/coins/CRCL.svg', SPACEX: '/coins/SPACEX.svg',
 };
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '').toUpperCase();

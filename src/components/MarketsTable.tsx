@@ -8,11 +8,14 @@
 // so the table stays readable from 1920px down to a phone.
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCompact } from '@/lib/api';
 import { type BulkTicker, formatPrice, openInterestUsd } from '@/hooks/useTickers';
+import { useAssetClass } from '@/hooks/useAssetClass';
+import { coinClass, STOCK_NAMES } from '@/lib/coins';
 import { CoinDetailModal } from '@/components/CoinDetailModal';
 import { CoinIcon } from '@/components/CoinIcon';
+import { AssetClassToggle } from '@/components/AssetClassToggle';
 
 interface MarketsTableProps {
   tickers: BulkTicker[];
@@ -33,15 +36,29 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const selectedTicker = tickers.find((t) => t.symbol === selectedSymbol) ?? null;
 
+  // Site-wide All / Crypto / Stocks filter. Counts come from the full feed so
+  // the caption can say "23 crypto · 8 stocks" even while narrowed.
+  const { assetClass, isIn, narrowed } = useAssetClass();
+  const counts = useMemo(() => {
+    const c = { all: tickers.length, crypto: 0, stock: 0 };
+    for (const t of tickers) c[coinClass(t.symbol)] += 1;
+    return c;
+  }, [tickers]);
+  const rows = useMemo(() => tickers.filter((t) => isIn(t.symbol)), [tickers, isIn]);
+  const caption = loading
+    ? 'Loading'
+    : narrowed
+      ? `${rows.length} ${assetClass === 'stock' ? 'stock' : 'crypto'} perps · ${counts.all} total`
+      : `${counts.all} active perps · ${counts.crypto} crypto · ${counts.stock} stocks`;
+
   return (
     <div className={`glass-card flex h-full flex-col ${flush ? 'panel-flush' : ''}`}>
       <div className="panel-header">
         <div className="min-w-0">
           <h2 className="panel-title t-h2 truncate">Markets</h2>
-          <p className="t-caption truncate">
-            {loading ? 'Loading' : `${tickers.length} active perps`}
-          </p>
+          <p className="t-caption truncate">{caption}</p>
         </div>
+        <AssetClassToggle counts={counts} className="mr-3 hidden sm:inline-flex" />
         <Link
           href="/analytics/general"
           className="group inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-muted)] transition-colors hover:text-[var(--role-content)]"
@@ -57,7 +74,7 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
       </div>
 
       {/* Column header */}
-      {!loading && tickers.length > 0 && (
+      {!loading && rows.length > 0 && (
         <div className="flex items-center gap-3 border-b border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 px-5 py-2">
           {/* Column priority, widest breakpoint last to disappear:
               Market / Last / 24h always → Volume + OI at lg → Funding at
@@ -85,14 +102,16 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
               </div>
             ))}
           </div>
-        ) : tickers.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
             <p className="t-body text-[var(--role-content-muted)]">No markets available</p>
-            <p className="t-caption mt-1">The exchange feed is not reporting any active perps.</p>
+            <p className="t-caption mt-1">
+              {narrowed ? 'No markets in this class right now.' : 'The exchange feed is not reporting any active perps.'}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-[var(--role-line-subtle)]">
-            {tickers.map((t, i) => {
+            {rows.map((t, i) => {
               const up = t.priceChangePercent >= 0;
               const signal = up ? 'var(--role-signal-positive)' : 'var(--role-signal-negative)';
               return (
@@ -113,6 +132,13 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
                     <span className="truncate font-sans text-xs font-medium tracking-tight text-[var(--role-content)]">
                       {t.symbol}
                     </span>
+                    {/* Company name for stock perps — the ticker alone
+                        (SNDK, SKHYNIX, CRCL) isn't obvious to a crypto crowd. */}
+                    {STOCK_NAMES[t.symbol.replace(/-USD$/i, '')] && (
+                      <span className="t-caption hidden truncate md:inline">
+                        {STOCK_NAMES[t.symbol.replace(/-USD$/i, '')]}
+                      </span>
+                    )}
                   </span>
 
                   {/* Last price */}
