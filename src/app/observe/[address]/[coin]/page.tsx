@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
 import { buildTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
+import { anchorFills } from '@/lib/walletMetrics';
 import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
 import { TradeShareCard } from '@/components/TradeShareCard';
@@ -70,7 +71,7 @@ export default function ObserveTradePage() {
       let fl: WalletFill[] = [];
       for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
         try {
-          const r = await wallet.getFills(address, { symbol: `${coin}-USD`, limit: 1000 });
+          const r = await wallet.getFills(address, { symbol: `${coin}-USD`, limit: 40000 });
           fl = r.fills || [];
           if (fl.length > 0) break;
         } catch { /* transient — retry below */ }
@@ -94,7 +95,10 @@ export default function ObserveTradePage() {
       }
       if (cancelled) return;
       setWalletData(wd);
-      setFills(fl);
+      // Very busy wallets outrun BULK's fill history, so seed the walk from the
+      // live position rather than letting it start flat and guess the side.
+      const live = wd?.live?.positions?.find((p) => p.symbol === `${coin}-USD`);
+      setFills(live ? anchorFills(fl, live.size, live.price).fills : fl);
       setClosedPositions(cp);
       setLoading(false);
     })();

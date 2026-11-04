@@ -270,8 +270,13 @@ export interface WalletData {
     positions: Array<{
       symbol: string;
       size: number;
+      /** Average entry price. */
       price: number;
+      /** BULK's fair price for the market: the mark this position is valued at. */
+      fairPrice?: number;
       notional: number;
+      /** Funding paid (negative) or received on this position so far. */
+      funding?: number;
       /** Net realized on this position (gross + fees + funding). */
       realizedPnl?: number;
       unrealizedPnl: number;
@@ -288,6 +293,18 @@ export interface WalletData {
      *  leverage — and thus initial margin — for a CLOSED trade even when no live
      *  position in that market exists. */
     leverageSettings?: Array<{ symbol: string; leverage: number }>;
+    /** Resting orders, including stops and take-profits. `size` is negative for a sell. */
+    openOrders?: Array<{
+      symbol: string;
+      orderId: string;
+      price: number;
+      size: number;
+      reduceOnly?: boolean;
+      orderType?: string;
+      trigger?: { isAbove: boolean; px: number } | null;
+    }>;
+    /** BULK's fee tier, with the rolling volume that earned it. */
+    feeTiers?: Array<{ symbol: string; rollingVolume: number; makerBps: number; takerBps: number; windowDays: number }>;
   } | null;
   markPrices: Record<string, number>;
   tracked: {
@@ -295,6 +312,8 @@ export interface WalletData {
     total_volume: number;
     total_trades: number;
     total_liquidations: number;
+    first_seen?: string;
+    adl_value?: number | string;
   } | null;
   history: Array<{
     timestamp: string;
@@ -1508,11 +1527,12 @@ export const wallet = {
   // DB) so the chart reflects fills that just happened a few seconds ago.
   async getFills(
     address: string,
-    opts: { symbol?: string; limit?: number } = {}
+    opts: { symbol?: string; limit?: number; lite?: boolean } = {}
   ): Promise<{ fills: WalletFill[] }> {
     const params = new URLSearchParams();
     if (opts.symbol) params.set('symbol', opts.symbol);
     if (opts.limit) params.set('limit', String(opts.limit));
+    if (opts.lite) params.set('lite', '1');
     const qs = params.toString();
     return request(
       `/api/wallet/${address}/fills${qs ? `?${qs}` : ''}`
