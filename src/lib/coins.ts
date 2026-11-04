@@ -59,7 +59,9 @@ export type AssetClass = 'all' | 'crypto' | 'stock';
 export const ASSET_CLASSES: readonly { key: AssetClass; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'crypto', label: 'Crypto' },
-  { key: 'stock', label: 'Stocks' },
+  // User-facing label is "TradFi" (user's call, 2026-11-04); the key stays
+  // 'stock' because it's persisted in localStorage and stamped by the backend.
+  { key: 'stock', label: 'TradFi' },
 ];
 
 /** Base symbols BULK lists that are equities (or equity-like, e.g. SPACEX). */

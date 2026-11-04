@@ -48,8 +48,8 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
   const caption = loading
     ? 'Loading'
     : narrowed
-      ? `${rows.length} ${assetClass === 'stock' ? 'stock' : 'crypto'} perps · ${counts.all} total`
-      : `${counts.all} active perps · ${counts.crypto} crypto · ${counts.stock} stocks`;
+      ? `${rows.length} ${assetClass === 'stock' ? 'TradFi' : 'crypto'} perps · ${counts.all} total`
+      : `${counts.all} active perps · ${counts.crypto} crypto · ${counts.stock} TradFi`;
 
   return (
     <div className={`glass-card flex h-full flex-col ${flush ? 'panel-flush' : ''}`}>
