@@ -284,11 +284,13 @@ export function marketBreakdown(input: {
 export interface TreeRect<T> { item: T; x: number; y: number; w: number; h: number }
 
 /** Squarified treemap (Bruls et al.): rows of cells kept as close to square as it can. */
-export function squarify<T>(items: { item: T; value: number }[], width: number, height: number): TreeRect<T>[] {
-  const total = items.reduce((s, i) => s + i.value, 0);
+export function squarify<T>(items: { item: T; value: number }[], width: number, height: number, last?: { item: T; value: number }): TreeRect<T>[] {
+  const total = items.reduce((s, i) => s + i.value, 0) + (last?.value ?? 0);
   if (total <= 0 || width <= 0 || height <= 0) return [];
   const scale = (width * height) / total;
   const queue = items.filter((i) => i.value > 0).sort((a, b) => b.value - a.value).map((i) => ({ item: i.item, area: i.value * scale }));
+  // Whatever is placed last fills what's left, which is always the bottom-right corner.
+  if (last && last.value > 0) queue.push({ item: last.item, area: last.value * scale });
   const out: TreeRect<T>[] = [];
   let x = 0, y = 0, w = width, h = height;
   const worst = (row: { area: number }[], side: number) => {

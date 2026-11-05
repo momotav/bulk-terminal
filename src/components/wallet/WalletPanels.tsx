@@ -126,15 +126,15 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
     const total = sorted.reduce((sum, r) => sum + metric(r), 0);
     const area = dims.w * dims.h;
     if (total <= 0 || area <= 0) return [];
-    // Every market stays on the map. Those too small for text share one corner as
+    // Every market stays on the map. Those too small for text share the bottom-right corner as
     // squares, sized equally because at that scale true proportions would be dots.
     const big = sorted.filter((r) => metric(r) >= (MIN_CELL_AREA / area) * total);
     const small = sorted.filter((r) => !big.includes(r));
     const smallValue = Math.max(small.reduce((sum, r) => sum + metric(r), 0), ((small.length * SQUARE_AREA) / area) * total);
-    const rects = squarify<MarketRow | null>([
-      ...big.map((item) => ({ item, value: metric(item) })),
-      ...(small.length ? [{ item: null, value: smallValue }] : []),
-    ], dims.w, dims.h);
+    const rects = squarify<MarketRow | null>(
+      big.map((item) => ({ item, value: metric(item) })), dims.w, dims.h,
+      small.length ? { item: null, value: smallValue } : undefined,
+    );
     return rects.flatMap((r) => (r.item
       ? [{ ...r, item: r.item, square: false }]
       : gridCells(small.length, r.w, r.h).map((g, i) => ({ item: small[i], x: r.x + g.x, y: r.y + g.y, w: g.w, h: g.h, square: true }))));
