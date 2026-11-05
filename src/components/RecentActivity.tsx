@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Flame, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { formatCompact, formatAddress, timeAgo, cn } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
+import { CoinIcon } from '@/components/CoinIcon';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -116,7 +117,6 @@ export function RecentActivity({ flush = false }: RecentActivityProps) {
           one system rather than two separately-designed widgets. */}
       {!loading && filtered.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[var(--role-line-subtle)] bg-[var(--role-background)]/40">
-          <span className="table-header w-7">Type</span>
           <span className="table-header flex-1">Market</span>
           {/* Wallet, time and price each earn a real column once the panel
               is wide enough. Below those breakpoints they fold back under
@@ -155,12 +155,11 @@ export function RecentActivity({ flush = false }: RecentActivityProps) {
           <div className="divide-y divide-[var(--border-secondary)]">
             <AnimatePresence initial={false}>
             {keyed.map(({ item, key }) => {
-              // One decision drives icon, chip tint, pill and value color,
+              // One decision drives pill and value color,
               // so a row can never disagree with itself about direction.
               const isLiq = item.type === 'liquidation';
               const isBuy = !isLiq && item.side === 'buy';
               const accent = isLiq || !isBuy ? 'var(--asks)' : 'var(--bids)';
-              const RowIcon = isLiq ? Flame : isBuy ? TrendingUp : TrendingDown;
 
               return (
                 <motion.div
@@ -173,31 +172,21 @@ export function RecentActivity({ flush = false }: RecentActivityProps) {
                   style={{ '--row-accent': accent } as React.CSSProperties}
                   className="data-row flex items-center gap-3 px-4 py-2.5"
                 >
-                  {/* Icon chip */}
-                  <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-xs)]"
-                    style={{
-                      color: accent,
-                      backgroundColor: `color-mix(in srgb, ${accent} 12%, transparent)`,
-                      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 22%, transparent)`,
-                    }}
-                  >
-                    <RowIcon className="h-3.5 w-3.5" strokeWidth={2} />
-                  </span>
+                  <CoinIcon symbol={item.symbol} size={22} className="shrink-0" />
 
                   {/* Market */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-medium text-[var(--role-content)]">
+                        {item.symbol}
+                      </span>
                       <span
                         className={cn(
-                          'side-pill',
+                          'side-pill shrink-0',
                           isLiq ? 'side-pill-rekt' : isBuy ? 'side-pill-buy' : 'side-pill-sell'
                         )}
                       >
-                        {isLiq ? 'Rekt' : item.side}
-                      </span>
-                      <span className="truncate text-xs font-medium text-[var(--role-content)]">
-                        {item.symbol}
+                        {isLiq ? `${item.side} liq` : item.side}
                       </span>
                     </div>
                     {/* Narrow-panel fallback: wallet and time fold under the
