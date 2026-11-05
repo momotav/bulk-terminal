@@ -16,13 +16,13 @@ import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard'
 import { useStore } from '@/store';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
 import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { RiskEventsList } from '@/components/RiskEventsList';
 import { PositionChartModal, type PositionForChart } from '@/components/PositionChartModal';
 import { ChartFrame } from '@/components/ChartFrame';
+import { PnlChart, type PnlHover } from '@/components/wallet/PnlChart';
 import { CoinIcon } from '@/components/CoinIcon';
 import { clampWicks } from '@/lib/candles';
 
@@ -134,27 +134,23 @@ function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
   const [picked, setPicked] = useState<Range | null>(null);
   const range: Range = picked ?? (curve.points.filter((p) => p.t >= Date.now() - 7 * 86_400_000).length >= 2 ? '7d' : 'all');
 
+  const [hover, setHover] = useState<PnlHover | null>(null);
+
+  // The line is PnL made inside the window, so it starts at zero and ends on the
+  // headline. All time starts from zero too: the wallet's first day.
   const data = useMemo(() => {
     const span = RANGES.find(([r]) => r === range)?.[1] ?? Infinity;
     const cutoff = Date.now() - span;
-    return thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
+    const inside = thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
+    if (!inside.length) return [];
+    const before = curve.points.filter((p) => p.t < cutoff).pop();
+    const start = before ? { t: cutoff, v: before.v } : { t: inside[0].t, v: range === 'all' ? 0 : inside[0].v };
+    return [start, ...inside].map((p) => ({ t: p.t, v: p.v - start.v }));
   }, [curve.points, curve.realizedOnlyUntil, range]);
 
-  const last = data.length ? data[data.length - 1].v : 0;
-  const headline = range === 'all' ? last : last - (data[0]?.v ?? 0);
-  const vals = data.map((d) => d.v);
-  const minV = vals.length ? Math.min(...vals) : 0;
-  const maxV = vals.length ? Math.max(...vals) : 0;
-  // Where zero falls in the gradient (0 = top, 1 = bottom).
-  const zero = maxV <= 0 ? 0 : minV >= 0 ? 1 : maxV / (maxV - minV);
-  const shortSpan = data.length > 1 && data[data.length - 1].t - data[0].t < 2 * 86_400_000;
-  // Evenly spaced, with a repeat of the same label dropped.
-  const tickLabel = (ts: number) => (shortSpan ? new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : shortDate(ts));
-  const ticks = data.length > 1
-    ? Array.from({ length: 7 }, (_, i) => data[0].t + ((data[data.length - 1].t - data[0].t) * i) / 6)
-        .filter((ts, i, all) => i === 0 || tickLabel(ts) !== tickLabel(all[i - 1]))
-    : [];
+  const headline = data.length ? data[data.length - 1].v : 0;
   const showsGap = curve.realizedOnlyUntil !== null && data.length > 0 && data[0].t < curve.realizedOnlyUntil;
+  const shown = hover ? hover.point.v : headline;
 
   const ranges = (
     <div className="flex items-center rounded-lg border border-[var(--border-color)] p-0.5 text-[12px]">
@@ -175,51 +171,20 @@ function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
         </div>
       ) : (
         <div className="px-5 pb-3 pt-4">
-          <div className="text-[28px] leading-none font-medium tabular-nums tracking-tight" style={{ color: pnlColor(headline) }}>{signed(headline)}</div>
-          <div className="mt-2 mb-3 text-[13px] text-[var(--role-content-muted)]">
-            {RANGE_LABEL[range]}
-            {showsGap && <span className="text-[var(--role-content-subtle)]"> · realized only before {shortDate(curve.realizedOnlyUntil as number)}</span>}
+          <div className="text-[28px] leading-none font-medium tabular-nums tracking-tight" style={{ color: pnlColor(shown) }}>{signed(shown)}</div>
+          <div className="mt-2 mb-4 text-[13px] text-[var(--role-content-muted)] truncate">
+            {hover ? (
+              new Date(hover.point.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+            ) : (
+              <>
+                {RANGE_LABEL[range]}
+                {showsGap && <span className="text-[var(--role-content-subtle)]"> · realized only before {shortDate(curve.realizedOnlyUntil as number)}</span>}
+              </>
+            )}
           </div>
-          {/* Explicit height: recharts' ResponsiveContainer is height:100% and
-              needs a definite height somewhere up the chain. */}
           <ChartFrame title="PnL history" className="h-[280px] sm:h-[400px]" walletAddress={address}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-                <defs>
-                  <linearGradient id="pnlLineGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--pos)" />
-                    <stop offset={`${zero * 100}%`} stopColor="var(--pos)" />
-                    <stop offset={`${zero * 100}%`} stopColor="var(--neg)" />
-                    <stop offset="100%" stopColor="var(--neg)" />
-                  </linearGradient>
-                  <linearGradient id="pnlFillGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--pos)" stopOpacity={0.3} />
-                    <stop offset={`${zero * 100}%`} stopColor="var(--pos)" stopOpacity={0.08} />
-                    <stop offset={`${zero * 100}%`} stopColor="var(--neg)" stopOpacity={0.08} />
-                    <stop offset="100%" stopColor="var(--neg)" stopOpacity={0.3} />
-                  </linearGradient>
-                  {/* Engraved hatch over the fill, the same texture as the dashboard sparklines. */}
-                  <pattern id="pnlHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                    <line x1="0" y1="0" x2="0" y2="5" stroke="var(--role-content)" strokeWidth="0.6" strokeOpacity={0.06} />
-                  </pattern>
-                </defs>
-                {/* A real time axis. On a category axis the seven weeks before the
-                    first snapshot collapsed into a sliver. */}
-                <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={ticks} interval="preserveStartEnd" minTickGap={40}
-                  tickFormatter={tickLabel}
-                  tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
-                <YAxis tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={56} domain={['auto', 'auto']} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                  labelStyle={{ color: 'var(--text-secondary)' }}
-                  labelFormatter={(ts) => new Date(ts as number).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
-                  formatter={(value: number) => [<span key="v" style={{ color: pnlColor(value) }}>{signed(value)}</span>, 'Total PnL']}
-                />
-                {/* No draw-on animation: the data refreshes every 10s. */}
-                <Area type="linear" dataKey="v" stroke="url(#pnlLineGradient)" strokeWidth={1.75} fill="url(#pnlFillGradient)" isAnimationActive={false} />
-                <Area type="linear" dataKey="v" stroke="none" fill="url(#pnlHatch)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <PnlChart points={data}
+              onHover={setHover} ariaLabel={`PnL ${RANGE_LABEL[range].toLowerCase()}: ${signed(headline)}`} />
           </ChartFrame>
         </div>
       )}

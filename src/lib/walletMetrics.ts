@@ -311,3 +311,38 @@ export function squarify<T>(items: { item: T; value: number }[], width: number, 
   }
   return out;
 }
+
+/**
+ * A calm version of the curve for drawing. Resample evenly in time, take a rolling
+ * median so a swing lasting a few percent of the window drops out, then average
+ * away the stairs the median leaves. Sustained moves stay: a real loss still reads
+ * as a steep fall. The windows narrow towards the edges, so the first and last
+ * points are exact and the line still ends on the live figure.
+ * Display only: every number on the page comes from the unsmoothed curve.
+ */
+export function smoothCurve(points: PnlPoint[], samples = 180): PnlPoint[] {
+  if (points.length < 3) return points;
+  const t0 = points[0].t;
+  const step = (points[points.length - 1].t - t0) / (samples - 1);
+  if (step <= 0) return points;
+
+  let j = 0;
+  const grid = Array.from({ length: samples }, (_, i) => {
+    const t = t0 + i * step;
+    while (j < points.length - 2 && points[j + 1].t <= t) j++;
+    const a = points[j];
+    const b = points[j + 1];
+    return a.v + (b.v - a.v) * Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t || 1)));
+  });
+
+  const pass = (vals: number[], radius: number, pick: (window: number[]) => number) =>
+    vals.map((_, i) => {
+      const r = Math.min(radius, i, vals.length - 1 - i);
+      return pick(vals.slice(i - r, i + r + 1));
+    });
+  const median = (w: number[]) => [...w].sort((a, b) => a - b)[w.length >> 1];
+  const mean = (w: number[]) => w.reduce((s, v) => s + v, 0) / w.length;
+
+  const out = pass(pass(pass(grid, Math.round(samples * 0.035), median), 3, mean), 3, mean);
+  return out.map((v, i) => ({ t: t0 + i * step, v }));
+}
