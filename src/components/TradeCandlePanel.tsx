@@ -220,7 +220,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       height: container.clientHeight || 360,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
       grid: { vertLines: { color: grid }, horzLines: { color: grid } },
-      crosshair: { mode: CrosshairMode.Normal },
+      crosshair: { mode: CrosshairMode.Normal, vertLine: { visible: false } },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false, rightOffset: 4 },
     });

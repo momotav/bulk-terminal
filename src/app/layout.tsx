@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import { DevnetBanner } from '@/components/DevnetBanner';
 import { CommandPalette } from '@/components/CommandPalette';
 import { BuildSkewGuard } from '@/components/BuildSkewGuard';
+import { FreeChartCursor } from '@/components/FreeChartCursor';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -78,6 +79,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${bulkFont.variable} ${fraunces.variable} font-sans antialiased`}>
         <PrivyProvider>
           <BuildSkewGuard />
+          <FreeChartCursor />
           <div className="min-h-screen flex flex-col">
             <Header />
             <CommandPalette />

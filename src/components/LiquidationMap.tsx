@@ -235,7 +235,7 @@ function HeatmapCandles({ gridL, gridS, pRows, pMin, pMax, peak, candles, price,
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
-      crosshair: { mode: 0 },
+      crosshair: { mode: 0, vertLine: { visible: false } },
     });
     const series = chart.addCandlestickSeries({
       upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg,

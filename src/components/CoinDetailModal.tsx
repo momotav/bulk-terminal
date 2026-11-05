@@ -236,7 +236,7 @@ export function CoinDetailModal({ ticker, onClose }: { ticker: BulkTicker | null
       height: container.clientHeight || 420,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11 },
       grid: { vertLines: { color: grid }, horzLines: { color: grid } },
-      crosshair: { mode: 0 },
+      crosshair: { mode: 0, vertLine: { visible: false } },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
       // On phones, DON'T let a touch drag pan the chart — let it scroll the

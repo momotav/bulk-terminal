@@ -493,6 +493,8 @@ export function PositionChartModal({ position, onClose }: Props) {
         // 0 = Normal (free crosshair that follows the cursor). Was 1 (Magnet),
         // which snapped the crosshair onto the nearest candle's OHLC.
         mode: 0,
+        // The shared FreeChartCursor line replaces this one, which snaps to bars.
+        vertLine: { visible: false },
       },
       rightPriceScale: {
         borderColor,

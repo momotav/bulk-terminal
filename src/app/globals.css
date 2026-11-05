@@ -1212,3 +1212,29 @@ html.light .trade-cta {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Free chart cursor: the hover line follows the mouse, see FreeChartCursor.tsx.
+   The libraries' own cursors snap to data points, so theirs are switched off. */
+.recharts-tooltip-cursor {
+  display: none;
+}
+.tv-lightweight-charts {
+  position: relative;
+}
+[data-free-cursor]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--cursor-top);
+  width: 1px;
+  height: var(--cursor-height);
+  transform: translateX(var(--cursor-x));
+  background: var(--role-content-muted);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 5;
+}
+.recharts-wrapper[data-free-cursor] .recharts-tooltip-wrapper {
+  transform: translate(var(--tip-x), var(--tip-y)) !important;
+  transition: none !important;
+}

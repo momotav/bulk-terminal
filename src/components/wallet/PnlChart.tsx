@@ -60,7 +60,7 @@ export function PnlChart({ points, onHover, ariaLabel }: {
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [active, setActive] = useState<number | null>(null);
+  const [cursorT, setCursorT] = useState<number | null>(null);
   const id = useId().replace(/:/g, '');
 
   useEffect(() => {
@@ -73,10 +73,7 @@ export function PnlChart({ points, onHover, ariaLabel }: {
     return () => ro.disconnect();
   }, []);
 
-  // The data refreshes on a timer; a stale index must not outlive the range it came from.
-  useEffect(() => { setActive(null); onHover(null); }, [points.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const line = useMemo(() => smoothCurve(points), [points]);
+    const line = useMemo(() => smoothCurve(points), [points]);
 
   const { w, h } = size;
   const plotW = Math.max(0, w - PAD.left - PAD.right);
@@ -108,13 +105,19 @@ export function PnlChart({ points, onHover, ariaLabel }: {
     if (tick >= t0 && x(tick) <= PAD.left + plotW - 16) xTicks.push(tick);
   }
 
-  /** The line's sample nearest a time. */
-  const sampleAt = (t: number) => line.reduce((best, p) => (Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), line[0]);
+  /** The drawn line's height at any moment, between its samples. */
+  const lineAt = (t: number) => {
+    const step = (t1 - t0) / (line.length - 1 || 1);
+    const i = Math.min(line.length - 2, Math.max(0, Math.floor((t - t0) / (step || 1))));
+    const a = line[i];
+    const b = line[i + 1] ?? a;
+    return a.v + (b.v - a.v) * Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t || 1)));
+  };
 
   const track = (clientX: number) => {
     const rect = box.current?.getBoundingClientRect();
     if (!rect || !plotW) return;
-    const t = t0 + ((clientX - rect.left - PAD.left) / plotW) * (t1 - t0);
+    const t = Math.min(t1, Math.max(t0, t0 + ((clientX - rect.left - PAD.left) / plotW) * (t1 - t0)));
     let lo = 0;
     let hi = points.length - 1;
     while (hi - lo > 1) {
@@ -122,13 +125,13 @@ export function PnlChart({ points, onHover, ariaLabel }: {
       if (points[mid].t <= t) lo = mid; else hi = mid;
     }
     const i = t - points[lo].t <= points[hi].t - t ? lo : hi;
-    setActive(i);
+    setCursorT(t);
     onHover({ point: points[i] });
   };
-  const clear = () => { setActive(null); onHover(null); };
+  const clear = () => { setCursorT(null); onHover(null); };
 
-  const hovered = active !== null ? points[active] : null;
-  const marker = hovered ? sampleAt(hovered.t) : line[line.length - 1];
+  // The dot rides the drawn line under the mouse; the headline reads the real figure.
+  const marker = cursorT !== null ? { t: cursorT, v: lineAt(cursorT) } : line[line.length - 1];
   const markerColor = marker && marker.v < 0 ? 'var(--neg)' : 'var(--pos)';
   const text = { fill: 'var(--text-tertiary)', fontSize: 11 } as const;
   const stop = (color: string, opacity: number) => ({ stopColor: color, stopOpacity: opacity });
@@ -187,7 +190,7 @@ export function PnlChart({ points, onHover, ariaLabel }: {
             <text key={t} x={x(t)} y={h - 6} textAnchor={x(t) < PAD.left + 20 ? 'start' : 'middle'} style={text}>{tickLabel(t)}</text>
           ))}
 
-          {hovered && <line x1={x(hovered.t)} x2={x(hovered.t)} y1={PAD.top} y2={PAD.top + plotH} style={{ stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />}
+          {cursorT !== null && <line x1={x(cursorT)} x2={x(cursorT)} y1={PAD.top} y2={PAD.top + plotH} style={{ stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />}
           {marker && (
             <>
               <circle cx={x(marker.t)} cy={y(marker.v)} r={8} style={{ fill: markerColor, fillOpacity: 0.22 }} />
