@@ -5,7 +5,7 @@
 // were already reconciled against BULK's account totals, and says so when a
 // busy wallet's history is partial instead of presenting a sample as a total.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, formatCompact, type WalletFunding } from '@/lib/api';
 import { coinOf, dayKey, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
@@ -70,16 +70,54 @@ export function PartialNote({ fills, oldest }: { fills: number; oldest: number |
 
 // ---- Market breakdown ------------------------------------------------------
 
-type TreeCell = MarketRow & { others?: number };
+type TreeCell = MarketRow & { members?: MarketRow[] };
 const MAX_CELLS = 18;
+/** Smallest tile worth drawing, in square pixels. Anything less joins Others. */
+const MIN_CELL_AREA = 7000;
+const TIP_WIDTH = 232;
+const TIP_GAP = 14;
 
-/** Net PnL per market as a treemap: size by volume or PnL, colour by bps on volume. */
+const bpsText = (n: number) => `${n < 0 ? '−' : n > 0 ? '+' : ''}${Math.abs(n).toFixed(2)} bps`;
+
+function CellTip({ cell, totalVolume }: { cell: TreeCell; totalVolume: number }) {
+  const line = (label: string, value: ReactNode, color?: string) => (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-[var(--role-content-muted)]">{label}</span>
+      <span className="tabular-nums" style={{ color: color ?? 'var(--role-content)' }}>{value}</span>
+    </div>
+  );
+  const share = totalVolume > 0 ? (cell.volume / totalVolume) * 100 : 0;
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-2">
+        {!cell.members && <CoinIcon symbol={cell.symbol} size={18} />}
+        <span className="text-[13px] font-medium text-[var(--role-content)]">{cell.members ? `${cell.members.length} smaller markets` : cell.symbol}</span>
+      </div>
+      <div className="space-y-1 text-[12px]">
+        {line('Net PnL', signed(cell.net), pnlColor(cell.net))}
+        {line('Volume', `$${formatCompact(cell.volume)} · ${share < 1 ? '<1' : share.toFixed(0)}%`)}
+        {line('Net on volume', bpsText(cell.bps))}
+        {!cell.members && line('Maker', `${(cell.makerShare * 100).toFixed(0)}%`)}
+      </div>
+      {cell.members && (
+        <div className="mt-2 pt-2 border-t border-[var(--role-line-subtle)] space-y-1 text-[12px]">
+          {cell.members.slice(0, 8).map((m) => <div key={m.symbol}>{line(coinOf(m.symbol), signed(m.net), pnlColor(m.net))}</div>)}
+          {cell.members.length > 8 && <div className="text-[var(--role-content-subtle)]">and {cell.members.length - 8} more</div>}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, makerShare }: {
   rows: MarketRow[]; exact: boolean; fills: number; oldest: number | null; totalVolume: number; makerShare: number;
 }) {
   const [sizeBy, setSizeBy] = useState<'volume' | 'pnl'>('volume');
   const box = useRef<HTMLDivElement | null>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [hover, setHover] = useState<{ symbol: string; x: number; y: number } | null>(null);
+  const tip = useRef<HTMLDivElement | null>(null);
+  const [tipH, setTipH] = useState(0);
   useEffect(() => {
     if (!box.current) return;
     const ro = new ResizeObserver(([e]) => setDims({ w: e.contentRect.width, h: e.contentRect.height }));
@@ -90,19 +128,44 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
   const metric = (r: MarketRow) => (sizeBy === 'volume' ? r.volume : Math.abs(r.net));
   const cells = useMemo(() => {
     const sorted = rows.filter((r) => metric(r) > 0).sort((a, b) => metric(b) - metric(a));
-    const head: TreeCell[] = sorted.slice(0, MAX_CELLS);
-    const tail = sorted.slice(MAX_CELLS);
-    if (tail.length) {
-      const volume = tail.reduce((s, r) => s + r.volume, 0);
-      const net = tail.reduce((s, r) => s + r.net, 0);
-      head.push({ symbol: `${tail.length} others`, volume, net, makerShare: 0, bps: volume ? (net / volume) * 10_000 : 0, others: tail.length });
+    const total = sorted.reduce((sum, r) => sum + metric(r), 0);
+    // Below this share of the total a tile is too small to carry its own name.
+    const floor = dims.w * dims.h > 0 ? (MIN_CELL_AREA / (dims.w * dims.h)) * total : 0;
+    let split = sorted.findIndex((r, i) => i >= MAX_CELLS || metric(r) < floor);
+    if (split === -1) split = sorted.length;
+    // A lone leftover has nothing to group with, so it keeps its own name.
+    if (split === sorted.length - 1) split = sorted.length;
+    const head: TreeCell[] = sorted.slice(0, split);
+    const members = sorted.slice(split);
+    const items = head.map((item) => ({ item, value: metric(item) }));
+    if (members.length) {
+      const volume = members.reduce((sum, r) => sum + r.volume, 0);
+      const net = members.reduce((sum, r) => sum + r.net, 0);
+      const makerShare = volume ? members.reduce((sum, r) => sum + r.makerShare * r.volume, 0) / volume : 0;
+      const item = { symbol: 'Others', volume, net, makerShare, bps: volume ? (net / volume) * 10_000 : 0, members };
+      // Kept to a readable size even when its markets add up to less.
+      items.push({ item, value: Math.max(members.reduce((sum, r) => sum + metric(r), 0), floor) });
     }
-    return squarify(head.map((item) => ({ item, value: metric(item) })), dims.w, dims.h);
+    return squarify(items, dims.w, dims.h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, sizeBy, dims.w, dims.h]);
 
   const peak = Math.max(1, ...rows.filter((r) => r.volume > 0).map((r) => Math.abs(r.bps)));
   const net = rows.reduce((s, r) => s + r.net, 0);
+
+  const track = (e: PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const cell = cells.find((c) => x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h);
+    setHover(cell ? { symbol: cell.item.symbol, x, y } : null);
+  };
+  const hovered = hover ? cells.find((c) => c.item.symbol === hover.symbol)?.item : undefined;
+  // Beside the mouse, flipping sides and clamping so it stays inside the map.
+  const tipX = hover ? (hover.x + TIP_GAP + TIP_WIDTH <= dims.w ? hover.x + TIP_GAP : Math.max(0, hover.x - TIP_GAP - TIP_WIDTH)) : 0;
+  const tipY = hover ? Math.max(0, Math.min(hover.y + TIP_GAP, dims.h - tipH)) : 0;
+  // Measured before paint: each tile's tooltip is a different height.
+  useLayoutEffect(() => { if (tip.current) setTipH(tip.current.offsetHeight); }, [hovered?.symbol]);
 
   return (
     <Panel title="Market breakdown" right={<Segmented value={sizeBy} options={[['volume', 'Volume'], ['pnl', 'PnL']] as const} onChange={setSizeBy} />}>
@@ -112,23 +175,47 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
         <span className="text-[var(--role-content-muted)]">Maker <span className="text-[var(--role-content)] tabular-nums">{(makerShare * 100).toFixed(0)}%</span></span>
         {totalVolume > 0 && exact && <span className="text-[var(--role-content-muted)]">Net <span className="tabular-nums" style={{ color: pnlColor(net) }}>{(net / totalVolume * 10_000).toFixed(2)} bps</span> on volume</span>}
       </div>
-      <div ref={box} className="relative mx-5 my-4 h-[320px] sm:h-[420px]">
+      <div ref={box} className="relative mx-5 my-4 h-[320px] sm:h-[420px]" style={{ touchAction: 'pan-y' }}
+        onPointerMove={track} onPointerDown={track} onPointerLeave={() => setHover(null)}>
         {cells.map(({ item: c, x, y, w, h }) => {
           // Square root keeps mid-sized edges visible next to a single outlier.
           const strength = c.volume > 0 ? Math.sqrt(Math.min(1, Math.abs(c.bps) / peak)) : 0.3;
-          const showName = w > 44 && h > 24;
-          const showValue = w > 76 && h > 48;
-          const showDetail = w > 200 && h > 96;
+          const large = w > 210 && h > 120;
+          const medium = w > 104 && h > 66;
+          const name = c.members ? `${c.members.length} others` : coinOf(c.symbol);
+          const active = hover?.symbol === c.symbol;
           return (
-            <div key={c.symbol} title={`${c.symbol}: ${signed(c.net)}, $${formatCompact(c.volume)} volume`}
-              className="absolute overflow-hidden rounded-lg flex flex-col items-center justify-center text-center p-1"
-              style={{ left: x + 1, top: y + 1, width: Math.max(0, w - 2), height: Math.max(0, h - 2), background: `color-mix(in srgb, ${pnlColor(c.net)} ${Math.round(8 + strength * 30)}%, var(--bg-muted))` }}>
-              {showName && <span className={cn('text-[var(--role-content)] truncate max-w-full', showDetail ? 'text-[15px]' : 'text-[12px]')}>{c.others ? c.symbol : coinOf(c.symbol)}</span>}
-              {showValue && <span className={cn('tabular-nums font-medium truncate max-w-full', showDetail ? 'text-[26px] leading-tight' : 'text-[14px]')} style={{ color: pnlColor(c.net) }}>{signed(c.net)}</span>}
-              {showDetail && !c.others && <span className="text-[12px] text-[var(--role-content-muted)] tabular-nums truncate max-w-full">{c.bps.toFixed(2)} bps · ${formatCompact(c.volume)} · {(c.makerShare * 100).toFixed(0)}% maker</span>}
+            <div key={c.symbol} role="img" aria-label={`${name}: ${signed(c.net)}, $${formatCompact(c.volume)} volume`}
+              className={cn('absolute overflow-hidden rounded-lg flex flex-col transition-opacity duration-150', large ? 'p-4' : 'p-2.5')}
+              style={{
+                left: x + 1, top: y + 1, width: Math.max(0, w - 2), height: Math.max(0, h - 2),
+                background: `color-mix(in srgb, ${pnlColor(c.net)} ${Math.round(8 + strength * 30 + (active ? 8 : 0))}%, var(--bg-muted))`,
+                opacity: hover && !active ? 0.6 : 1,
+                boxShadow: active ? `inset 0 0 0 1px color-mix(in srgb, ${pnlColor(c.net)} 55%, transparent)` : undefined,
+              }}>
+              <div className="flex items-center gap-1.5 min-w-0">
+                {!c.members && medium && <CoinIcon symbol={c.symbol} size={large ? 20 : 16} className="shrink-0" />}
+                <span className={cn('text-[var(--role-content)] truncate', large ? 'text-[15px]' : 'text-[12px]')}>{name}</span>
+              </div>
+              {/* Too narrow for the figure means no figure: a cut-off number reads as a wrong one. */}
+              {w >= 72 && (
+                <span className={cn('tabular-nums font-medium truncate', large ? 'mt-1.5 text-[28px] leading-none' : medium ? 'mt-1 text-[15px] leading-tight' : 'text-[12px] leading-tight')}
+                  style={{ color: `color-mix(in srgb, ${pnlColor(c.net)} 75%, var(--role-content))` }}>{signed(c.net)}</span>
+              )}
+              {large && (
+                <span className="mt-auto text-[12px] text-[var(--role-content-muted)] tabular-nums truncate">
+                  ${formatCompact(c.volume)} volume · {bpsText(c.bps)}
+                </span>
+              )}
             </div>
           );
         })}
+        {hovered && (
+          <div ref={tip} className="glass-tooltip pointer-events-none absolute z-20 rounded-lg border border-[var(--border-color)] p-3"
+            style={{ width: TIP_WIDTH, left: tipX, top: tipY }}>
+            <CellTip cell={hovered} totalVolume={totalVolume} />
+          </div>
+        )}
       </div>
       {!exact && <PartialNote fills={fills} oldest={oldest} />}
     </Panel>
