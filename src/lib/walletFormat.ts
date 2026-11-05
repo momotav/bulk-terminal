@@ -3,8 +3,10 @@
 import { formatNumber } from '@/lib/api';
 
 export const money = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`;
-export const signed = (n: number) => `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`;
-export const pnlColor = (n: number) => (n >= 0 ? 'var(--pos)' : 'var(--neg)');
+/** Under half a cent prints as $0.00, which is neither a gain nor a loss. */
+const isZero = (n: number) => Math.abs(n) < 0.005;
+export const signed = (n: number) => (isZero(n) ? '$0.00' : `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`);
+export const pnlColor = (n: number) => (isZero(n) ? 'var(--role-content)' : n >= 0 ? 'var(--pos)' : 'var(--neg)');
 export const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '');
 export const shortDate = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 // Fixed en-US. The shared ticker formatter follows the browser locale, which

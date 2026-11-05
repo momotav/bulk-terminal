@@ -8,7 +8,7 @@ import { wallet, analytics, formatNumber, formatCompact, formatAddress, formatPe
 import { isSystemWallet } from '@/lib/systemWallets';
 import type { WalletFill } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
-import { anchorFills, buildPnlCurve, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
+import { anchorFills, buildPnlCurve, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, trimQuietTail, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
 import { coinOf, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
 import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
@@ -130,26 +130,33 @@ const RANGE_LABEL: Record<Range, string> = { '24h': 'Last 24 hours', '7d': 'Last
 /** The page's one rich element: the total-PnL curve, with the calendar as its other view. */
 function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
   // The rail already carries the all-time figure, so open on the last week and
-  // show something new. A wallet quiet for a week opens on everything instead.
+  // show something new. A wallet that didn't move this week opens on everything instead.
   const [picked, setPicked] = useState<Range | null>(null);
-  const range: Range = picked ?? (curve.points.filter((p) => p.t >= Date.now() - 7 * 86_400_000).length >= 2 ? '7d' : 'all');
+  const week = curve.points.filter((p) => p.t >= Date.now() - 7 * 86_400_000).map((p) => p.v);
+  const range: Range = picked ?? (week.length >= 2 && Math.max(...week) - Math.min(...week) >= 0.01 ? '7d' : 'all');
 
   const [hover, setHover] = useState<PnlHover | null>(null);
 
   // The line is PnL made inside the window, so it starts at zero and ends on the
   // headline. All time starts from zero too: the wallet's first day.
-  const data = useMemo(() => {
+  const { data, quietSince } = useMemo(() => {
     const span = RANGES.find(([r]) => r === range)?.[1] ?? Infinity;
     const cutoff = Date.now() - span;
-    const inside = thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
-    if (!inside.length) return [];
+    const thinned = thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
+    if (!thinned.length) return { data: [], quietSince: null };
+    const { points: inside, quietSince } = range === 'all' ? trimQuietTail(thinned) : { points: thinned, quietSince: null };
     const before = curve.points.filter((p) => p.t < cutoff).pop();
-    const start = before ? { t: cutoff, v: before.v } : { t: inside[0].t, v: range === 'all' ? 0 : inside[0].v };
-    return [start, ...inside].map((p) => ({ t: p.t, v: p.v - start.v }));
+    // All time rises from zero just ahead of the first close, not in one vertical jump.
+    const lead = (inside[inside.length - 1].t - inside[0].t) * 0.03;
+    const start = before ? { t: cutoff, v: before.v } : range === 'all' ? { t: inside[0].t - lead, v: 0 } : inside[0];
+    // Whole cents: stored and live figures can disagree by a fraction of one, and
+    // the chart would stretch that fraction to full height.
+    const cents = (v: number) => Math.round(v * 100) / 100;
+    return { data: [start, ...inside].map((p) => ({ t: p.t, v: cents(p.v - start.v) })), quietSince };
   }, [curve.points, curve.realizedOnlyUntil, range]);
 
   const headline = data.length ? data[data.length - 1].v : 0;
-  const showsGap = curve.realizedOnlyUntil !== null && data.length > 0 && data[0].t < curve.realizedOnlyUntil;
+  const showsGap = !quietSince && curve.realizedOnlyUntil !== null && data.length > 0 && data[0].t < curve.realizedOnlyUntil;
   const shown = hover ? hover.point.v : headline;
 
   const ranges = (
@@ -179,6 +186,7 @@ function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
               <>
                 {RANGE_LABEL[range]}
                 {showsGap && <span className="text-[var(--role-content-subtle)]"> · realized only before {shortDate(curve.realizedOnlyUntil as number)}</span>}
+                {quietSince && <span className="text-[var(--role-content-subtle)]"> · no trades since {shortDate(quietSince)}</span>}
               </>
             )}
           </div>

@@ -6,13 +6,14 @@ import { smoothCurve, type PnlPoint } from '@/lib/walletMetrics';
 
 // Top clears ChartFrame's export buttons, which sit over the plot's corner.
 const PAD = { top: 44, right: 58, bottom: 24, left: 0 };
+const LINE_BLEED = 10;
 
 export interface PnlHover { point: PnlPoint }
 
 const axisMoney = (v: number) => `${v < 0 ? '−' : v > 0 ? '+' : ''}$${formatCompact(Math.abs(v)).replace(/\.0+(?=[A-Za-z]*$)/, '')}`;
 
 const HOUR = 3_600_000;
-const TICK_STEPS = [1, 2, 3, 4, 6, 12, 24, 48, 72, 168, 336, 720, 1440, 2160].map((n) => n * HOUR);
+const TICK_STEPS = [1 / 60, 2 / 60, 5 / 60, 10 / 60, 15 / 60, 30 / 60, 1, 2, 3, 4, 6, 12, 24, 48, 72, 168, 336, 720, 1440, 2160].map((n) => n * HOUR);
 
 /** Round tick values covering [min, max], always including zero. */
 function niceTicks(min: number, max: number, count: number): number[] {
@@ -84,12 +85,19 @@ export function PnlChart({ points, onHover, ariaLabel }: {
   const x = (t: number) => PAD.left + ((t - t0) / (t1 - t0 || 1)) * plotW;
 
   const vals = line.map((p) => p.v);
-  const yTicks = niceTicks(Math.min(...vals), Math.max(...vals), h < 340 ? 3 : 4);
+  const vMin = Math.min(...vals);
+  const vMax = Math.max(...vals);
+  // Nothing moved: a level line through the middle, with no colour for gain or loss.
+  const flat = vMax === vMin;
+  const yTicks = flat ? [-1, 0, 1] : niceTicks(vMin, vMax, h < 340 ? 3 : 4);
   const yMin = yTicks[0];
   const yMax = yTicks[yTicks.length - 1];
   const y = (v: number) => PAD.top + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
   const zero = y(0);
   const zeroAt = `${(((zero - PAD.top) / (plotH || 1)) * 100).toFixed(2)}%`;
+  // Neutral in a thin band around zero: a stretch sitting on it is neither gain nor loss.
+  // Its gradient overshoots the plot by LINE_BLEED, or the band clips when zero is the top edge.
+  const offsetAt = (px: number) => `${(((zero + px - PAD.top + LINE_BLEED) / (plotH + 2 * LINE_BLEED || 1)) * 100).toFixed(2)}%`;
 
   const curve = monotonePath(line.map((p) => [x(p.t), y(p.v)]));
   const area = `${curve}L${x(t1).toFixed(1)} ${zero.toFixed(1)}L${x(t0).toFixed(1)} ${zero.toFixed(1)}Z`;
@@ -105,12 +113,11 @@ export function PnlChart({ points, onHover, ariaLabel }: {
     if (tick >= t0 && x(tick) <= PAD.left + plotW - 16) xTicks.push(tick);
   }
 
-  /** The drawn line's height at any moment, between its samples. */
+  /** The drawn line's height at any moment, between its points. */
   const lineAt = (t: number) => {
-    const step = (t1 - t0) / (line.length - 1 || 1);
-    const i = Math.min(line.length - 2, Math.max(0, Math.floor((t - t0) / (step || 1))));
-    const a = line[i];
-    const b = line[i + 1] ?? a;
+    const i = Math.max(1, line.findIndex((p) => p.t >= t));
+    const a = line[i - 1];
+    const b = line[i] ?? a;
     return a.v + (b.v - a.v) * Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t || 1)));
   };
 
@@ -124,7 +131,8 @@ export function PnlChart({ points, onHover, ariaLabel }: {
       const mid = (lo + hi) >> 1;
       if (points[mid].t <= t) lo = mid; else hi = mid;
     }
-    const i = t - points[lo].t <= points[hi].t - t ? lo : hi;
+    // The latest figure at or before the mouse: PnL holds its level between closes.
+    const i = t >= points[hi].t ? hi : lo;
     setCursorT(t);
     onHover({ point: points[i] });
   };
@@ -132,7 +140,7 @@ export function PnlChart({ points, onHover, ariaLabel }: {
 
   // The dot rides the drawn line under the mouse; the headline reads the real figure.
   const marker = cursorT !== null ? { t: cursorT, v: lineAt(cursorT) } : line[line.length - 1];
-  const markerColor = marker && marker.v < 0 ? 'var(--neg)' : 'var(--pos)';
+  const markerColor = flat ? 'var(--role-content-muted)' : marker && marker.v < 0 ? 'var(--neg)' : 'var(--pos)';
   const text = { fill: 'var(--text-tertiary)', fontSize: 11 } as const;
   const stop = (color: string, opacity: number) => ({ stopColor: color, stopOpacity: opacity });
 
@@ -142,10 +150,12 @@ export function PnlChart({ points, onHover, ariaLabel }: {
       {w > 0 && h > 0 && line.length > 1 && (
         <svg width={w} height={h} role="img" aria-label={ariaLabel} className="block">
           <defs>
-            {/* One hard stop at zero splits the line's colour without a second path. */}
-            <linearGradient id={`${id}line`} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={PAD.top} y2={PAD.top + plotH}>
-              <stop offset={zeroAt} style={stop('var(--pos)', 1)} />
-              <stop offset={zeroAt} style={stop('var(--neg)', 1)} />
+            {/* Hard stops at zero split the line's colour without a second path. */}
+            <linearGradient id={`${id}line`} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={PAD.top - LINE_BLEED} y2={PAD.top + plotH + LINE_BLEED}>
+              <stop offset={offsetAt(-1.5)} style={stop('var(--pos)', 1)} />
+              <stop offset={offsetAt(-1.5)} style={stop('var(--role-content-muted)', 1)} />
+              <stop offset={offsetAt(1.5)} style={stop('var(--role-content-muted)', 1)} />
+              <stop offset={offsetAt(1.5)} style={stop('var(--neg)', 1)} />
             </linearGradient>
             <linearGradient id={`${id}tint`} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={PAD.top} y2={PAD.top + plotH}>
               <stop offset="0%" style={stop('var(--pos)', 0.26)} />
@@ -170,21 +180,24 @@ export function PnlChart({ points, onHover, ariaLabel }: {
             <clipPath id={`${id}down`}><rect x={0} y={zero} width={w} height={h} /></clipPath>
           </defs>
 
-          {yTicks.map((v) => (
+          {yTicks.filter((v) => !flat || v === 0).map((v) => (
             <g key={v}>
               {v !== 0 && <line x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} style={{ stroke: 'var(--border-color)', strokeOpacity: 0.45 }} />}
               <text x={PAD.left + plotW + 10} y={y(v) + 4} style={text} className="tabular-nums">{axisMoney(v)}</text>
             </g>
           ))}
 
-          <path d={area} style={{ fill: `url(#${id}tint)` }} />
-          <g mask={`url(#${id}mask)`}>
-            <path d={area} clipPath={`url(#${id}up)`} style={{ fill: `url(#${id}pos)` }} />
-            <path d={area} clipPath={`url(#${id}down)`} style={{ fill: `url(#${id}neg)` }} />
-          </g>
-
-          <line x1={PAD.left} x2={PAD.left + plotW} y1={zero} y2={zero} strokeDasharray="3 4" style={{ stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />
-          <path d={curve} style={{ fill: 'none', stroke: `url(#${id}line)`, strokeWidth: 2, strokeLinejoin: 'round', strokeLinecap: 'round' }} />
+          {!flat && (
+            <>
+              <path d={area} style={{ fill: `url(#${id}tint)` }} />
+              <g mask={`url(#${id}mask)`}>
+                <path d={area} clipPath={`url(#${id}up)`} style={{ fill: `url(#${id}pos)` }} />
+                <path d={area} clipPath={`url(#${id}down)`} style={{ fill: `url(#${id}neg)` }} />
+              </g>
+              <line x1={PAD.left} x2={PAD.left + plotW} y1={zero} y2={zero} strokeDasharray="3 4" style={{ stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />
+            </>
+          )}
+          <path d={curve} style={{ fill: 'none', stroke: flat ? 'var(--role-content-muted)' : `url(#${id}line)`, strokeWidth: 2, strokeLinejoin: 'round', strokeLinecap: 'round' }} />
 
           {xTicks.map((t) => (
             <text key={t} x={x(t)} y={h - 6} textAnchor={x(t) < PAD.left + 20 ? 'start' : 'middle'} style={text}>{tickLabel(t)}</text>

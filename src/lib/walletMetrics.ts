@@ -312,16 +312,44 @@ export function squarify<T>(items: { item: T; value: number }[], width: number, 
   return out;
 }
 
+const CENT = 0.005;
+/** At or below this many moves a curve is drawn through them one by one. */
+const FEW_MOVES = 16;
+
 /**
- * A calm version of the curve for drawing. Resample evenly in time, take a rolling
- * median so a swing lasting a few percent of the window drops out, then average
- * away the stairs the median leaves. Sustained moves stay: a real loss still reads
- * as a steep fall. The windows narrow towards the edges, so the first and last
- * points are exact and the line still ends on the live figure.
+ * A curve with few moves, usually a handful of closes: keep every one of them, so
+ * the line glides through each real value. Across a gap of about a third of the
+ * chart the old level is held until just before the next move, so it reads as a flat
+ * line and not as a slow drift nobody traded.
+ */
+function throughMoves(points: PnlPoint[], moves: PnlPoint[]): PnlPoint[] {
+  const span = points[points.length - 1].t - points[0].t;
+  const out = [points[0]];
+  let prev = points[0];
+  for (const m of moves) {
+    if (m.t - prev.t > span * 0.3) out.push({ t: m.t - span * 0.012, v: prev.v });
+    out.push(m);
+    prev = m;
+  }
+  const end = points[points.length - 1];
+  if (end.t > prev.t) out.push(end);
+  return out;
+}
+
+/**
+ * A calm version of the curve for drawing. A curve with few moves keeps them all,
+ * see throughMoves. A busy one is resampled evenly in time, a rolling median drops
+ * any swing lasting a few percent of the window, and averaging removes the stairs
+ * the median leaves. Sustained moves stay: a real loss still reads as a steep fall.
+ * The windows narrow towards the edges, so the first and last points are exact and
+ * the line still ends on the live figure.
  * Display only: every number on the page comes from the unsmoothed curve.
  */
 export function smoothCurve(points: PnlPoint[], samples = 180): PnlPoint[] {
   if (points.length < 3) return points;
+  const moves = points.filter((p, i) => i > 0 && Math.abs(p.v - points[i - 1].v) >= CENT);
+  if (moves.length <= FEW_MOVES) return throughMoves(points, moves);
+
   const t0 = points[0].t;
   const step = (points[points.length - 1].t - t0) / (samples - 1);
   if (step <= 0) return points;
@@ -345,4 +373,18 @@ export function smoothCurve(points: PnlPoint[], samples = 180): PnlPoint[] {
 
   const out = pass(pass(pass(grid, Math.round(samples * 0.035), median), 3, mean), 3, mean);
   return out.map((v, i) => ({ t: t0 + i * step, v }));
+}
+
+/**
+ * Cut a long quiet ending off an all-time curve. A wallet that traded for an hour
+ * and then sat for two months would otherwise squeeze all its history into a sliver.
+ * Returns the time of its last move when the quiet part is over a third of the span.
+ */
+export function trimQuietTail(points: PnlPoint[]): { points: PnlPoint[]; quietSince: number | null } {
+  if (points.length < 3) return { points, quietSince: null };
+  const end = points[points.length - 1];
+  let i = points.length - 1;
+  while (i > 0 && Math.abs(points[i - 1].v - end.v) < CENT) i--;
+  if (i === 0 || end.t - points[i].t <= (end.t - points[0].t) / 3) return { points, quietSince: null };
+  return { points: [...points.slice(0, i), { t: points[i].t, v: end.v }], quietSince: points[i].t };
 }
