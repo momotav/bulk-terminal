@@ -312,6 +312,29 @@ export function squarify<T>(items: { item: T; value: number }[], width: number, 
   return out;
 }
 
+/**
+ * Pack n equal tiles into a box, as close to square as the box allows. Rows that
+ * come up one short stretch to fill the width, so the box has no holes.
+ */
+export function gridCells(n: number, width: number, height: number): { x: number; y: number; w: number; h: number }[] {
+  if (n <= 0 || width <= 0 || height <= 0) return [];
+  let cols = 1;
+  let best = 0;
+  for (let c = 1; c <= n; c++) {
+    const side = Math.min(width / c, height / Math.ceil(n / c));
+    if (side > best) { best = side; cols = c; }
+  }
+  const rows = Math.ceil(n / cols);
+  const out: { x: number; y: number; w: number; h: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    const inRow = Math.floor(n / rows) + (r < n % rows ? 1 : 0);
+    for (let c = 0; c < inRow; c++) {
+      out.push({ x: (width / inRow) * c, y: (height / rows) * r, w: width / inRow, h: height / rows });
+    }
+  }
+  return out;
+}
+
 const CENT = 0.005;
 /** At or below this many moves a curve is drawn through them one by one. */
 const FEW_MOVES = 16;
