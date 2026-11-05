@@ -47,7 +47,7 @@ const coinsFromRow = (row: ChartData): Record<string, number> =>
 export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
-  const { narrowed, defaults, filterDict, isIn } = useAssetClass();
+  const { narrowed, defaults, filterDict, isIn, label: classLabel } = useAssetClass();
   const [hours, setHours] = useState(24);
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
   const [headlineMode, setHeadlineMode] = useState<'24h' | 'all'>('24h');
@@ -187,7 +187,11 @@ export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
                 {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}%
               </span>
             )}
-            {headlineMode === 'all' && <span className="text-[13px] font-medium text-[var(--role-content-subtle)]">all-time</span>}
+            {(narrowed || headlineMode === 'all') && (
+              <span className="whitespace-nowrap text-[13px] font-medium text-[var(--role-content-subtle)]">
+                {[narrowed ? classLabel : null, headlineMode === 'all' ? 'all-time' : null].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </div>
         </div>
         {/* Toolbar. JSX order is class toggle, chart-type, timeframe. On mobile

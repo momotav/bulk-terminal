@@ -35,7 +35,7 @@ export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
   // "Active Traders" card becomes the class's share of 24h volume — a
   // per-class distinct-trader count isn't available without overcounting
   // wallets that trade several markets, so we don't fake one.
-  const { assetClass, narrowed, isIn } = useAssetClass();
+  const { assetClass, narrowed, isIn, label: classLabel } = useAssetClass();
   const classSparks = assetClass === 'all' ? undefined : sparks?.byClass?.[assetClass];
   const classStats = useMemo(() => {
     if (!narrowed) return null;
@@ -76,7 +76,7 @@ export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
         {classStats ? (
           <>
             <MetricMiniCard
-              label="Open Interest"
+              label={`${classLabel} open interest`}
               value={tickers.length > 0 ? classStats.oi : null}
               format={fmtUsd}
               spark={classSparks?.openInterest}
@@ -84,7 +84,7 @@ export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
               sub={`${classStats.markets} market${classStats.markets === 1 ? '' : 's'} · ${classStats.active} active`}
             />
             <MetricMiniCard
-              label="Share of 24h volume"
+              label={`${classLabel} share of 24h volume`}
               value={tickers.length > 0 ? classStats.share : null}
               format={(n) => `${n.toFixed(1)}%`}
               // A percent change of a percentage reads as nonsense, so no change line.
@@ -155,7 +155,7 @@ function MetricMiniCard({ label, value, format, spark, color, sub }: {
           {value == null ? <span className="text-[var(--role-content-subtle)]">—</span> : <AnimatedNumber value={value} format={format} />}
         </div>
         {change != null && Number.isFinite(change) && (
-          <div className="mt-1.5 text-[12px] tabular-nums">
+          <div className="text-[12px] leading-4 tabular-nums">
             <span className="text-[var(--role-content-subtle)]">24h </span>
             <span className={cn('font-semibold', change >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]')}>
               {change >= 0 ? '+' : ''}{change.toFixed(2)}%
@@ -163,7 +163,7 @@ function MetricMiniCard({ label, value, format, spark, color, sub }: {
           </div>
         )}
         {sub && (change == null || !Number.isFinite(change)) && (
-          <div className="mt-1.5 truncate text-[12px] text-[var(--role-content-subtle)]">{sub}</div>
+          <div className="truncate text-[12px] leading-4 text-[var(--role-content-subtle)]">{sub}</div>
         )}
       </div>
     </div>

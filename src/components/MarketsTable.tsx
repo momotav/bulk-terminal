@@ -58,7 +58,8 @@ export function MarketsTable({ tickers, loading, flush = false }: MarketsTablePr
           <h2 className="panel-title t-h2 truncate">Markets</h2>
           <p className="t-caption truncate">{caption}</p>
         </div>
-        <AssetClassToggle counts={counts} className="mr-3 hidden sm:inline-flex" />
+        {/* ml-auto pins it to the right; centred by the header it slid as the caption changed length. */}
+        <AssetClassToggle counts={counts} className="ml-auto mr-3 hidden sm:inline-flex" />
         <Link
           href="/analytics/general"
           className="group inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-[var(--role-content-muted)] transition-colors hover:text-[var(--role-content)]"
