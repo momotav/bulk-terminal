@@ -18,7 +18,8 @@ import { openInterestUsd, type BulkTicker } from '@/hooks/useTickers';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
 type Spark = { series: number[]; changePct: number | null; low: number | null; high: number | null };
-type Sparklines = Record<'volume24h' | 'openInterest' | 'activeTraders' | 'liquidations24h', Spark>;
+type ClassSparks = { openInterest: Spark; volumeShare: Spark };
+type Sparklines = Record<'volume24h' | 'openInterest' | 'activeTraders' | 'liquidations24h', Spark> & { byClass?: Record<'crypto' | 'stock', ClassSparks> };
 
 const fmtUsd = (n: number) => `$${formatCompact(n)}`;
 const fmtCount = (n: number) => Math.round(n).toLocaleString();
@@ -34,7 +35,8 @@ export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
   // "Active Traders" card becomes the class's share of 24h volume — a
   // per-class distinct-trader count isn't available without overcounting
   // wallets that trade several markets, so we don't fake one.
-  const { narrowed, isIn, label: classLabel } = useAssetClass();
+  const { assetClass, narrowed, isIn } = useAssetClass();
+  const classSparks = assetClass === 'all' ? undefined : sparks?.byClass?.[assetClass];
   const classStats = useMemo(() => {
     if (!narrowed) return null;
     const mine = tickers.filter((t) => isIn(t.symbol));
@@ -74,16 +76,19 @@ export function TodayPanel({ tickers = [] }: { tickers?: BulkTicker[] }) {
         {classStats ? (
           <>
             <MetricMiniCard
-              label={`Open Interest · ${classLabel}`}
+              label="Open Interest"
               value={tickers.length > 0 ? classStats.oi : null}
               format={fmtUsd}
+              spark={classSparks?.openInterest}
               color="var(--role-signal-info)"
               sub={`${classStats.markets} market${classStats.markets === 1 ? '' : 's'} · ${classStats.active} active`}
             />
             <MetricMiniCard
-              label={`${classLabel} · share of 24h volume`}
+              label="Share of 24h volume"
               value={tickers.length > 0 ? classStats.share : null}
               format={(n) => `${n.toFixed(1)}%`}
+              // A percent change of a percentage reads as nonsense, so no change line.
+              spark={classSparks ? { ...classSparks.volumeShare, changePct: null } : undefined}
               color="var(--accent)"
               sub="of exchange-wide volume"
             />

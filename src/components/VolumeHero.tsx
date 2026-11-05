@@ -47,7 +47,7 @@ const coinsFromRow = (row: ChartData): Record<string, number> =>
 export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
   const { network } = useCurrentNetwork();
   const isMobile = useIsMobile();
-  const { narrowed, defaults, filterDict, isIn, label: classLabel } = useAssetClass();
+  const { narrowed, defaults, filterDict, isIn } = useAssetClass();
   const [hours, setHours] = useState(24);
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
   const [headlineMode, setHeadlineMode] = useState<'24h' | 'all'>('24h');
@@ -177,11 +177,6 @@ export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
                 {m === '24h' ? '24h Volume' : 'Total Volume'}
               </button>
             ))}
-            {narrowed && (
-              <span className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
-                {classLabel}
-              </span>
-            )}
           </div>
           <div className="mt-1 flex items-baseline gap-2.5">
             <span className="text-[34px] font-medium font-sans leading-none tracking-tight tabular-nums text-[var(--role-content)] sm:text-[40px]">
