@@ -132,12 +132,17 @@ function counterpartyDisplay(addr: string | undefined, label: string | undefined
   return label ?? formatAddress(addr);
 }
 
-export function ActivityFeed({ address, flush = false }: { address: string; flush?: boolean }) {
-  const [events, setEvents] = useState<ActivityEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ActivityFeed({ address, flush = false, provided }: { address: string; flush?: boolean; provided?: ActivityEvent[] }) {
+  // A parent that already holds the events passes them in, so the panel can't
+  // disagree with the totals above it and doesn't fetch a second time.
+  const [fetched, setEvents] = useState<ActivityEvent[]>([]);
+  const events = provided ?? fetched;
+  const [fetching, setLoading] = useState(true);
+  const loading = !provided && fetching;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (provided) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -160,7 +165,7 @@ export function ActivityFeed({ address, flush = false }: { address: string; flus
     return () => {
       cancelled = true;
     };
-  }, [address]);
+  }, [address, provided]);
 
   return (
     <div className={flush ? 'flex flex-col' : 'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col'}>

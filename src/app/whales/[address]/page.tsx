@@ -583,19 +583,25 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [address, network]);
 
-  // Funding and transfers load once per wallet, after the page itself.
+  // Funding and transfers wait for the page's own data: fired alongside it they
+  // made a burst BULK rate-limited, which took a cold load past 20 seconds.
+  const mainWaveDone = mainDone && fillsDone;
+  useEffect(() => { setFunding(null); setTransfers(null); }, [address, network]);
   useEffect(() => {
+    if (!mainWaveDone) return;
     let cancelled = false;
-    setFunding(null); setTransfers(null);
-    (async () => {
-      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
-        try { const f = await wallet.getFunding(address); if (!cancelled) setFunding(f); break; }
-        catch { await new Promise((r) => setTimeout(r, 1000 * (attempt + 1))); }
+    const retry = async <T,>(load: () => Promise<T>, done: (v: T) => void) => {
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+        try { const v = await load(); if (!cancelled) done(v); return; }
+        catch { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); }
       }
+    };
+    (async () => {
+      await retry(() => wallet.getFunding(address), setFunding);
+      await retry(() => wallet.getActivity(address, 200), (r) => setTransfers(r.data || []));
     })();
-    wallet.getActivity(address, 200).then((r) => { if (!cancelled) setTransfers(r.data || []); }).catch(() => { if (!cancelled) setTransfers([]); });
     return () => { cancelled = true; };
-  }, [address, network]);
+  }, [address, network, mainWaveDone]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
@@ -1014,7 +1020,7 @@ export default function WalletPage() {
                       { label: 'Net deposited', value: netDeposited !== null ? money(netDeposited) : '—' },
                       { label: 'Return on deposits', hint: 'Total PnL', value: netDeposited !== null && netDeposited > 0 ? `${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%` : '—', color: netDeposited !== null && netDeposited > 0 ? pnlColor(totalPnl) : undefined },
                     ]} />
-                    <ActivityFeed address={address} flush />
+                    <ActivityFeed address={address} flush provided={transfers ?? undefined} />
                   </>
                 )}
 
