@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatCompact } from '@/lib/api';
 import { smoothCurve, type PnlPoint } from '@/lib/walletMetrics';
 
@@ -52,16 +52,20 @@ function monotonePath(xy: [number, number][]): string {
  *
  * The drawn line is smoothed; hover reports the real figure, not the smoothed one.
  * Hand-drawn SVG so colours stay CSS variables, which recharts' SVG attributes can
- * fail to resolve. Hover is reported up to the panel's headline, no floating tooltip.
+ * fail to resolve. Hover is reported up to the panel's headline, no floating tooltip,
+ * and only when the figure changes. The line and dot are moved directly, so a mouse
+ * move redraws nothing: slow frames stall hover, see FreeChartCursor.
  */
-export function PnlChart({ points, onHover, ariaLabel }: {
+export const PnlChart = memo(function PnlChart({ points, onHover, ariaLabel }: {
   points: PnlPoint[];
   onHover: (hover: PnlHover | null) => void;
   ariaLabel: string;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [cursorT, setCursorT] = useState<number | null>(null);
+  const cursorLine = useRef<SVGLineElement | null>(null);
+  const dot = useRef<SVGGElement | null>(null);
+  const shown = useRef(-1);
   const id = useId().replace(/:/g, '');
 
   useEffect(() => {
@@ -133,14 +137,31 @@ export function PnlChart({ points, onHover, ariaLabel }: {
     }
     // The latest figure at or before the mouse: PnL holds its level between closes.
     const i = t >= points[hi].t ? hi : lo;
-    setCursorT(t);
-    onHover({ point: points[i] });
+    // The dot rides the drawn line under the mouse; the headline reads the real figure.
+    moveMarker(t, lineAt(t));
+    cursorLine.current?.setAttribute('x1', String(x(t)));
+    cursorLine.current?.setAttribute('x2', String(x(t)));
+    cursorLine.current?.style.setProperty('display', 'block');
+    if (i !== shown.current) {
+      shown.current = i;
+      onHover({ point: points[i] });
+    }
   };
-  const clear = () => { setCursorT(null); onHover(null); };
+  const clear = () => {
+    shown.current = -1;
+    cursorLine.current?.style.setProperty('display', 'none');
+    if (end) moveMarker(end.t, end.v);
+    onHover(null);
+  };
 
-  // The dot rides the drawn line under the mouse; the headline reads the real figure.
-  const marker = cursorT !== null ? { t: cursorT, v: lineAt(cursorT) } : line[line.length - 1];
-  const markerColor = flat ? 'var(--role-content-muted)' : marker && marker.v < 0 ? 'var(--neg)' : 'var(--pos)';
+  const end = line[line.length - 1];
+  const markerTone = (v: number) => (flat ? 'var(--role-content-muted)' : v < 0 ? 'var(--neg)' : 'var(--pos)');
+  const moveMarker = (t: number, v: number) => {
+    const g = dot.current;
+    if (!g) return;
+    g.setAttribute('transform', `translate(${x(t)} ${y(v)})`);
+    g.style.setProperty('fill', markerTone(v));
+  };
   const text = { fill: 'var(--text-tertiary)', fontSize: 11 } as const;
   const stop = (color: string, opacity: number) => ({ stopColor: color, stopOpacity: opacity });
 
@@ -203,15 +224,15 @@ export function PnlChart({ points, onHover, ariaLabel }: {
             <text key={t} x={x(t)} y={h - 6} textAnchor={x(t) < PAD.left + 20 ? 'start' : 'middle'} style={text}>{tickLabel(t)}</text>
           ))}
 
-          {cursorT !== null && <line x1={x(cursorT)} x2={x(cursorT)} y1={PAD.top} y2={PAD.top + plotH} style={{ stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />}
-          {marker && (
-            <>
-              <circle cx={x(marker.t)} cy={y(marker.v)} r={8} style={{ fill: markerColor, fillOpacity: 0.22 }} />
-              <circle cx={x(marker.t)} cy={y(marker.v)} r={3.5} style={{ fill: markerColor }} />
-            </>
+          <line ref={cursorLine} y1={PAD.top} y2={PAD.top + plotH} style={{ display: 'none', stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />
+          {end && (
+            <g ref={dot} transform={`translate(${x(end.t)} ${y(end.v)})`} style={{ fill: markerTone(end.v) }}>
+              <circle r={8} style={{ fillOpacity: 0.22 }} />
+              <circle r={3.5} />
+            </g>
           )}
         </svg>
       )}
     </div>
   );
-}
+});

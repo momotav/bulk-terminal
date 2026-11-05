@@ -1117,9 +1117,9 @@ html.light .trade-cta {
    tooltips (treemap, heatmap). */
 .recharts-tooltip-wrapper > *,
 .glass-tooltip {
-  background: color-mix(in srgb, var(--bg-muted) 72%, transparent) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  backdrop-filter: blur(12px) saturate(1.4);
+  /* No backdrop blur: these move with the mouse, and re-blurring what's behind them
+     every frame is what stalls hover. */
+  background: color-mix(in srgb, var(--bg-muted) 94%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--border-color) 85%, transparent) !important;
   border-radius: 8px !important;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28) !important;
@@ -1218,23 +1218,19 @@ html.light .trade-cta {
 .recharts-tooltip-cursor {
   display: none;
 }
-.tv-lightweight-charts {
-  position: relative;
-}
-[data-free-cursor]::after {
-  content: '';
-  position: absolute;
+.free-cursor-line {
+  display: none;
+  position: fixed;
   left: 0;
-  top: var(--cursor-top);
+  top: 0;
   width: 1px;
-  height: var(--cursor-height);
-  transform: translateX(var(--cursor-x));
   background: var(--role-content-muted);
   opacity: 0.5;
   pointer-events: none;
-  z-index: 5;
+  will-change: transform;
+  z-index: 99999; /* Charts also live in popups, which stack above the page. */
 }
-.recharts-wrapper[data-free-cursor] .recharts-tooltip-wrapper {
+.recharts-tooltip-wrapper[data-free-tip] {
   transform: translate(var(--tip-x), var(--tip-y)) !important;
   transition: none !important;
 }

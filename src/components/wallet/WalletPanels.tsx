@@ -110,9 +110,12 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
   const [sizeBy, setSizeBy] = useState<'volume' | 'pnl'>('volume');
   const box = useRef<HTMLDivElement | null>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
-  const [hover, setHover] = useState<{ symbol: string; x: number; y: number } | null>(null);
+  // State only says which tile: the tooltip's position is written straight to it,
+  // so moving within a tile renders nothing.
+  const [hover, setHover] = useState<string | null>(null);
   const tip = useRef<HTMLDivElement | null>(null);
-  const [tipH, setTipH] = useState(0);
+  const mouse = useRef({ x: 0, y: 0 });
+  const tipHeight = useRef(0);
   useEffect(() => {
     if (!box.current) return;
     const ro = new ResizeObserver(([e]) => setDims({ w: e.contentRect.width, h: e.contentRect.height }));
@@ -144,19 +147,32 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
   const peak = Math.max(1, ...rows.filter((r) => r.volume > 0).map((r) => Math.abs(r.bps)));
   const net = rows.reduce((s, r) => s + r.net, 0);
 
+  const place = () => {
+    const el = tip.current;
+    if (!el) return;
+    const { x, y } = mouse.current;
+    // Beside the mouse, flipping sides and clamping so it stays inside the map.
+    const tx = x + TIP_GAP + TIP_WIDTH <= dims.w ? x + TIP_GAP : Math.max(0, x - TIP_GAP - TIP_WIDTH);
+    const ty = Math.max(0, Math.min(y + TIP_GAP, dims.h - tipHeight.current));
+    el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+  };
   const track = (e: PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
+    mouse.current = { x, y };
     const cell = cells.find((c) => x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h);
-    setHover(cell ? { symbol: cell.item.symbol, x, y } : null);
+    const symbol = cell ? cell.item.symbol : null;
+    if (symbol !== hover) setHover(symbol);
+    place();
   };
-  const hovered = hover ? cells.find((c) => c.item.symbol === hover.symbol)?.item : undefined;
-  // Beside the mouse, flipping sides and clamping so it stays inside the map.
-  const tipX = hover ? (hover.x + TIP_GAP + TIP_WIDTH <= dims.w ? hover.x + TIP_GAP : Math.max(0, hover.x - TIP_GAP - TIP_WIDTH)) : 0;
-  const tipY = hover ? Math.max(0, Math.min(hover.y + TIP_GAP, dims.h - tipH)) : 0;
-  // Measured before paint: each tile's tooltip is a different height.
-  useLayoutEffect(() => { if (tip.current) setTipH(tip.current.offsetHeight); }, [hovered?.symbol]);
+  const hovered = hover ? cells.find((c) => c.item.symbol === hover)?.item : undefined;
+  // Each tile's tooltip is its own height, measured once when the tile changes.
+  useLayoutEffect(() => {
+    if (tip.current) tipHeight.current = tip.current.offsetHeight;
+    place();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovered?.symbol]);
 
   return (
     <Panel title="Market breakdown" right={<Segmented value={sizeBy} options={[['volume', 'Volume'], ['pnl', 'PnL']] as const} onChange={setSizeBy} />}>
@@ -174,7 +190,7 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
           const large = w > 210 && h > 120;
           const medium = w > 104 && h > 66;
           const name = coinOf(c.symbol);
-          const active = hover?.symbol === c.symbol;
+          const active = hover === c.symbol;
           const icon = Math.min(20, Math.floor(Math.min(w, h)) - 12);
           return (
             <div key={c.symbol} role="img" aria-label={`${name}: ${signed(c.net)}, $${formatCompact(c.volume)} volume`}
@@ -209,7 +225,7 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
         })}
         {hovered && (
           <div ref={tip} className="glass-tooltip pointer-events-none absolute z-20 rounded-lg border border-[var(--border-color)] p-3"
-            style={{ width: TIP_WIDTH, left: tipX, top: tipY }}>
+            style={{ width: TIP_WIDTH, left: 0, top: 0 }}>
             <CellTip cell={hovered} totalVolume={totalVolume} />
           </div>
         )}
