@@ -180,15 +180,134 @@ export function trackRecord(closed: ClosedPosition[]): TrackRecord | null {
   };
 }
 
-/** Closed PnL plus the open position's unrealized, per market, biggest first. */
-export function pnlByMarket(
-  closed: Pick<ClosedPosition, 'symbol' | 'realizedPnl'>[],
-  open: { symbol: string; unrealizedPnl: number }[],
-): { symbol: string; pnl: number }[] {
-  const m = new Map<string, number>();
-  for (const p of closed) m.set(p.symbol, (m.get(p.symbol) ?? 0) + p.realizedPnl);
-  for (const p of open) m.set(p.symbol, (m.get(p.symbol) ?? 0) + (p.unrealizedPnl || 0));
-  return Array.from(m, ([symbol, pnl]) => ({ symbol, pnl }))
-    .filter((r) => Math.abs(r.pnl) >= 0.01)
-    .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+/** A fill with the fields the full-history (lite) feed adds. */
+export type WalletFillLite = WalletFill & { fee?: number; isMaker?: boolean };
+
+export interface SideStats { volume: number; fills: number; fees: number }
+
+export interface FillSummary {
+  markets: { symbol: string; volume: number; makerVolume: number; fills: number; fees: number; realized: number }[];
+  maker: SideStats;
+  taker: SideStats;
+  volume: number;
+  fees: number;
+  /** Gross realized PnL replayed from the fills. */
+  realized: number;
+  dailyVolume: Map<string, number>;
+  oldest: number | null;
+}
+
+const localDay = (t: number) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** One pass over the fills: volume, fees, maker/taker and realized PnL per market. */
+export function summarizeFills(fills: WalletFillLite[]): FillSummary {
+  const sorted = [...fills].sort((a, b) => a.timestamp - b.timestamp);
+  const bySymbol = new Map<string, FillSummary['markets'][number] & { net: number; avg: number }>();
+  const maker: SideStats = { volume: 0, fills: 0, fees: 0 };
+  const taker: SideStats = { volume: 0, fills: 0, fees: 0 };
+  const dailyVolume = new Map<string, number>();
+  for (const f of sorted) {
+    const m = bySymbol.get(f.symbol) ?? { symbol: f.symbol, volume: 0, makerVolume: 0, fills: 0, fees: 0, realized: 0, net: 0, avg: 0 };
+    const value = Math.abs(f.size) * f.price;
+    const fee = f.fee ?? 0;
+    m.volume += value; m.fills += 1; m.fees += fee;
+    if (f.isMaker) m.makerVolume += value;
+    const side = f.isMaker ? maker : taker;
+    side.volume += value; side.fills += 1; side.fees += fee;
+    const day = localDay(f.timestamp);
+    dailyVolume.set(day, (dailyVolume.get(day) ?? 0) + value);
+
+    const delta = f.isBuy ? f.size : -f.size;
+    if (m.net === 0 || m.net > 0 === delta > 0) {
+      m.avg = (Math.abs(m.net) * m.avg + Math.abs(delta) * f.price) / (Math.abs(m.net) + Math.abs(delta));
+      m.net += delta;
+    } else {
+      const closed = Math.min(Math.abs(m.net), Math.abs(delta));
+      m.realized += closed * (f.price - m.avg) * Math.sign(m.net);
+      const after = m.net + delta;
+      if (Math.abs(after) < 1e-9) { m.net = 0; m.avg = 0; }
+      else if (after > 0 !== m.net > 0) { m.net = after; m.avg = f.price; }
+      else m.net = after;
+    }
+    bySymbol.set(f.symbol, m);
+  }
+  const markets = Array.from(bySymbol.values()).map(({ net: _net, avg: _avg, ...m }) => m);
+  return {
+    markets,
+    maker,
+    taker,
+    volume: maker.volume + taker.volume,
+    fees: maker.fees + taker.fees,
+    realized: markets.reduce((s, m) => s + m.realized, 0),
+    dailyVolume,
+    oldest: sorted.length ? sorted[0].timestamp : null,
+  };
+}
+
+export interface MarketRow { symbol: string; net: number; volume: number; makerShare: number; bps: number }
+
+/**
+ * Net PnL per market. With the wallet's full fill history the replay matches
+ * BULK's realized total to the cent, so realized + unrealized + fees + funding
+ * sums to the headline. When BULK has cut the history short the replay can't be
+ * trusted, and realized falls back to the closed-position log: `exact` is false
+ * and the page says the split is partial.
+ */
+export function marketBreakdown(input: {
+  summary: FillSummary;
+  /** BULK's lifetime gross realized PnL. */
+  grossRealized: number | null;
+  closed: Pick<ClosedPosition, 'symbol' | 'realizedPnl'>[];
+  open: { symbol: string; unrealizedPnl: number }[];
+  funding: Record<string, number>;
+}): { rows: MarketRow[]; exact: boolean } {
+  const { summary, grossRealized, closed, open, funding } = input;
+  const exact = grossRealized !== null && summary.markets.length > 0
+    && Math.abs(summary.realized - grossRealized) <= Math.max(1, Math.abs(grossRealized) * 0.001);
+  const closedBySymbol = new Map<string, number>();
+  for (const p of closed) closedBySymbol.set(p.symbol, (closedBySymbol.get(p.symbol) ?? 0) + p.realizedPnl);
+  const symbols = new Set<string>([...summary.markets.map((m) => m.symbol), ...closedBySymbol.keys(), ...open.map((p) => p.symbol), ...Object.keys(funding)]);
+  const rows = Array.from(symbols).map((symbol) => {
+    const m = summary.markets.find((x) => x.symbol === symbol);
+    const realized = exact ? (m?.realized ?? 0) : (closedBySymbol.get(symbol) ?? 0);
+    const unrealized = open.find((p) => p.symbol === symbol)?.unrealizedPnl ?? 0;
+    const net = realized + unrealized + (m?.fees ?? 0) + (funding[symbol] ?? 0);
+    const volume = m?.volume ?? 0;
+    return { symbol, net, volume, makerShare: volume > 0 ? (m?.makerVolume ?? 0) / volume : 0, bps: volume > 0 ? (net / volume) * 10_000 : 0 };
+  }).filter((r) => r.volume > 0 || Math.abs(r.net) >= 0.01);
+  return { rows, exact };
+}
+
+export interface TreeRect<T> { item: T; x: number; y: number; w: number; h: number }
+
+/** Squarified treemap (Bruls et al.): rows of cells kept as close to square as it can. */
+export function squarify<T>(items: { item: T; value: number }[], width: number, height: number): TreeRect<T>[] {
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (total <= 0 || width <= 0 || height <= 0) return [];
+  const scale = (width * height) / total;
+  const queue = items.filter((i) => i.value > 0).sort((a, b) => b.value - a.value).map((i) => ({ item: i.item, area: i.value * scale }));
+  const out: TreeRect<T>[] = [];
+  let x = 0, y = 0, w = width, h = height;
+  const worst = (row: { area: number }[], side: number) => {
+    const sum = row.reduce((s, r) => s + r.area, 0);
+    return Math.max(...row.map((r) => Math.max((side * side * r.area) / (sum * sum), (sum * sum) / (side * side * r.area))));
+  };
+  while (queue.length) {
+    const side = Math.min(w, h);
+    const row = [queue.shift() as (typeof queue)[number]];
+    while (queue.length && worst([...row, queue[0]], side) <= worst(row, side)) row.push(queue.shift() as (typeof queue)[number]);
+    const sum = row.reduce((s, r) => s + r.area, 0);
+    const thick = sum / side;
+    let offset = 0;
+    for (const r of row) {
+      const len = r.area / thick;
+      out.push(w >= h ? { item: r.item, x, y: y + offset, w: thick, h: len } : { item: r.item, x: x + offset, y, w: len, h: thick });
+      offset += len;
+    }
+    if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+  }
+  return out;
 }

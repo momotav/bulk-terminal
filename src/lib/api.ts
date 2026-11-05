@@ -167,6 +167,15 @@ export interface ActivityEvent {
   sequence?: number;
 }
 
+export interface WalletFunding {
+  count: number;
+  paid: number;
+  received: number;
+  net: number;
+  bySymbol: Record<string, number>;
+  recent: { timestamp: number; symbol: string; payment: number; fundingRate: number; size: number }[];
+}
+
 export interface ActivityResponse {
   address: string;
   data: ActivityEvent[];
@@ -1517,6 +1526,11 @@ export const wallet = {
   // multisig proposals). Proxies BULK's activityHistory query and labels
   // addresses through the resolver so sub-accounts show as e.g. "alice's farm"
   // instead of off-curve pubkeys.
+  // Funding paid and received, summarised by the backend.
+  async getFunding(address: string): Promise<WalletFunding> {
+    return request(`/api/wallet/${address}/funding`);
+  },
+
   async getActivity(address: string, limit: number = 50): Promise<ActivityResponse> {
     return request(`/api/wallet/${address}/activity?limit=${limit}`);
   },

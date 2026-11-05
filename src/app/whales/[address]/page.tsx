@@ -3,18 +3,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, TrendingUp, Wallet, AlertCircle, Loader2, UserCheck, Shield, Image as ImageIcon } from 'lucide-react';
-import { wallet, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type ClosedPosition, userApi } from '@/lib/api';
+import { ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, AlertCircle, Loader2, UserCheck, Shield, Image as ImageIcon } from 'lucide-react';
+import { wallet, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type ClosedPosition, type ActivityEvent, type WalletFunding, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
-import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
-import { anchorFills, buildPnlCurve, maxDrawdownUsd, pnlByMarket, thinCurve, trackRecord, type PnlCurve } from '@/lib/walletMetrics';
 import type { WalletFill } from '@/lib/api';
+import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
+import { anchorFills, buildPnlCurve, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
+import { coinOf, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
+import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
 import { useStore } from '@/store';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
-import { AreaChart, Area, BarChart, Bar, Cell, ReferenceLine, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AccountHierarchy } from '@/components/AccountHierarchy';
 import { BulkRankBadge } from '@/components/BulkRankBadge';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -44,407 +46,21 @@ interface WalletProfile {
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
 }
-// ----------------------------------------------------------------------------
-// A single day cell in the calendar heatmap, with its own styled hover
-// tooltip showing the date and that day's net PnL. Color rules:
-//   green  = positive PnL day
-//   red    = negative PnL day
-//   muted  = no trades (tooltip shows date only)
-// Manages hover state locally so the parent (which returns early before
-// any hooks) stays hooks-free.
-function HeatmapCell({
-  size = 36,
-  date,
-  pnl,
-  bg,
-  isNoTrade,
-  isWin,
-}: {
-  size?: number;
-  date: Date;
-  pnl: number | null;
-  bg: string | undefined;
-  isNoTrade: boolean;
-  isWin: boolean;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const dateStr = date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const pnlStr =
-    pnl === null || isNoTrade
-      ? null
-      : `${pnl >= 0 ? '+' : '-'}$${formatNumber(Math.abs(pnl), 2)}`;
-  return (
-    <div className="relative">
-      <div
-        className="rounded-[4px] cursor-pointer transition-transform hover:scale-110 hover:ring-1 hover:ring-[var(--text-secondary)]/40"
-        style={{
-          width: size,
-          height: size,
-          ...(isNoTrade ? { backgroundColor: 'var(--border-color)', opacity: 0.5 } : { backgroundColor: bg }),
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      />
-      {hovered && (
-        <div className="absolute z-30 bottom-full left-0 mb-1.5 pointer-events-none whitespace-nowrap">
-          <div className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 shadow-lg">
-            <div className="text-[11px] font-medium text-[var(--text-primary)]">{dateStr}</div>
-            {pnlStr ? (
-              <div
-                className={cn(
-                  'text-[11px] font-semibold tabular-nums',
-                  isWin ? 'text-bulk-green' : 'text-bulk-red',
-                )}
-              >
-                {pnlStr}
-              </div>
-            ) : (
-              <div className="text-[11px] text-[var(--text-tertiary)]">No trades</div>
-            )}
-          </div>
-          {/* little downward arrow, aligned to the cell on the left */}
-          <div className="absolute top-full left-[12px] -mt-px border-4 border-transparent border-t-[var(--border-color)]" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PnlCalendarHeatmap({ closedPositions, dailyOverride, compact = false }: { closedPositions: ClosedPosition[]; dailyOverride?: Map<string, number> | null; compact?: boolean }) {
-  // Compact = the Daily-performance card: small cells, no side bar chart.
-  const CELL = compact ? 18 : 36;
-  const GAP = compact ? 3 : 5;
-  // Wallets with only OPEN positions have no closed trades, so instead of a dead
-  // "No trade history" we fall back to a daily PnL derived from the reconstructed
-  // (mark-to-market) curve, passed in as dailyOverride.
-  // Prefer the series-derived daily PnL whenever it covers MORE days than the
-  // loaded closes do (the closes are capped at 200 — one day for a busy
-  // wallet — while the series reaches back to the first collector snapshot).
-  const closedDays = new Set(closedPositions.filter((p) => p.closedAt > 0).map((p) => { const d = new Date(p.closedAt); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; })).size;
-  const useOverride = !!dailyOverride && dailyOverride.size > 0 && (closedPositions.length === 0 || dailyOverride.size > closedDays);
-
-  if (closedPositions.length === 0 && !useOverride) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
-        <div>
-          <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No trade history yet</p>
-          <p className="text-xs mt-1">Daily PnL appears once the wallet has trades</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Bucket positions by day (YYYY-MM-DD in local time). Use a Map so
-  // insertion order is irrelevant — we collect all days then render.
-  const dayBuckets = new Map<string, number>();
-  let earliest = Infinity;
-  let latest = -Infinity;
-  const noteDay = (dayKey: string, ms: number) => {
-    if (ms < earliest) earliest = ms;
-    if (ms > latest) latest = ms;
-  };
-  if (useOverride) {
-    for (const [dayKey, pnl] of dailyOverride!) {
-      dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + pnl);
-      const [y, mo, da] = dayKey.split('-').map(Number);
-      noteDay(dayKey, new Date(y, mo - 1, da).getTime());
-    }
-  } else for (const p of closedPositions) {
-    // Guard against ns-precision timestamps slipping through un-converted
-    // (BULK ships closeTime in nanoseconds; if any path forgets the ÷1e6
-    // the date lands in the far future and the whole heatmap renders
-    // empty/blank). Anything past year ~5000 in ms is certainly ns.
-    const closedMs = p.closedAt > 1e15 ? p.closedAt / 1e6 : p.closedAt;
-    if (!closedMs || Number.isNaN(closedMs)) continue;
-    const d = new Date(closedMs);
-    // Normalize to start-of-day in local time so all timestamps that
-    // fall on the same calendar day bucket together.
-    const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + p.realizedPnl);
-    noteDay(dayKey, closedMs);
-  }
-
-  // If every position was filtered out (all bad timestamps), show the
-  // empty state rather than rendering a blank grid from Infinity bounds.
-  if (dayBuckets.size === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8 text-center text-[var(--text-tertiary)] min-h-[420px]">
-        <div>
-          <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No dated trade history</p>
-          <p className="text-xs mt-1">Calendar appears once trades have valid close times</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Window: from the wallet's first trade day to "today" so we have a
-  // continuous strip even on days with no activity. Bound the start at
-  // most ~14 months back so a 5000-trade wallet doesn't try to render
-  // a years-long heatmap (still useful but starts to lose density).
-  const earliestDate = new Date(earliest);
-  earliestDate.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  // Cap range at 420 days back (~14 months) to keep render bounded.
-  const fourteenMonthsAgo = new Date(today);
-  fourteenMonthsAgo.setDate(fourteenMonthsAgo.getDate() - 420);
-  // Floor: show at least 16 weeks even for a brand-new wallet, so the grid
-  // reads as a calendar (empty cells are information too) rather than a
-  // couple of orphan squares.
-  const sixteenWeeksAgo = new Date(today);
-  sixteenWeeksAgo.setDate(sixteenWeeksAgo.getDate() - 16 * 7);
-  const naturalStart = earliestDate > fourteenMonthsAgo ? earliestDate : fourteenMonthsAgo;
-  const rangeStart = naturalStart < sixteenWeeksAgo ? naturalStart : sixteenWeeksAgo;
-  // Align rangeStart to the previous Monday so columns are full weeks.
-  const startDow = rangeStart.getDay(); // 0=Sun, 1=Mon, ...
-  const daysToBackUp = startDow === 0 ? 6 : startDow - 1;
-  rangeStart.setDate(rangeStart.getDate() - daysToBackUp);
-
-  // Build an array of weeks, each week is an array of 7 day entries.
-  const weeks: Array<Array<{ date: Date; key: string; pnl: number | null; isFuture: boolean }>> = [];
-  const cursor = new Date(rangeStart);
-  while (cursor <= today) {
-    const week: Array<{ date: Date; key: string; pnl: number | null; isFuture: boolean }> = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(cursor);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      const isFuture = date > today;
-      const pnl = isFuture ? null : (dayBuckets.get(key) ?? 0);
-      week.push({ date, key, pnl, isFuture });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-
-  // Color intensity: cap at the 90th percentile of absolute daily PnL
-  // to avoid one outlier day swamping the color scale. Days at or above
-  // the cap get full saturation, lesser days get proportional opacity.
-  const absValues = Array.from(dayBuckets.values()).map(Math.abs).sort((a, b) => a - b);
-  const cap = absValues.length > 0 ? absValues[Math.min(absValues.length - 1, Math.floor(absValues.length * 0.9))] : 0;
-  const intensity = (pnl: number): number => {
-    if (cap === 0) return 0;
-    return Math.min(1, Math.abs(pnl) / cap);
-  };
-
-  // Month labels — sample one column per visible month change for the
-  // bottom axis. Track which month each week's first day belongs to;
-  // when it differs from the previous, emit a label for that column.
-  const monthLabels: Array<{ col: number; label: string }> = [];
-  let lastMonth = -1;
-  weeks.forEach((week, col) => {
-    const firstDay = week[0].date;
-    if (firstDay.getMonth() !== lastMonth) {
-      monthLabels.push({
-        col,
-        label: firstDay.toLocaleDateString('en-US', { month: 'short' }),
-      });
-      lastMonth = firstDay.getMonth();
-    }
-  });
-
-  // Summary stats for the strip above the heatmap.
-  let totalWins = 0;
-  let totalLosses = 0;
-  let bestDay = 0;
-  let worstDay = 0;
-  for (const pnl of dayBuckets.values()) {
-    if (pnl > 0) totalWins++;
-    else if (pnl < 0) totalLosses++;
-    if (pnl > bestDay) bestDay = pnl;
-    if (pnl < worstDay) worstDay = pnl;
-  }
-
-  // Per-day PnL bars for the panel beside the heatmap — the days that actually
-  // traded, chronological. Turns the empty right half into a real readout.
-  const dailyBars = Array.from(dayBuckets.entries())
-    .filter(([, pnl]) => pnl !== 0)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, pnl]) => ({ label: key.slice(5).replace('-', '/'), pnl }));
-
-  return (
-    <div className={cn("flex-1", compact ? "h-full px-5 pt-4 pb-3 overflow-x-auto flex flex-col justify-center" : "p-4 min-h-[420px]")}>
-      {/* Summary strip — gives context for the heatmap below. */}
-      <div className={cn("flex items-center gap-x-5 gap-y-1 mb-4 text-xs flex-wrap", compact && "mb-3 text-[11px]")}>
-        <div>
-          <span className="text-[var(--text-tertiary)]">Winning Days </span>
-          <span className="text-bulk-green font-semibold tabular-nums">{totalWins}</span>
-        </div>
-        <div>
-          <span className="text-[var(--text-tertiary)]">Losing Days </span>
-          <span className="text-bulk-red font-semibold tabular-nums">{totalLosses}</span>
-        </div>
-        <div>
-          <span className="text-[var(--text-tertiary)]">Best Day </span>
-          <span className="text-bulk-green font-semibold tabular-nums">
-            +${formatCompact(bestDay)}
-          </span>
-        </div>
-        <div>
-          <span className="text-[var(--text-tertiary)]">Worst Day </span>
-          <span className="text-bulk-red font-semibold tabular-nums">
-            -${formatCompact(Math.abs(worstDay))}
-          </span>
-        </div>
-        {/* Streaks live here rather than in their own card: they answer the
-            same question the grid does — how consistent is this trader — so
-            splitting them across two surfaces made the reader compare across
-            a gap. `streaks` is hoisted, defined further down this file. */}
-        {(() => {
-          const st = streaks(closedPositions);
-          if (!st.longest && !st.current) return null;
-          return (
-            <>
-              <div>
-                <span className="text-[var(--text-tertiary)]">Longest Streak </span>
-                <span className="text-bulk-green font-semibold tabular-nums">{st.longest || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[var(--text-tertiary)]">Current </span>
-                <span
-                  className="font-semibold tabular-nums"
-                  style={{ color: st.current ? (st.currentWin ? 'var(--pos)' : 'var(--neg)') : 'var(--role-content-subtle)' }}
-                >
-                  {st.current ? `${st.current} ${st.currentWin ? 'W' : 'L'}` : '—'}
-                </span>
-              </div>
-            </>
-          );
-        })()}
-      </div>
-
-      {/* Heatmap grid. Each column = one week (Mon top → Sun bottom).
-          GitHub-contributions model: fixed-size cells (14px) with fixed
-          gaps, left-aligned. Cells do NOT stretch to fill the panel - a
-          wallet with one week of data shows a few small squares in the
-          corner, not giant blocks. The panel scrolls horizontally if a
-          very long history overflows. */}
-      <div className={cn("flex flex-col gap-6", !compact && "lg:flex-row lg:items-stretch")}>
-      {/* The grid keeps fixed-size cells (GitHub-contributions model), so on a
-          narrow screen it is wider than the card. Scroll it rather than letting
-          it clip — a cut-off calendar reads as broken, not as "more to the
-          right". */}
-      <div className="shrink-0 max-w-full overflow-x-auto [scrollbar-width:thin]">
-        <div className="inline-flex items-start gap-2">
-          {/* Weekday labels — 14px rows + 3px gaps to line up with cells. */}
-          <div className="flex flex-col shrink-0 pr-1" style={{ gap: GAP }}>
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
-              <div
-                key={d}
-                className="text-[10px] text-[var(--text-tertiary)] tabular-nums"
-                style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden', height: CELL, lineHeight: `${CELL}px` }}
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-          {/* Week columns — 36px cells, 5px gaps. */}
-          <div className="flex" style={{ gap: GAP }}>
-            {weeks.map((week, col) => (
-              <div key={col} className="flex flex-col" style={{ gap: GAP }}>
-                {week.map((day, row) => {
-                  if (day.isFuture) {
-                    return <div key={row} style={{ width: CELL, height: CELL }} />;
-                  }
-                  const i = day.pnl !== null && day.pnl !== 0 ? intensity(day.pnl) : 0;
-                  const isWin = day.pnl !== null && day.pnl > 0;
-                  const isNoTrade = day.pnl === 0;
-                  const bg = isNoTrade
-                    ? undefined
-                    : isWin
-                      ? `rgb(var(--pos-rgb) / ${0.2 + i * 0.8})`
-                      : `rgb(var(--neg-rgb) / ${0.2 + i * 0.8})`;
-                  return (
-                    <HeatmapCell
-                      key={row}
-                      size={CELL}
-                      date={day.date}
-                      pnl={day.pnl}
-                      bg={bg}
-                      isNoTrade={isNoTrade}
-                      isWin={isWin}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Month labels — fixed 17px per column (14px cell + 3px gap). */}
-        <div className="flex mt-2 text-[10px] text-[var(--text-tertiary)] tabular-nums uppercase tracking-wider" style={{ marginLeft: compact ? '34px' : '41px' }}>
-          {monthLabels.map((m, idx) => {
-            const nextCol = idx + 1 < monthLabels.length ? monthLabels[idx + 1].col : weeks.length;
-            const widthCols = nextCol - m.col;
-            return (
-              <div key={`${m.col}-${m.label}`} style={{ width: `${widthCols * (CELL + GAP)}px` }}>
-                {m.label}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Daily-PnL bars — fills the space beside the heatmap with a real
-          readout of each trading day's realized PnL, green up / red down. */}
-      {!compact && dailyBars.length > 0 && (
-        <div className="min-w-0 flex-1 lg:min-h-[220px]">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">Daily PnL</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dailyBars} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
-              <XAxis dataKey="label" tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
-              <YAxis tickFormatter={(v) => `${v < 0 ? '−' : ''}$${formatCompact(Math.abs(v))}`} tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
-              <ReferenceLine y={0} stroke="var(--border-color)" />
-              <Tooltip
-                cursor={{ fill: 'var(--text-primary)', opacity: 0.05 }}
-                contentStyle={{ background: 'var(--bg-muted)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: 'var(--text-secondary)' }}
-                formatter={(v: number) => [<span style={{ color: v >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{v >= 0 ? '+' : '-'}${formatNumber(Math.abs(v), 2)}</span>, 'PnL']}
-              />
-              <Bar dataKey="pnl" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-                {dailyBars.map((d, i) => (
-                  <Cell key={i} fill={d.pnl >= 0 ? 'var(--pos)' : 'var(--neg)'} fillOpacity={0.85} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      </div>
-    </div>
-  );
-}
-
-
 // ============================================================================
 // Wallet page
 //
 // Answers three questions about a trader, in this order: are they any good, what
 // are they holding, how close are they to blowing up. One figure per fact: if a
 // number appears twice on this page, one of them should go.
-//   header  — who this is, follow
-//   summary — total PnL, account value, exposure, closest liquidation
-//   main    — the PnL curve, then positions / orders / history
-//   side    — track record and PnL by market (lands under main on a phone)
+//   rail — who this is, the big PnL, overview and performance
+//   tabs — overview, positions, trades, calendar, funding, transfers
 // ============================================================================
 
+type WalletTab = 'overview' | 'positions' | 'trades' | 'calendar' | 'funding' | 'transfers' | 'liquidations';
 type OpenPos = NonNullable<WalletData['live']>['positions'][number];
 type OpenOrder = NonNullable<NonNullable<WalletData['live']>['openOrders']>[number];
 
-const money = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`;
-const signed = (n: number) => `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`;
-const pnlColor = (n: number) => (n >= 0 ? 'var(--pos)' : 'var(--neg)');
-// Fixed en-US, like every other figure here. The shared ticker formatter follows
-// the browser locale, which printed 1 212,20 beside $186,708.
-const formatPx = (n: number) => formatNumber(n, n >= 1 ? 2 : n >= 0.01 ? 4 : 6);
-const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '');
 const fmtLev = (x: number) => `${Number(x.toFixed(1))}×`;
-const shortDate = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 /** BULK's own fair price on the position. The page-level markPrices map comes
  *  from the ticker feed, which is sometimes partial, so it is only a fallback. */
@@ -512,8 +128,7 @@ type Range = (typeof RANGES)[number][0];
 const RANGE_LABEL: Record<Range, string> = { '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' };
 
 /** The page's one rich element: the total-PnL curve, with the calendar as its other view. */
-function PnlPanel({ curve, closed, daily, address }: { curve: PnlCurve; closed: ClosedPosition[]; daily: Map<string, number> | null; address: string }) {
-  const [view, setView] = useState<'pnl' | 'calendar'>('pnl');
+function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
   // The rail already carries the all-time figure, so open on the last week and
   // show something new. A wallet quiet for a week opens on everything instead.
   const [picked, setPicked] = useState<Range | null>(null);
@@ -541,18 +156,7 @@ function PnlPanel({ curve, closed, daily, address }: { curve: PnlCurve; closed: 
     : [];
   const showsGap = curve.realizedOnlyUntil !== null && data.length > 0 && data[0].t < curve.realizedOnlyUntil;
 
-  const tabs = (
-    <div className="flex items-center gap-1 -ml-2" role="tablist">
-      {([['pnl', 'Performance'], ['calendar', 'Daily performance']] as const).map(([v, label]) => (
-        <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-          className={cn('relative px-2 py-1 text-[15px] transition-colors', view === v ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
-          {label}
-          {view === v && <span className="absolute left-1/2 -translate-x-1/2 -bottom-[9px] h-[3px] w-6 bg-[var(--accent)]" />}
-        </button>
-      ))}
-    </div>
-  );
-  const ranges = view === 'pnl' && (
+  const ranges = (
     <div className="flex items-center rounded-lg border border-[var(--border-color)] p-0.5 text-[12px]">
       {RANGES.map(([r]) => (
         <button key={r} type="button" onClick={() => setPicked(r)}
@@ -564,10 +168,8 @@ function PnlPanel({ curve, closed, daily, address }: { curve: PnlCurve; closed: 
   );
 
   return (
-    <Card title={tabs} right={ranges}>
-      {view === 'calendar' ? (
-        <div className="min-h-[360px] flex flex-col"><PnlCalendarHeatmap closedPositions={closed} dailyOverride={daily} /></div>
-      ) : data.length < 2 ? (
+    <Card title={<span className="text-[15px] text-[var(--role-content)]">Performance</span>} right={ranges}>
+      {data.length < 2 ? (
         <div className="grid place-items-center min-h-[360px] p-8 text-center text-[14px] text-[var(--role-content-subtle)]">
           {curve.points.length < 2 ? 'No PnL history yet. The curve starts with this wallet’s first closed trade.' : 'Nothing recorded in this range.'}
         </div>
@@ -624,26 +226,6 @@ function PnlPanel({ curve, closed, daily, address }: { curve: PnlCurve; closed: 
     </Card>
   );
 }
-
-/** Longest / current win streak, in trades, from the closed history. */
-function streaks(closed: ClosedPosition[]) {
-  const chrono = [...closed].sort((a, b) => a.closedAt - b.closedAt);
-  let longest = 0, run = 0, from = 0, to = 0, bestFrom = 0, bestTo = 0;
-  for (const p of chrono) {
-    if (p.realizedPnl >= 0) { if (run === 0) from = p.closedAt; run++; to = p.closedAt; if (run > longest) { longest = run; bestFrom = from; bestTo = to; } }
-    else run = 0;
-  }
-  // Current streak: sign-consistent run at the tail (wins or losses).
-  let current = 0, currentWin = true;
-  for (let i = chrono.length - 1; i >= 0; i--) {
-    const w = chrono[i].realizedPnl >= 0;
-    if (current === 0) { currentWin = w; current = 1; }
-    else if (w === currentWin) current++;
-    else break;
-  }
-  return { longest, bestFrom, bestTo, current, currentWin };
-}
-
 
 function ShareButton({ symbol, onShare }: { symbol: string; onShare: (symbol: string) => void }) {
   return (
@@ -756,30 +338,6 @@ function OrdersList({ orders }: { orders: OpenOrder[] }) {
   );
 }
 
-/** Where the money came from: closed PnL plus open PnL, biggest markets first. */
-function MarketPnl({ rows }: { rows: { symbol: string; pnl: number }[] }) {
-  if (rows.length === 0) {
-    return <div className="p-10 text-center text-[14px] text-[var(--role-content-subtle)]">No trades yet</div>;
-  }
-  const shown = rows;
-  const max = Math.max(1, ...shown.map((r) => Math.abs(r.pnl)));
-  return (
-    <div className="flex flex-col gap-3 p-5 max-w-3xl">
-      {shown.map((r) => (
-        <div key={r.symbol}>
-          <div className="flex items-baseline justify-between gap-3 text-[14px]">
-            <span className="flex items-center gap-2 min-w-0 text-[var(--role-content)]"><CoinIcon symbol={r.symbol} size={16} /><span className="truncate">{coinOf(r.symbol)}</span></span>
-            <span className="tabular-nums shrink-0" style={{ color: pnlColor(r.pnl) }}>{signed(r.pnl)}</span>
-          </div>
-          <div className="mt-1 h-1 rounded-full bg-[var(--role-surface-raised)] overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${(Math.abs(r.pnl) / max) * 100}%`, background: pnlColor(r.pnl) }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function WalletPage() {
   const params = useParams();
   const router = useRouter();
@@ -824,17 +382,16 @@ export default function WalletPage() {
   // guard against zero-length arrays.
   const [closedPositions, setClosedPositions] = useState<ClosedPosition[]>([]);
   // Raw fills: position open times, the share card and lifetime volume.
-  const [allFills, setAllFills] = useState<WalletFill[]>([]);
+  const [allFills, setAllFills] = useState<WalletFillLite[]>([]);
   // Position currently being inspected in the price-chart modal. null means
   // closed. Set when the user clicks any position card.
   const [chartPosition, setChartPosition] = useState<PositionForChart | null>(null);
 
-  // Which sub-panel is showing — open positions or recent closed positions.
-  // Defaults to whichever has data (we set this in an effect below). User
-  // can flick between the two with the segmented control in the panel
-  // header. Replaces the older two-panel stacked layout that wasted
-  // vertical space.
-  const [positionsTab, setPositionsTab] = useState<'open' | 'orders' | 'recent' | 'markets' | 'liquidations' | 'activity'>('open');
+  // Which section of the page is showing.
+  const [tab, setTab] = useState<WalletTab>('overview');
+  const [tradeView, setTradeView] = useState<'fills' | 'closed'>('fills');
+  const [funding, setFunding] = useState<WalletFunding | null>(null);
+  const [transfers, setTransfers] = useState<ActivityEvent[] | null>(null);
   // Share-card state: reconstruct a trade's lifecycle (fills + klines) and open
   // the animated card for it — same card the observe page uses.
   const [cardData, setCardData] = useState<ShareCardData | null>(null);
@@ -1026,18 +583,19 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [address, network]);
 
-  // Track whether the user has manually clicked a tab. Once they have, we
-  // never auto-switch on data changes — that would be jarring (e.g. their
-  // last position closes and the panel suddenly jumps tabs). On first load
-  // with no open positions we land on "recent" automatically; afterward,
-  // the user is in charge.
-  const [tabIsUserPicked, setTabIsUserPicked] = useState(false);
-
+  // Funding and transfers load once per wallet, after the page itself.
   useEffect(() => {
-    if (tabIsUserPicked) return;
-    const hasOpen = (data?.live?.positions || []).length > 0;
-    setPositionsTab(hasOpen ? 'open' : 'recent');
-  }, [data, tabIsUserPicked]);
+    let cancelled = false;
+    setFunding(null); setTransfers(null);
+    (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try { const f = await wallet.getFunding(address); if (!cancelled) setFunding(f); break; }
+        catch { await new Promise((r) => setTimeout(r, 1000 * (attempt + 1))); }
+      }
+    })();
+    wallet.getActivity(address, 200).then((r) => { if (!cancelled) setTransfers(r.data || []); }).catch(() => { if (!cancelled) setTransfers([]); });
+    return () => { cancelled = true; };
+  }, [address, network]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
@@ -1216,7 +774,11 @@ export default function WalletPage() {
   const totalNotional = positions.reduce((sum, p) => sum + Math.abs(p.notional || 0), 0);
   const longNotional = positions.reduce((sum, p) => sum + (p.size > 0 ? Math.abs(p.notional || 0) : 0), 0);
   const longShare = totalNotional > 0 ? longNotional / totalNotional : null;
-  const leverage = margin && margin.totalBalance > 0 && totalNotional > 0 ? totalNotional / margin.totalBalance : null;
+  // BULK's totalMargin is cash: net deposits plus net realized, to the cent. Open
+  // PnL sits on top of it, so what the account is worth is the two together.
+  const accountValue = margin ? margin.totalBalance + margin.unrealizedPnl : null;
+  const netDeposited = margin ? margin.totalBalance - margin.realizedPnl : null;
+  const leverage = accountValue !== null && accountValue > 0 && totalNotional > 0 ? totalNotional / accountValue : null;
 
   // The position most likely to take the wallet down next.
   const closestLiq = positions.reduce<{ symbol: string; dist: number; price: number } | null>((best, p) => {
@@ -1226,7 +788,27 @@ export default function WalletPage() {
 
   const openOrders = data?.live?.openOrders ?? [];
   const record = useMemo(() => trackRecord(closedPositions), [closedPositions]);
-  const marketPnl = useMemo(() => pnlByMarket(closedPositions, positions), [closedPositions, positions]);
+  const fillSummary = useMemo(() => summarizeFills(allFills), [allFills]);
+  // Margin's realized figure is net, so fees and funding come back out for gross.
+  const grossRealized = margin ? margin.realizedPnl - margin.fees - margin.funding : null;
+  const positionPnlKey = positions.map((p) => `${p.symbol}:${Math.round(p.unrealizedPnl)}`).join();
+  const breakdown = useMemo(
+    () => marketBreakdown({ summary: fillSummary, grossRealized, closed: closedPositions, open: positions, funding: funding?.bySymbol ?? {} }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fillSummary, grossRealized, closedPositions, positionPnlKey, funding],
+  );
+  const longValue = longNotional;
+  const shortValue = totalNotional - longNotional;
+  const transferTotals = useMemo(() => {
+    let inn = 0, out = 0;
+    for (const e of transfers ?? []) {
+      if (e.status && e.status !== 'completed') continue;
+      const amount = Number(e.amount) || 0;
+      if (e.activityType === 'deposit' || (e.to === address && e.from !== address && /transfer/i.test(e.activityType))) inn += amount;
+      else if (e.activityType === 'withdrawal' || (e.from === address && e.to !== address && /transfer/i.test(e.activityType))) out += amount;
+    }
+    return { inn, out };
+  }, [transfers, address]);
   const drawdown = useMemo(() => maxDrawdownUsd(curve.points), [curve.points]);
   const openLiveChart = (pos: OpenPos) => {
     const isLong = pos.size > 0;
@@ -1338,57 +920,114 @@ export default function WalletPage() {
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-                <Tile label="Account value" value={margin ? money(margin.totalBalance) : '—'} />
+                <Tile label="Account value" value={accountValue !== null ? money(accountValue) : '—'} />
                 <Tile label={`Volume (${feeTier?.windowDays ?? 14}d)`} value={feeTier ? money(feeTier.rollingVolume) : '—'} />
               </div>
             </section>
 
             {/* ── MAIN ─────────────────────────────────────────────────── */}
             <div className="flex flex-col min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2">
-              <PnlPanel curve={curve} closed={closedPositions} daily={dailyPnlFromSeries} address={address} />
+              {/* Scrolls rather than overflowing: these tabs don't fit a phone. */}
+              <div className="px-3 bg-[var(--bg-muted)] border-b border-[var(--border-color)] flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist">
+                {([
+                  ['overview', 'Overview'],
+                  ['positions', `Positions (${positions.length})`],
+                  ['trades', 'Trade history'],
+                  ['calendar', 'PnL calendar'],
+                  ['funding', 'Funding'],
+                  ['transfers', 'Deposits & withdrawals'],
+                  ['liquidations', 'Liquidations'],
+                ] as const).map(([k, label]) => (
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                    className={cn('relative px-2 pt-3.5 pb-3 text-[15px] transition-colors whitespace-nowrap', tab === k ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
+                    {label}
+                    {tab === k && <span className="absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] w-6 bg-[var(--accent)]" />}
+                  </button>
+                ))}
+              </div>
 
-              <section className="flex flex-col min-w-0 flex-1 bg-[var(--bg-muted)]">
-                {/* Scrolls rather than overflowing: these tabs don't fit a phone. */}
-                <div className="px-3 border-b border-[var(--border-color)] flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0" role="tablist">
-                  {([
-                    ['open', `Positions (${positions.length})`],
-                    ['orders', `Open orders (${openOrders.length})`],
-                    ['recent', `Closed (${closedPositions.length})`],
-                    ['markets', 'Markets'],
-                    ['liquidations', 'Liquidations'],
-                    ['activity', 'Account history'],
-                  ] as const).map(([k, label]) => (
-                    <button key={k} type="button" role="tab" aria-selected={positionsTab === k} onClick={() => { setPositionsTab(k); setTabIsUserPicked(true); }}
-                      className={cn('relative px-2 pt-3.5 pb-3 text-[15px] transition-colors whitespace-nowrap', positionsTab === k ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
-                      {label}
-                      {positionsTab === k && <span className="absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] w-6 bg-[var(--accent)]" />}
-                    </button>
-                  ))}
-                </div>
-                <div className="max-h-[640px] overflow-y-auto">
-                  {positionsTab === 'open' ? (
-                    !hasLiveData && positions.length === 0 ? (
+              <div className="flex-1 min-w-0 bg-[var(--bg-muted)]">
+                {tab === 'overview' && (
+                  <>
+                    <PnlPanel curve={curve} address={address} />
+                    <MarketBreakdown rows={breakdown.rows} exact={breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest}
+                      totalVolume={fillSummary.volume} makerShare={fillSummary.volume > 0 ? fillSummary.maker.volume / fillSummary.volume : 0} />
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-px bg-[var(--border-color)]">
+                      {margin && <GrossToNet gross={(grossRealized ?? 0) + margin.unrealizedPnl} fees={margin.fees} funding={margin.funding} net={totalPnl} />}
+                      <MakerTaker maker={fillSummary.maker} taker={fillSummary.taker} partial={!breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest} />
+                    </div>
+                  </>
+                )}
+
+                {tab === 'positions' && (
+                  <>
+                    <StatStrip items={[
+                      { label: 'Open', hint: 'Positions', value: String(positions.length) },
+                      { label: 'Gross', hint: 'Long + short', value: `$${formatCompact(totalNotional)}`, bar: { pct: 1, color: 'var(--accent)' } },
+                      { label: 'Long', hint: `${positions.filter((p) => p.size > 0).length} markets`, value: `$${formatCompact(longValue)}`, color: 'var(--pos)', bar: { pct: totalNotional ? longValue / totalNotional : 0, color: 'var(--pos)' } },
+                      { label: 'Short', hint: `${positions.filter((p) => p.size < 0).length} markets`, value: `$${formatCompact(shortValue)}`, color: 'var(--neg)', bar: { pct: totalNotional ? shortValue / totalNotional : 0, color: 'var(--neg)' } },
+                    ]} />
+                    {!hasLiveData && positions.length === 0 ? (
                       <div className="p-6 text-[14px] text-[var(--role-content-muted)] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />Fetching positions</div>
-                    ) : <PositionsTable positions={positions} markPrices={markPrices} openTimes={positionOpenTimes} onOpen={openLiveChart} onShare={openShareCard} />
-                  ) : positionsTab === 'orders' ? (
-                    <OrdersList orders={openOrders} />
-                  ) : positionsTab === 'recent' ? (
-                    <ClosedPositionsList address={address} provided={closedPositions} limit={1000} density="table" onSelect={openClosedChart} />
-                  ) : positionsTab === 'markets' ? (
-                    <MarketPnl rows={marketPnl} />
-                  ) : positionsTab === 'liquidations' ? (
-                    <RiskEventsList address={address} bare />
-                  ) : (
-                    <ActivityFeed address={address} />
-                  )}
-                </div>
-              </section>
+                    ) : <PositionsTable positions={positions} markPrices={markPrices} openTimes={positionOpenTimes} onOpen={openLiveChart} onShare={openShareCard} />}
+                    {openOrders.length > 0 && (
+                      <>
+                        <h2 className="px-5 pt-5 pb-2 text-[15px] text-[var(--role-content)] border-t border-[var(--border-color)]">Open orders ({openOrders.length})</h2>
+                        <OrdersList orders={openOrders} />
+                      </>
+                    )}
+                  </>
+                )}
+
+                {tab === 'trades' && (
+                  <>
+                    <StatStrip items={[
+                      { label: 'Fills', hint: breakdown.exact ? 'All time' : 'Latest available', value: allFills.length.toLocaleString('en-US') },
+                      { label: 'Volume', hint: 'All time', value: `$${formatCompact(lifetimeVolume)}` },
+                      { label: 'Realized PnL', hint: 'After fees', value: margin ? signed(margin.realizedPnl) : '—', color: margin ? pnlColor(margin.realizedPnl) : undefined },
+                      { label: 'Fees', hint: 'Net of rebates', value: margin ? signed(margin.fees) : '—', color: margin ? pnlColor(margin.fees) : undefined },
+                    ]} />
+                    <div className="flex items-center gap-1 px-4 pt-3">
+                      {([['fills', 'Fills'], ['closed', `Closed trades (${closedPositions.length})`]] as const).map(([k, label]) => (
+                        <button key={k} type="button" onClick={() => setTradeView(k)}
+                          className={cn('px-2.5 py-1 rounded-md text-[13px] transition-colors', tradeView === k ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>{label}</button>
+                      ))}
+                    </div>
+                    {tradeView === 'fills' ? (
+                      <>
+                        <FillsTable fills={allFills} />
+                        {!breakdown.exact && allFills.length > 0 && <div className="pt-3"><PartialNote fills={allFills.length} oldest={fillSummary.oldest} /></div>}
+                      </>
+                    ) : <ClosedPositionsList address={address} provided={closedPositions} limit={1000} density="table" onSelect={openClosedChart} />}
+                  </>
+                )}
+
+                {tab === 'calendar' && <PnlCalendar daily={dailyPnlFromSeries} volume={fillSummary.dailyVolume} />}
+
+                {tab === 'funding' && <FundingPanel funding={funding} />}
+
+                {tab === 'transfers' && (
+                  <>
+                    <StatStrip items={[
+                      { label: 'In', hint: 'Deposits and transfers', value: transfers ? money(transferTotals.inn) : '—' },
+                      { label: 'Out', hint: 'Withdrawals and transfers', value: transfers ? money(transferTotals.out) : '—' },
+                      { label: 'Net deposited', value: netDeposited !== null ? money(netDeposited) : '—' },
+                      { label: 'Return on deposits', hint: 'Total PnL', value: netDeposited !== null && netDeposited > 0 ? `${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%` : '—', color: netDeposited !== null && netDeposited > 0 ? pnlColor(totalPnl) : undefined },
+                    ]} />
+                    <ActivityFeed address={address} flush />
+                  </>
+                )}
+
+                {tab === 'liquidations' && <RiskEventsList address={address} bare />}
+              </div>
             </div>
 
             {/* ── RAIL, STATS ──────────────────────────────────────────── */}
             <aside className="bg-[var(--role-surface-raised)] lg:border-r border-t border-[var(--border-color)] px-5 py-4 flex flex-col gap-4 min-w-0">
               <RailGroup title="Overview">
                 <Row label="Available" value={margin ? money(margin.availableBalance) : '—'} />
+                {netDeposited !== null && netDeposited > 0 && <Row label="Net deposited" value={money(netDeposited)} title="Deposits less withdrawals" />}
+                {netDeposited !== null && netDeposited > 0 && <Row label="Return on deposits" value={`${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%`} color={pnlColor(totalPnl)} title="Total PnL ÷ net deposited. Doesn't weight for when money came in or out." />}
                 <Row label="Exposure" value={totalNotional > 0 ? money(totalNotional) : '—'} />
                 {leverage !== null && <Row label="Leverage" value={`${leverage.toFixed(1)}×`} />}
                 {longShare !== null && <Row label="Direction" value={`${(longShare * 100).toFixed(0)}% long`} />}

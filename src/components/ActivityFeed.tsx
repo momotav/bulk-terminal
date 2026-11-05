@@ -132,7 +132,7 @@ function counterpartyDisplay(addr: string | undefined, label: string | undefined
   return label ?? formatAddress(addr);
 }
 
-export function ActivityFeed({ address }: { address: string }) {
+export function ActivityFeed({ address, flush = false }: { address: string; flush?: boolean }) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +163,7 @@ export function ActivityFeed({ address }: { address: string }) {
   }, [address]);
 
   return (
-    <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
+    <div className={flush ? 'flex flex-col' : 'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col'}>
       <div className="p-4 border-b border-[var(--border-color)]">
         <h2 className="font-semibold flex items-center gap-2">
           <ActivityIcon className="w-4 h-4 text-bulk-green" />
@@ -189,7 +189,7 @@ export function ActivityFeed({ address }: { address: string }) {
           events will appear here.
         </div>
       ) : (
-        <div className="divide-y divide-[var(--border-color)]/40 max-h-[400px] overflow-y-auto">
+        <div className="divide-y divide-[var(--role-line-subtle)] max-h-[560px] overflow-y-auto">
           {events.map((e, i) => (
             <ActivityRow key={`${e.timestamp}-${i}`} event={e} viewerAddress={address} />
           ))}
