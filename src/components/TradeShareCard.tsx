@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
-import { FREEZE_MS, drawChip, drawImpact, drawShatter, drawStamp, makeGlass, shakeAt } from '@/lib/liquidationFx';
+import { FREEZE_MS, drawLabel, drawToon, makeToon, shakeAt } from '@/lib/liquidationFx';
 
 export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number; liq?: 'partial' | 'full' | 'adl' | null }
 export interface ShareCardData {
@@ -130,13 +130,10 @@ export function TradeShareCard({ data, onClose }: Props) {
     const sub = share == null ? null : share >= 0.995 ? 'Entire position force-closed' : `${Math.max(1, Math.round(share * 100))}% of position force-closed`;
     return { t, price, sub, hits: slices.slice(0, -1) };
   }, [data.events, data.liquidated, data.exitPrice, isOpen, closedAt, size]);
-  const glass = useMemo(() => makeGlass(`${address}${symbol}${openedAt}`), [address, symbol, openedAt]);
+  const toon = useMemo(() => makeToon(`${address}${symbol}${openedAt}`), [address, symbol, openedAt]);
   const fxRef = useRef<number | null>(null); // ms since the blast; null before it
-  // The glass is in front of the chart, so damage stays where it happened on screen
-  // while the candles scroll on behind it.
+  // The damage stays where it happened on screen while the candles scroll on behind it.
   const impactRef = useRef<{ x: number; y: number } | null>(null);
-  const chipsRef = useRef(new Map<number, { x: number; y: number; at: number }>());
-  const frameCopyRef = useRef<HTMLCanvasElement | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -278,7 +275,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     const canvas = canvasRef.current, cs = candles, V = varsRef.current;
     if (!canvas || !cs || !V) return;
     if (fxMs !== undefined) fxRef.current = fxMs;
-    if (fxRef.current === null && headF === 0) { impactRef.current = null; chipsRef.current.clear(); }
+    if (fxRef.current === null && headF === 0) impactRef.current = null;
     const fx = blast ? fxRef.current : null;
     const boomed = fx !== null;
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -470,7 +467,9 @@ export function TradeShareCard({ data, onClose }: Props) {
       const my = markerY(bar, e.buy, stack);
       const isLiq = !!e.liq;
       ctx.globalAlpha = op;
-      ctx.beginPath(); ctx.arc(x, my, isLiq ? 9 : 8, 0, Math.PI * 2);
+      // A liquidation marker pops in past its size.
+      const popIn = isLiq ? 1 + 0.7 * (1 - clamp01(since / hitBars)) : 1;
+      ctx.beginPath(); ctx.arc(x, my, (isLiq ? 9 : 8) * popIn, 0, Math.PI * 2);
       ctx.fillStyle = isLiq ? V.neg : (e.buy ? V.pos : V.neg); ctx.fill();
       // Liquidations get a bright white ring so they stand out from ordinary fills.
       ctx.lineWidth = isLiq ? 2 : 1.5; ctx.strokeStyle = isLiq ? '#fff' : V.bgBase; ctx.stroke();
@@ -648,34 +647,18 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.restore(); // end shake
 
     // ---- liquidation effects, over the whole card ----
-    if (blast) {
-      // Each slice leaves a chip in the glass where it landed.
-      if (!boomed) {
-        for (const e of blast.hits) {
-          if (idxAtTime(cs, e.t) <= h && !chipsRef.current.has(e.t)) {
-            chipsRef.current.set(e.t, { x: camX(candleOf(e.t)), y: yOf(cs[candleOf(e.t)].c), at: now });
-          }
-        }
-      }
+    if (blast && boomed) {
+      const ms = fx as number;
+      if (!impactRef.current) impactRef.current = { x: camX(candleOf(blast.t)), y: yOf(cs[candleOf(blast.t)].c) };
+      const { x: ox, y: oy } = impactRef.current;
       ctx.save();
       roundRect(ctx, 3, 3, W - 6, cardH - 6, 19); ctx.clip();
-      [...chipsRef.current.entries()].slice(-5).forEach(([t, c]) => drawChip(ctx, t, now - c.at, c.x, c.y));
-      if (boomed) {
-        const ms = fx as number;
-        if (!impactRef.current) impactRef.current = { x: camX(candleOf(blast.t)), y: yOf(cs[candleOf(blast.t)].c) };
-        const { x: ox, y: oy } = impactRef.current;
-        if (!frameCopyRef.current) frameCopyRef.current = document.createElement('canvas');
-        const copy = frameCopyRef.current;
-        if (copy.width !== canvas.width || copy.height !== canvas.height) { copy.width = canvas.width; copy.height = canvas.height; }
-        copy.getContext('2d')?.drawImage(canvas, 0, 0);
-        drawShatter(ctx, glass, copy, ms, ox, oy, W, cardH);
-        drawImpact(ctx, glass, ms, ox, oy, W, cardH, calm);
-        drawStamp(ctx, ms, cx0 + cw / 2, cy0 + ch / 2, 'LIQUIDATED', blast.sub, { red: V.neg, bg: V.bgBase }, FONT);
-      }
+      drawToon(ctx, toon, ms, ox, oy, W, cardH, { red: V.neg, green: V.pos }, calm);
+      drawLabel(ctx, toon, ms, cx0 + cw / 2, cy0 + ch / 2 - 6, 'LIQUIDATED', blast.sub, V.neg, FONT);
       ctx.restore();
     }
     ctx.restore();
-  }, [blast, glass, candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.exitPrice, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
+  }, [blast, toon, candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.exitPrice, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
 
   // One smooth replay pass (steady scroll) → resolves after a short end-hold.
   const play = useCallback((): Promise<void> => {
