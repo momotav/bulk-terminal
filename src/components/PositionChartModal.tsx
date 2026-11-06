@@ -377,7 +377,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         ...shared, ...series(life),
         side: position.side, isOpen: false, openedAt: life.openedAt, closedAt: position.closedAt,
         avgEntry: position.entryPrice, size: Math.abs(position.size), leverage: position.leverage ?? 0,
-        markPrice: null, exitPrice: position.closePrice, pnl: position.realizedPnl,
+        markPrice: null, exitPrice: position.closePrice, pnl: position.realizedPnl, liquidated: position.liquidated,
       };
     }
 

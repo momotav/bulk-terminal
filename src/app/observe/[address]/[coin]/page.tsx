@@ -366,6 +366,7 @@ export default function ObserveTradePage() {
             leverage: liveLeverage || 0,
             markPrice,
             exitPrice: life.isOpen ? markPrice : (pinnedRecord?.closePrice ?? lastPrice),
+            liquidated: pinnedRecord?.liquidated,
             pnl: displayPnl,
             events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
             pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),

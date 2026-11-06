@@ -685,7 +685,22 @@ export function closedTradeLifecycle(
 ): TradeLifecycle {
   const replay = fills.length ? buildTradeLifecycle(fills, candles, { ...opts, liqPrice: null }) : null;
   const tolerance = Math.max(1, Math.abs(record.realizedPnl) * 0.1);
-  return replay && !replay.isOpen && Math.abs(replay.finalPnl - record.realizedPnl) <= tolerance
-    ? replay
-    : lifecycleFromClosedRecord(record, symbol);
+  if (replay && !replay.isOpen && Math.abs(replay.finalPnl - record.realizedPnl) <= tolerance) return replay;
+
+  // The record has no fills, but the liquidation slices must survive: BULK marks these
+  // trades closeReason 'normal', so the fills are the only sign one was liquidated.
+  const life = lifecycleFromClosedRecord(record, symbol);
+  const long = record.side === 'long';
+  let held = Math.abs(record.size);
+  const slices = fills
+    .filter((f) => liqReasonKind(f.reasonCode) === 'liq' && f.isBuy !== long && f.timestamp >= record.openedAt && f.timestamp <= record.closedAt)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((f): TradeEventPoint => {
+      held = Math.max(0, held - f.size);
+      return {
+        t: f.timestamp, action: 'reduce', actionLabel: 'Partial liq', price: f.price, sizeDelta: long ? -f.size : f.size,
+        positionAfter: long ? held : -held, realizedDelta: 0, liq: 'partial',
+      };
+    });
+  return slices.length ? { ...life, events: [life.events[0], ...slices, life.events[1]] } : life;
 }

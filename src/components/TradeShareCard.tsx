@@ -14,10 +14,11 @@
 // Fill markers (open / add / partial-close / close) fade in and out over ~1s.
 // ---------------------------------------------------------------------------
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
+import { FREEZE_MS, drawBlast, drawCracks, drawEmbers, drawHit, drawStamp, drawTension, makeFxScene, shakeAt } from '@/lib/liquidationFx';
 
 export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number; liq?: 'partial' | 'full' | 'adl' | null }
 export interface ShareCardData {
@@ -39,6 +40,9 @@ export interface ShareCardData {
   /** Liquidation-price step series over the trade (widens at partial liqs).
    *  Empty when leverage is unknown → no liq line drawn. */
   liqCurve?: { t: number; price: number }[];
+  /** BULK's record says it was liquidated. Rarely set: BULK liquidates in slices
+   *  and leaves closeReason 'normal', so the liq fills in `events` are the real signal. */
+  liquidated?: boolean;
 }
 
 interface Props { data: ShareCardData; onClose: () => void; }
@@ -48,6 +52,8 @@ const FONT = "'BULK', ui-sans-serif, -apple-system, \"Segoe UI\", Roboto, sans-s
 const VISIBLE = 22;          // candles on screen at once (the scrolling window)
 const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
 const HOLD_MS = 1100;        // linger on the final frame
+const LIQ_HOLD_MS = 1500;    // the same on a liquidation card, with the embers still going
+const RESUME_MAX_MS = 1600;  // playing out what happened after the blast
 const FADE_SEC = 1.0;        // marker fade in/out duration
 const LABEL_SEC = 1.3;       // how long a fill's pop-up label stays up
 // Chart band + body layout (taller chart, tighter bottom gap).
@@ -108,6 +114,24 @@ export function TradeShareCard({ data, onClose }: Props) {
   const signedSize = side === 'long' ? size : -size;
   const notional = size * avgEntry;
   const margin = leverage > 0 ? notional / leverage : notional;
+
+  // The liquidation story of this trade. A trade that was only ever sliced and then
+  // closed by hand counts: across real wallets none ended on a liquidation fill. The
+  // blast lands on the last slice, and earlier slices get a small hit on the way.
+  const blast = useMemo(() => {
+    const slices = data.events.filter((e) => e.liq === 'full' || e.liq === 'partial');
+    if (isOpen || (!slices.length && !data.liquidated)) return null;
+    const last = slices[slices.length - 1];
+    const t = last?.t ?? closedAt;
+    const price = last?.price ?? data.exitPrice;
+    if (t == null || price == null) return null;
+    const units = slices.reduce((sum, e) => sum + Math.abs(e.units), 0);
+    const share = slices.length && size > 0 ? Math.min(1, units / size) : null;
+    const sub = share == null ? null : share >= 0.995 ? 'Entire position force-closed' : `${Math.max(1, Math.round(share * 100))}% of position force-closed`;
+    return { t, price, sub, hits: slices.slice(0, -1) };
+  }, [data.events, data.liquidated, data.exitPrice, isOpen, closedAt, size]);
+  const scene = useMemo(() => makeFxScene(`${address}${symbol}${openedAt}`), [address, symbol, openedAt]);
+  const fxRef = useRef<number | null>(null); // ms since the blast; null before it
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -244,9 +268,14 @@ export function TradeShareCard({ data, onClose }: Props) {
   }, []);
 
   // ---- the single draw function: renders the card at a given scroll head -----
-  const draw = useCallback((headF: number) => {
+  // `fxMs` is the time since the blast. Left out, a repaint keeps the last frame's.
+  const draw = useCallback((headF: number, fxMs?: number | null) => {
     const canvas = canvasRef.current, cs = candles, V = varsRef.current;
     if (!canvas || !cs || !V) return;
+    if (fxMs !== undefined) fxRef.current = fxMs;
+    const fx = blast ? fxRef.current : null;
+    const boomed = fx !== null;
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const ctx = canvas.getContext('2d');
     if (!ctx || cs.length < 2) return;
     const N = cs.length;
@@ -263,8 +292,21 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.imageSmoothingEnabled = true;
     (ctx as any).imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, W, cardH);
-    roundRect(ctx, 0, 0, W, cardH, 22); ctx.fillStyle = V.accent; ctx.fill();
+    roundRect(ctx, 0, 0, W, cardH, 22); ctx.fillStyle = boomed ? V.neg : V.accent; ctx.fill();
     roundRect(ctx, 3, 3, W - 6, cardH - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
+
+    const boomIdx = blast ? idxAtTime(cs, blast.t) : 0;
+    // How close the price is to the blast, 0 until the last third of a screen.
+    const tension = blast && !boomed ? clamp01(1 - (boomIdx - h) / (VISIBLE * 0.34)) : 0;
+    // Each slice before the blast: 0 at the hit, 1 once it has died away.
+    const hitBars = N / 90;
+    const hits = blast && !boomed ? blast.hits.map((e) => ({ e, age: (h - idxAtTime(cs, e.t)) / hitBars })).filter((x) => x.age >= 0 && x.age < 1) : [];
+    const knock = hits.length ? (1 - Math.min(...hits.map((x) => x.age))) * 4 : 0;
+    const now = performance.now();
+    const [shakeX, shakeY] = boomed ? shakeAt(fx, calm)
+      : calm ? [0, 0] : [Math.sin(now * 0.09) * (tension * 2 + knock), Math.cos(now * 0.07) * (tension * 2 + knock)];
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
 
     // ---- header ----  (wallet hidden → "bulker")
     const [a1, a2, initials] = avatarHues(opt.hideWallet ? 'bulker' : address);
@@ -276,12 +318,14 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillText(opt.hideWallet ? 'B' : initials, ax, ay + 1);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'bulker' : formatAddress(address), PAD + 58, PAD + 18);
-    const badge = isOpen ? 'OPEN' : 'CLOSED';
+    // A liquidation card reads as live until the blast, so the ending isn't given away.
+    const live = isOpen || (!!blast && !boomed);
+    const badge = boomed ? 'LIQUIDATED' : live ? 'OPEN' : 'CLOSED';
     ctx.font = `600 11px ${FONT}`;
     const bw = ctx.measureText(badge).width + 16;
     roundRect(ctx, PAD + 58, PAD + 28, bw, 18, 5);
-    ctx.fillStyle = isOpen ? V.accent : V.border; ctx.globalAlpha = isOpen ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = isOpen ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
+    ctx.fillStyle = boomed ? V.neg : live ? V.accent : V.border; ctx.globalAlpha = boomed ? 0.22 : live ? 0.18 : 0.5; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = boomed ? V.neg : live ? V.accentText : V.text3; ctx.fillText(badge, PAD + 66, PAD + 41);
     // "trade on BULK" lockup, top-right. Pick the light or dark version from the
     // card background's luminance so it's always readable in either theme.
     const bgLum = (() => { const m = V.bgBase.match(/\d+/g); if (!m) return 20; const [r, gr, b] = m.slice(0, 3).map(Number); return 0.299 * r + 0.587 * gr + 0.114 * b; })();
@@ -313,6 +357,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     let vlo = Infinity, vhi = -Infinity;
     for (let i = firstIdx; i <= intHead; i++) { if (cs[i].l < vlo) vlo = cs[i].l; if (cs[i].h > vhi) vhi = cs[i].h; }
     vlo = Math.min(vlo, price); vhi = Math.max(vhi, price);
+    // The fill can sit outside its candle's range. Bring it into frame for the blast.
+    if (blast && (boomed || tension > 0)) { vlo = Math.min(vlo, blast.price); vhi = Math.max(vhi, blast.price); }
     // Keep the liq line in view, but don't let a very distant liq squash the
     // candles to a flat line — clamp its pull to ±8% beyond the candle range.
     if (liqNow != null && Number.isFinite(liqNow)) {
@@ -344,10 +390,16 @@ export function TradeShareCard({ data, onClose }: Props) {
       const edge = clamp01((x - cx0) / (step * 1.5));   // fade as it slides off the left
       const c = cs[i];
       const up = c.c >= c.o;
-      ctx.globalAlpha = 0.25 + 0.75 * edge;
+      // The candles next to the blast drop out of the chart, nearest first.
+      const crater = boomed ? Math.abs(i - boomIdx) : Infinity;
+      const age = crater <= 8 ? (fx as number) - crater * 45 : -1;
+      if (age > 900) continue;
+      const drop = age > 0 ? 0.0011 * age * age : 0;
+      const gone = age > 0 ? 1 - age / 900 : 1;
+      ctx.globalAlpha = (0.25 + 0.75 * edge) * gone * (boomed && crater > 8 && i < boomIdx ? 0.55 : 1);
       ctx.strokeStyle = up ? V.pos : V.neg; ctx.fillStyle = up ? V.pos : V.neg; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x, yOf(c.h)); ctx.lineTo(x, yOf(c.l)); ctx.stroke();
-      const yO = yOf(c.o), yC = yOf(c.c);
+      ctx.beginPath(); ctx.moveTo(x, yOf(c.h) + drop); ctx.lineTo(x, yOf(c.l) + drop); ctx.stroke();
+      const yO = yOf(c.o) + drop, yC = yOf(c.c) + drop;
       ctx.fillRect(x - bodyW / 2, Math.min(yO, yC), bodyW, Math.max(1, Math.abs(yC - yO)));
     }
     ctx.globalAlpha = 1;
@@ -376,7 +428,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     const beforeEntry = curT < (data.pnlCurve[0]?.t ?? openedAt);
     // At the last frame land exactly on the authoritative value even if the card's
     // candle window ends a touch before the curve's "now" point.
-    const pnlNow = h >= N - 1 ? data.pnl : pnlAt(curT);
+    const closeIdx = closedAt ? idxAtTime(cs, closedAt) : N - 1;
+    const pnlNow = h >= N - 1 || (blast && h >= closeIdx - 0.001) ? data.pnl : pnlAt(curT);
     const positive = pnlNow >= 0;
     const tone = beforeEntry ? V.text3 : (positive ? V.pos : V.neg);
     const yC = yOf(price);
@@ -445,7 +498,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (active && active.op > 0.02) {
       const { e, x, my, op } = active;
       const top = (e.label || (e.buy ? 'Buy' : 'Sell')).toUpperCase();
-      const isExit = e.action === 'reduce' || e.action === 'close' || e.action === 'flip';
+      // A slice rebuilt from BULK's record has no PnL of its own, so it shows its size.
+      const isExit = (e.action === 'reduce' || e.action === 'close' || e.action === 'flip') && !(e.liq && e.realized === 0);
       const val = isExit
         ? `${e.realized >= 0 ? '+' : '−'}$${formatCompact(Math.abs(e.realized))}`
         : `${formatNumber(e.units, e.units < 1 ? 4 : 2)} ${coin}`;
@@ -536,7 +590,21 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.fillStyle = tone;
     ctx.font = `600 42px ${FONT}`;
     const pnlW = ctx.measureText(pnlTxt).width;
-    ctx.fillText(pnlTxt, PAD + 18, by + 98);
+    // The number takes the hit too: it jumps and briefly splits apart.
+    const pop = boomed && !calm ? 1 + 0.34 * Math.exp(-(fx as number) / 170) : 1;
+    ctx.save();
+    ctx.translate(PAD + 18, by + 98);
+    ctx.scale(pop, pop);
+    if (boomed && !calm && (fx as number) < 340) {
+      const split = 5 * (1 - (fx as number) / 340);
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#fff'; ctx.fillText(pnlTxt, -split, 0);
+      ctx.fillStyle = V.accent; ctx.fillText(pnlTxt, split, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = tone;
+    }
+    ctx.fillText(pnlTxt, 0, 0);
+    ctx.restore();
     ctx.font = `500 18px ${FONT}`;
     ctx.fillText(pctTxt, PAD + 18 + pnlW + 12, by + 98);
 
@@ -568,19 +636,67 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = V.text3; ctx.font = `500 13px ${FONT}`;
     ctx.fillText('bulkstats.com', W / 2, footCy);
     ctx.textBaseline = 'alphabetic';
+    ctx.restore(); // end shake
+
+    // ---- liquidation effects, over the whole card ----
+    if (blast) {
+      const hot = V.accent;
+      drawTension(ctx, W, cardH, Math.max(tension, knock / 4 * 0.6), now, V.neg);
+      for (const { e, age } of hits.slice(-3)) drawHit(ctx, age, camX(idxAtTime(cs, e.t)), yOf(e.price), V.neg);
+      if (boomed) {
+        const ms = fx as number;
+        const ox = camX(boomIdx), oy = Math.max(cy0, Math.min(cy0 + ch, yOf(blast.price)));
+        ctx.save();
+        ctx.beginPath(); ctx.rect(cx0 - 1, cy0 - 6, cw + 2, ch + 12); ctx.clip();
+        drawCracks(ctx, scene, ms, ox, oy, V.text2);
+        ctx.restore();
+        ctx.save();
+        roundRect(ctx, 3, 3, W - 6, cardH - 6, 19); ctx.clip();
+        drawBlast(ctx, scene, ms, ox, oy, W, cardH, { red: V.neg, green: V.pos, hot }, calm);
+        drawEmbers(ctx, scene, ms, { x: cx0, y: cy0, w: cw, h: ch }, hot);
+        drawStamp(ctx, ms, cx0 + cw / 2, cy0 + ch / 2, 'LIQUIDATED', blast.sub, { red: V.neg, bg: V.bgBase }, FONT);
+        ctx.restore();
+      }
+    }
     ctx.restore();
-  }, [candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.exitPrice, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
+  }, [blast, scene, candles, address, isOpen, openedAt, closedAt, avgEntry, side, leverage, margin, coin, data.exitPrice, data.events, data.pnlCurve, data.pnl, data.liqCurve, pnlAt, liqAt, idxAtTime]);
 
   // One smooth replay pass (steady scroll) → resolves after a short end-hold.
   const play = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const cs = candles;
-      if (!cs || cs.length < 2) { draw(cs?.length ? cs.length - 1 : 0); resolve(); return; }
+      if (!cs || cs.length < 2) { draw(cs?.length ? cs.length - 1 : 0, null); resolve(); return; }
       scaleRef.current = null; // re-init the smoothed y-axis for this pass
       const N = cs.length;
       const screens = N / VISIBLE;
       const dur = Math.max(4500, Math.min(11000, screens * SECONDS_PER_SCREEN * 1000));
       const t0 = performance.now();
+
+      if (blast) {
+        // Scroll in, slowing for the last stretch; hold on the blast; then play out
+        // whatever happened between the last slice and the close.
+        const boomIdx = idxAtTime(cs, blast.t);
+        const closeIdx = closedAt ? idxAtTime(cs, closedAt) : N - 1;
+        const rest = Math.max(0, closeIdx - boomIdx);
+        const lead = Math.max(3200, dur * (boomIdx / (N - 1)));
+        const after = rest > 0.5 ? Math.min(RESUME_MAX_MS, 300 + rest * 120) : 0;
+        const total = lead + FREEZE_MS + after + LIQ_HOLD_MS;
+        const approach = (p: number) => (p < 0.8 ? (p / 0.8) * 0.9 : 0.9 + 0.1 * (1 - (1 - (p - 0.8) / 0.2) ** 2));
+        const frame = (t: number) => {
+          const e = t - t0;
+          if (e < lead) draw(boomIdx * approach(e / lead), null);
+          else {
+            const ms = e - lead;
+            const out = after ? clamp01((ms - FREEZE_MS) / after) : 0;
+            draw(boomIdx + rest * out, ms);
+          }
+          if (e < total) rafRef.current = requestAnimationFrame(frame);
+          else resolve();
+        };
+        rafRef.current = requestAnimationFrame(frame);
+        return;
+      }
+
       const frame = (t: number) => {
         const e = t - t0;
         if (e < dur) {
@@ -593,7 +709,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       };
       rafRef.current = requestAnimationFrame(frame);
     });
-  }, [candles, draw]);
+  }, [candles, draw, blast, closedAt, idxAtTime]);
 
   const stop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -611,7 +727,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     const start = () => {
       if (cancelled) return;
       scaleRef.current = null;
-      draw(0);
+      draw(0, null);
       if (candles.length >= 2) { setPlaying(true); play().then(() => { if (!cancelled) setPlaying(false); }); }
     };
     // Make sure the BULK font is loaded so the canvas renders in it (not a
@@ -642,7 +758,7 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (!canvas || !mime || recording) return;
     stop(); setRecording(true);
     try {
-      draw(0);
+      draw(0, null);
       const stream = (canvas as any).captureStream(30) as MediaStream;
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
       const chunks: BlobPart[] = [];
