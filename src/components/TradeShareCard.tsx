@@ -357,8 +357,6 @@ export function TradeShareCard({ data, onClose }: Props) {
     let vlo = Infinity, vhi = -Infinity;
     for (let i = firstIdx; i <= intHead; i++) { if (cs[i].l < vlo) vlo = cs[i].l; if (cs[i].h > vhi) vhi = cs[i].h; }
     vlo = Math.min(vlo, price); vhi = Math.max(vhi, price);
-    // The fill can sit outside its candle's range. Bring it into frame for the blast.
-    if (blast && (boomed || tension > 0)) { vlo = Math.min(vlo, blast.price); vhi = Math.max(vhi, blast.price); }
     // Keep the liq line in view, but don't let a very distant liq squash the
     // candles to a flat line — clamp its pull to ±8% beyond the candle range.
     if (liqNow != null && Number.isFinite(liqNow)) {
@@ -373,6 +371,13 @@ export function TradeShareCard({ data, onClose }: Props) {
     const lo = scaleRef.current.lo, hi = scaleRef.current.hi;
     const range = (hi - lo) || 1;
     const yOf = (p: number) => cy0 + (1 - (p - lo) / range) * ch;
+    // Where a fill sits on its candle. Liquidation fills print hundreds of dollars past
+    // the market and never reach the candles, so at their true price they float in empty
+    // space. The marker stays on the candle; its label carries the real fill price.
+    const onCandle = (e: { t: number; price: number }) => {
+      const c = cs[Math.min(N - 1, Math.floor(idxAtTime(cs, e.t)))];
+      return yOf(Math.max(c.l, Math.min(c.h, e.price)));
+    };
 
     // clip the chart band so candles slide off cleanly at the edges
     ctx.save();
@@ -453,7 +458,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       const edge = clamp01((x - cx0) / (step * 1.5));
       const op = appear * edge;
       if (op <= 0.02) continue;
-      const my = yOf(e.price);
+      const my = onCandle(e);
       const isLiq = !!e.liq;
       ctx.globalAlpha = op;
       ctx.beginPath(); ctx.arc(x, my, isLiq ? 9 : 8, 0, Math.PI * 2);
@@ -502,7 +507,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       const isExit = (e.action === 'reduce' || e.action === 'close' || e.action === 'flip') && !(e.liq && e.realized === 0);
       const val = isExit
         ? `${e.realized >= 0 ? '+' : '−'}$${formatCompact(Math.abs(e.realized))}`
-        : `${formatNumber(e.units, e.units < 1 ? 4 : 2)} ${coin}`;
+        : `${formatNumber(e.units, e.units < 1 ? 4 : 2)} ${coin}${e.liq ? ` @ ${px(e.price)}` : ''}`;
       const valColor = isExit ? (e.realized >= 0 ? V.pos : V.neg) : V.text2;
       ctx.font = `600 12px ${FONT}`; const w1 = ctx.measureText(val).width;
       ctx.font = `600 9px ${FONT}`; const w0 = ctx.measureText(top).width;
@@ -642,10 +647,10 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (blast) {
       const hot = V.accent;
       drawTension(ctx, W, cardH, Math.max(tension, knock / 4 * 0.6), now, V.neg);
-      for (const { e, age } of hits.slice(-3)) drawHit(ctx, age, camX(idxAtTime(cs, e.t)), yOf(e.price), V.neg);
+      for (const { e, age } of hits.slice(-3)) drawHit(ctx, age, camX(idxAtTime(cs, e.t)), onCandle(e), V.neg);
       if (boomed) {
         const ms = fx as number;
-        const ox = camX(boomIdx), oy = Math.max(cy0, Math.min(cy0 + ch, yOf(blast.price)));
+        const ox = camX(boomIdx), oy = onCandle(blast);
         ctx.save();
         ctx.beginPath(); ctx.rect(cx0 - 1, cy0 - 6, cw + 2, ch + 12); ctx.clip();
         drawCracks(ctx, scene, ms, ox, oy, V.text2);
