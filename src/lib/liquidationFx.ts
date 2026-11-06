@@ -6,7 +6,7 @@
 // the preview and the recorded video match and any frame can be redrawn on its own.
 // Colours are fixed too: the site's accent is grey on some palettes, and fire isn't.
 
-export const STAMP_MS = 380;   // when the stamp lands, after the impact
+export const TILE_MS = 520;    // when the closing tile eases in, after the impact
 export const FREEZE_MS = 1900; // how long the replay holds on the impact
 
 type Pt = [number, number];
@@ -141,13 +141,11 @@ export function makeGlass(seed: string): Glass {
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
-/** Card shake: the impact, then a smaller knock when the stamp lands. */
+/** Card shake on impact. */
 export function shakeAt(ms: number, calm: boolean): [number, number] {
   if (calm) return [0, 0];
   const blast = 9 * Math.exp(-ms / 130);
-  const knock = ms >= STAMP_MS ? 5 * Math.exp(-(ms - STAMP_MS) / 90) : 0;
-  const amp = blast + knock;
-  return [Math.sin(ms * 0.13) * amp, Math.cos(ms * 0.1) * amp * 0.8];
+  return [Math.sin(ms * 0.13) * blast, Math.cos(ms * 0.1) * blast * 0.8];
 }
 
 const cellPath = (ctx: CanvasRenderingContext2D, points: Pt[]) => {
@@ -308,40 +306,52 @@ export function drawImpact(ctx: CanvasRenderingContext2D, glass: Glass, ms: numb
   ctx.restore();
 }
 
-/** The stamp slams down, overshoots, settles. */
-export function drawStamp(ctx: CanvasRenderingContext2D, ms: number, x: number, y: number, title: string, sub: string | null,
-  c: { red: string; bg: string }, font: string) {
-  const t = ms - STAMP_MS;
+/** The closing tile, built like the site's stat cards: label, big figure, caption. */
+export function drawLiqTile(ctx: CanvasRenderingContext2D, ms: number, x: number, y: number, figure: string | null, caption: string | null,
+  c: { red: string; muted: string; surface: string; line: string }, font: string) {
+  const t = ms - TILE_MS;
   if (t < 0) return;
-  const land = 150;
-  const scale = t < land ? 2.8 - 1.9 * (t / land) ** 2 : 0.9 + 0.1 * clamp01((t - land) / 130);
+  const shown = clamp01(t / 260);
+  const eased = 1 - (1 - shown) ** 3;
+
+  ctx.font = `500 13px ${font}`;
+  const captionW = caption ? ctx.measureText(caption).width : 0;
+  ctx.font = `500 34px ${font}`;
+  const figureW = ctx.measureText(figure ?? 'Liquidated').width;
+  const padX = 18;
+  const w = Math.max(captionW, figureW, 92) + padX * 2;
+  const h = figure ? 112 : 78;
+  const left = x - w / 2;
+  const top = y - h / 2 + (1 - eased) * 10;
+
   ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-0.12);
-  ctx.scale(scale, scale);
-  ctx.globalAlpha = clamp01(t / 60);
-
-  ctx.font = `600 37px ${font}`;
-  const wide = ctx.measureText(title).width;
-  const boxW = wide + 34;
-  const boxH = sub ? 84 : 62;
-  ctx.fillStyle = c.bg;
-  ctx.globalAlpha *= 0.86;
-  ctx.fillRect(-boxW / 2, -boxH / 2, boxW, boxH);
-  ctx.globalAlpha = clamp01(t / 60);
-  ctx.strokeStyle = c.red;
-  ctx.lineWidth = 3.5;
-  ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.globalAlpha = eased;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, 14);
+  ctx.fillStyle = c.surface;
+  ctx.fill();
+  ctx.strokeStyle = c.line;
   ctx.lineWidth = 1;
-  ctx.strokeRect(-boxW / 2 + 5, -boxH / 2 + 5, boxW - 10, boxH - 10);
+  ctx.stroke();
 
-  ctx.fillStyle = c.red;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(title, 0, sub ? -11 : 2);
-  if (sub) {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  if (figure) {
+    ctx.fillStyle = c.muted;
     ctx.font = `500 13px ${font}`;
-    ctx.fillText(sub, 0, 22);
+    ctx.fillText('Liquidated', left + padX, top + 28);
+    ctx.fillStyle = c.red;
+    ctx.font = `500 34px ${font}`;
+    ctx.fillText(figure, left + padX, top + 68);
+    if (caption) {
+      ctx.fillStyle = c.muted;
+      ctx.font = `500 13px ${font}`;
+      ctx.fillText(caption, left + padX, top + 92);
+    }
+  } else {
+    ctx.fillStyle = c.red;
+    ctx.font = `500 34px ${font}`;
+    ctx.fillText('Liquidated', left + padX, top + 51);
   }
   ctx.restore();
 }
