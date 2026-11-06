@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Play, Download, Loader2 } from 'lucide-react';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
-import { FREEZE_MS, drawImpact, drawLiqTile, drawShatter, makeGlass, shakeAt } from '@/lib/liquidationFx';
+import { FREEZE_MS, drawImpact, drawLiqStamp, drawShatter, makeGlass, shakeAt } from '@/lib/liquidationFx';
 
 export interface ShareCardEvent { t: number; price: number; buy: boolean; action: string; label: string; realized: number; units: number; liq?: 'partial' | 'full' | 'adl' | null }
 export interface ShareCardData {
@@ -127,8 +127,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     if (t == null || price == null) return null;
     const units = slices.reduce((sum, e) => sum + Math.abs(e.units), 0);
     const share = slices.length && size > 0 ? Math.min(1, units / size) : null;
-    const figure = share == null ? null : `${Math.max(1, Math.round(share * 100))}%`;
-    return { t, price, figure, hits: slices.slice(0, -1) };
+    const sub = share == null ? null : `${Math.max(1, Math.round(share * 100))}% of position force-closed`;
+    return { t, price, sub, hits: slices.slice(0, -1) };
   }, [data.events, data.liquidated, data.exitPrice, isOpen, closedAt, size]);
   const glass = useMemo(() => makeGlass(`${address}${symbol}${openedAt}`), [address, symbol, openedAt]);
   const fxRef = useRef<number | null>(null); // ms since the blast; null before it
@@ -524,12 +524,14 @@ export function TradeShareCard({ data, onClose }: Props) {
       if (liqRows) {
         ctx.font = `500 11px ${FONT}`;
         bw = Math.max(...liqRows.map(([k, v]) => ctx.measureText(k).width + ctx.measureText(v).width)) + 34;
+        ctx.font = `600 9px ${FONT}`;
+        bw = Math.max(bw, ctx.measureText(top).width + 20);
       } else {
         ctx.font = `600 12px ${FONT}`; const w1 = ctx.measureText(val).width;
         ctx.font = `600 9px ${FONT}`; const w0 = ctx.measureText(top).width;
         bw = Math.max(w0, w1) + 22;
       }
-      const bh = liqRows ? 42 : 34;
+      const bh = liqRows ? 56 : 34;
       let bx = x - bw / 2; bx = Math.max(cx0, Math.min(cx0 + cw - bw, bx));
       // Over the marker, or under it when there's no room above the chart.
       const flip = my - 16 - bh < cy0 - 6;
@@ -541,9 +543,10 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.beginPath(); ctx.moveTo(x - 5, tailY); ctx.lineTo(x + 5, tailY); ctx.lineTo(x, tailY + (flip ? -6 : 6)); ctx.closePath();
       ctx.fillStyle = V.bgMuted; ctx.fill();
       if (liqRows) {
+        ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `600 9px ${FONT}`; ctx.fillText(top, bx + 10, byl + 14);
         ctx.font = `500 11px ${FONT}`;
         liqRows.forEach(([k, v], i) => {
-          const rowY = byl + 17 + i * 16;
+          const rowY = byl + 31 + i * 16;
           ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.fillText(k, bx + 10, rowY);
           ctx.textAlign = 'right'; ctx.fillStyle = V.text; ctx.fillText(v, bx + bw - 10, rowY);
         });
@@ -679,8 +682,7 @@ export function TradeShareCard({ data, onClose }: Props) {
         copy.getContext('2d')?.drawImage(canvas, 0, 0);
         drawShatter(ctx, glass, copy, ms, ox, oy, W, cardH);
         drawImpact(ctx, glass, ms, ox, oy, W, cardH, calm);
-        drawLiqTile(ctx, ms, cx0 + cw * 0.36, cy0 + ch / 2, blast.figure, blast.figure ? 'of position force-closed' : null,
-          { red: V.neg, muted: V.text3, surface: V.bgMuted, line: V.border }, FONT);
+        drawLiqStamp(ctx, ms, cx0 + cw * 0.42, cy0 + ch * 0.42, 'LIQUIDATED', blast.sub, { red: V.neg, surface: V.bgBase }, FONT);
       }
       ctx.restore();
     }

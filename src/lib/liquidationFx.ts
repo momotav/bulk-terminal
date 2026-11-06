@@ -6,7 +6,7 @@
 // the preview and the recorded video match and any frame can be redrawn on its own.
 // Colours are fixed too: the site's accent is grey on some palettes, and fire isn't.
 
-export const TILE_MS = 520;    // when the closing tile eases in, after the impact
+export const STAMP_MS = 430;   // when the stamp lands, after the impact
 export const FREEZE_MS = 1900; // how long the replay holds on the impact
 
 type Pt = [number, number];
@@ -141,11 +141,13 @@ export function makeGlass(seed: string): Glass {
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
-/** Card shake on impact. */
+/** Card shake: the impact, then a small thump as the stamp lands. */
 export function shakeAt(ms: number, calm: boolean): [number, number] {
   if (calm) return [0, 0];
   const blast = 9 * Math.exp(-ms / 130);
-  return [Math.sin(ms * 0.13) * blast, Math.cos(ms * 0.1) * blast * 0.8];
+  const thump = ms >= STAMP_MS + 110 ? 3 * Math.exp(-(ms - STAMP_MS - 110) / 80) : 0;
+  const amp = blast + thump;
+  return [Math.sin(ms * 0.13) * amp, Math.cos(ms * 0.1) * amp * 0.8];
 }
 
 const cellPath = (ctx: CanvasRenderingContext2D, points: Pt[]) => {
@@ -306,52 +308,64 @@ export function drawImpact(ctx: CanvasRenderingContext2D, glass: Glass, ms: numb
   ctx.restore();
 }
 
-/** The closing tile, built like the site's stat cards: label, big figure, caption. */
-export function drawLiqTile(ctx: CanvasRenderingContext2D, ms: number, x: number, y: number, figure: string | null, caption: string | null,
-  c: { red: string; muted: string; surface: string; line: string }, font: string) {
-  const t = ms - TILE_MS;
+/**
+ * The closing stamp, in the site's own type: rounded corners, the BULK face, spaced
+ * capitals like its section headings. It lands with a short thump, and the ink is
+ * worn in places, because a stamp that prints perfectly reads as a graphic.
+ */
+export function drawLiqStamp(ctx: CanvasRenderingContext2D, ms: number, x: number, y: number, title: string, sub: string | null,
+  c: { red: string; surface: string }, font: string) {
+  const t = ms - STAMP_MS;
   if (t < 0) return;
-  const shown = clamp01(t / 260);
-  const eased = 1 - (1 - shown) ** 3;
+  const land = 130;
+  const scale = t < land ? 1.55 - 0.55 * (t / land) ** 2 : 1;
+  const r = rng(title);
 
-  ctx.font = `500 13px ${font}`;
-  const captionW = caption ? ctx.measureText(caption).width : 0;
-  ctx.font = `500 34px ${font}`;
-  const figureW = ctx.measureText(figure ?? 'Liquidated').width;
-  const padX = 18;
-  const w = Math.max(captionW, figureW, 92) + padX * 2;
-  const h = figure ? 112 : 78;
-  const left = x - w / 2;
-  const top = y - h / 2 + (1 - eased) * 10;
+  const spacing = 3;
+  ctx.font = `500 29px ${font}`;
+  const letters = [...title];
+  const widths = letters.map((l) => ctx.measureText(l).width + spacing);
+  const titleW = widths.reduce((sum, v) => sum + v, 0) - spacing;
+  const w = titleW + 44;
+  const h = sub ? 86 : 62;
 
   ctx.save();
-  ctx.globalAlpha = eased;
-  ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 14);
-  ctx.fillStyle = c.surface;
-  ctx.fill();
-  ctx.strokeStyle = c.line;
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.translate(x, y);
+  ctx.rotate(-0.1);
+  ctx.scale(scale, scale);
+  const fadeIn = clamp01(t / 50);
 
+  ctx.globalAlpha = fadeIn * 0.8;
+  ctx.fillStyle = c.surface;
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 13); ctx.fill();
+
+  ctx.globalAlpha = fadeIn * 0.94;
+  ctx.strokeStyle = c.red;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 13); ctx.stroke();
+  ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.roundRect(-w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 9); ctx.stroke();
+
+  ctx.fillStyle = c.red;
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  if (figure) {
-    ctx.fillStyle = c.muted;
-    ctx.font = `500 13px ${font}`;
-    ctx.fillText('Liquidated', left + padX, top + 28);
-    ctx.fillStyle = c.red;
-    ctx.font = `500 34px ${font}`;
-    ctx.fillText(figure, left + padX, top + 68);
-    if (caption) {
-      ctx.fillStyle = c.muted;
-      ctx.font = `500 13px ${font}`;
-      ctx.fillText(caption, left + padX, top + 92);
-    }
-  } else {
-    ctx.fillStyle = c.red;
-    ctx.font = `500 34px ${font}`;
-    ctx.fillText('Liquidated', left + padX, top + 51);
+  ctx.textBaseline = 'middle';
+  ctx.font = `500 29px ${font}`;
+  let at = -titleW / 2;
+  letters.forEach((letter, i) => { ctx.fillText(letter, at, sub ? -11 : 1); at += widths[i]; });
+  if (sub) {
+    ctx.textAlign = 'center';
+    ctx.font = `500 12.5px ${font}`;
+    ctx.fillText(sub, 0, 21);
+  }
+
+  // Worn ink: flecks of the card showing through.
+  ctx.globalAlpha = fadeIn;
+  ctx.fillStyle = c.surface;
+  for (let i = 0; i < 90; i++) {
+    const fx = (r() - 0.5) * w;
+    const fy = (r() - 0.5) * h;
+    const size = 0.35 + r() * r() * 1.5;
+    ctx.beginPath(); ctx.arc(fx, fy, size, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 }
