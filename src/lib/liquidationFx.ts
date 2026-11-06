@@ -1,19 +1,13 @@
-// The liquidation share card, drawn as a comic panel: flat colour, thick ink outlines,
-// no gradients. Motion runs on twos, stepping at 12 frames a second the way hand-drawn
-// animation does, which is most of what stops it reading as a realistic effect.
+// The liquidation share card treats the card as a pane of glass that the last slice
+// shatters. The fracture is a spider web (spokes plus broken rings) around
+// the impact, and its inner cells are real pieces of the rendered card that fall out.
 //
-// Shapes are fixed by a seed and everything else is a function of elapsed time, so the
-// preview and the recorded video match and any frame can be redrawn on its own. Colours
-// are fixed too: the site's accent is grey on some palettes, and ink works on any card.
+// Geometry is fixed by a seed and everything else is a function of elapsed time, so
+// the preview and the recorded video match and any frame can be redrawn on its own.
+// Colours are fixed too: the site's accent is grey on some palettes, and fire isn't.
 
-export const LABEL_MS = 300;   // when the label lands, after the impact
+export const STAMP_MS = 380;   // when the stamp lands, after the impact
 export const FREEZE_MS = 1900; // how long the replay holds on the impact
-
-const INK = '#15100d';
-const PAPER = '#fff6e6';
-const YELLOW = '#ffd23f';
-const ORANGE = '#ff7a2f';
-const FRAME_MS = 1000 / 12;
 
 type Pt = [number, number];
 type Rng = () => number;
@@ -29,242 +23,325 @@ function rng(seedText: string): Rng {
   };
 }
 
-export interface Toon {
-  hole: Pt[];
-  cracks: Pt[][];
-  chunks: { points: Pt[]; angle: number; speed: number; spin: number; tone: 'pos' | 'neg' | 'paper' }[];
-  burst: number[];
-  focus: { angle: number; width: number }[];
-  plate: number[];
+interface Edge { a: Pt; b: Pt; path: Pt[]; from: number; to: number; weight: number; goneAt: number }
+interface Cell {
+  points: Pt[]; center: Pt; dist: number;
+  /** Null stays in the pane, slightly knocked out of line. */
+  fall: { delay: number; vx: number; vy: number; spin: number } | null;
+  shift: Pt; tilt: number;
 }
+export interface Glass { edges: Edge[]; cells: Cell[]; sparks: { angle: number; speed: number; life: number }[] }
 
 const polar = (r: number, a: number): Pt => [Math.cos(a) * r, Math.sin(a) * r];
+const dist = ([x, y]: Pt) => Math.hypot(x, y);
 
-/** A closed star: alternating points around an ellipse, scaled by `spikes` radii. */
-function starPath(ctx: CanvasRenderingContext2D, radii: number[], rx: number, ry: number) {
-  ctx.beginPath();
-  radii.forEach((f, i) => {
-    const a = (i / radii.length) * Math.PI * 2;
-    const x = Math.cos(a) * rx * f;
-    const y = Math.sin(a) * ry * f;
-    if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-  });
-  ctx.closePath();
-}
-
-/** One card's shapes, fixed by its seed so every replay plays the same drawing. */
-export function makeToon(seed: string): Toon {
+/** The fracture around an impact at (0, 0). */
+export function makeGlass(seed: string): Glass {
   const r = rng(seed);
+  const spokes = 9;
+  const rings = [13, 30, 56, 96, 158];
+  // Uneven on purpose: real cracks crowd together in places and leave wide gaps in others.
+  const angles = Array.from({ length: spokes }, (_, j) => ((j + (r() - 0.5) * 0.9) / spokes) * Math.PI * 2).sort((p, q) => p - q);
+  // Rings aren't circles: each vertex lands at its own distance along the spoke.
+  const verts = rings.map((radius) => angles.map((a) => polar(radius * (0.66 + r() * 0.72), a + (r() - 0.5) * 0.12)));
 
-  const hole: Pt[] = Array.from({ length: 16 }, (_, i) => polar(i % 2 ? 15 + r() * 8 : 33 + r() * 17, (i / 16) * Math.PI * 2 + (r() - 0.5) * 0.14));
-
-  // Lightning shapes: a zigzag spine, wide at the hole and tapering to a point.
-  const cracks = Array.from({ length: 6 }, (_, i) => {
-    const heading = (i / 6) * Math.PI * 2 + (r() - 0.5) * 0.6;
-    const steps = 4;
-    const reach = 76 + r() * 74;
-    const spine: Pt[] = [polar(26, heading)];
-    for (let s = 1; s <= steps; s++) {
-      const a = heading + (s % 2 ? 0.5 : -0.5) * (0.6 + r() * 0.5);
-      const [px, py] = spine[s - 1];
-      const [dx, dy] = polar(reach / steps, a);
-      spine.push([px + dx, py + dy]);
-    }
-    const side = (sign: number) => spine.slice(0, -1).map(([x, y], s): Pt => {
-      const half = 5.5 * (1 - s / steps);
-      return [x + Math.cos(heading + Math.PI / 2) * half * sign, y + Math.sin(heading + Math.PI / 2) * half * sign];
+  const edges: Edge[] = [];
+  const edge = (a: Pt, b: Pt, weight: number) => {
+    // Glass never breaks in a ruled line: the crack wanders a little along its length.
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const parts = Math.max(1, Math.round(len / 9));
+    const nx = (-(b[1] - a[1]) / (len || 1));
+    const ny = (b[0] - a[0]) / (len || 1);
+    const path: Pt[] = Array.from({ length: parts + 1 }, (_, i) => {
+      const t = i / parts;
+      const off = i === 0 || i === parts ? 0 : (r() - 0.5) * 2.4;
+      return [a[0] + (b[0] - a[0]) * t + nx * off, a[1] + (b[1] - a[1]) * t + ny * off];
     });
-    return [...side(1), spine[steps], ...side(-1).reverse()];
-  });
+    edges.push({ a, b, path, from: dist(a), to: dist(b), weight, goneAt: Infinity });
+  };
 
-  const tones = ['neg', 'paper', 'pos', 'neg', 'paper', 'neg', 'pos', 'paper', 'neg', 'neg'] as const;
-  const chunks = tones.map((tone) => {
-    const size = 7 + r() * 9;
-    const corners = 3 + Math.floor(r() * 2);
-    return {
-      points: Array.from({ length: corners }, (_, i): Pt => polar(size * (0.7 + r() * 0.6), (i / corners) * Math.PI * 2)),
-      angle: -Math.PI * r() - 0.1, speed: 150 + r() * 210, spin: (r() - 0.5) * 11, tone,
-    };
+  for (let j = 0; j < spokes; j++) {
+    let prev: Pt = [0, 0];
+    for (let k = 0; k < rings.length; k++) { edge(prev, verts[k][j], 1 - k * 0.1); prev = verts[k][j]; }
+    // Past the last ring a spoke runs on, thinning, and sometimes forks.
+    let a = angles[j];
+    let reach = 164;
+    // Most cracks die quickly and a couple run long.
+    const end = 180 + r() * r() * 300;
+    while (reach < end) {
+      a += (r() - 0.5) * 0.3;
+      const step = 26 + r() * 34;
+      const next: Pt = [prev[0] + Math.cos(a) * step, prev[1] + Math.sin(a) * step];
+      edge(prev, next, 0.5);
+      if (r() > 0.78) {
+        const fa = a + (r() > 0.5 ? 1 : -1) * (0.4 + r() * 0.5);
+        edge(next, [next[0] + Math.cos(fa) * (20 + r() * 34), next[1] + Math.sin(fa) * (20 + r() * 34)], 0.34);
+      }
+      prev = next;
+      reach += step;
+    }
+  }
+  // Glass fractures along the spokes first. Cross cracks only link some of them, which
+  // is what keeps this from reading as a web.
+  const crossing = [0.64, 0.46, 0.3, 0.2, 0.08];
+  rings.forEach((_, k) => {
+    for (let j = 0; j < spokes; j++) if (r() < crossing[k]) edge(verts[k][j], verts[k][(j + 1) % spokes], 0.7 - k * 0.1);
   });
+  // The crushed zone: fine hairlines packed around the impact, which is what makes the
+  // long cracks read as coming from a point and not just crossing the card.
+  for (let i = 0; i < 46; i++) {
+    const a = r() * Math.PI * 2;
+    const start = 26 + r() * 38;
+    edge(polar(start, a), polar(start + 5 + r() * 15, a + (r() - 0.5) * 0.22), 0.26);
+  }
+  edges.sort((p, q) => Math.min(p.from, p.to) - Math.min(q.from, q.to));
 
-  const burst = Array.from({ length: 22 }, (_, i) => (i % 2 ? 0.5 + r() * 0.08 : 0.86 + r() * 0.24));
-  const focus = Array.from({ length: 26 }, (_, i) => ({ angle: (i / 26) * Math.PI * 2 + (r() - 0.5) * 0.12, width: 0.022 + r() * 0.03 }));
-  const plate = Array.from({ length: 30 }, (_, i) => (i % 2 ? 0.83 + r() * 0.04 : 0.98 + r() * 0.09));
-  return { hole, cracks, chunks, burst, focus, plate };
+  const cells: Cell[] = [];
+  const add = (points: Pt[], ring: number) => {
+    const center: Pt = [points.reduce((s, p) => s + p[0], 0) / points.length, points.reduce((s, p) => s + p[1], 0) / points.length];
+    const d = dist(center);
+    const falls = ring === 0 || (ring === 1 && r() < 0.8) || (ring === 2 && r() < 0.14);
+    const out = Math.atan2(center[1], center[0]);
+    cells.push({
+      points, center, dist: d,
+      fall: falls ? { delay: 45 + d * 1.1 + r() * 90, vx: Math.cos(out) * (30 + r() * 80), vy: Math.sin(out) * 40 - 30 - r() * 60, spin: (r() - 0.5) * 7 } : null,
+      shift: polar(0.6 + r() * 2.2, out + (r() - 0.5) * 1.6), tilt: (r() - 0.5) * 0.012,
+    });
+  };
+  for (let j = 0; j < spokes; j++) {
+    const n = (j + 1) % spokes;
+    add([[0, 0], verts[0][j], verts[0][n]], 0);
+    for (let k = 0; k < 3; k++) add([verts[k][j], verts[k][n], verts[k + 1][n], verts[k + 1][j]], k + 1);
+  }
+
+  // A crack with fallen glass on both sides has nothing left to run through.
+  const inside = ([px, py]: Pt, poly: Pt[]) => {
+    let hit = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i];
+      const [xj, yj] = poly[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) hit = !hit;
+    }
+    return hit;
+  };
+  const fallenAt = (p: Pt) => cells.find((c) => c.fall && inside(p, c.points))?.fall?.delay ?? null;
+  for (const e of edges) {
+    const mid: Pt = [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
+    const len = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]) || 1;
+    const nx = (-(e.b[1] - e.a[1]) / len) * 2.5;
+    const ny = ((e.b[0] - e.a[0]) / len) * 2.5;
+    const one = fallenAt([mid[0] + nx, mid[1] + ny]);
+    const two = fallenAt([mid[0] - nx, mid[1] - ny]);
+    if (one !== null && two !== null) e.goneAt = Math.max(one, two);
+  }
+
+  const sparks = Array.from({ length: 20 }, () => ({ angle: r() * Math.PI * 2, speed: 180 + r() * 340, life: 170 + r() * 240 }));
+  return { edges, cells, sparks };
 }
 
-const step = (ms: number) => Math.floor(ms / FRAME_MS) * FRAME_MS;
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
-/** Card shake, in steps: the hit, then a smaller knock when the label lands. */
+/** Card shake: the impact, then a smaller knock when the stamp lands. */
 export function shakeAt(ms: number, calm: boolean): [number, number] {
   if (calm) return [0, 0];
-  const t = Math.floor(ms / 42) * 42;
-  const hit = 8 * Math.exp(-t / 120);
-  const knock = t >= LABEL_MS ? 4 * Math.exp(-(t - LABEL_MS) / 80) : 0;
-  const side = Math.floor(ms / 42) % 2 ? 1 : -1;
-  return [side * (hit + knock), -side * (hit + knock) * 0.7];
+  const blast = 9 * Math.exp(-ms / 130);
+  const knock = ms >= STAMP_MS ? 5 * Math.exp(-(ms - STAMP_MS) / 90) : 0;
+  const amp = blast + knock;
+  return [Math.sin(ms * 0.13) * amp, Math.cos(ms * 0.1) * amp * 0.8];
 }
 
-function outlined(ctx: CanvasRenderingContext2D, points: Pt[], fill: string, line: number) {
+const cellPath = (ctx: CanvasRenderingContext2D, points: Pt[]) => {
   ctx.beginPath();
   points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.closePath();
-  ctx.fillStyle = fill;
+};
+
+/** Thickness of a crack at a distance from the impact: heavy near it, hair-thin far out. */
+const crackWidth = (d: number, weight: number) => (0.25 + 1.5 * (1 - clamp01(d / 240))) * (0.45 + 0.55 * weight);
+
+/** A crack as a filled sliver, tapering along its path, with a dark edge so it reads on any card. */
+function crackShape(ctx: CanvasRenderingContext2D, pts: Pt[], x: number, y: number, weight: number, alpha: number) {
+  if (pts.length < 2) return;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  pts.forEach(([px, py], i) => {
+    const [ax, ay] = pts[Math.max(0, i - 1)];
+    const [bx, by] = pts[Math.min(pts.length - 1, i + 1)];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const half = crackWidth(Math.hypot(px, py), weight) / 2;
+    left.push([px - ((by - ay) / len) * half, py + ((bx - ax) / len) * half]);
+    right.push([px + ((by - ay) / len) * half, py - ((bx - ax) / len) * half]);
+  });
+  const outline = [...left, ...right.reverse()];
+  const trace = (dx: number, dy: number) => {
+    ctx.beginPath();
+    outline.forEach(([px, py], i) => (i ? ctx.lineTo(px + x + dx, py + y + dy) : ctx.moveTo(px + x + dx, py + y + dy)));
+    ctx.closePath();
+  };
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = '#000';
+  trace(0.7, 0.8);
   ctx.fill();
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = line;
-  ctx.stroke();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#f4f6f8';
+  trace(0, 0);
+  ctx.fill();
 }
 
-/** The hit and what it leaves behind: hole, cracks, flying chunks, burst, focus lines. */
-export function drawToon(ctx: CanvasRenderingContext2D, toon: Toon, ms: number, x: number, y: number, w: number, h: number,
-  c: { red: string; green: string }, calm: boolean) {
-  const t = step(ms);
-  const frame = Math.round(t / FRAME_MS);
-  ctx.save();
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
+/**
+ * The shattered pane, drawn over the finished card. `src` is a copy of that frame in
+ * device pixels; pieces are cut from it, so what falls away is the chart itself.
+ */
+export function drawShatter(ctx: CanvasRenderingContext2D, glass: Glass, src: CanvasImageSource, ms: number, x: number, y: number, w: number, h: number) {
+  const reached = ms * 1.5; // how far the fracture has run, in pixels
 
-  // Focus lines, the comic way of saying everything just went that way.
-  if (!calm && frame < 3) {
-    ctx.fillStyle = frame === 0 ? INK : PAPER;
-    const far = Math.hypot(w, h);
-    for (const f of toon.focus) {
-      const near = 96 + (frame + 1) * 26;
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(f.angle) * near, y + Math.sin(f.angle) * near);
-      ctx.lineTo(x + Math.cos(f.angle - f.width) * far, y + Math.sin(f.angle - f.width) * far);
-      ctx.lineTo(x + Math.cos(f.angle + f.width) * far, y + Math.sin(f.angle + f.width) * far);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  ctx.save();
-  ctx.translate(x, y);
-
-  // Cracks grow in three drawn steps.
-  const grown = Math.min(3, frame) / 3;
-  if (grown > 0) {
-    for (const crack of toon.cracks) {
-      outlined(ctx, crack.map(([px, py]): Pt => [px * grown, py * grown]), PAPER, 2);
-    }
-  }
-
-  // The hole pops open past its size and settles.
-  const open = [0.45, 1.16, 0.96][frame] ?? 1;
-  ctx.save();
-  ctx.scale(open, open);
-  outlined(ctx, toon.hole, INK, 0);
-  ctx.strokeStyle = PAPER;
-  ctx.lineWidth = 3 / open;
-  ctx.stroke();
-  ctx.restore();
-  ctx.restore();
-
-  // Chunks thrown up, tumbling in steps, falling off the card.
-  for (const k of toon.chunks) {
-    const sec = t / 1000;
-    if (sec > 1.15) continue;
-    const px = x + Math.cos(k.angle) * k.speed * sec;
-    const py = y + Math.sin(k.angle) * k.speed * sec + 720 * sec * sec;
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(k.spin * sec);
-    outlined(ctx, k.points, k.tone === 'pos' ? c.green : k.tone === 'neg' ? c.red : PAPER, 2.2);
-    ctx.restore();
-  }
-
-  // The burst: three flat layers for the first few frames.
-  if (frame < 4) {
-    const size = [0.72, 1.2, 1, 0.66][frame];
+  // Cells that stay, knocked slightly out of line and catching the light unevenly.
+  for (const c of glass.cells) {
+    if (c.fall || c.dist > reached) continue;
+    const settle = clamp01((reached - c.dist) / 60);
     ctx.save();
     ctx.translate(x, y);
-    for (const [fill, scale] of [[c.red, 118], [ORANGE, 88], [YELLOW, 60], ['#fff', 30]] as const) {
-      starPath(ctx, toon.burst, scale * size, scale * size);
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 2.6;
-      ctx.stroke();
-    }
+    cellPath(ctx, c.points);
+    ctx.clip();
+    ctx.translate(c.shift[0] * settle, c.shift[1] * settle);
+    ctx.rotate(c.tilt * settle);
+    ctx.translate(-x, -y);
+    ctx.drawImage(src, 0, 0, w, h);
     ctx.restore();
   }
-  ctx.restore();
-}
 
-/** Comic title: a red burst lands, the letters drop in one by one, then the tag. */
-export function drawLabel(ctx: CanvasRenderingContext2D, toon: Toon, ms: number, x: number, y: number, title: string, sub: string | null,
-  red: string, font: string) {
-  const t = step(ms) - LABEL_MS;
-  if (t < 0) return;
-  const size = t < FRAME_MS ? 0.62 : t < FRAME_MS * 2 ? 1.14 : t < FRAME_MS * 3 ? 0.97 : 1;
-
+  // The hole behind the pieces that have gone.
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(-0.07);
-  ctx.lineJoin = 'round';
-
-  ctx.save();
-  ctx.scale(size, size);
-  ctx.translate(5, 6);
-  starPath(ctx, toon.plate, 172, 72);
-  ctx.fillStyle = INK;
-  ctx.fill();
-  ctx.translate(-5, -6);
-  starPath(ctx, toon.plate, 172, 72);
-  ctx.fillStyle = red;
-  ctx.fill();
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
+  ctx.fillStyle = '#080606';
+  for (const c of glass.cells) {
+    if (!c.fall || ms < c.fall.delay) continue;
+    cellPath(ctx, c.points);
+    ctx.fill();
+    ctx.strokeStyle = '#080606';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+  // Depth: a soft dark falloff at the centre, so it reads as a hole and not a black shape.
+  const depth = ctx.createRadialGradient(0, 0, 0, 0, 0, 20);
+  depth.addColorStop(0, 'rgba(0,0,0,0.9)');
+  depth.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = clamp01(ms / 200);
+  ctx.fillStyle = depth;
+  ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // Letters land left to right, each with its own small tilt.
-  ctx.font = `600 35px ${font}`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const gap = 1.5;
-  const letters = [...title];
-  const widths = letters.map((l) => ctx.measureText(l).width + gap);
-  let at = -widths.reduce((s, v) => s + v, 0) / 2;
-  const line = sub ? -9 : 0;
-  letters.forEach((letter, i) => {
-    const age = t - FRAME_MS - i * 22;
-    const lw = widths[i];
-    if (age >= 0) {
-      const pop = age < FRAME_MS ? 1.45 : 1;
-      ctx.save();
-      ctx.translate(at + lw / 2, line + (i % 2 ? -2 : 2));
-      ctx.rotate(i % 2 ? 0.05 : -0.05);
-      ctx.scale(pop, pop);
-      ctx.translate(-lw / 2, 0);
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 7;
-      ctx.strokeText(letter, 2, 3);
-      ctx.strokeText(letter, 0, 0);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(letter, 0, 0);
-      ctx.restore();
-    }
-    at += lw;
-  });
+  // The fracture, running out from the impact and thinning away.
+  ctx.save();
+  for (const e of glass.edges) {
+    const near = Math.min(e.from, e.to);
+    if (near > reached || ms >= e.goneAt) continue;
+    const far = Math.max(e.from, e.to);
+    const grown = clamp01((reached - near) / Math.max(1, far - near));
+    const path = e.from <= e.to ? e.path : [...e.path].reverse();
+    const shown = path.slice(0, Math.max(2, Math.ceil(path.length * grown)));
+    crackShape(ctx, shown, x, y, e.weight, (0.34 + 0.58 * e.weight) * (1 - clamp01((near - 50) / 240)));
+  }
+  ctx.restore();
 
-  if (sub && t > FRAME_MS * 4) {
-    ctx.font = `500 12.5px ${font}`;
-    const tw = ctx.measureText(sub).width + 22;
-    const ty = 15;
-    ctx.fillStyle = INK;
-    ctx.fillRect(-tw / 2 + 3, ty + 3, tw, 23);
-    ctx.fillStyle = PAPER;
-    ctx.fillRect(-tw / 2, ty, tw, 23);
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 2.2;
-    ctx.strokeRect(-tw / 2, ty, tw, 23);
-    ctx.fillStyle = INK;
-    ctx.textAlign = 'center';
-    ctx.fillText(sub, 0, ty + 12);
+  // Pieces breaking out and dropping, last so they fall in front of everything.
+  for (const c of glass.cells) {
+    if (!c.fall) continue;
+    const sec = (ms - c.fall.delay) / 1000;
+    if (sec >= 1.25) continue;
+    const t = Math.max(0, sec);
+    const px = x + c.center[0] + c.fall.vx * t;
+    const py = y + c.center[1] + c.fall.vy * t + 760 * t * t;
+    ctx.save();
+    ctx.globalAlpha = clamp01((1.25 - t) / 0.3);
+    ctx.translate(px, py);
+    ctx.rotate(c.fall.spin * t);
+    ctx.translate(-c.center[0], -c.center[1]);
+    cellPath(ctx, c.points);
+    ctx.save();
+    ctx.clip();
+    ctx.translate(-x, -y);
+    ctx.drawImage(src, 0, 0, w, h);
+    ctx.restore();
+    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** The instant of the hit: a hard point of light and a few white-hot streaks. */
+export function drawImpact(ctx: CanvasRenderingContext2D, glass: Glass, ms: number, x: number, y: number, w: number, h: number, calm: boolean) {
+  ctx.save();
+  if (ms < 240) {
+    const t = ms / 240;
+    const reach = 40 + t * 130;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, reach);
+    g.addColorStop(0, 'rgba(255,250,240,1)');
+    g.addColorStop(0.22, 'rgba(255,170,90,0.85)');
+    g.addColorStop(0.55, 'rgba(235,50,30,0.35)');
+    g.addColorStop(1, 'rgba(235,50,30,0)');
+    ctx.globalAlpha = (1 - t) ** 2;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, reach, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.lineCap = 'round';
+  for (const s of glass.sparks) {
+    if (ms >= s.life) continue;
+    const t = ms / 1000;
+    const head = s.speed * t;
+    const tail = Math.max(0, head - 26);
+    ctx.globalAlpha = 1 - ms / s.life;
+    ctx.strokeStyle = '#ffd9a0';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(s.angle) * tail, y + Math.sin(s.angle) * tail + 300 * t * t);
+    ctx.lineTo(x + Math.cos(s.angle) * head, y + Math.sin(s.angle) * head + 300 * t * t);
+    ctx.stroke();
+  }
+  // One flash, skipped for anyone who asked for less motion.
+  if (!calm && ms < 90) {
+    ctx.globalAlpha = 0.5 * (1 - ms / 90);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
   }
   ctx.restore();
 }
 
+/** The stamp slams down, overshoots, settles. */
+export function drawStamp(ctx: CanvasRenderingContext2D, ms: number, x: number, y: number, title: string, sub: string | null,
+  c: { red: string; bg: string }, font: string) {
+  const t = ms - STAMP_MS;
+  if (t < 0) return;
+  const land = 150;
+  const scale = t < land ? 2.8 - 1.9 * (t / land) ** 2 : 0.9 + 0.1 * clamp01((t - land) / 130);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-0.12);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = clamp01(t / 60);
+
+  ctx.font = `600 37px ${font}`;
+  const wide = ctx.measureText(title).width;
+  const boxW = wide + 34;
+  const boxH = sub ? 84 : 62;
+  ctx.fillStyle = c.bg;
+  ctx.globalAlpha *= 0.86;
+  ctx.fillRect(-boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.globalAlpha = clamp01(t / 60);
+  ctx.strokeStyle = c.red;
+  ctx.lineWidth = 3.5;
+  ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-boxW / 2 + 5, -boxH / 2 + 5, boxW - 10, boxH - 10);
+
+  ctx.fillStyle = c.red;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, 0, sub ? -11 : 2);
+  if (sub) {
+    ctx.font = `500 13px ${font}`;
+    ctx.fillText(sub, 0, 22);
+  }
+  ctx.restore();
+}
