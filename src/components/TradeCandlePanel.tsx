@@ -42,9 +42,8 @@ interface Props {
 
 const INTERVALS: [string, string][] = [['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']];
 const CANDLE_LIMIT = 5000; // BULK returns the full range for a ranged query (caps at 5000)
-// How many candles the DEFAULT (auto) interval targets for the full open→now
-// view — kept modest so the default render is snappy.
-const FIT_BARS = 1200;
+// How many candles the trade itself should span at the default interval.
+const TRADE_BARS = 200;
 // Upper bound for loading the ENTIRE history at a user-picked interval. Stays
 // under BULK's ~5000 ranged cap so the full range comes back complete (e.g.
 // 15m over a month ≈ 3.2k candles still shows everything).
@@ -55,6 +54,14 @@ const WINDOW_BARS = 2500;
 
 const IV_SECONDS: [string, number][] = [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]];
 const barSeconds = (iv: string): number => (IV_SECONDS.find(([n]) => n === iv)?.[1] ?? 3600);
+
+// The chart throws, and takes the page with it, on two bars in the same second. BULK's
+// still-forming candle can arrive twice across a paged fetch, so the newest copy wins.
+const uniqueBars = (cs: Candle[]): Candle[] => {
+  const bySec = new Map<number, Candle>();
+  for (const c of cs) bySec.set(Math.floor(c.t / 1000), c);
+  return Array.from(bySec.values()).sort((a, b) => a.t - b.t);
+};
 
 const resolveColor = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
@@ -67,13 +74,11 @@ const resolveColor = (expr: string, fallback: string): string => {
   return resolved || fallback;
 };
 
-// Default interval = the FINEST one where the whole open→now span still fits in
-// CANDLE_LIMIT bars, so the chart shows everything from the trade's start to now
-// (not just the trade window) while staying as detailed as possible.
-function pickInterval(openedAt: number, now: number): string {
-  const span = (now - openedAt) / 1000;
+// Default interval: the finest one that shows the trade in a readable number of bars.
+// Sizing it to the market's whole history turned a 4-hour trade into a single candle.
+function tradeInterval(tradeMs: number): string {
   for (const [name, sec] of IV_SECONDS) {
-    if (span / sec <= FIT_BARS) return name;
+    if (tradeMs / 1000 / sec <= TRADE_BARS) return name;
   }
   return '1d';
 }
@@ -87,7 +92,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   // B/S marker overlays, glued to (time, price) each frame. markerLayoutRef
   // carries the de-collision layout (snapped bar, bar-high anchor, stack index).
   const markerElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const markerDataRef = useRef<{ key: string; timeSec: number; price: number; buy: boolean; label: string }[]>([]);
+  const markerDataRef = useRef<{ key: string; timeSec: number; price: number; buy: boolean; label: string; liq: boolean }[]>([]);
   const markerLayoutRef = useRef<Map<string, { sec: number; high: number; stack: number }>>(new Map());
   // Replay plumbing.
   const plottedRef = useRef<Candle[]>([]);
@@ -110,7 +115,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   const endT = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
   // Default interval = the finest one where the entire history (listing → now)
   // still fits in FIT_BARS. Falls back to 1h until the probe resolves.
-  const iv = userInterval ?? interval ?? (histStart != null ? pickInterval(histStart, Date.now()) : '1h');
+  const iv = userInterval ?? interval ?? tradeInterval(endT - openedAt);
 
   const [candles, setCandles] = useState<Candle[] | null>(null);
   // The interval the current `candles` were actually fetched with. The chart
@@ -130,6 +135,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       price: e.price,
       buy: e.sizeDelta > 0,
       label: e.actionLabel,
+      liq: e.liq === 'partial' || e.liq === 'full',
     })),
     [events],
   );
@@ -189,9 +195,9 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   }, [symbol, iv, histStart, openedAt, closedAt, isOpen]);
 
   const plotted = useMemo(
-    () => clampWicks((candles ?? []).filter((c) =>
+    () => clampWicks(uniqueBars((candles ?? []).filter((c) =>
       Number.isFinite(c.o) && c.o > 0 && Number.isFinite(c.h) && c.h > 0 &&
-      Number.isFinite(c.l) && c.l > 0 && Number.isFinite(c.c) && c.c > 0)),
+      Number.isFinite(c.l) && c.l > 0 && Number.isFinite(c.c) && c.c > 0))),
     [candles],
   );
   plottedRef.current = plotted;
@@ -218,7 +224,8 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const chart = createChart(container, {
       width: container.clientWidth || 800,
       height: container.clientHeight || 360,
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+      localization: { locale: 'en-US' },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: text, fontSize: 11, fontFamily: getComputedStyle(document.body).fontFamily },
       grid: { vertLines: { color: grid }, horzLines: { color: grid } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { visible: false } },
       rightPriceScale: { borderColor: border },
@@ -228,6 +235,8 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
 
     const series = chart.addCandlestickSeries({
       upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg,
+      // A closed trade has no live price to flag: the tag would just show today's.
+      priceLineVisible: isOpen, lastValueVisible: isOpen,
     });
     seriesRef.current = series;
     series.setData(plotted.map(toLW));
@@ -256,13 +265,27 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       for (const s of secs) { const d = Math.abs(s - sec); if (d < bd) { bd = d; best = s; } }
       return best;
     };
+    // One marker per kind per candle: a busy trade has thousands of fills, and a tower
+    // of identical dots says less than one dot with a count.
     const perBar = new Map<number, number>();
+    const lead = new Map<string, { key: string; count: number }>();
     const layout = new Map<string, { sec: number; high: number; stack: number }>();
     for (const m of markerData) {
       const s = snap(m.timeSec);
+      const kind = `${s}:${m.liq ? 'L' : m.buy ? 'B' : 'S'}`;
+      const first = lead.get(kind);
+      if (first) { first.count += 1; continue; }
+      lead.set(kind, { key: m.key, count: 1 });
       const stack = perBar.get(s) ?? 0;
       perBar.set(s, stack + 1);
       layout.set(m.key, { sec: s, high: highBySec.get(s) ?? m.price, stack });
+    }
+    for (const { key, count } of lead.values()) {
+      markerElsRef.current.get(key)?.setAttribute('title', count > 1 ? `${count} fills on this candle` : '');
+    }
+    for (const m of markerData) {
+      const node = markerElsRef.current.get(m.key);
+      if (node) node.style.display = layout.has(m.key) ? '' : 'none';
     }
     markerLayoutRef.current = layout;
 
@@ -280,7 +303,16 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     // whole history (first candle → now); on a fine interval it's the trade
     // window. Either way, everything loaded is on screen — zoom in to the trade
     // via the markers, or switch to 1m/5m for minute detail at the entry.
-    chart.timeScale().fitContent();
+    // Open on the trade with some context either side; the rest is a scroll away.
+    const tradeEnd = isOpen ? Date.now() : (closedAt ?? openedAt);
+    const barMsNow = barSeconds(loadedIv) * 1000;
+    const margin = Math.max((tradeEnd - openedAt) * 0.3, barMsNow * 16);
+    try {
+      chart.timeScale().setVisibleRange({
+        from: Math.floor((openedAt - margin) / 1000) as UTCTimestamp,
+        to: Math.floor((tradeEnd + (isOpen ? barMsNow * 4 : margin)) / 1000) as UTCTimestamp,
+      });
+    } catch { chart.timeScale().fitContent(); }
 
     // ---- lazy back-fill: page older candles in as the user scrolls left ------
     // The initial window is a slice (full history for coarse intervals, a
@@ -310,7 +342,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
         );
         const s = seriesRef.current, c = chartRef.current;
         if (!older.length || !s || !c) return;
-        const merged = clampWicks([...older, ...buf]);
+        const merged = clampWicks(uniqueBars([...older, ...buf]));
         displayRef.current = merged;
         const vis = c.timeScale().getVisibleRange(); // time-based → stable across prepend
         s.setData(merged.map(toLW));
@@ -338,7 +370,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
         );
         const s = seriesRef.current, c = chartRef.current;
         if (!newer.length || !s || !c) return;
-        const merged = clampWicks([...buf, ...newer]);
+        const merged = clampWicks(uniqueBars([...buf, ...newer]));
         displayRef.current = merged;
         const vis = c.timeScale().getVisibleRange();
         s.setData(merged.map(toLW));
@@ -370,10 +402,12 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       const ts = c.timeScale();
       const w = cont.clientWidth, h = cont.clientHeight;
       for (const m of markerDataRef.current) {
+        // This runs every frame, so fills folded into another marker cost nothing here.
+        const L = markerLayoutRef.current.get(m.key);
+        if (!L) continue;
         const node = markerElsRef.current.get(m.key);
         if (!node) continue;
-        const L = markerLayoutRef.current.get(m.key);
-        if (!L || m.timeSec * 1000 > replayCutoffRef.current + 1) { node.style.opacity = '0'; continue; }
+        if (m.timeSec * 1000 > replayCutoffRef.current + 1) { node.style.opacity = '0'; continue; }
         const x = ts.timeToCoordinate(L.sec as UTCTimestamp);
         const yHigh = s.priceToCoordinate(L.high);
         if (x == null || yHigh == null) { node.style.opacity = '0'; continue; }
@@ -482,28 +516,32 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   return (
     <div className="flex h-full w-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-1 pb-1.5">
-        <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 min-h-12 py-2 border-b border-[var(--border-color)]">
+        <span className="hidden sm:block text-[15px] text-[var(--role-content)]">Price</span>
+        <div ref={ohlcRef} className="hidden sm:block min-w-0 truncate text-[12px] tabular-nums text-[var(--role-content-subtle)]" />
+        <div className="ml-auto flex items-center rounded-lg border border-[var(--border-color)] p-0.5 text-[12px]">
           {INTERVALS.map(([id, label]) => (
             <button
               key={id}
+              type="button"
               onClick={() => { setReplaying(false); setUserInterval(id); }}
-              className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase transition-colors ${
-                iv === id ? 'bg-[var(--bg-secondary-20)] text-[var(--role-content)]' : 'text-[var(--role-content-subtle)] hover:text-[var(--role-content)]'
+              className={`px-2 sm:px-2.5 py-1 rounded-md transition-colors ${
+                iv === id ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]'
               }`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div ref={ohlcRef} className="ml-2 min-w-0 truncate text-[10px] tabular-nums text-[var(--role-content-subtle)]" />
         <button
+          type="button"
           onClick={() => canReplay && setReplaying((r) => !r)}
           disabled={!canReplay}
           title={replaying ? 'Pause replay' : 'Replay from open'}
-          className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--role-line)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-[var(--role-content)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent-text)] disabled:opacity-40"
+          className="inline-flex shrink-0 items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg border border-[var(--border-color)] text-[12px] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors disabled:opacity-40"
         >
-          {replaying ? <><Pause className="h-3.5 w-3.5" /> Pause</> : <><Play className="h-3.5 w-3.5" /> Replay</>}
+          {replaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          <span className="hidden sm:inline">{replaying ? 'Pause' : 'Replay'}</span>
         </button>
       </div>
 
@@ -520,15 +558,14 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
           >
             <div className="group relative flex items-center justify-center" style={{ pointerEvents: 'auto' }}>
               <div
-                className="flex h-[18px] w-[18px] cursor-default select-none items-center justify-center rounded-full text-[9px] font-bold leading-none text-white shadow"
-                style={{ backgroundColor: m.buy ? 'var(--pos)' : 'var(--neg)', border: '2px solid var(--role-surface)' }}
+                className="flex h-[18px] w-[18px] cursor-default select-none items-center justify-center rounded-full text-[9px] font-medium leading-none text-white"
+                style={{ backgroundColor: m.buy && !m.liq ? 'var(--pos)' : 'var(--neg)', border: `2px solid ${m.liq ? '#fff' : 'var(--role-surface)'}` }}
               >
-                {m.buy ? 'B' : 'S'}
+                {m.liq ? 'L' : m.buy ? 'B' : 'S'}
               </div>
               <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 group-hover:block">
-                <div className="relative whitespace-nowrap rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium tabular-nums text-gray-900 shadow-xl">
-                  {m.label} · ${formatNumber(m.price, 2)}
-                  <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-white" />
+                <div className="glass-tooltip whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] tabular-nums text-[var(--role-content)]">
+                  <span style={m.liq ? { color: 'var(--neg)' } : undefined}>{m.label}</span> · ${formatNumber(m.price, 2)}
                 </div>
               </div>
             </div>

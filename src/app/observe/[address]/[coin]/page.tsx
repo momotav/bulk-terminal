@@ -14,18 +14,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  ArrowLeft, Check, Share2, Loader2, CircleDot, ExternalLink,
-  CandlestickChart, Activity, Wallet, ListOrdered, Flag, Plus, Minus, ArrowUpRight, ArrowDownRight, type LucideIcon,
-} from 'lucide-react';
-import { wallet, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
-import { buildTradeLifecycle, closedTradeLifecycle, formatDuration, type TradeLifecycle, type TradeEventPoint } from '@/lib/positionWalk';
+import { ArrowLeft, Check, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { wallet, cn, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
+import { buildTradeLifecycle, closedTradeLifecycle, formatDuration, type TradeLifecycle } from '@/lib/positionWalk';
 import { anchorFills } from '@/lib/walletMetrics';
-import { TradeJourneyChart, type JourneyMarker } from '@/components/TradeJourneyChart';
+import { pnlColor } from '@/lib/walletFormat';
 import { TradeCandlePanel } from '@/components/TradeCandlePanel';
 import { TradeShareCard } from '@/components/TradeShareCard';
-import { getCoinColor } from '@/lib/coins';
-import { Image as ImageIcon } from 'lucide-react';
+import { CoinIcon } from '@/components/CoinIcon';
+import { PnlChart, type PnlHover } from '@/components/wallet/PnlChart';
 
 export default function ObserveTradePage() {
   const params = useParams<{ address: string; coin: string }>();
@@ -50,6 +47,8 @@ export default function ObserveTradePage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showCard, setShowCard] = useState(false);
+  const [tab, setTab] = useState<'journey' | 'fills'>('journey');
+  const [journeyHover, setJourneyHover] = useState<PnlHover | null>(null);
 
   // Resolve the full symbol ("BTC" → "BTC-USD") from the wallet's own fills so
   // we never guess a quote the market doesn't use.
@@ -218,23 +217,6 @@ export default function ObserveTradePage() {
     return null;
   }, [tradeFills, symbol, markPrice, candleTick, livePos, toMs, pinnedRecord]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const journeyMarkers = useMemo<JourneyMarker[]>(() => {
-    if (!life || !life.pnlCurve.length) return [];
-    const curve = life.pnlCurve;
-    const pnlAt = (t: number): number => {
-      // nearest curve sample
-      let best = curve[0];
-      let bd = Math.abs(best.t - t);
-      for (const p of curve) { const d = Math.abs(p.t - t); if (d < bd) { bd = d; best = p; } }
-      return best.pnl;
-    };
-    return life.events.map((e) => ({
-      t: e.t,
-      pnl: pnlAt(e.t),
-      label: e.actionLabel,
-      tone: (e.action === 'reduce' || e.action === 'close') ? 'out' : 'in',
-    }));
-  }, [life]);
 
   if (loading) {
     return (
@@ -264,7 +246,8 @@ export default function ObserveTradePage() {
     );
   }
 
-  const coinColor = getCoinColor(coin);
+  // BULK leaves closeReason 'normal' on these, so the liquidation fills are the signal.
+  const liquidated = !life.isOpen && (pinnedRecord?.liquidated || life.events.some((e) => e.liq === 'partial' || e.liq === 'full'));
   // For a LIVE position, prefer BULK's authoritative unrealized PnL over the
   // fills-reconstructed value so the number matches the wallet page exactly.
   const displayPnl = (life.isOpen && livePos && Number.isFinite(livePos.unrealizedPnl))
@@ -288,66 +271,156 @@ export default function ObserveTradePage() {
     } catch { /* clipboard blocked — no-op */ }
   };
 
-  return (
-    <Shell>
-      {/* Back link */}
-      <Link href={`/whales/${address}`} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to wallet
-      </Link>
+  const money = (n: number) => `$${formatNumber(n, n < 10 ? 4 : 2)}`;
+  const curve = life.pnlCurve.map((p) => ({ t: p.t, v: p.pnl }));
+  const shown = journeyHover ? journeyHover.point.v : displayPnl;
 
-      {/* Header card — coin + pair + side/status, actions on the right */}
-      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-4 py-3.5">
-        <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full" style={{ background: coinColor }}>
-          <span className="text-sm font-semibold text-white">{coin.slice(0, 1)}</span>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/coins/${coin}.svg`}
-            alt=""
-            className="absolute inset-0 h-9 w-9 object-cover"
-            onError={(e) => {
-              const el = e.currentTarget as HTMLImageElement;
-              if (!el.dataset.triedPng) { el.dataset.triedPng = '1'; el.src = `/coins/${coin}.png`; }
-              else { el.style.display = 'none'; }
-            }}
-          />
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-medium text-[var(--text-primary)]">{coin}/USD</span>
-            <span
-              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-              style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', borderColor: life.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${life.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}
-            >
-              {life.side === 'long' ? 'Long' : 'Short'}{liveLeverage > 0 ? ` ${Number(liveLeverage.toFixed(1))}×` : ''}
-            </span>
-            {/* Open/Closed — a real pill so it doesn't blend into the bg */}
-            <span
-              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-              style={life.isOpen
-                ? { color: 'var(--accent-text)', borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 16%, transparent)' }
-                : { color: 'var(--text-secondary)', borderColor: 'var(--border-color)', background: 'var(--bg-base)' }}
-            >
-              {life.isOpen ? '● Open' : 'Closed'}
-            </span>
-          </div>
-          <div className="mt-1 font-mono text-[11px] leading-snug text-[var(--text-tertiary)] break-all">
-            {address}
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] lg:min-h-[calc(100vh-57px)]">
+      {/* Left rail: the trade at a glance, same structure as the wallet page. */}
+      <aside className="bg-[var(--role-surface-raised)] lg:border-r border-b lg:border-b-0 border-[var(--border-color)] px-5 py-5 flex flex-col gap-5 min-w-0">
+        <Link href={`/whales/${address}`} className="inline-flex items-center gap-1.5 self-start text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" /> {formatAddress(address)}
+        </Link>
+
+        <div className="flex items-center gap-3 min-w-0">
+          <CoinIcon symbol={symbol} size={32} className="shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[18px] leading-tight text-[var(--role-content)]">{coin}/USD</div>
+            <div className="mt-0.5 text-[13px] text-[var(--role-content-muted)]">
+              <span style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>{life.side === 'long' ? 'Long' : 'Short'}</span>
+              {liveLeverage > 0 ? ` ${Number(liveLeverage.toFixed(1))}×` : ''} · {liquidated ? 'Liquidated' : life.isOpen ? 'Open' : 'Closed'}
+            </div>
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setShowCard(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
-          >
+
+        <div>
+          <div className="text-[13px] text-[var(--role-content-muted)]">{life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}</div>
+          <div className="mt-1.5 text-[40px] leading-none font-medium tabular-nums tracking-tight" style={{ color: pnlColor(displayPnl) }}>{signed2(displayPnl)}</div>
+          {roi != null && Number.isFinite(roi) && (
+            <div className="mt-2 text-[13px] tabular-nums text-[var(--role-content-muted)]">
+              {roi >= 0 ? '+' : '−'}{Math.abs(roi).toFixed(2)}% on {liveLeverage > 0 ? 'margin' : 'position size'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setShowCard(true)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[var(--role-content)] text-[var(--bg-base)] text-[13px] transition-opacity hover:opacity-90">
             <ImageIcon className="h-3.5 w-3.5" /> Card
           </button>
-          <button
-            onClick={share}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          >
+          <button type="button" onClick={share}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg border border-[var(--border-color)] text-[13px] text-[var(--role-content)] hover:bg-[var(--bg-muted)] transition-colors">
             {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Share2 className="h-3.5 w-3.5" /> Share</>}
           </button>
         </div>
+
+        <div>
+          <Row label="Avg. entry" value={money(life.avgEntry)} />
+          <Row label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? money(lastPrice) : '—'} />
+          <Row label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
+          <Row label="Value" value={`$${formatCompact(notionalPeak)}`} />
+          {/* BULK records no leverage on a closed trade. The only figure it exposes is
+              the market maximum, so a closed trade shows that bound, not the trader's pick. */}
+          <Row label={leverageIsBound ? 'Max leverage' : 'Leverage'} value={shownLeverage > 0 ? `${Number(shownLeverage.toFixed(1))}×` : '—'} />
+          {shownLeverage > 0 && <Row label={leverageIsBound ? 'Min margin' : 'Margin'} value={`${leverageIsBound ? '≥ ' : ''}$${formatCompact(notionalPeak / shownLeverage)}`} />}
+          {life.isOpen && livePos && livePos.liquidationPrice > 0 && <Row label="Liq. price" value={money(livePos.liquidationPrice)} color="var(--neg)" />}
+          {life.isOpen && <Row label="Realized" value={signed2(life.realizedTotal)} color={pnlColor(life.realizedTotal)} />}
+          <Row label="Best" value={signed2(Math.max(0, life.peakPnl))} />
+          <Row label="Worst" value={signed2(Math.min(0, life.troughPnl))} />
+          <Row label="Held" value={isFallback ? 'Live' : formatDuration(heldMs)} />
+        </div>
+
+        <p className="mt-auto text-[12px] leading-relaxed text-[var(--role-content-subtle)]">Rebuilt from BULK fills and candles.</p>
+      </aside>
+
+      {/* Right: flush panels separated by hairlines. */}
+      <div className="min-w-0 flex flex-col bg-[var(--bg-muted)]">
+        <section className="border-b border-[var(--border-color)]">
+          <div className="h-[420px] sm:h-[520px]">
+            <TradeCandlePanel
+              symbol={symbol}
+              side={life.side}
+              avgEntry={life.avgEntry}
+              liqPrice={livePos?.liquidationPrice}
+              markPrice={markPrice}
+              events={life.events}
+              openedAt={life.openedAt}
+              closedAt={life.closedAt}
+              isOpen={life.isOpen}
+              onCandles={(cs) => {
+                // The journey is marked against these. Keep the finest set seen for this
+                // trade, or switching the chart to 1D would flatten it to a straight line.
+                const end = life.closedAt ?? Date.now();
+                const inTrade = (list: { t: number }[]) => list.filter((c) => c.t >= life.openedAt && c.t <= end).length;
+                if (cs.length && inTrade(cs) > inTrade(candleCache.get(symbol) ?? [])) {
+                  candleCache.set(symbol, cs);
+                  setCandleTick((n) => n + 1);
+                }
+              }}
+            />
+          </div>
+        </section>
+
+        <section className="flex-1 min-h-0 flex flex-col">
+          <div role="tablist" className="flex items-center gap-5 px-5 min-h-12 border-b border-[var(--border-color)]">
+            {([['journey', 'PnL journey'], ['fills', `Fills ${life.events.length}`]] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+                className={cn('h-12 -mb-px border-b-2 text-[15px] transition-colors', tab === id ? 'border-[var(--role-content)] text-[var(--role-content)]' : 'border-transparent text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
+                {label}
+              </button>
+            ))}
+            {tab === 'journey' && (
+              <span className="ml-auto text-[13px] tabular-nums text-[var(--role-content-muted)]">
+                <span style={{ color: pnlColor(shown) }}>{signed2(shown)}</span>
+                {journeyHover && ` · ${when(journeyHover.point.t)}`}
+              </span>
+            )}
+          </div>
+
+          {tab === 'journey' ? (
+            curve.length < 2 ? (
+              <div className="grid place-items-center min-h-[260px] text-[13px] text-[var(--role-content-subtle)]">Not enough price history to chart this trade.</div>
+            ) : (
+              <div className="relative h-[280px] mx-5 my-2">
+                <PnlChart points={curve} onHover={setJourneyHover} ariaLabel={`PnL over the trade, ending ${signed2(displayPnl)}`} />
+              </div>
+            )
+          ) : (
+            <div className="overflow-x-auto">
+              {isFallback && <p className="px-5 py-4 text-[13px] text-[var(--role-content-muted)]">No fill history for this position. BULK only keeps a limited window.</p>}
+              {life.events.length > 0 && (
+                <table className="w-full min-w-[520px] text-[13px]">
+                  <thead>
+                    <tr className="text-left text-[12px] text-[var(--role-content-subtle)]">
+                      <th className="px-5 py-2.5 font-normal">Time</th>
+                      <th className="px-3 py-2.5 font-normal">Action</th>
+                      <th className="px-3 py-2.5 font-normal text-right">Size</th>
+                      <th className="px-3 py-2.5 font-normal text-right">Price</th>
+                      <th className="px-5 py-2.5 font-normal text-right">Realized</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {life.events.map((e, i) => {
+                      const liq = e.liq === 'partial' || e.liq === 'full';
+                      return (
+                        <tr key={`${e.t}-${i}`} className="border-t border-[var(--role-line-subtle)]">
+                          <td className="px-5 py-2.5 tabular-nums text-[var(--role-content-muted)] whitespace-nowrap">{when(e.t)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: liq ? 'var(--neg)' : 'var(--role-content)' }}>{e.actionLabel}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{formatNumber(Math.abs(e.sizeDelta), 4)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{money(e.price)}</td>
+                          <td className="px-5 py-2.5 text-right tabular-nums" style={{ color: Math.abs(e.realizedDelta) > 1e-6 ? pnlColor(e.realizedDelta) : 'var(--role-content-subtle)' }}>
+                            {Math.abs(e.realizedDelta) > 1e-6 ? signed2(e.realizedDelta) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </section>
       </div>
 
       {showCard && (
@@ -374,126 +447,7 @@ export default function ObserveTradePage() {
           }}
         />
       )}
-
-      {/* Terminal grid — big chart left, data readout right. */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
-        {/* LEFT: price (big) + journey */}
-        <div className="flex min-w-0 flex-col gap-3">
-          <TermPanel title="Price & Fills" icon={CandlestickChart}>
-            <div className="h-[380px] p-1.5 sm:h-[460px] lg:h-[560px]">
-              <TradeCandlePanel
-                symbol={symbol}
-                side={life.side}
-                avgEntry={life.avgEntry}
-                liqPrice={livePos?.liquidationPrice}
-                markPrice={markPrice}
-                events={life.events}
-                openedAt={life.openedAt}
-                closedAt={life.closedAt}
-                isOpen={life.isOpen}
-                onCandles={(cs) => {
-                  if (cs.length && candleCache.get(symbol)?.length !== cs.length) {
-                    candleCache.set(symbol, cs);
-                    setCandleTick((n) => n + 1);
-                  }
-                }}
-              />
-            </div>
-          </TermPanel>
-
-          <TermPanel title="PnL Journey" icon={Activity}>
-            <div className="h-[240px] p-1.5 pt-2">
-              <TradeJourneyChart curve={life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl }))} markers={journeyMarkers} />
-            </div>
-          </TermPanel>
-        </div>
-
-        {/* RIGHT: position readout + lifecycle */}
-        <div className="flex min-w-0 flex-col gap-3">
-          <TermPanel title="Position" icon={Wallet}>
-            <div className="p-3">
-              <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-                {life.isOpen ? 'Unrealized PnL' : 'Realized PnL'}
-              </div>
-              <div className="mt-1 flex items-end gap-2">
-                <span className="text-[32px] font-medium leading-none tracking-tight tabular-nums" style={{ color: isUp ? 'var(--pos)' : 'var(--neg)' }}>
-                  {isUp ? '+' : '−'}${formatNumber(Math.abs(displayPnl), 2)}
-                </span>
-                {roi != null && Number.isFinite(roi) && (
-                  <span className="pb-0.5 text-[12px] font-medium tabular-nums" style={{ color: roi >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-                    {roi >= 0 ? '+' : ''}{roi.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <MiniStat label="Peak" value={`+$${formatCompact(Math.max(0, life.peakPnl))}`} tone="pos" />
-                <MiniStat label="Draw" value={`-$${formatCompact(Math.abs(Math.min(0, life.troughPnl)))}`} tone="neg" />
-                <MiniStat label="Held" value={isFallback ? 'live' : formatDuration(heldMs)} />
-              </div>
-
-              <div className="mt-3 border-t border-[var(--border-color)]">
-                <DataRow label="Avg Entry" value={`$${formatNumber(life.avgEntry, life.avgEntry < 10 ? 4 : 2)}`} />
-                <DataRow label={life.isOpen ? 'Mark' : 'Exit'} value={lastPrice ? `$${formatNumber(lastPrice, lastPrice < 10 ? 4 : 2)}` : '—'} />
-                <DataRow label="Size" value={`${formatNumber(life.peakSize, 4)} ${coin}`} />
-                {/* Notional = position VALUE (size × avg entry). Leverage/Margin:
-                    BULK records no leverage on CLOSED trades and the only
-                    leverage value it exposes per market is the exchange MAX
-                    (same for everyone) — not the trader's actual pick. So we show
-                    the real values only for a LIVE position; for a closed trade we
-                    show a true BOUND: "Max leverage" and "Min margin"
-                    (= notional / max leverage, since actual leverage ≤ max). */}
-                <DataRow label="Notional" value={`$${formatCompact(notionalPeak)}`} />
-                <DataRow
-                  label={leverageIsBound ? 'Max leverage' : 'Leverage'}
-                  value={shownLeverage > 0 ? `${Number(shownLeverage.toFixed(1))}×` : '—'}
-                />
-                {shownLeverage > 0 && (
-                  <DataRow
-                    label={leverageIsBound ? 'Min margin' : 'Margin'}
-                    value={`${leverageIsBound ? '≥ ' : ''}$${formatCompact(notionalPeak / shownLeverage)}`}
-                  />
-                )}
-                {life.isOpen && livePos && livePos.liquidationPrice > 0 && (
-                  <DataRow label="Liq." value={`$${formatNumber(livePos.liquidationPrice, 2)}`} valueClass="text-[var(--neg)]" />
-                )}
-                <DataRow label="Realized" value={`${life.realizedTotal >= 0 ? '+' : '−'}$${formatNumber(Math.abs(life.realizedTotal), 2)}`} valueClass={life.realizedTotal >= 0 ? 'text-[var(--pos)]' : 'text-[var(--neg)]'} />
-                <DataRow label="Fills" value={String(life.events.length)} />
-              </div>
-            </div>
-          </TermPanel>
-
-          <TermPanel title="Lifecycle" icon={ListOrdered} right={`${life.events.length}`}>
-            <ol className="max-h-[320px] overflow-y-auto overscroll-contain lg:max-h-[380px]">
-              {isFallback && (
-                <li className="border-b border-[var(--border-color)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
-                  Per-fill history unavailable (opened beyond BULK&apos;s window, or rate-limited) — live position marked to market.
-                </li>
-              )}
-              {life.events.map((e, i) => (
-                <TermEventRow key={`${e.t}-${i}`} e={e} coin={coin} />
-              ))}
-              {life.isOpen && (
-                <li className="flex items-center gap-2 border-t border-[var(--border-color)] px-3 py-2 text-[11px]">
-                  <CircleDot className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                  <span className="font-medium text-[var(--text-primary)]">tracking live</span>
-                  <span className="ml-auto tabular-nums text-[var(--text-tertiary)]">now</span>
-                </li>
-              )}
-            </ol>
-          </TermPanel>
-        </div>
-      </div>
-
-      {/* Honest scope note */}
-      <p className="mt-6 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
-        Reconstructed from BULK fills and candles. BULK doesn&apos;t record a closed position&apos;s actual
-        leverage — the only value it exposes per market is the exchange max — so a closed trade shows a
-        bound (Max leverage → Min margin), not the trader&apos;s real figure; the exact leverage/margin is
-        known only while the position is live. Take-profit / stop-loss placements and isolated-margin
-        top-ups aren&apos;t exposed by any BULK feed we read yet, so they aren&apos;t shown.
-      </p>
-    </Shell>
+    </div>
   );
 }
 
@@ -551,76 +505,15 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>;
 }
 
-// A clean rounded card panel — matches the share-card aesthetic.
-function TermPanel({ title, icon: Icon, right, children }: { title: string; icon: LucideIcon; right?: React.ReactNode; children: React.ReactNode }) {
+/** Label and value on one line, as in the wallet page's rail. */
+function Row({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)]">
-      <header className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
-        <Icon className="h-3.5 w-3.5 text-[var(--accent)]" />
-        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{title}</span>
-        {right != null && <span className="ml-auto text-[11px] font-medium tabular-nums text-[var(--text-tertiary)]">{right}</span>}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-// LABEL ............ value row for the position readout.
-function DataRow({ label, value, valueClass, hint }: { label: string; value: string; valueClass?: string; hint?: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 py-2 text-[13px] last:border-b-0">
-      <span className="text-[var(--text-tertiary)]">{label}</span>
-      <span className="flex items-baseline gap-1.5">
-        {hint && <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]/70">{hint}</span>}
-        <span className={`font-medium tabular-nums ${valueClass ?? 'text-[var(--text-primary)]'}`}>{value}</span>
-      </span>
+    <div className="flex items-center justify-between gap-4 py-1.5 text-[14px]">
+      <span className="text-[var(--role-content-muted)] truncate">{label}</span>
+      <span className="font-medium tabular-nums shrink-0" style={{ color: color ?? 'var(--role-content)' }}>{value}</span>
     </div>
   );
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">{label}</div>
-      <div className="mt-0.5 text-[14px] font-medium tabular-nums" style={tone ? { color: tone === 'pos' ? 'var(--pos)' : 'var(--neg)' } : undefined}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// Small round action icon for a lifecycle event.
-function eventIcon(e: TradeEventPoint) {
-  if (e.action === 'open') return Flag;
-  if (e.action === 'add') return Plus;
-  if (e.action === 'reduce') return Minus;
-  if (e.action === 'flip') return e.positionAfter > 0 ? ArrowUpRight : ArrowDownRight;
-  return CircleDot; // close
-}
-
-// Compact one-line event row: icon · time · action · size @ price · realized.
-function TermEventRow({ e, coin }: { e: TradeEventPoint; coin: string }) {
-  const time = new Date(e.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  const building = e.action === 'open' || e.action === 'add';
-  const tint = building ? 'var(--accent-text)' : (e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)');
-  const Icon = eventIcon(e);
-  return (
-    <li className="flex items-center gap-2 border-b border-[var(--border-color)] px-3 py-2 text-[11px] last:border-b-0">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, currentColor 14%, transparent)', color: tint }}>
-        <Icon className="h-3 w-3" />
-      </span>
-      <span className="shrink-0 tabular-nums text-[var(--text-tertiary)]">{time}</span>
-      <span className="shrink-0 font-medium uppercase tracking-wide" style={{ color: building ? 'var(--accent-text)' : 'var(--text-primary)' }}>
-        {e.actionLabel}
-      </span>
-      <span className="truncate tabular-nums text-[var(--text-tertiary)]">
-        {formatNumber(Math.abs(e.sizeDelta), 4)} @ {formatNumber(e.price, e.price < 10 ? 4 : 2)}
-      </span>
-      {Math.abs(e.realizedDelta) > 1e-6 && (
-        <span className="ml-auto shrink-0 font-medium tabular-nums" style={{ color: e.realizedDelta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-          {e.realizedDelta >= 0 ? '+' : '−'}${formatNumber(Math.abs(e.realizedDelta), 2)}
-        </span>
-      )}
-    </li>
-  );
-}
+const signed2 = (n: number) => (Math.abs(n) < 0.005 ? '$0.00' : `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), 2)}`);
+const when = (t: number) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });

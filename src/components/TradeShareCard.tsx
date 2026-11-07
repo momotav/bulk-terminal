@@ -543,7 +543,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       ctx.beginPath(); ctx.moveTo(x - 5, tailY); ctx.lineTo(x + 5, tailY); ctx.lineTo(x, tailY + (flip ? -6 : 6)); ctx.closePath();
       ctx.fillStyle = V.bgMuted; ctx.fill();
       if (liqRows) {
-        ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `600 9px ${FONT}`; ctx.fillText(top, bx + 10, byl + 14);
+        ctx.textAlign = 'left'; ctx.fillStyle = V.neg; ctx.font = `600 9px ${FONT}`; ctx.fillText(top, bx + 10, byl + 14);
         ctx.font = `500 11px ${FONT}`;
         liqRows.forEach(([k, v], i) => {
           const rowY = byl + 31 + i * 16;

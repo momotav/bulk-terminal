@@ -702,5 +702,25 @@ export function closedTradeLifecycle(
         positionAfter: long ? held : -held, realizedDelta: 0, liq: 'partial',
       };
     });
-  return slices.length ? { ...life, events: [life.events[0], ...slices, life.events[1]] } : life;
+  const events = slices.length ? [life.events[0], ...slices, life.events[1]] : life.events;
+
+  // BULK's record only gives the two ends, which charts as a straight line. Marking the
+  // position to each candle, less whatever was sliced off, gives the path between them.
+  const dir = long ? 1 : -1;
+  const inTrade = candles.filter((c) => c.t > record.openedAt && c.t < record.closedAt);
+  if (!inTrade.length) return { ...life, events };
+  let i = 0;
+  let size = Math.abs(record.size);
+  let banked = 0;
+  const path = inTrade.map((c) => {
+    for (; i < slices.length && slices[i].t <= c.t; i++) {
+      const cut = Math.abs(slices[i].sizeDelta);
+      size = Math.max(0, size - cut);
+      banked += cut * (slices[i].price - record.openPrice) * dir;
+    }
+    return { t: c.t, pnl: banked + size * (c.c - record.openPrice) * dir, realized: banked, price: c.c };
+  });
+  const pnlCurve = [life.pnlCurve[0], ...path, life.pnlCurve[1]];
+  const pnls = pnlCurve.map((p) => p.pnl);
+  return { ...life, events, pnlCurve, peakPnl: Math.max(0, ...pnls), troughPnl: Math.min(0, ...pnls) };
 }
