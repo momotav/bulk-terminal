@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle,
-  type CandlestickData, type UTCTimestamp,
+  type AutoscaleInfo, type CandlestickData, type UTCTimestamp,
 } from 'lightweight-charts';
 import { Play, Pause } from 'lucide-react';
 import { analytics, marketStreamUrl, formatNumber, type Candle } from '@/lib/api';
@@ -63,6 +63,21 @@ const uniqueBars = (cs: Candle[]): Candle[] => {
   return Array.from(bySec.values()).sort((a, b) => a.t - b.t);
 };
 
+// Replay pacing: a whole trade plays in about this long, whatever its length.
+const REPLAY_MS = 18_000;
+const REPLAY_MAX_BAR_MS = 420;
+
+/** A candle part-way through forming: open, out to one extreme, across to the other, to close. */
+function formingBar(c: Candle, p: number): CandlestickData {
+  const up = c.c >= c.o;
+  const first = up ? c.l : c.h;
+  const second = up ? c.h : c.l;
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const price = p < 0.25 ? lerp(c.o, first, p / 0.25) : p < 0.7 ? lerp(first, second, (p - 0.25) / 0.45) : lerp(second, c.c, (p - 0.7) / 0.3);
+  const seen = [c.o, price, ...(p >= 0.25 ? [first] : []), ...(p >= 0.7 ? [second] : [])];
+  return { time: Math.floor(c.t / 1000) as UTCTimestamp, open: c.o, high: Math.max(...seen), low: Math.min(...seen), close: price };
+}
+
 const resolveColor = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
   const probe = document.createElement('span');
@@ -99,6 +114,10 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
   const replayTimerRef = useRef<number | null>(null);
   const replayCutoffRef = useRef<number>(Infinity); // ms — markers/candles after this are hidden
   const replayingRef = useRef(false);
+  // Held still during replay: a price axis that rescales on every new high is most of
+  // what makes a replay feel jerky.
+  const scaleFrozenRef = useRef(false);
+  const scaleRef = useRef<AutoscaleInfo | null>(null); // the axis's last range before freezing
   // Lazy back-fill plumbing: displayRef holds EVERY candle currently on the
   // series (the initial window + any older chunks paged in as the user scrolls
   // left), so even at 1m/5m the whole history is reachable despite BULK's
@@ -237,6 +256,11 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg,
       // A closed trade has no live price to flag: the tag would just show today's.
       priceLineVisible: isOpen, lastValueVisible: isOpen,
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+        if (scaleFrozenRef.current && scaleRef.current) return scaleRef.current;
+        scaleRef.current = original();
+        return scaleRef.current;
+      },
     });
     seriesRef.current = series;
     series.setData(plotted.map(toLW));
@@ -344,6 +368,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
         if (!older.length || !s || !c) return;
         const merged = clampWicks(uniqueBars([...older, ...buf]));
         displayRef.current = merged;
+        if (replayingRef.current) return; // the buffer has it; replay restores from there
         const vis = c.timeScale().getVisibleRange(); // time-based → stable across prepend
         s.setData(merged.map(toLW));
         if (vis) { try { c.timeScale().setVisibleRange(vis); } catch { /* out of range */ } }
@@ -372,6 +397,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
         if (!newer.length || !s || !c) return;
         const merged = clampWicks(uniqueBars([...buf, ...newer]));
         displayRef.current = merged;
+        if (replayingRef.current) return; // the buffer has it; replay restores from there
         const vis = c.timeScale().getVisibleRange();
         s.setData(merged.map(toLW));
         if (vis) { try { c.timeScale().setVisibleRange(vis); } catch { /* out of range */ } }
@@ -471,42 +497,56 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     const data = displayRef.current.length ? displayRef.current : plottedRef.current;
     if (!s || data.length < 2) return;
 
+    const chart = chartRef.current;
     if (!replaying) {
+      const held = chart?.timeScale().getVisibleLogicalRange();
       replayCutoffRef.current = Infinity;
       s.setData(data.map(toLW)); // restore the full series
+      scaleFrozenRef.current = false;
+      if (held) chart?.timeScale().setVisibleLogicalRange(held);
       return;
     }
+    if (!chart) return;
 
-    const bsec = barSeconds(loadedIv);
+    // The replay plays inside the view you were already looking at: same frame, same
+    // price range, so the only thing moving on screen is the new candles.
+    const view = chart.timeScale().getVisibleLogicalRange();
+    const from = Math.max(0, Math.floor(view?.from ?? 0));
+    const to = Math.min(data.length - 1, Math.ceil(view?.to ?? data.length - 1));
+    scaleFrozenRef.current = true;
+
     let idx = data.findIndex((c) => c.t >= openedAt);
-    if (idx < 1) idx = Math.max(1, Math.floor(data.length * 0.3));
-    // Fix the frame to the whole open→now span so revealed candles draw into it.
-    const chart = chartRef.current;
-    if (chart) {
-      try {
-        chart.timeScale().setVisibleRange({
-          from: (Math.floor(openedAt / 1000) - bsec * 30) as UTCTimestamp,
-          to: (Math.floor(endT / 1000) + bsec * 5) as UTCTimestamp,
-        });
-      } catch { /* out of range — leave the view as-is */ }
-    }
-    s.setData(data.slice(0, idx + 1).map(toLW));
-    replayCutoffRef.current = data[idx].t;
+    if (idx < 1) idx = Math.max(1, from);
+    // Up to the frame's right edge: bars past it restore off-screen, so nothing pops in.
+    const last = Math.max(idx + 1, to);
+    const hold = () => { if (view) chart.timeScale().setVisibleLogicalRange(view); };
+    chart.timeScale().applyOptions({ shiftVisibleRangeOnNewBar: false });
+    s.setData(data.slice(0, idx).map(toLW));
+    hold();
 
-    replayTimerRef.current = window.setInterval(() => {
-      idx += 1;
-      if (idx >= data.length) {
-        if (replayTimerRef.current) { window.clearInterval(replayTimerRef.current); replayTimerRef.current = null; }
-        replayCutoffRef.current = Infinity;
-        setReplaying(false);
-        return;
-      }
-      seriesRef.current?.update(toLW(data[idx]));
-      replayCutoffRef.current = data[idx].t;
-    }, 110);
+    const barMs = Math.min(REPLAY_MAX_BAR_MS, REPLAY_MS / (last - idx + 1));
+    const barSpan = barSeconds(loadedIv) * 1000;
+    const start = performance.now();
+    let drawn = idx; // the bar being formed
+    const frame = (now: number) => {
+      const series = seriesRef.current;
+      if (!series) return;
+      const at = (now - start) / barMs;
+      const target = idx + Math.floor(at);
+      // Bars the clock has passed land finished. On a long trade that's several a frame.
+      while (drawn < target && drawn <= last) { series.update(toLW(data[drawn])); drawn += 1; }
+      if (drawn > last) { setReplaying(false); return; }
+      const p = at - Math.floor(at);
+      series.update(formingBar(data[drawn], p));
+      replayCutoffRef.current = data[drawn].t + barSpan * p;
+      replayTimerRef.current = requestAnimationFrame(frame);
+    };
+    replayCutoffRef.current = data[idx].t;
+    replayTimerRef.current = requestAnimationFrame(frame);
 
     return () => {
-      if (replayTimerRef.current) { window.clearInterval(replayTimerRef.current); replayTimerRef.current = null; }
+      if (replayTimerRef.current) { cancelAnimationFrame(replayTimerRef.current); replayTimerRef.current = null; }
+      chart.timeScale().applyOptions({ shiftVisibleRangeOnNewBar: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replaying, openedAt, loadedIv]);
@@ -554,7 +594,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
             key={m.key}
             ref={(el) => { if (el) markerElsRef.current.set(m.key, el); else markerElsRef.current.delete(m.key); }}
             className="absolute left-0 top-0 z-20"
-            style={{ opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity' }}
+            style={{ opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity', transition: 'opacity 200ms ease-out' }}
           >
             <div className="group relative flex items-center justify-center" style={{ pointerEvents: 'auto' }}>
               <div
