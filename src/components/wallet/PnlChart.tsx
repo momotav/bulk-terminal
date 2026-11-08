@@ -66,6 +66,7 @@ export const PnlChart = memo(function PnlChart({ points, onHover, ariaLabel }: {
   const cursorLine = useRef<SVGLineElement | null>(null);
   const dot = useRef<SVGGElement | null>(null);
   const shown = useRef(-1);
+  const touchedAt = useRef(0);
   const id = useId().replace(/:/g, '');
 
   useEffect(() => {
@@ -170,8 +171,11 @@ export const PnlChart = memo(function PnlChart({ points, onHover, ariaLabel }: {
     // fine everywhere, use these, and pointer moves didn't arrive for one user until
     // they pressed the button. A tap leaves its reading up, as recharts tooltips do.
     <div ref={box} className="absolute inset-0 select-none" style={{ touchAction: 'pan-y' }}
-      onMouseMove={(e) => track(e.clientX)} onMouseDown={(e) => track(e.clientX)} onMouseLeave={clear}
-      onTouchStart={(e) => track(e.touches[0].clientX)} onTouchMove={(e) => track(e.touches[0].clientX)}>
+      onMouseMove={(e) => track(e.clientX)} onMouseDown={(e) => track(e.clientX)}
+      // Phones follow a tap with emulated mouse events, a leave among them; that one isn't the user leaving.
+      onMouseLeave={() => { if (Date.now() - touchedAt.current > 800) clear(); }}
+      onTouchStart={(e) => { touchedAt.current = Date.now(); track(e.touches[0].clientX); }}
+      onTouchMove={(e) => { touchedAt.current = Date.now(); track(e.touches[0].clientX); }}>
       {w > 0 && h > 0 && line.length > 1 && (
         <svg width={w} height={h} role="img" aria-label={ariaLabel} className="block">
           <defs>
