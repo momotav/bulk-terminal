@@ -10,7 +10,7 @@ import type { WalletFill } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
 import { anchorFills, buildPnlCurve, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, trimQuietTail, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
 import { coinOf, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
-import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
+import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PanelLoading, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
 import { useStore } from '@/store';
@@ -556,25 +556,33 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [address, network]);
 
-  // Funding and transfers wait for the page's own data: fired alongside it they
-  // made a burst BULK rate-limited, which took a cold load past 20 seconds.
-  const mainWaveDone = mainDone && fillsDone;
-  useEffect(() => { setFunding(null); setTransfers(null); }, [address, network]);
+  // Each tab loads only what it shows. Funding feeds the Overview's per-market
+  // breakdown, so it follows the fills; transfers load the first time their tab opens.
+  // Spacing them after the page's own calls also keeps a cold load from bursting BULK.
+  const [fundingDone, setFundingDone] = useState(false);
+  useEffect(() => { setFunding(null); setTransfers(null); setFundingDone(false); }, [address, network]);
+  const retryLoad = async <T,>(load: () => Promise<T>, done: (v: T) => void, cancelled: () => boolean) => {
+    for (let attempt = 0; attempt < 6 && !cancelled(); attempt++) {
+      try { const v = await load(); if (!cancelled()) done(v); return; }
+      catch { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); }
+    }
+  };
   useEffect(() => {
-    if (!mainWaveDone) return;
+    if (!mainDone || !fillsDone) return;
     let cancelled = false;
-    const retry = async <T,>(load: () => Promise<T>, done: (v: T) => void) => {
-      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
-        try { const v = await load(); if (!cancelled) done(v); return; }
-        catch { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); }
-      }
-    };
     (async () => {
-      await retry(() => wallet.getFunding(address), setFunding);
-      await retry(() => wallet.getActivity(address, 200), (r) => setTransfers(r.data || []));
+      await retryLoad(() => wallet.getFunding(address), setFunding, () => cancelled);
+      if (!cancelled) setFundingDone(true);
     })();
     return () => { cancelled = true; };
-  }, [address, network, mainWaveDone]);
+  }, [address, network, mainDone, fillsDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wantsTransfers = tab === 'transfers';
+  useEffect(() => {
+    if (!wantsTransfers || transfers !== null) return;
+    let cancelled = false;
+    void retryLoad(() => wallet.getActivity(address, 200), (r) => setTransfers(r.data || []), () => cancelled);
+    return () => { cancelled = true; };
+  }, [address, network, wantsTransfers, transfers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
@@ -804,11 +812,13 @@ export default function WalletPage() {
     openedAt: p.openedAt, closedAt: p.closedAt, liquidated: p.liquidated,
   });
 
-  // Reveal once both data waves have landed, or the safety timeout fires.
-  const ready = revealTimedOut || (mainDone && fillsDone);
+  // Reveal as soon as the account is in. Fill history is the slow part (a busy wallet
+  // is several sequential BULK pages), and only some panels need it: those show a
+  // loading state in place, never a partial figure, until it lands.
+  const ready = revealTimedOut || mainDone;
+  const analysisReady = fillsDone && fundingDone;
 
-  // Hold the animated logo loader until all the key data waves have landed, so
-  // the page reveals complete instead of flashing partial numbers.
+  // Hold the animated logo loader until the account has landed.
   if (!ready) {
     return (
       <div className="fixed inset-0 z-[9999] grid place-items-center bg-[var(--bg-base)]">
@@ -929,11 +939,15 @@ export default function WalletPage() {
                 {tab === 'overview' && (
                   <>
                     <PnlPanel curve={curve} address={address} />
-                    <MarketBreakdown rows={breakdown.rows} exact={breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest}
-                      totalVolume={fillSummary.volume} makerShare={fillSummary.volume > 0 ? fillSummary.maker.volume / fillSummary.volume : 0} />
+                    {analysisReady ? (
+                      <MarketBreakdown rows={breakdown.rows} exact={breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest}
+                        totalVolume={fillSummary.volume} makerShare={fillSummary.volume > 0 ? fillSummary.maker.volume / fillSummary.volume : 0} />
+                    ) : <PanelLoading title="Market breakdown" className="h-[445px] sm:h-[527px]" />}
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-px bg-[var(--border-color)]">
                       {margin && <GrossToNet gross={(grossRealized ?? 0) + margin.unrealizedPnl} fees={margin.fees} funding={margin.funding} net={totalPnl} />}
-                      <MakerTaker maker={fillSummary.maker} taker={fillSummary.taker} partial={!breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest} />
+                      {fillsDone
+                        ? <MakerTaker maker={fillSummary.maker} taker={fillSummary.taker} partial={!breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest} />
+                        : <PanelLoading title="Maker / taker" className="h-[220px]" />}
                     </div>
                   </>
                 )}
@@ -961,8 +975,8 @@ export default function WalletPage() {
                 {tab === 'trades' && (
                   <>
                     <StatStrip items={[
-                      { label: 'Fills', hint: breakdown.exact ? 'All time' : 'Latest available', value: allFills.length.toLocaleString('en-US') },
-                      { label: 'Volume', hint: 'All time', value: `$${formatCompact(lifetimeVolume)}` },
+                      { label: 'Fills', hint: breakdown.exact ? 'All time' : 'Latest available', value: fillsDone ? allFills.length.toLocaleString('en-US') : '—' },
+                      { label: 'Volume', hint: 'All time', value: fillsDone ? `$${formatCompact(lifetimeVolume)}` : '—' },
                       { label: 'Realized PnL', hint: 'After fees', value: margin ? signed(margin.realizedPnl) : '—', color: margin ? pnlColor(margin.realizedPnl) : undefined },
                       { label: 'Fees', hint: 'Net of rebates', value: margin ? signed(margin.fees) : '—', color: margin ? pnlColor(margin.fees) : undefined },
                     ]} />
@@ -972,7 +986,9 @@ export default function WalletPage() {
                           className={cn('px-2.5 py-1 rounded-md text-[13px] transition-colors', tradeView === k ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>{label}</button>
                       ))}
                     </div>
-                    {tradeView === 'fills' ? (
+                    {tradeView === 'fills' && !fillsDone ? (
+                      <PanelLoading title="Fills" className="h-[320px]" />
+                    ) : tradeView === 'fills' ? (
                       <>
                         <FillsTable fills={allFills} />
                         {!breakdown.exact && allFills.length > 0 && <div className="pt-3"><PartialNote fills={allFills.length} oldest={fillSummary.oldest} /></div>}
@@ -981,7 +997,9 @@ export default function WalletPage() {
                   </>
                 )}
 
-                {tab === 'calendar' && <PnlCalendar daily={dailyPnlFromSeries} volume={fillSummary.dailyVolume} />}
+                {tab === 'calendar' && (fillsDone
+                  ? <PnlCalendar daily={dailyPnlFromSeries} volume={fillSummary.dailyVolume} />
+                  : <PanelLoading title="PnL calendar" className="h-[360px]" />)}
 
                 {tab === 'funding' && <FundingPanel funding={funding} />}
 
@@ -1011,7 +1029,7 @@ export default function WalletPage() {
                 {leverage !== null && <Row label="Leverage" value={`${leverage.toFixed(1)}×`} />}
                 {longShare !== null && <Row label="Direction" value={`${(longShare * 100).toFixed(0)}% long`} />}
                 {closestLiq && <Row label={`Liquidation, ${coinOf(closestLiq.symbol)}`} value={`${(closestLiq.dist * 100).toFixed(1)}% away`} color={liqColor(closestLiq.dist)} title={`Liquidates at ${formatPx(closestLiq.price)}`} />}
-                <Row label="All-time volume" value={lifetimeVolume > 0 ? money(lifetimeVolume) : '$0'} />
+                <Row label="All-time volume" value={!fillsDone ? '—' : lifetimeVolume > 0 ? money(lifetimeVolume) : '$0'} />
               </RailGroup>
               <div className="border-t border-[var(--border-color)]" />
               <RailGroup title="Performance" hint={record ? `${record.count.toLocaleString('en-US')} closed` : undefined}>

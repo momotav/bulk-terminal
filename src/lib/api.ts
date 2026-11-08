@@ -559,8 +559,11 @@ export async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Content-Type only when there is a body. On a GET it made every call a CORS
+  // "non-simple" request, so the browser sent a preflight first: one extra round
+  // trip (about 240ms) before each of the wallet page's requests could start.
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(options.body != null ? { 'Content-Type': 'application/json' } : {}),
     ...options.headers,
   };
   

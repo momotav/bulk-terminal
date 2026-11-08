@@ -46,6 +46,20 @@ function Panel({ title, hint, right, children }: { title: string; hint?: ReactNo
   );
 }
 
+/** A panel whose data is still on its way: same frame and height, so nothing jumps when it lands. */
+export function PanelLoading({ title, className, note = 'Loading trade history' }: { title: string; className: string; note?: string }) {
+  return (
+    <Panel title={title}>
+      <div className={cn('grid place-items-center text-[13px] text-[var(--role-content-subtle)]', className)}>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-[var(--role-line)] border-t-[var(--accent)] animate-spin" />
+          {note}
+        </span>
+      </div>
+    </Panel>
+  );
+}
+
 function Segmented<T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string])[]; onChange: (v: T) => void }) {
   return (
     <div className="flex items-center rounded-lg border border-[var(--border-color)] p-0.5 text-[12px]">
