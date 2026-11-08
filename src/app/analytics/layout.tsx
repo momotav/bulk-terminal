@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { ChartFocuser } from '@/components/ChartFocuser';
+
+const SLIDE_MS = 200; // matches the sidebar's duration-200
 
 const menuItems = [
   {
@@ -58,7 +60,19 @@ export default function AnalyticsLayout({
       setCollapsed(localStorage.getItem('bulkstats:analytics-sidebar') === 'collapsed');
     } catch { /* private mode / disabled storage — default expanded */ }
   }, []);
+  // While the sidebar slides, the content keeps its width and only moves. Letting it
+  // reflow made every chart on the page re-render on every frame of the slide (General
+  // has a dozen), which is what made it stutter. It takes its new width once, at the end.
+  const contentRef = useRef<HTMLElement | null>(null);
+  const settleRef = useRef<number | null>(null);
   const toggleCollapsed = () => {
+    const content = contentRef.current;
+    if (content) {
+      content.style.width = `${content.getBoundingClientRect().width}px`;
+      content.style.flex = 'none';
+      if (settleRef.current) window.clearTimeout(settleRef.current);
+      settleRef.current = window.setTimeout(() => { content.style.width = ''; content.style.flex = ''; }, SLIDE_MS + 20);
+    }
     setCollapsed((c) => {
       const next = !c;
       try { localStorage.setItem('bulkstats:analytics-sidebar', next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
@@ -67,11 +81,11 @@ export default function AnalyticsLayout({
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:flex-row overflow-x-clip">
       {/* Smooth-scrolls to a chart when the command palette asks for one. */}
       <ChartFocuser />
       {/* Desktop Sidebar */}
-      <aside className={`hidden md:block flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)] transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-56'}`}>
+      <aside className={`hidden md:block flex-shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-base)] transition-[width] duration-200 ease-out ${collapsed ? 'w-16' : 'w-56'}`}>
         <div className="sticky top-14 pt-6 pb-4">
           <div className={`mb-6 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
             {!collapsed && <h2 className="text-lg font-medium text-[var(--text-primary)]">Analytics</h2>}
@@ -155,7 +169,7 @@ export default function AnalyticsLayout({
       </div>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0">
+      <main ref={contentRef} className="flex-1 min-w-0">
         {children}
       </main>
     </div>

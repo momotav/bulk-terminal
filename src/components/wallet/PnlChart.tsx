@@ -166,8 +166,12 @@ export const PnlChart = memo(function PnlChart({ points, onHover, ariaLabel }: {
   const stop = (color: string, opacity: number) => ({ stopColor: color, stopOpacity: opacity });
 
   return (
+    // Mouse and touch events, not pointer events: the recharts charts, which hover
+    // fine everywhere, use these, and pointer moves didn't arrive for one user until
+    // they pressed the button. A tap leaves its reading up, as recharts tooltips do.
     <div ref={box} className="absolute inset-0 select-none" style={{ touchAction: 'pan-y' }}
-      onPointerDown={(e) => track(e.clientX)} onPointerMove={(e) => track(e.clientX)} onPointerLeave={clear} onPointerCancel={clear}>
+      onMouseMove={(e) => track(e.clientX)} onMouseDown={(e) => track(e.clientX)} onMouseLeave={clear}
+      onTouchStart={(e) => track(e.touches[0].clientX)} onTouchMove={(e) => track(e.touches[0].clientX)}>
       {w > 0 && h > 0 && line.length > 1 && (
         <svg width={w} height={h} role="img" aria-label={ariaLabel} className="block">
           <defs>
@@ -224,6 +228,11 @@ export const PnlChart = memo(function PnlChart({ points, onHover, ariaLabel }: {
             <text key={t} x={x(t)} y={h - 6} textAnchor={x(t) < PAD.left + 20 ? 'start' : 'middle'} style={text}>{tickLabel(t)}</text>
           ))}
 
+        </svg>
+      )}
+      {/* Hover marks live on their own layer, so moving them never redraws the chart. */}
+      {w > 0 && h > 0 && line.length > 1 && (
+        <svg width={w} height={h} aria-hidden className="absolute inset-0 pointer-events-none">
           <line ref={cursorLine} y1={PAD.top} y2={PAD.top + plotH} style={{ display: 'none', stroke: 'var(--role-content-muted)', strokeOpacity: 0.5 }} />
           {end && (
             <g ref={dot} transform={`translate(${x(end.t)} ${y(end.v)})`} style={{ fill: markerTone(end.v) }}>

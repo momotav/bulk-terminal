@@ -5,7 +5,7 @@
 // were already reconciled against BULK's account totals, and says so when a
 // busy wallet's history is partial instead of presenting a sample as a total.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, formatCompact, type WalletFunding } from '@/lib/api';
 import { coinOf, dayKey, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
@@ -156,10 +156,10 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
     const ty = Math.max(0, Math.min(y + TIP_GAP, dims.h - tipHeight.current));
     el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
   };
-  const track = (e: PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
+  const track = (el: HTMLElement, clientX: number, clientY: number) => {
+    const r = el.getBoundingClientRect();
+    const x = clientX - r.left;
+    const y = clientY - r.top;
     mouse.current = { x, y };
     const cell = cells.find((c) => x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h);
     const symbol = cell ? cell.item.symbol : null;
@@ -183,7 +183,11 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
         {totalVolume > 0 && exact && <span className="text-[var(--role-content-muted)]">Net <span className="tabular-nums" style={{ color: pnlColor(net) }}>{(net / totalVolume * 10_000).toFixed(2)} bps</span> on volume</span>}
       </div>
       <div ref={box} className="relative mx-5 my-4 h-[320px] sm:h-[420px]" style={{ touchAction: 'pan-y' }}
-        onPointerMove={track} onPointerDown={track} onPointerLeave={() => setHover(null)}>
+        // Mouse and touch events, as in PnlChart: pointer moves didn't arrive for one user.
+        onMouseMove={(e) => track(e.currentTarget, e.clientX, e.clientY)} onMouseDown={(e) => track(e.currentTarget, e.clientX, e.clientY)}
+        onMouseLeave={() => setHover(null)}
+        onTouchStart={(e) => track(e.currentTarget, e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchMove={(e) => track(e.currentTarget, e.touches[0].clientX, e.touches[0].clientY)}>
         {cells.map(({ item: c, x, y, w, h, square }) => {
           // Square root keeps mid-sized edges visible next to a single outlier.
           const strength = c.volume > 0 ? Math.sqrt(Math.min(1, Math.abs(c.bps) / peak)) : 0.3;
@@ -224,7 +228,7 @@ export function MarketBreakdown({ rows, exact, fills, oldest, totalVolume, maker
           );
         })}
         {hovered && (
-          <div ref={tip} className="glass-tooltip pointer-events-none absolute z-20 rounded-lg border border-[var(--border-color)] p-3"
+          <div ref={tip} className="glass-tooltip pointer-events-none absolute z-20 rounded-lg border border-[var(--border-color)] p-3 will-change-transform"
             style={{ width: TIP_WIDTH, left: 0, top: 0 }}>
             <CellTip cell={hovered} totalVolume={totalVolume} />
           </div>
