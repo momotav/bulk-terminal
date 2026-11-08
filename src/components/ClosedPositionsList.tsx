@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Activity, TrendingUp, TrendingDown, Flame } from 'lucide-react';
 import { wallet, formatNumber, formatCompact, cn, timeAgo, type ClosedPosition } from '@/lib/api';
 import { formatDuration } from '@/lib/positionWalk';
+import { CoinIcon } from '@/components/CoinIcon';
 
 // Styled hover popover for the closed-position PnL breakdown. Anchored
 // to the headline number, shown on mouse enter / hidden on leave with
@@ -351,6 +352,7 @@ function ClosedPositionRow({
           >
             {isLong ? 'LONG' : 'SHORT'}
           </span>
+          <CoinIcon symbol={p.symbol} size={18} className="shrink-0" />
           <span className="font-semibold text-[var(--text-primary)] truncate">
             {p.symbol}
           </span>
@@ -486,7 +488,8 @@ function ClosedPositionTableRow({
           >
             {isLong ? 'LONG' : 'SHORT'}
           </span>
-          <span className="font-medium text-[var(--text-primary)]">{p.symbol}</span>
+          <CoinIcon symbol={p.symbol} size={18} className="shrink-0" />
+          <span className="font-medium text-[var(--text-primary)] whitespace-nowrap">{p.symbol}</span>
           {p.liquidated && (
             <span
               className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-bulk-orange/15 text-bulk-orange text-[9px] font-semibold tracking-wider"
