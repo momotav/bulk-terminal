@@ -827,7 +827,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       onClick={(e) => { if (e.target === e.currentTarget && !recording) onClose(); }}
     >
       <div className="relative flex flex-col items-center gap-3">
-        <button onClick={onClose} aria-label="Close" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
+        <button onClick={onClose} aria-label="Close" data-tour-close="card" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
           <X className="h-4 w-4" />
         </button>
         <canvas ref={canvasRef} style={{ width: W, height: displayH }} className="rounded-[22px] shadow-2xl" />

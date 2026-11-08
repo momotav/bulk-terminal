@@ -963,6 +963,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             )}
             <button
               onClick={onClose}
+              data-tour-close="chart"
               className="p-1.5 rounded hover:bg-[var(--bg-secondary-20)]/50 transition-colors"
               aria-label="Close"
             >

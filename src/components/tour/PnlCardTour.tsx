@@ -28,6 +28,8 @@ interface Step {
   body: string;
   /** Next clicks the target for you. Absent on the last step. */
   next?: string;
+  /** Closes what this step's click opened, for going back past it. */
+  undo?: string;
   onWalletPage: boolean;
 }
 
@@ -48,12 +50,12 @@ const STEPS: Step[] = [
     body: 'Each row is one trade from open to close, with what it made or lost.',
   },
   {
-    target: '[data-tour="trade-row"]', onWalletPage: true, next: 'Open this trade',
+    target: '[data-tour="trade-row"]', onWalletPage: true, next: 'Open this trade', undo: '[data-tour-close="chart"]',
     title: 'Pick a trade',
     body: 'Choose the trade you want on your card. Its chart opens with every fill marked.',
   },
   {
-    target: '[data-tour="card-button"]', onWalletPage: true, next: 'Make the card',
+    target: '[data-tour="card-button"]', onWalletPage: true, next: 'Make the card', undo: '[data-tour-close="card"]',
     title: 'Make the card',
     body: 'Card turns this trade into a PnL card: replayed on its own chart, with entry, exit and the result.',
   },
@@ -122,6 +124,10 @@ export function PnlCardTour() {
     setMissing(false);
     setFound(false);
     const since = performance.now();
+    // The step before opened something (the chart, the card). If it's been closed by
+    // hand, this step's target went with it, so step back to where it can be redone.
+    const opener = step !== null && step > 0 ? STEPS[step - 1].undo : undefined;
+    let goneSince = 0;
     let frame = 0;
     let arriveAt = 0;
     let arrived = false;
@@ -169,6 +175,10 @@ export function PnlCardTour() {
     };
 
     const tick = () => {
+      if (opener && arriveAt && !document.querySelector(opener)) {
+        if (!goneSince) goneSince = performance.now();
+        else if (performance.now() - goneSince > 400) { setStep((s) => (s === null ? s : s - 1)); return; }
+      } else goneSince = 0;
       const el = document.querySelector<HTMLElement>(current.target);
       targetRef.current = el;
       if (el && el.offsetParent !== null) {
@@ -215,6 +225,14 @@ export function PnlCardTour() {
     if (step === 0) { searchedAt.current = Date.now(); lastBox.current = null; setSearching(true); return; }
     if (step >= STEPS.length - 1) { stop(); return; }
     setStep(step + 1);
+  };
+
+  // Going back undoes what the previous step's click opened, so its target is in view again.
+  const back = () => {
+    if (step === null || step < 1) return;
+    const undo = STEPS[step - 1].undo;
+    if (undo) document.querySelector<HTMLElement>(undo)?.click();
+    setStep(step - 1);
   };
 
   if (step === null || !current) return null;
@@ -265,7 +283,7 @@ export function PnlCardTour() {
         )}
         <div className="mt-4 flex items-center gap-2">
           {step > 1 && (
-            <button type="button" onClick={() => setStep(step - 1)} className="h-9 px-3 rounded-lg text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)]">Back</button>
+            <button type="button" onClick={back} className="h-9 px-3 rounded-lg text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)]">Back</button>
           )}
           <span className="flex-1" />
           {missing || !current.next ? (
