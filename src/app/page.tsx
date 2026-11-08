@@ -9,6 +9,7 @@ import { MarketsTable } from '@/components/MarketsTable';
 import { LiquidationBreakdown } from '@/components/LiquidationBreakdown';
 import { cn } from '@/lib/api';
 import { useTickers } from '@/hooks/useTickers';
+import { PnlCardGuideButton } from '@/components/tour/PnlCardGuideButton';
 
 export default function HomePage() {
   // One ticker poll feeds both the strip and the markets table.
@@ -39,7 +40,10 @@ export default function HomePage() {
           revenue panel. A slim eyebrow label (with a hairline rule) heads it
           instead of a big title, so there's no dead space up top. Search lives
           in the top-nav ⌘K palette. */}
-      <SectionLabel className="mt-4">Overview</SectionLabel>
+      <div className="mt-4 flex items-center gap-3">
+        <SectionLabel className="flex-1">Overview</SectionLabel>
+        <PnlCardGuideButton />
+      </div>
       <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
         {/* Left: Total Volume hero. Right: two metric cards + a wide Revenue
             card, ASXN-style. On mobile the right panel grows naturally (so the

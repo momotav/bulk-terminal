@@ -273,6 +273,7 @@ export function Header() {
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event('bulkstats:open-command'))}
+              data-tour="search"
               aria-label="Search (⌘K)"
               className="flex items-center gap-2 rounded border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary-20)] hover:text-[var(--text-primary)]"
             >

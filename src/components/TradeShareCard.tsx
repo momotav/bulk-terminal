@@ -834,7 +834,7 @@ export function TradeShareCard({ data, onClose }: Props) {
         {!candles && <div className="absolute inset-0 grid place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" /></div>}
 
         {/* Share options */}
-        <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
+        <div data-tour="card-options" className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
           <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
             <span>Hide wallet</span>
             <input type="checkbox" checked={hideWallet} onChange={(e) => setHideWallet(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />

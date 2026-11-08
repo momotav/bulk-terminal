@@ -941,7 +941,7 @@ export default function WalletPage() {
                   ['transfers', 'Deposits & withdrawals'],
                   ['liquidations', 'Liquidations'],
                 ] as const).map(([k, label]) => (
-                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} data-tour={k === 'trades' ? 'tab-trades' : undefined}
                     className={cn('relative px-2 pt-3.5 pb-3 text-[15px] transition-colors whitespace-nowrap', tab === k ? 'text-[var(--role-content)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>
                     {label}
                     {tab === k && <span className="absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] w-6 bg-[var(--accent)]" />}
@@ -996,7 +996,7 @@ export default function WalletPage() {
                     ]} />
                     <div className="flex items-center gap-1 px-4 pt-3">
                       {([['fills', 'Fills'], ['closed', `Closed trades (${closedPositions.length})`]] as const).map(([k, label]) => (
-                        <button key={k} type="button" onClick={() => setTradeView(k)}
+                        <button key={k} type="button" onClick={() => setTradeView(k)} data-tour={k === 'closed' ? 'closed-trades' : undefined}
                           className={cn('px-2.5 py-1 rounded-md text-[13px] transition-colors', tradeView === k ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>{label}</button>
                       ))}
                     </div>

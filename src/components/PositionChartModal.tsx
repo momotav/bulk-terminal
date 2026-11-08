@@ -954,6 +954,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             {shareCardData && (
               <button
                 onClick={() => setShowShareCard(true)}
+                data-tour="card-button"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
               >
                 <ImageIcon className="w-3.5 h-3.5" />

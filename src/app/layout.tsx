@@ -9,6 +9,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { BuildSkewGuard } from '@/components/BuildSkewGuard';
 import { FreeChartCursor } from '@/components/FreeChartCursor';
 import { WalletWarmup } from '@/components/WalletWarmup';
+import { PnlCardTour } from '@/components/tour/PnlCardTour';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -82,6 +83,7 @@ export default function RootLayout({
           <BuildSkewGuard />
           <FreeChartCursor />
           <WalletWarmup />
+          <PnlCardTour />
           <div className="min-h-screen flex flex-col">
             <Header />
             <CommandPalette />

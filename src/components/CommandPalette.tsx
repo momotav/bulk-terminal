@@ -127,10 +127,13 @@ export function CommandPalette() {
     window.addEventListener('keydown', onKey);
     // Let the header button (and anything else) open it via a custom event.
     const openEvt = () => setOpen(true);
+    const closeEvt = () => setOpen(false);
     window.addEventListener('bulkstats:open-command', openEvt);
+    window.addEventListener('bulkstats:close-command', closeEvt);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('bulkstats:open-command', openEvt);
+      window.removeEventListener('bulkstats:close-command', closeEvt);
     };
   }, []);
 

@@ -270,6 +270,7 @@ export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, den
                 key={`${p.symbol}-${p.closedAt}-${i}`}
                 p={p}
                 onSelect={onSelect}
+                tour={i === 0}
               />
             ))}
           </tbody>
@@ -285,6 +286,7 @@ export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, den
           key={`${p.symbol}-${p.closedAt}-${i}`}
           p={p}
           onSelect={onSelect}
+          tour={i === 0}
         />
       ))}
     </div>
@@ -296,9 +298,12 @@ export function ClosedPositionsList({ address, symbol, limit = 50, onSelect, den
 function ClosedPositionRow({
   p,
   onSelect,
+  tour,
 }: {
   p: ClosedPosition;
   onSelect?: (p: ClosedPosition) => void;
+  /** Marks the row the PnL card guide points at (the first one). */
+  tour?: boolean;
 }) {
   const isWin = p.realizedPnl >= 0;
   const isLong = p.side === 'long';
@@ -331,7 +336,7 @@ function ClosedPositionRow({
       };
 
   return (
-    <Wrapper {...wrapperProps}>
+    <Wrapper {...wrapperProps} data-tour={tour ? 'trade-row' : undefined}>
       {/* Header row: side badge + symbol on left, realized PnL on right.
           Liquidated positions get an extra orange flame badge. */}
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -446,9 +451,12 @@ function ClosedPositionRow({
 function ClosedPositionTableRow({
   p,
   onSelect,
+  tour,
 }: {
   p: ClosedPosition;
   onSelect?: (p: ClosedPosition) => void;
+  /** Marks the row the PnL card guide points at (the first one). */
+  tour?: boolean;
 }) {
   const isWin = p.realizedPnl >= 0;
   const isLong = p.side === 'long';
@@ -463,6 +471,7 @@ function ClosedPositionTableRow({
         onSelect && 'cursor-pointer hover:bg-[var(--bg-secondary-20)]/30',
       )}
       onClick={handleClick}
+      data-tour={tour ? 'trade-row' : undefined}
     >
       {/* Market cell — side badge + symbol + LIQ flag if force-closed. */}
       <td className="px-4 py-2.5">
