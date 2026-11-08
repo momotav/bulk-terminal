@@ -2,10 +2,13 @@
 
 import { formatNumber } from '@/lib/api';
 
-export const money = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`;
+// Cents up to a million: rounding −$362.94 to −$363 hid where the money went. Past a
+// million the cents stop mattering and the figure stops fitting.
+const places = (n: number) => (Math.abs(n) < 1_000_000 ? 2 : 0);
+export const money = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), places(n))}`;
 /** Under half a cent prints as $0.00, which is neither a gain nor a loss. */
 const isZero = (n: number) => Math.abs(n) < 0.005;
-export const signed = (n: number) => (isZero(n) ? '$0.00' : `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), Math.abs(n) < 100 ? 2 : 0)}`);
+export const signed = (n: number) => (isZero(n) ? '$0.00' : `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), places(n))}`);
 export const pnlColor = (n: number) => (isZero(n) ? 'var(--role-content)' : n >= 0 ? 'var(--pos)' : 'var(--neg)');
 export const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '');
 export const shortDate = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

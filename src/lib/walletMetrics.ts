@@ -10,6 +10,9 @@ export interface PnlCurve {
   /** When collector snapshots begin. Before this the curve is realized PnL only,
    *  because nothing recorded the unrealized side. Null if there is no such gap. */
   realizedOnlyUntil: number | null;
+  /** The curve begins at the wallet's first close, from zero. Without the closed-position
+   *  log it begins at whatever the first snapshot already held. */
+  startsFromZero: boolean;
 }
 
 interface SnapshotRow { timestamp: string; pnl: number; unrealized_pnl: number }
@@ -79,7 +82,7 @@ export function buildPnlCurve(input: {
   const points: PnlPoint[] = [...prefix, ...recorded.map((r) => ({ t: r.t, v: r.total }))];
   if (realizedNow != null) points.push({ t: now, v: realizedNow + (unrealizedNow ?? 0) });
 
-  return { points, realizedOnlyUntil: prefix.length > 0 && recorded.length > 0 ? seam : null };
+  return { points, realizedOnlyUntil: prefix.length > 0 && recorded.length > 0 ? seam : null, startsFromZero: prefix.length > 0 };
 }
 
 /**
@@ -194,6 +197,10 @@ export interface FillSummary {
   /** Gross realized PnL replayed from the fills. */
   realized: number;
   dailyVolume: Map<string, number>;
+  /** Gross realized and fees per local day, from the same replay. Exact only when the
+   *  wallet's whole fill history is present. */
+  dailyRealized: Map<string, number>;
+  dailyFees: Map<string, number>;
   oldest: number | null;
 }
 
@@ -209,6 +216,9 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
   const maker: SideStats = { volume: 0, fills: 0, fees: 0 };
   const taker: SideStats = { volume: 0, fills: 0, fees: 0 };
   const dailyVolume = new Map<string, number>();
+  const dailyRealized = new Map<string, number>();
+  const dailyFees = new Map<string, number>();
+  const add = (map: Map<string, number>, day: string, v: number) => map.set(day, (map.get(day) ?? 0) + v);
   for (const f of sorted) {
     const m = bySymbol.get(f.symbol) ?? { symbol: f.symbol, volume: 0, makerVolume: 0, fills: 0, fees: 0, realized: 0, net: 0, avg: 0 };
     const value = Math.abs(f.size) * f.price;
@@ -219,6 +229,7 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
     side.volume += value; side.fills += 1; side.fees += fee;
     const day = localDay(f.timestamp);
     dailyVolume.set(day, (dailyVolume.get(day) ?? 0) + value);
+    if (fee) add(dailyFees, day, fee);
 
     const delta = f.isBuy ? f.size : -f.size;
     if (m.net === 0 || m.net > 0 === delta > 0) {
@@ -226,7 +237,9 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
       m.net += delta;
     } else {
       const closed = Math.min(Math.abs(m.net), Math.abs(delta));
-      m.realized += closed * (f.price - m.avg) * Math.sign(m.net);
+      const booked = closed * (f.price - m.avg) * Math.sign(m.net);
+      m.realized += booked;
+      add(dailyRealized, day, booked);
       const after = m.net + delta;
       if (Math.abs(after) < 1e-9) { m.net = 0; m.avg = 0; }
       else if (after > 0 !== m.net > 0) { m.net = after; m.avg = f.price; }
@@ -243,6 +256,8 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
     fees: maker.fees + taker.fees,
     realized: markets.reduce((s, m) => s + m.realized, 0),
     dailyVolume,
+    dailyRealized,
+    dailyFees,
     oldest: sorted.length ? sorted[0].timestamp : null,
   };
 }
@@ -412,4 +427,29 @@ export function trimQuietTail(points: PnlPoint[]): { points: PnlPoint[]; quietSi
   while (i > 0 && Math.abs(points[i - 1].v - end.v) < CENT) i--;
   if (i === 0 || end.t - points[i].t <= (end.t - points[0].t) / 3) return { points, quietSince: null };
   return { points: [...points.slice(0, i), { t: points[i].t, v: end.v }], quietSince: points[i].t };
+}
+
+/**
+ * Net PnL per local day, built from what actually happened that day: realized PnL and
+ * fees from the fills, funding from the payments, and open positions' unrealized PnL on
+ * today. Returns null unless the days add up to the account's total, so a calendar never
+ * shows days that don't sum to the headline.
+ */
+export function dailyNetPnl(input: {
+  summary: FillSummary;
+  funding: { timestamp: number; payment: number }[] | null;
+  unrealizedNow: number;
+  totalNow: number;
+  now: number;
+}): Map<string, number> | null {
+  const { summary, funding, unrealizedNow, totalNow, now } = input;
+  if (!funding) return null;
+  const out = new Map<string, number>();
+  const add = (day: string, v: number) => out.set(day, (out.get(day) ?? 0) + v);
+  for (const [day, v] of summary.dailyRealized) add(day, v);
+  for (const [day, v] of summary.dailyFees) add(day, v);
+  for (const p of funding) add(localDay(p.timestamp), p.payment);
+  if (Math.abs(unrealizedNow) > 1e-9) add(localDay(now), unrealizedNow);
+  const sum = Array.from(out.values()).reduce((s, v) => s + v, 0);
+  return Math.abs(sum - totalNow) <= Math.max(0.05, Math.abs(totalNow) * 0.0005) ? out : null;
 }

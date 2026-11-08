@@ -8,7 +8,7 @@ import { wallet, analytics, formatNumber, formatCompact, formatAddress, formatPe
 import { isSystemWallet } from '@/lib/systemWallets';
 import type { WalletFill } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
-import { anchorFills, buildPnlCurve, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, trimQuietTail, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
+import { anchorFills, buildPnlCurve, dailyNetPnl, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, trimQuietTail, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
 import { coinOf, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
 import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PanelLoading, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
@@ -732,10 +732,12 @@ export default function WalletPage() {
     }
     const days = Array.from(lastByDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     const out = new Map<string, number>();
-    let prev: number | null = null;
+    // A curve that starts at the first close starts from zero, so its first day counts
+    // too. Leaving it out dropped a whole trading day from the calendar.
+    let prev: number | null = curve.startsFromZero ? 0 : null;
     for (const [key, v] of days) { if (prev !== null) out.set(key, v - prev); prev = v; }
     return out;
-  }, [curve.points]);
+  }, [curve.points, curve.startsFromZero]);
 
   // Everything below reads the live account first. `tracked` is our DB row and
   // only fills in for a wallet BULK has no live account for.
@@ -784,6 +786,18 @@ export default function WalletPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fillSummary, grossRealized, closedPositions, positionPnlKey, funding],
   );
+  // The calendar's days. Exact when the whole fill history is here: each day is what
+  // happened on it (realized and fees from the fills, funding from the payments). The
+  // total-PnL curve has no fees in its older stretch and spreads them evenly over time,
+  // which put a day's fees on the wrong day; it's the fallback when the history is cut.
+  const dailyPnl = useMemo(() => {
+    const complete = funding && funding.recent.length >= funding.count;
+    const exact = breakdown.exact && complete
+      ? dailyNetPnl({ summary: fillSummary, funding: funding.recent, unrealizedNow: margin?.unrealizedPnl ?? 0, totalNow: totalPnl, now: Date.now() })
+      : null;
+    return exact ?? dailyPnlFromSeries;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breakdown.exact, funding, fillSummary, dailyPnlFromSeries, totalPnl]);
   const longValue = longNotional;
   const shortValue = totalNotional - longNotional;
   const transferTotals = useMemo(() => {
@@ -997,8 +1011,8 @@ export default function WalletPage() {
                   </>
                 )}
 
-                {tab === 'calendar' && (fillsDone
-                  ? <PnlCalendar daily={dailyPnlFromSeries} volume={fillSummary.dailyVolume} />
+                {tab === 'calendar' && (analysisReady
+                  ? <PnlCalendar daily={dailyPnl} volume={fillSummary.dailyVolume} />
                   : <PanelLoading title="PnL calendar" className="h-[360px]" />)}
 
                 {tab === 'funding' && <FundingPanel funding={funding} />}
