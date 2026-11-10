@@ -5,6 +5,7 @@ import { analytics, cn, formatCompact, formatNumber, type RiskSurfaces } from '@
 import { CoinPicker } from '@/components/CoinPicker';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { Layers, Plus, X } from 'lucide-react';
+import { normCoin as norm, portfolioMargin, type Side } from '@/lib/portfolioMargin';
 
 // ----------------------------------------------------------------------------
 // PortfolioMarginCard — a faithful port of BULK's published portfolio-margin
@@ -28,7 +29,6 @@ import { Layers, Plus, X } from 'lucide-react';
 // produces the reduction, exactly as in BULK's calculator.
 // ----------------------------------------------------------------------------
 
-type Side = 'long' | 'short';
 interface Position { id: number; asset: string; side: Side; notional: number; }
 
 const REGIMES: { id: number; label: string }[] = [
@@ -36,59 +36,6 @@ const REGIMES: { id: number; label: string }[] = [
   { id: 0, label: 'Neutral / Low' }, { id: 1, label: 'Neutral / Med' }, { id: 2, label: 'Neutral / High' },
   { id: 10, label: 'Bull / Low' }, { id: 11, label: 'Bull / Med' }, { id: 12, label: 'Bull / High' },
 ];
-
-const FALLBACK_LAMBDA = 0.02; // 2% - BULK's surface floor, if a cell is missing.
-const norm = (s: string) => s.replace(/-USD$/i, '').trim().toUpperCase();
-
-/** λ(t) = mmrE + (mmrO − mmrE)·p^t — BULK's regime time-decay. t=0 ⇒ strict (mmrO). */
-function decayedLambda(mmrO: number, mmrE: number, p: number, t: number): number {
-  if (t <= 0) return mmrO;
-  if (!p || p <= 0 || p >= 1) return mmrO;
-  return mmrE + (mmrO - mmrE) * Math.pow(p, t);
-}
-
-/** Bilinear-interpolated λ on a regime surface at (notional, leverage), with decay. */
-function lookupLambda(surf: RiskSurfaces | null, regime: number, notional: number, leverage: number, side: Side, dt: number): number {
-  if (!surf) return FALLBACK_LAMBDA;
-  const entry = surf.surfaces.find((s) => s.regime === regime)
-    ?? surf.surfaces.find((s) => s.regime === surf.liveRegime)
-    ?? surf.surfaces[0];
-  if (!entry) return FALLBACK_LAMBDA;
-  const lev = entry.leverage; const nots = entry.notionals;
-  const grid = side === 'long' ? entry.buy : entry.sell;
-  if (!grid?.length || !lev?.length || !nots?.length) return FALLBACK_LAMBDA;
-
-  const bracket = (knots: number[], x: number): [number, number, number] => {
-    if (x <= knots[0]) return [0, 0, 0];
-    if (x >= knots[knots.length - 1]) return [knots.length - 1, knots.length - 1, 0];
-    for (let i = 0; i < knots.length - 1; i++) {
-      if (x >= knots[i] && x <= knots[i + 1]) return [i, i + 1, (x - knots[i]) / (knots[i + 1] - knots[i])];
-    }
-    return [0, 0, 0];
-  };
-  const [ni0, ni1, nt] = bracket(nots, notional);
-  const [li0, li1, lt] = bracket(lev, leverage);
-  const cell = (ni: number, li: number) => {
-    const c = grid[ni]?.[li];
-    return c ? decayedLambda(c.mmrO, c.mmrE, c.p, dt) : FALLBACK_LAMBDA;
-  };
-  const top = cell(ni0, li0) + lt * (cell(ni0, li1) - cell(ni0, li0));
-  const bot = cell(ni1, li0) + lt * (cell(ni1, li1) - cell(ni1, li0));
-  return top + nt * (bot - top);
-}
-
-/** BULK correlation ρ for an unordered pair, from the colon-joined `corrs` matrix. */
-function lookupRho(corrs: RiskSurfaces['corrs'] | undefined, a: string, b: string): number | null {
-  if (!corrs) return null;
-  const A = norm(a); const B = norm(b);
-  if (A === B) return 1;
-  for (const [pair, r] of corrs) {
-    const [x, y] = String(pair).split(':');
-    if (x === undefined || y === undefined) continue;
-    if ((norm(x) === A && norm(y) === B) || (norm(x) === B && norm(y) === A)) return r;
-  }
-  return null;
-}
 
 export function PortfolioMarginCard() {
   const { network } = useCurrentNetwork();
@@ -141,56 +88,10 @@ export function PortfolioMarginCard() {
     return () => { cancelled = true; };
   }, [network]);
 
-  // Any one fetched surface carries the full correlation matrix.
-  const corrs = useMemo(() => {
-    for (const s of Object.values(surfaces)) if (s?.corrs?.length) return s.corrs;
-    return undefined;
-  }, [surfaces]);
-
   const calc = useMemo(() => {
-    const C = collateral || 1;
-    const pos = positions.filter((p) => p.notional > 0);
-    if (!pos.length) return null;
-
-    const rho = (i: number, j: number) => lookupRho(corrs, pos[i].asset, pos[j].asset) ?? 0.75;
-    const sign = (p: Position) => (p.side === 'long' ? 1 : -1);
-
-    // Effective notional.
-    const sN = pos.map((p) => sign(p) * p.notional);
-    let nEffSq = 0;
-    for (let i = 0; i < pos.length; i++) {
-      nEffSq += sN[i] * sN[i];
-      for (let j = i + 1; j < pos.length; j++) nEffSq += 2 * sN[i] * sN[j] * rho(i, j);
-    }
-    const nEff = Math.sqrt(Math.max(0, nEffSq));
-    const portLev = nEff / C;
-
-    // Per-position λ at portfolio leverage, then signed margins.
-    const dtFor = (p: Position) => (mode === 'strict' ? 0 : (regimeDts[norm(p.asset)] ?? 0));
-    const regimeFor = (p: Position) => (regimeSel === 'live' ? (surfaces[norm(p.asset)]?.liveRegime ?? 0) : regimeSel);
-    const lambdas = pos.map((p) => lookupLambda(surfaces[norm(p.asset)] ?? null, regimeFor(p), p.notional, portLev, p.side, dtFor(p)));
-    const M = pos.map((p, i) => sign(p) * lambdas[i] * p.notional);
-
-    let mpSq = 0;
-    for (let i = 0; i < pos.length; i++) {
-      mpSq += M[i] * M[i];
-      for (let j = i + 1; j < pos.length; j++) mpSq += 2 * M[i] * M[j] * rho(i, j);
-    }
-    const mp = Math.sqrt(Math.max(0, mpSq));
-    const sumM = lambdas.reduce((a, l, i) => a + Math.abs(l * pos[i].notional), 0);
-    const sumN = pos.reduce((a, p) => a + p.notional, 0);
-    const hedgeDiscount = pos.length > 1 && sumM > 0 ? (1 - mp / sumM) * 100 : 0;
-    const marginUsage = mp / C;
-    const efficiency = mp > 0 ? sumM / mp : 0;
-
-    const pairs: { label: string; rho: number }[] = [];
-    for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) {
-      pairs.push({ label: `${norm(pos[i].asset)} / ${norm(pos[j].asset)}`, rho: rho(i, j) });
-    }
-    const rows = pos.map((p, i) => ({ asset: norm(p.asset), side: p.side, notional: p.notional, lambda: lambdas[i], margin: Math.abs(M[i]) }));
-
-    return { sumN, nEff, portLev, sumM, mp, hedgeDiscount, marginUsage, efficiency, pairs, rows };
-  }, [positions, collateral, regimeSel, mode, surfaces, regimeDts, corrs]);
+    const r = portfolioMargin(positions, { collateral, surfaces, regimeDts, regime: regimeSel, strict: mode === 'strict' });
+    return r && { ...r, pairs: r.pairs.map((p) => ({ label: `${p.a} / ${p.b}`, rho: p.rho })) };
+  }, [positions, collateral, regimeSel, mode, surfaces, regimeDts]);
 
   const addPos = () => {
     setPositions((p) => [...p, { id: nextId, asset: 'SOL', side: 'long', notional: 50_000 }]);

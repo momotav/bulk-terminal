@@ -6,7 +6,7 @@
 // against it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Calculator, Receipt, Landmark, Loader2, Scale } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { analytics, wallet as walletApi, formatNumber, formatCompact, cn, type FeeSchedule, type AccountFeeTier, type FeeTierRow, type MakerShareTier } from '@/lib/api';
 import { feeOn, makerRebate, tierIndex } from '@/lib/fees';
 import { CoinIcon } from '@/components/CoinIcon';
@@ -21,13 +21,10 @@ const pct = (ppm: number) => `${formatNumber(ppm / 10_000, ppm < 10_000 ? 2 : 1)
 
 const card = 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)]';
 
-function Heading({ icon: Icon, title, note }: { icon: typeof Receipt; title: string; note?: string }) {
+function Heading({ title, note }: { title: string; note?: string }) {
   return (
     <div className="mb-4">
-      <div className="flex items-center gap-2">
-        <Icon className="w-5 h-5 text-[var(--accent-primary)]" />
-        <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
-      </div>
+      <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
       {note && <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">{note}</p>}
     </div>
   );
@@ -120,7 +117,7 @@ export default function FeesPage() {
           <div className="space-y-6">
             {/* ── Calculator ─────────────────────────────────────────── */}
             <section className={cn(card, 'p-4 sm:p-6')}>
-              <Heading icon={Calculator} title="Fee calculator" note={`BULK sets your tier by your volume over the last ${schedule.windowDays} days.`} />
+              <Heading title="Fee calculator" note={`BULK sets your tier by your volume over the last ${schedule.windowDays} days.`} />
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-6">
                 <div className="space-y-4">
                   <div>
@@ -243,7 +240,7 @@ export default function FeesPage() {
 
             {/* ── Against Hyperliquid ─────────────────────────────────── */}
             <section className={cn(card, 'p-4 sm:p-6')}>
-              <Heading icon={Scale} title="Why trade on BULK" note="BULK's fees against Hyperliquid's, by how much you trade. Lower is cheaper." />
+              <Heading title="Why trade on BULK" note="BULK's fees against Hyperliquid's, by how much you trade. Lower is cheaper." />
               <FeeComparison crypto={schedule.tiers} tradfiTakerBps={overrides[0]?.tiers[0]?.takerBps ?? null}
                 volume={volume} takerShare={takerPct / 100} comparing={market === 'crypto'} />
             </section>
@@ -251,7 +248,7 @@ export default function FeesPage() {
             {/* ── TradFi markets ─────────────────────────────────────── */}
             {overrides.length > 0 && (
               <section className={cn(card, 'p-4 sm:p-6')}>
-                <Heading icon={Receipt} title="Markets with their own fees"
+                <Heading title="Markets with their own fees"
                   note={`These don't use the volume tiers. Crypto starts at ${bps(schedule.tiers[0]?.takerBps ?? 0)} taker.`} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {overrides.map((o) => {
@@ -280,7 +277,7 @@ export default function FeesPage() {
 
             {/* ── BULK's own counters ───────────────────────────────── */}
             <section className={cn(card, 'p-4 sm:p-6')}>
-              <Heading icon={Landmark} title="Fees collected so far" note="BULK's own lifetime counters, as it reports them." />
+              <Heading title="Fees collected so far" note="BULK's own lifetime counters, as it reports them." />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <Stat label="Fills settled" value={formatNumber(schedule.settledFills, 0)} />
                 <Stat label="Taker fees paid" value={usd(Math.abs(schedule.totalTakerFees))} />

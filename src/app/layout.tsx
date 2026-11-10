@@ -10,6 +10,8 @@ import { BuildSkewGuard } from '@/components/BuildSkewGuard';
 import { FreeChartCursor } from '@/components/FreeChartCursor';
 import { WalletWarmup } from '@/components/WalletWarmup';
 import { PnlCardTour } from '@/components/tour/PnlCardTour';
+import { Workspace } from '@/components/basket/Workspace';
+import { ChromeGate } from '@/components/ChromeGate';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -83,11 +85,14 @@ export default function RootLayout({
           <BuildSkewGuard />
           <FreeChartCursor />
           <WalletWarmup />
-          <PnlCardTour />
+          <ChromeGate><PnlCardTour /></ChromeGate>
+          <Workspace />
           <div className="min-h-screen flex flex-col">
-            <Header />
-            <CommandPalette />
-            <DevnetBanner />
+            <ChromeGate>
+              <Header />
+              <CommandPalette />
+              <DevnetBanner />
+            </ChromeGate>
             <main className="flex-1">
               {children}
             </main>

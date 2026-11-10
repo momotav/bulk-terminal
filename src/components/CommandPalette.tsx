@@ -14,9 +14,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, BarChart3, CornerDownLeft } from 'lucide-react';
+import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, BarChart3, CornerDownLeft, CandlestickChart } from 'lucide-react';
 import { userApi, formatAddress, formatCompact, cn, type UserSearchResult } from '@/lib/api';
 import { withNetwork } from '@/lib/network';
+import { dock } from '@/lib/basket';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
 
@@ -93,7 +94,7 @@ type Market = { symbol: string; lastPrice: number; changePct: number };
 type Row =
   | { kind: 'page'; key: string; label: string; sub?: string; href: string }
   | { kind: 'chart'; key: string; label: string; sub?: string; href: string }
-  | { kind: 'market'; key: string; label: string; sub?: string; symbol: string }
+  | { kind: 'market'; key: string; label: string; sub?: string; symbol: string; dock?: boolean }
   | { kind: 'wallet'; key: string; label: string; sub?: string; address: string; avatar?: string };
 
 export function CommandPalette() {
@@ -208,6 +209,10 @@ export function CommandPalette() {
       for (const m of mk) {
         out.push({ kind: 'market', key: `m:${m.symbol}`, label: m.symbol, sub: `$${formatCompact(m.lastPrice)} · ${m.changePct >= 0 ? '+' : ''}${m.changePct.toFixed(2)}%`, symbol: m.symbol });
       }
+      // The same markets as charts in the dock, which stays open across pages.
+      for (const m of mk.slice(0, 3)) {
+        out.push({ kind: 'market', key: `d:${m.symbol}`, label: `Chart ${m.symbol}`, sub: 'Open in Charts, beside this page', symbol: m.symbol, dock: true });
+      }
     }
 
     for (const w of wallets) {
@@ -232,6 +237,8 @@ export function CommandPalette() {
       window.dispatchEvent(new CustomEvent('bulkstats:focus-chart', { detail: { title: row.label } }));
     } else if (row.kind === 'page') {
       router.push(row.href);
+    } else if (row.kind === 'market' && row.dock) {
+      dock.openChart(row.symbol);
     } else if (row.kind === 'market') {
       router.push(`/analytics/orderbook?coin=${encodeURIComponent(row.symbol)}`);
     } else {
@@ -343,6 +350,7 @@ function RowIcon({ row }: { row: Row }) {
       ? <img src={row.avatar} alt="" className="h-7 w-7 shrink-0 rounded-md border border-[var(--role-line)] object-cover" />
       : <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--role-content-subtle)]')}><WalletIcon className="h-3.5 w-3.5" /></span>;
   }
+  if (row.kind === 'market' && row.dock) return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--accent)]')}><CandlestickChart className="h-3.5 w-3.5" /></span>;
   if (row.kind === 'market') return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--pos)]')}><TrendingUp className="h-3.5 w-3.5" /></span>;
   if (row.kind === 'chart') return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--accent)]')}><BarChart3 className="h-3.5 w-3.5" /></span>;
   return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--role-content-subtle)]')}><LayoutGrid className="h-3.5 w-3.5" /></span>;

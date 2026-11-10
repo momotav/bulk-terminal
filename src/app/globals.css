@@ -1234,3 +1234,21 @@ html.light .trade-cta {
   transform: translate(var(--tip-x), var(--tip-y)) !important;
   transition: none !important;
 }
+
+/* Workspace: the line that links open charts into a basket. */
+@keyframes basket-link-flow { to { stroke-dashoffset: -26; } }
+@keyframes basket-link-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes basket-link-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes basket-link-pill { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.basket-link-flow { animation: basket-link-flow 1.1s linear infinite; }
+.basket-link-in { animation: basket-link-in 0.35s ease-out; }
+.basket-link-dot { animation: basket-link-pulse 1.6s ease-in-out infinite; }
+.basket-link-pill { animation: basket-link-pill 0.3s cubic-bezier(.2,.9,.3,1.2); }
+@media (prefers-reduced-motion: reduce) {
+  .basket-link-flow, .basket-link-dot, .basket-link-pill, .basket-link-in { animation: none; }
+}
+
+/* Workspace: the "+" menu and dock icons pop in from the corner. */
+@keyframes ws-pop { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
+.ws-pop { animation: ws-pop 0.18s cubic-bezier(.2,.8,.2,1); transform-origin: bottom right; }
+@media (prefers-reduced-motion: reduce) { .ws-pop { animation: none; } }
