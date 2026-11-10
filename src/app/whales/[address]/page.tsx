@@ -10,6 +10,7 @@ import type { WalletFill } from '@/lib/api';
 import { computePositionOpenTime, formatDuration, buildTradeLifecycle, type PositionOpenInfo } from '@/lib/positionWalk';
 import { anchorFills, buildPnlCurve, dailyNetPnl, marketBreakdown, maxDrawdownUsd, summarizeFills, thinCurve, trackRecord, trimQuietTail, type PnlCurve, type WalletFillLite } from '@/lib/walletMetrics';
 import { coinOf, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
+import { closedCountSeries, exposureSeries, fillSeries, transferSeries } from '@/lib/walletSeries';
 import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PanelLoading, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
@@ -362,7 +363,7 @@ export default function WalletPage() {
 
   // Which section of the page is showing.
   const [tab, setTab] = useState<WalletTab>('overview');
-  const [tradeView, setTradeView] = useState<'fills' | 'closed'>('fills');
+  const [tradeView, setTradeView] = useState<'fills' | 'closed'>('closed');
   const [funding, setFunding] = useState<WalletFunding | null>(null);
   const [transfers, setTransfers] = useState<ActivityEvent[] | null>(null);
   // Share-card state: reconstruct a trade's lifecycle (fills + klines) and open
@@ -811,6 +812,12 @@ export default function WalletPage() {
     return { inn, out };
   }, [transfers, address]);
   const drawdown = useMemo(() => maxDrawdownUsd(curve.points), [curve.points]);
+
+  // The trends behind the KPI tiles. See walletSeries.
+  const exposure = useMemo(() => exposureSeries(allFills, positions), [allFills, positionPnlKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tradeSeries = useMemo(() => ({ closed: closedCountSeries(closedPositions), ...fillSeries(allFills) }), [closedPositions, allFills]);
+  const flows = useMemo(() => transferSeries(transfers, address), [transfers, address]);
+  const pnlSeries = useMemo(() => curve.points.map((p) => p.v), [curve.points]);
   const openLiveChart = (pos: OpenPos) => {
     const isLong = pos.size > 0;
     const markPrice = markOf(pos, markPrices);
@@ -969,10 +976,10 @@ export default function WalletPage() {
                 {tab === 'positions' && (
                   <>
                     <StatStrip items={[
-                      { label: 'Open', hint: 'Positions', value: String(positions.length) },
-                      { label: 'Gross', hint: 'Long + short', value: `$${formatCompact(totalNotional)}`, bar: { pct: 1, color: 'var(--accent)' } },
-                      { label: 'Long', hint: `${positions.filter((p) => p.size > 0).length} markets`, value: `$${formatCompact(longValue)}`, color: 'var(--pos)', bar: { pct: totalNotional ? longValue / totalNotional : 0, color: 'var(--pos)' } },
-                      { label: 'Short', hint: `${positions.filter((p) => p.size < 0).length} markets`, value: `$${formatCompact(shortValue)}`, color: 'var(--neg)', bar: { pct: totalNotional ? shortValue / totalNotional : 0, color: 'var(--neg)' } },
+                      { label: 'Open', hint: 'Positions', value: String(positions.length), series: exposure.count },
+                      { label: 'Gross', hint: 'Long + short', value: `$${formatCompact(totalNotional)}`, bar: { pct: 1, color: 'var(--accent)' }, series: exposure.gross },
+                      { label: 'Long', hint: `${positions.filter((p) => p.size > 0).length} markets`, value: `$${formatCompact(longValue)}`, color: 'var(--pos)', bar: { pct: totalNotional ? longValue / totalNotional : 0, color: 'var(--pos)' }, series: exposure.long, seriesColor: 'var(--pos)' },
+                      { label: 'Short', hint: `${positions.filter((p) => p.size < 0).length} markets`, value: `$${formatCompact(shortValue)}`, color: 'var(--neg)', bar: { pct: totalNotional ? shortValue / totalNotional : 0, color: 'var(--neg)' }, series: exposure.short, seriesColor: 'var(--neg)' },
                     ]} />
                     {!hasLiveData && positions.length === 0 ? (
                       <div className="p-6 text-[14px] text-[var(--role-content-muted)] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />Fetching positions</div>
@@ -989,13 +996,13 @@ export default function WalletPage() {
                 {tab === 'trades' && (
                   <>
                     <StatStrip items={[
-                      { label: 'Fills', hint: breakdown.exact ? 'All time' : 'Latest available', value: fillsDone ? allFills.length.toLocaleString('en-US') : '—' },
-                      { label: 'Volume', hint: 'All time', value: fillsDone ? `$${formatCompact(lifetimeVolume)}` : '—' },
-                      { label: 'Realized PnL', hint: 'After fees', value: margin ? signed(margin.realizedPnl) : '—', color: margin ? pnlColor(margin.realizedPnl) : undefined },
-                      { label: 'Fees', hint: 'Net of rebates', value: margin ? signed(margin.fees) : '—', color: margin ? pnlColor(margin.fees) : undefined },
+                      { label: 'Closed trades', hint: fillsDone ? `${allFills.length.toLocaleString('en-US')} fills` : undefined, value: closedPositions.length.toLocaleString('en-US'), series: tradeSeries.closed },
+                      { label: 'Volume', hint: 'All time', value: fillsDone ? `$${formatCompact(lifetimeVolume)}` : '—', series: tradeSeries.volume },
+                      { label: 'Realized PnL', hint: 'After fees', value: margin ? signed(margin.realizedPnl) : '—', color: margin ? pnlColor(margin.realizedPnl) : undefined, series: tradeSeries.realized, seriesColor: margin && margin.realizedPnl < 0 ? 'var(--neg)' : 'var(--pos)' },
+                      { label: 'Fees', hint: 'Net of rebates', value: margin ? signed(margin.fees) : '—', color: margin ? pnlColor(margin.fees) : undefined, series: tradeSeries.fees, seriesColor: margin && margin.fees > 0 ? 'var(--pos)' : 'var(--neg)' },
                     ]} />
                     <div className="flex items-center gap-1 px-4 pt-3">
-                      {([['fills', 'Fills'], ['closed', `Closed trades (${closedPositions.length})`]] as const).map(([k, label]) => (
+                      {([['closed', `Closed trades (${closedPositions.length})`], ['fills', 'Fills']] as const).map(([k, label]) => (
                         <button key={k} type="button" onClick={() => setTradeView(k)} data-tour={k === 'closed' ? 'closed-trades' : undefined}
                           className={cn('px-2.5 py-1 rounded-md text-[13px] transition-colors', tradeView === k ? 'text-[var(--role-content)] bg-[var(--role-surface-raised)]' : 'text-[var(--role-content-muted)] hover:text-[var(--role-content)]')}>{label}</button>
                       ))}
@@ -1020,10 +1027,10 @@ export default function WalletPage() {
                 {tab === 'transfers' && (
                   <>
                     <StatStrip items={[
-                      { label: 'In', hint: 'Deposits and transfers', value: transfers ? money(transferTotals.inn) : '—' },
-                      { label: 'Out', hint: 'Withdrawals and transfers', value: transfers ? money(transferTotals.out) : '—' },
-                      { label: 'Net deposited', value: netDeposited !== null ? money(netDeposited) : '—' },
-                      { label: 'Return on deposits', hint: 'Total PnL', value: netDeposited !== null && netDeposited > 0 ? `${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%` : '—', color: netDeposited !== null && netDeposited > 0 ? pnlColor(totalPnl) : undefined },
+                      { label: 'In', hint: 'Deposits and transfers', value: transfers ? money(transferTotals.inn) : '—', series: flows.inn },
+                      { label: 'Out', hint: 'Withdrawals and transfers', value: transfers ? money(transferTotals.out) : '—', series: flows.out },
+                      { label: 'Net deposited', value: netDeposited !== null ? money(netDeposited) : '—', series: flows.net },
+                      { label: 'Return on deposits', hint: 'Total PnL', value: netDeposited !== null && netDeposited > 0 ? `${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%` : '—', color: netDeposited !== null && netDeposited > 0 ? pnlColor(totalPnl) : undefined, series: pnlSeries, seriesColor: totalPnl < 0 ? 'var(--neg)' : 'var(--pos)' },
                     ]} />
                     <ActivityFeed address={address} flush provided={transfers ?? undefined} />
                   </>

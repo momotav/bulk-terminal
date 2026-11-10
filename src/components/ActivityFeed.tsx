@@ -171,7 +171,6 @@ export function ActivityFeed({ address, flush = false, provided }: { address: st
     <div className={flush ? 'flex flex-col' : 'bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col'}>
       <div className="p-4 border-b border-[var(--border-color)]">
         <h2 className="font-semibold flex items-center gap-2">
-          <ActivityIcon className="w-4 h-4 text-bulk-green" />
           Activity
           {events.length > 0 && (
             <span className="text-xs text-[var(--text-tertiary)] font-normal">

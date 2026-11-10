@@ -46,12 +46,18 @@ const bulkFont = localFont({
 export const metadata: Metadata = {
   title: 'BULK Stats - Community Analytics Dashboard',
   description: 'Track trading activity, whale movements, and analytics for BULK Exchange',
+  // Tab icon set. Phones need their own: iOS (tab overview, home screen) reads the
+  // apple-touch-icon, Android reads the manifest's 192/512 icons; the single 700px
+  // PNG before left phones' recent-tabs view without a logo.
   icons: {
     icon: [
-      { url: '/STATS.png', type: 'image/png' },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
-    apple: '/STATS.png',
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
   },
+  manifest: '/site.webmanifest',
 };
 
 export default function RootLayout({

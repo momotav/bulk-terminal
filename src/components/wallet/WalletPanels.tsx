@@ -6,6 +6,8 @@
 // busy wallet's history is partial instead of presenting a sample as a total.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Sparkline } from '@/components/Sparkline';
+import { drawable } from '@/lib/walletSeries';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, formatCompact, type WalletFunding } from '@/lib/api';
 import { coinOf, dayKey, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
@@ -13,23 +15,43 @@ import { gridCells, squarify, type MarketRow, type SideStats, type WalletFillLit
 import { CoinIcon } from '@/components/CoinIcon';
 
 /** A strip of headline figures at the top of a tab. */
-export function StatStrip({ items }: { items: { label: string; hint?: string; value: ReactNode; color?: string; bar?: { pct: number; color: string } }[] }) {
+export interface StatItem {
+  label: string; hint?: string; value: ReactNode; color?: string;
+  bar?: { pct: number; color: string };
+  /** History behind the number, drawn under it like the analytics KPIs. */
+  series?: number[];
+  /** Directional series (PnL, long/short) take green/red; magnitudes take gold. */
+  seriesColor?: string;
+}
+
+export function StatStrip({ items }: { items: StatItem[] }) {
+  const charted = items.some((s) => drawable(s.series));
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--border-color)] border-b border-[var(--border-color)]">
-      {items.map((s) => (
-        <div key={s.label} className="min-w-0 bg-[var(--bg-muted)] px-5 py-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[13px] text-[var(--role-content-muted)] truncate">{s.label}</span>
-            {s.hint && <span className="text-[12px] text-[var(--role-content-subtle)] truncate">{s.hint}</span>}
-          </div>
-          <div className="mt-2 text-[24px] leading-none font-medium tabular-nums tracking-tight truncate" style={{ color: s.color ?? 'var(--role-content)' }}>{s.value}</div>
-          {s.bar && (
-            <div className="mt-3 h-1 rounded-full bg-[var(--role-surface-raised)] overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, s.bar.pct * 100))}%`, background: s.bar.color }} />
+      {items.map((s) => {
+        const hasSeries = drawable(s.series);
+        return (
+          <div key={s.label} className={cn('relative min-w-0 overflow-hidden bg-[var(--bg-muted)] px-5 py-4', charted && 'min-h-[132px]')}>
+            {hasSeries && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[64px] opacity-90">
+                <Sparkline data={s.series!} color={s.seriesColor ?? 'var(--accent)'} height={64} className="h-full w-full" />
+              </div>
+            )}
+            <div className="relative">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[13px] text-[var(--role-content-muted)] truncate">{s.label}</span>
+                {s.hint && <span className="text-[12px] text-[var(--role-content-subtle)] truncate">{s.hint}</span>}
+              </div>
+              <div className="mt-2 text-[24px] leading-none font-medium tabular-nums tracking-tight truncate" style={{ color: s.color ?? 'var(--role-content)' }}>{s.value}</div>
+              {s.bar && !hasSeries && (
+                <div className="mt-3 h-1 rounded-full bg-[var(--role-surface-raised)] overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, s.bar.pct * 100))}%`, background: s.bar.color }} />
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
