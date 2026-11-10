@@ -14,6 +14,7 @@ import { STOCK_NAMES, baseCoin } from '@/lib/coins';
 import { OptionSelect } from '@/components/ui/OptionSelect';
 import { FeeComparison } from '@/components/FeeComparison';
 import { FeeCurve } from '@/components/FeeCurve';
+import { Sparkline } from '@/components/Sparkline';
 
 const usd = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 1000 ? 2 : 0)}`;
 const bps = (n: number) => `${n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)} bps`;
@@ -30,12 +31,20 @@ function Heading({ title, note }: { title: string; note?: string }) {
   );
 }
 
-function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'pos' | 'neg' }) {
+function Stat({ label, value, hint, tone, series }: { label: string; value: string; hint?: string; tone?: 'pos' | 'neg'; series?: number[] }) {
+  const charted = !!series && series.length >= 2 && series.some((v) => v !== series[0]);
   return (
-    <div className="rounded-lg bg-[var(--bg-muted)] px-4 py-3 min-w-0">
-      <div className="text-[12px] text-[var(--text-tertiary)]">{label}</div>
-      <div className="mt-1 text-[20px] font-medium tabular-nums truncate" style={tone ? { color: `var(--${tone})` } : { color: 'var(--text-primary)' }}>{value}</div>
-      {hint && <div className="mt-0.5 text-[12px] text-[var(--text-tertiary)] truncate">{hint}</div>}
+    <div className={cn('relative overflow-hidden rounded-lg bg-[var(--bg-muted)] px-4 py-3 min-w-0', charted && 'min-h-[128px]')}>
+      {charted && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[56px] opacity-90">
+          <Sparkline data={series!} height={56} className="h-full w-full" />
+        </div>
+      )}
+      <div className="relative">
+        <div className="text-[12px] text-[var(--text-tertiary)]">{label}</div>
+        <div className="mt-1 text-[20px] font-medium tabular-nums truncate" style={tone ? { color: `var(--${tone})` } : { color: 'var(--text-primary)' }}>{value}</div>
+        {hint && <div className="mt-0.5 text-[12px] text-[var(--text-tertiary)] truncate">{hint}</div>}
+      </div>
     </div>
   );
 }
@@ -43,6 +52,27 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 export default function FeesPage() {
   const [schedule, setSchedule] = useState<FeeSchedule | null>(null);
   const [failed, setFailed] = useState(false);
+  // How the lifetime counters grew, day by day since mainnet: our daily revenue
+  // record (taker fees, maker rebates, what the protocol kept) and trade counts.
+  // Running totals, drawn behind each counter; the counters themselves are BULK's.
+  const [growth, setGrowth] = useState<{ fills: number[]; taker: number[]; maker: number[]; kept: number[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const ALL = 8760 * 2;
+    Promise.all([analytics.getProtocolRevenueChart(ALL).catch(() => null), analytics.getTradesCounts(ALL).catch(() => [])]).then(([rev, counts]) => {
+      if (!live) return;
+      const run = (xs: number[]) => { let a = 0; return xs.map((x) => (a += x)); };
+      const rows = rev?.data ?? [];
+      setGrowth({
+        // Our trade-count table only keeps recent days; under a week isn't a trend.
+        fills: counts.length >= 7 ? run(counts.map((c) => c.count)) : [],
+        taker: run(rows.map((r) => Math.abs(r.takerFees))),
+        maker: run(rows.map((r) => Math.abs(r.makerFees))),
+        kept: rows.map((r) => r.cumulativeRevenue),
+      });
+    });
+    return () => { live = false; };
+  }, []);
 
   // Calculator inputs.
   const [market, setMarket] = useState<string>('crypto');
@@ -277,12 +307,12 @@ export default function FeesPage() {
 
             {/* ── BULK's own counters ───────────────────────────────── */}
             <section className={cn(card, 'p-4 sm:p-6')}>
-              <Heading title="Fees collected so far" note="BULK's own lifetime counters, as it reports them." />
+              <Heading title="Fees collected so far" note="BULK's own lifetime counters, as it reports them, with how each grew since mainnet." />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <Stat label="Fills settled" value={formatNumber(schedule.settledFills, 0)} />
-                <Stat label="Taker fees paid" value={usd(Math.abs(schedule.totalTakerFees))} />
-                <Stat label="Maker rebates paid out" value={usd(Math.abs(schedule.totalMakerFees))} />
-                <Stat label="Kept by the protocol" value={usd(schedule.totalProtocolSettlement)} hint="Taker fees less maker rebates" />
+                <Stat label="Fills settled" value={formatNumber(schedule.settledFills, 0)} series={growth?.fills} />
+                <Stat label="Taker fees paid" value={usd(Math.abs(schedule.totalTakerFees))} series={growth?.taker} />
+                <Stat label="Maker rebates paid out" value={usd(Math.abs(schedule.totalMakerFees))} series={growth?.maker} />
+                <Stat label="Kept by the protocol" value={usd(schedule.totalProtocolSettlement)} hint="Taker fees less maker rebates" series={growth?.kept} />
               </div>
             </section>
           </div>

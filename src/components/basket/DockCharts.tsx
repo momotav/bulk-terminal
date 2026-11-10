@@ -113,7 +113,9 @@ export function BasketReturnChart({ points }: { points: { t: number; v: number }
   useEffect(() => {
     const el = ref.current;
     if (!el || points.length < 2) return;
-    const c = createChart(el, { ...baseOptions(el), rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.15 } } });
+    // A small chart inside a scrolling panel: the wheel scrolls the panel, it doesn't zoom here.
+    const c = createChart(el, { ...baseOptions(el), rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.15 } },
+      handleScroll: false, handleScale: false });
     chart.current = c;
     const pos = resolve('var(--pos)', '#21C07A'); const neg = resolve('var(--neg)', '#E5484D');
     const fade = (rgb: string, a: number) => rgb.replace(/rgba?\(([^,]+),([^,]+),([^,)]+).*\)/, `rgba($1,$2,$3,${a})`);
