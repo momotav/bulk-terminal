@@ -6,11 +6,13 @@
 // against it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Calculator, Receipt, Landmark, Loader2 } from 'lucide-react';
+import { Calculator, Receipt, Landmark, Loader2, Scale } from 'lucide-react';
 import { analytics, wallet as walletApi, formatNumber, formatCompact, cn, type FeeSchedule, type AccountFeeTier, type FeeTierRow, type MakerShareTier } from '@/lib/api';
 import { feeOn, makerRebate, tierIndex } from '@/lib/fees';
 import { CoinIcon } from '@/components/CoinIcon';
 import { STOCK_NAMES, baseCoin } from '@/lib/coins';
+import { OptionSelect } from '@/components/ui/OptionSelect';
+import { FeeComparison } from '@/components/FeeComparison';
 
 const usd = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 1000 ? 2 : 0)}`;
 const bps = (n: number) => `${n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)} bps`;
@@ -140,12 +142,13 @@ export default function FeesPage() {
 
                   <div>
                     <label className={labelCls} htmlFor="fee-market">Market</label>
-                    <select id="fee-market" className={inputCls} value={market} onChange={(e) => setMarket(e.target.value)}>
-                      <option value="crypto">Crypto (all crypto markets)</option>
-                      {overrides.map((o) => (
-                        <option key={o.symbol} value={o.symbol}>{baseCoin(o.symbol)}{STOCK_NAMES[baseCoin(o.symbol)] ? ` · ${STOCK_NAMES[baseCoin(o.symbol)]}` : ''}</option>
-                      ))}
-                    </select>
+                    <OptionSelect id="fee-market" value={market} onChange={setMarket} options={[
+                      { value: 'crypto', label: 'Crypto, all markets', hint: `from ${bps(schedule.tiers[0]?.takerBps ?? 0)}`, icon: <CoinIcon symbol="BTC-USD" size={18} className="shrink-0" /> },
+                      ...overrides.map((o) => {
+                        const base = baseCoin(o.symbol);
+                        return { value: o.symbol, label: STOCK_NAMES[base] ? `${base} · ${STOCK_NAMES[base]}` : base, hint: bps(o.tiers[0]?.takerBps ?? 0), icon: <CoinIcon symbol={o.symbol} size={18} className="shrink-0" /> };
+                      }),
+                    ]} />
                   </div>
 
                   <div>
@@ -228,6 +231,13 @@ export default function FeesPage() {
                   </div>
                 )}
               </div>
+            </section>
+
+            {/* ── Against Hyperliquid ─────────────────────────────────── */}
+            <section className={cn(card, 'p-4 sm:p-6')}>
+              <Heading icon={Scale} title="Why trade on BULK" note="BULK's fees against Hyperliquid's, by how much you trade. Lower is cheaper." />
+              <FeeComparison crypto={schedule.tiers} tradfiTakerBps={overrides[0]?.tiers[0]?.takerBps ?? null}
+                volume={volume} takerShare={takerPct / 100} comparing={market === 'crypto'} />
             </section>
 
             {/* ── TradFi markets ─────────────────────────────────────── */}
