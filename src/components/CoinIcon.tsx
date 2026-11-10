@@ -1,8 +1,7 @@
 'use client';
 
 // Coin logo with graceful fallbacks, tried in order:
-//   1) /coins/<SYMBOL>.svg  then  /coins/<SYMBOL>.png   (put BULK's own logos
-//      here — public/coins/BTC.svg etc. — to match the exchange exactly)
+//   1) /coins/<SYMBOL>.svg (BULK's own icons, see LOCAL) then /coins/<SYMBOL>.png
 //   2) the cryptocurrency-icons CDN (covers the majors automatically)
 //   3) a colored monogram (first letter on the coin's palette colour)
 //
@@ -21,20 +20,19 @@ const CDN_HAS = new Set([
   'LINK', 'AVAX', 'ADA', 'LTC', 'DOT', 'UNI', 'ATOM', 'XLM', 'TRX', 'BCH', 'ETC', 'FIL',
 ]);
 
-// Exact local files in public/coins (the logos dropped in to match BULK). Keyed
-// by symbol → path so we never fire a guessed 404 for a coin we already have.
+// BULK's own coin icons (app.bulk.trade/assets/coins/<SYMBOL>.svg, fetched
+// 2026-11-10), one per listed market, so logos match the exchange exactly. Each
+// SVG carries its own shape (crypto round, stocks rounded-square), so they're
+// drawn unclipped. XAU is hidden on BULK and keeps its older file.
 const LOCAL: Record<string, string> = {
-  ETH: '/coins/ETH.svg', SOL: '/coins/SOL.svg', HYPE: '/coins/HYPE.svg', ENA: '/coins/ENA.svg', XPL: '/coins/XPL.svg',
-  FARTCOIN: '/coins/FARTCOIN.png', JTO: '/coins/JTO.png', JUP: '/coins/JUP.png', LIT: '/coins/LIT.png', MEGA: '/coins/MEGA.png',
-  MON: '/coins/MON.png', NEAR: '/coins/NEAR.png', PUMP: '/coins/PUMP.png', SUI: '/coins/SUI.png', TAO: '/coins/TAO.png',
-  XAU: '/coins/XAU.png', ZEC: '/coins/ZEC.png', DOGE: '/coins/DOGE.png', AAVE: '/coins/AAVE.png',
-  PAXG: '/coins/PAXG.png',
-  // Stock perps (listed 2026-11). NVDA/TSLA/MSTR/MU/SNDK are real company
-  // marks; SKHYNIX/CRCL/SPACEX had no public logo source so they're simple
-  // hand-drawn SVG marks — swap in the real ones whenever we get them.
-  NVDA: '/coins/NVDA.png', TSLA: '/coins/TSLA.png', MSTR: '/coins/MSTR.png', MU: '/coins/MU.png',
-  SNDK: '/coins/SNDK.png', SKHYNIX: '/coins/SKHYNIX.svg', CRCL: '/coins/CRCL.svg', SPACEX: '/coins/SPACEX.svg',
-  US500: '/coins/US500.svg',
+  AAVE: '/coins/AAVE.svg', BNB: '/coins/BNB.svg', BTC: '/coins/BTC.svg', CRCL: '/coins/CRCL.svg', DOGE: '/coins/DOGE.svg',
+  ENA: '/coins/ENA.svg', ETH: '/coins/ETH.svg', FARTCOIN: '/coins/FARTCOIN.svg', HYPE: '/coins/HYPE.svg', JTO: '/coins/JTO.svg',
+  JUP: '/coins/JUP.svg', LIT: '/coins/LIT.svg', MEGA: '/coins/MEGA.svg', MON: '/coins/MON.svg', MSTR: '/coins/MSTR.svg',
+  MU: '/coins/MU.svg', NEAR: '/coins/NEAR.svg', NVDA: '/coins/NVDA.svg', PAPER: '/coins/PAPER.svg', PAXG: '/coins/PAXG.svg',
+  PUMP: '/coins/PUMP.svg', SKHYNIX: '/coins/SKHYNIX.svg', SNDK: '/coins/SNDK.svg', SOL: '/coins/SOL.svg', SPACEX: '/coins/SPACEX.svg',
+  SUI: '/coins/SUI.svg', TAO: '/coins/TAO.svg', TSLA: '/coins/TSLA.svg', US500: '/coins/US500.svg', XPL: '/coins/XPL.svg',
+  XRP: '/coins/XRP.svg', ZEC: '/coins/ZEC.svg',
+  XAU: '/coins/XAU.png',
 };
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '').toUpperCase();
@@ -71,7 +69,8 @@ export function CoinIcon({ symbol, size = 20, className = '' }: { symbol: string
       height={size}
       loading="lazy"
       onError={() => setIdx((i) => i + 1)}
-      className={`shrink-0 rounded-full ${className}`}
+      // BULK's files bring their own shape; anything else is clipped to a circle.
+      className={`shrink-0 ${LOCAL[coin] && LOCAL[coin].endsWith('.svg') ? '' : 'rounded-full'} ${className}`}
       style={{ width: size, height: size }}
     />
   );

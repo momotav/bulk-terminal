@@ -1,26 +1,14 @@
 # Coin logos
 
-Drop coin logo files here to match BULK exactly. `CoinIcon` looks for them
-first, so anything you add overrides the CDN / monogram fallback.
+BULK's own coin icons, one SVG per listed market, fetched from
+`https://app.bulk.trade/assets/coins/<SYMBOL>.svg` on 2026-11-10. `CoinIcon`
+(src/components/CoinIcon.tsx) maps each symbol in its `LOCAL` table, and the
+PnL share card loads `/coins/<SYMBOL>.svg` for its canvas.
 
-## Naming
+When BULK lists a new market, fetch its icon from the same path (the app is
+behind a Vercel bot check, so load it in a browser), save it here as
+`<SYMBOL>.svg` and add it to `LOCAL`. Until then the coin falls back to a public
+CDN icon or a coloured monogram.
 
-`<SYMBOL>.svg` (preferred) or `<SYMBOL>.png` — UPPERCASE base asset, e.g.:
-
-    public/coins/BTC.svg
-    public/coins/HYPE.png
-    public/coins/FARTCOIN.svg
-
-Square images work best (they're rendered in a circle).
-
-## What's already handled automatically
-
-These 8 are pulled from a public CDN with no file needed (though a local file
-still overrides them): **BTC, ETH, SOL, BNB, DOGE, AAVE, XRP, ZEC**.
-
-## What you'll want to add (the CDN doesn't have these)
-
-**ENA, FARTCOIN, HYPE, JTO, JUP, LIT, MEGA, MON, NEAR, PUMP, SUI, TAO, XAU, XPL**
-
-Grab each from BULK (or the token's site) and save as `<SYMBOL>.svg`/`.png`.
-Any coin without a file shows a colored letter monogram, so nothing ever breaks.
+The SVGs bring their own shape (crypto round, stocks rounded-square), so
+they're drawn unclipped. `XAU.png` is older and stays for the hidden XAU market.
