@@ -16,6 +16,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import { PortfolioMarginCard } from '@/components/PortfolioMarginCard';
+import { MarkOraclePanel } from '@/components/MarkOraclePanel';
 import {
   DEFAULT_COINS,
   OTHER_KEY,
@@ -625,6 +626,9 @@ export default function RiskPage() {
                 with "what does a HEDGE cost?" - the cross-asset netting that
                 the single-coin surface can't show on its own. */}
             <PortfolioMarginCard />
+
+            {/* Mark vs oracle: where BULK prices each market against Pyth spot. */}
+            <MarkOraclePanel />
 
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
             <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>

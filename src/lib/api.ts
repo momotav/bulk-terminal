@@ -1265,16 +1265,13 @@ export const analytics = {
   // ============ FEE DATA ============
 
   // Fee tiers and protocol revenue
-  async getFeeTiers(): Promise<{
-    timestamp: number;
-    windowDays: number;
-    tiers: { thresholdVolume: number; makerBps: number; takerBps: number }[];
-    totalMakerFees: number;
-    totalTakerFees: number;
-    totalProtocolSettlement: number;
-    settledFills: number;
-  }> {
+  async getFeeTiers(): Promise<FeeSchedule> {
     return request('/api/analytics/fee-tiers');
+  },
+
+  // Mark over oracle per market: live, plus hourly averages since collection began.
+  async getMarkOracle(hours = 24): Promise<{ live: { symbol: string; bps: number; mark: number; oracle: number; ts: number }[]; history: Record<string, { t: number; bps: number }[]> }> {
+    return request(`/api/analytics/mark-oracle?hours=${hours}`);
   },
 
   // Protocol revenue chart
@@ -1492,7 +1489,38 @@ export interface RiskEventsResponse {
 }
 
 // Wallet API
+export interface FeeTierRow { thresholdVolume: number; makerBps: number; takerBps: number }
+export interface MakerShareTier { thresholdPpm: number; rebateBps: number }
+/** BULK's fee schedule (/feeState): the default tiers, markets priced on their own, and lifetime totals. */
+export interface FeeSchedule {
+  timestamp: number;
+  windowDays: number;
+  tiers: FeeTierRow[];
+  makerShareTiers?: MakerShareTier[];
+  overrides?: { symbol: string; tiers: FeeTierRow[]; makerShareTiers: MakerShareTier[] }[];
+  totalMakerFees: number;
+  totalTakerFees: number;
+  totalProtocolSettlement: number;
+  settledFills: number;
+}
+/** One account's fee tier as BULK quotes it. */
+export interface AccountFeeTier {
+  rollingVolume: number;
+  tierIndex: number;
+  tierThreshold: number;
+  takerBps: number;
+  makerBps: number;
+  makerSharePpm: number;
+  makerShareRebateBps: number;
+  effectiveMakerBps: number;
+  windowDays: number;
+}
+
 export const wallet = {
+  async getFeeTier(address: string): Promise<AccountFeeTier> {
+    return request(`/api/wallet/${address}/fee-tier`);
+  },
+
   async getWallet(address: string): Promise<WalletData> {
     return request(`/api/wallet/${address}`);
   },
