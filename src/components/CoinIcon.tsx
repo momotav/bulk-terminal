@@ -34,6 +34,7 @@ const LOCAL: Record<string, string> = {
   // hand-drawn SVG marks — swap in the real ones whenever we get them.
   NVDA: '/coins/NVDA.png', TSLA: '/coins/TSLA.png', MSTR: '/coins/MSTR.png', MU: '/coins/MU.png',
   SNDK: '/coins/SNDK.png', SKHYNIX: '/coins/SKHYNIX.svg', CRCL: '/coins/CRCL.svg', SPACEX: '/coins/SPACEX.svg',
+  US500: '/coins/US500.svg',
 };
 
 const coinOf = (symbol: string) => symbol.replace(/-USD$/i, '').toUpperCase();
