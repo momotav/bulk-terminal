@@ -13,6 +13,7 @@ import { CoinIcon } from '@/components/CoinIcon';
 import { STOCK_NAMES, baseCoin } from '@/lib/coins';
 import { OptionSelect } from '@/components/ui/OptionSelect';
 import { FeeComparison } from '@/components/FeeComparison';
+import { FeeCurve } from '@/components/FeeCurve';
 
 const usd = (n: number) => `${n < 0 ? '−' : ''}$${formatNumber(Math.abs(n), Math.abs(n) < 1000 ? 2 : 0)}`;
 const bps = (n: number) => `${n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)} bps`;
@@ -180,7 +181,7 @@ export default function FeesPage() {
                 </div>
 
                 {calc && (
-                  <div className="min-w-0 space-y-3">
+                  <div className="min-w-0 flex flex-col gap-3">
                     <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                       <Stat label="Your tier" value={policy!.tiers.length > 1 ? `${calc.i + 1} of ${policy!.tiers.length}` : 'Flat rate'}
                         hint={calc.tier.thresholdVolume > 0 ? `From $${formatCompact(calc.tier.thresholdVolume)}` : 'Starting tier'} />
@@ -198,7 +199,15 @@ export default function FeesPage() {
                       ) : policy!.tiers.length > 1 ? 'You’re in the top tier: the lowest taker fee BULK charges.' : 'This market has one rate for everyone.'}
                     </div>
 
-                    {/* The schedule for the chosen market, your tier marked. */}
+                    <FeeCurve tiers={policy!.tiers} makerBpsAdj={calc.rebate} takerShare={takerPct / 100} volume={volume}
+                      onPick={setVolume} compare={market === 'crypto'} className="flex-1" />
+                  </div>
+                )}
+              </div>
+
+              {/* The schedule for the chosen market, your tier marked, under both columns. */}
+              {calc && (
+                  <div className="mt-6 space-y-3">
                     <div className="overflow-x-auto">
                       <table className="w-full text-[13px]">
                         <thead>
@@ -229,8 +238,7 @@ export default function FeesPage() {
                       </p>
                     )}
                   </div>
-                )}
-              </div>
+              )}
             </section>
 
             {/* ── Against Hyperliquid ─────────────────────────────────── */}
