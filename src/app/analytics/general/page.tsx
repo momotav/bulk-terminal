@@ -436,6 +436,20 @@ export default function AnalyticsPage() {
   const [tradesChart, setTradesChart] = useState<ChartData[]>([]);
   const [liquidationsChart, setLiquidationsChart] = useState<ChartData[]>([]);
   const [adlChart, setAdlChart] = useState<ChartData[]>([]);
+  // All-time ADL record, for the empty state: ADLs have been rare on mainnet (a
+  // burst Sep 5–8 2026, then almost none), so most windows are honestly empty and
+  // should say when the last one happened rather than "no data yet".
+  const [adlAll, setAdlAll] = useState<{ count: number; value: number; last: { t: string; coin: string; value: number } | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    Promise.all([analytics.getADLChart(8760 * 2), analytics.getADLSummary('all')]).then(([rows, sum]) => {
+      if (!live) return;
+      const lastRow = [...rows].reverse().find((r) => Number((r as any).total) > 0) as any;
+      const coins = lastRow ? Object.entries((lastRow.coins ?? {}) as Record<string, number>).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]) : [];
+      setAdlAll({ count: sum.totalCount, value: sum.totalValue, last: lastRow ? { t: lastRow.timestamp, coin: coins.map(([c]) => c).join(', '), value: Number(lastRow.total) } : null });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [network]);
   const [volumeChart, setVolumeChart] = useState<ChartData[]>([]);
   const [stats, setStats] = useState<{ trades: { count: number; volume: number }; liquidations: { count: number; volume: number }; adl: { count: number; volume: number }; uniqueTraders: number } | null>(null);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
@@ -1096,7 +1110,20 @@ export default function AnalyticsPage() {
   const liquidationsDataFiltered = useMemo(() => sliceDataByRange(liquidationsDataFull, liquidationsRange), [liquidationsDataFull, liquidationsRange, sliceDataByRange]);
   
   // ADL keeps the per-window cumulative (resets at each timeframe)
-  const adlDataFull = useMemo(() => withCumulativeForCoins(adlChart, adlCoins), [adlChart, adlCoins, withCumulativeForCoins]);
+  // Days without an ADL are filled in as zero, so the bars sit at their real dates
+  // (Sep 8 and Oct 15 aren't drawn side by side as if a day apart).
+  const adlDaily = useMemo(() => {
+    if (!adlChart.length) return adlChart;
+    const DAY = 86_400_000;
+    const day = (t: number) => Math.floor(t / DAY) * DAY;
+    const byDay = new Map(adlChart.map((r) => [day(new Date(r.timestamp as any).getTime()), r]));
+    const first = Math.min(...byDay.keys());
+    const start = adlHours >= 8760 ? first : Math.min(first, day(Date.now() - adlHours * 3_600_000));
+    const out: ChartData[] = [];
+    for (let t = start; t <= day(Date.now()); t += DAY) out.push(byDay.get(t) ?? ({ timestamp: new Date(t).toISOString(), total: 0 } as any));
+    return out;
+  }, [adlChart, adlHours]);
+  const adlDataFull = useMemo(() => withCumulativeForCoins(adlDaily, adlCoins), [adlDaily, adlCoins, withCumulativeForCoins]);
   const adlDataFiltered = useMemo(() => sliceDataByRange(adlDataFull, adlRange), [adlDataFull, adlRange, sliceDataByRange]);
 
   return (
@@ -1671,7 +1698,24 @@ export default function AnalyticsPage() {
                       onDraggingChange={setAdlDragging}
                     />
                   </>
-                ) : <NoDataMessage title="ADL" />}
+                ) : (
+                  <div className="h-[260px] flex flex-col items-center justify-center gap-1.5 px-6 text-center text-[var(--text-tertiary)]">
+                    <p className="text-sm text-[var(--text-secondary)]">No auto-deleveraging in this period</p>
+                    {adlAll?.last ? (
+                      <p className="text-xs leading-relaxed max-w-[420px]">
+                        The last ADL was on {new Date(adlAll.last.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {adlAll.last.coin ? ` (${adlAll.last.coin}, $${formatCompact(adlAll.last.value)})` : ''}.
+                        {' '}BULK has auto-deleveraged {adlAll.count.toLocaleString('en-US')} times since mainnet, ${formatCompact(adlAll.value)} in all, almost all of it Sep 5–8.
+                        {' '}It only happens when the insurance fund can't cover a liquidation.
+                      </p>
+                    ) : <p className="text-xs">It only happens when the insurance fund can't cover a liquidation.</p>}
+                    {adlHours < 8760 * 2 && adlAll?.last && (
+                      <button type="button" onClick={() => setAdlHours(8760 * 2)} className="mt-2 px-3 py-1.5 rounded-md border border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                        Show all time
+                      </button>
+                    )}
+                  </div>
+                )}
               </ChartCard>
             </ResizableChartRow>
 
