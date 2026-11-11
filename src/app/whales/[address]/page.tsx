@@ -14,6 +14,7 @@ import { closedCountSeries, exposureSeries, fillSeries, transferSeries } from '@
 import { FillsTable, FundingPanel, GrossToNet, MakerTaker, MarketBreakdown, PanelLoading, PartialNote, PnlCalendar, StatStrip } from '@/components/wallet/WalletPanels';
 import { ClosedPositionsList } from '@/components/ClosedPositionsList';
 import { TradeShareCard, type ShareCardData } from '@/components/TradeShareCard';
+import { PortfolioShareCard } from '@/components/PortfolioShareCard';
 import { useStore } from '@/store';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 import { usePrivy, useSolanaWallets } from '@privy-io/react-auth';
@@ -128,8 +129,25 @@ const RANGES = [['24h', 86_400_000], ['7d', 7 * 86_400_000], ['30d', 30 * 86_400
 type Range = (typeof RANGES)[number][0];
 const RANGE_LABEL: Record<Range, string> = { '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' };
 
+/** PnL made inside a window, from zero: the Performance chart and the portfolio card share it. */
+function curveWindow(curve: PnlCurve, range: Range): { data: { t: number; v: number }[]; quietSince: number | null } {
+  const span = RANGES.find(([r]) => r === range)?.[1] ?? Infinity;
+  const cutoff = Date.now() - span;
+  const thinned = thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
+  if (!thinned.length) return { data: [], quietSince: null };
+  const { points: inside, quietSince } = range === 'all' ? trimQuietTail(thinned) : { points: thinned, quietSince: null };
+  const before = curve.points.filter((p) => p.t < cutoff).pop();
+  // All time rises from zero just ahead of the first close, not in one vertical jump.
+  const lead = (inside[inside.length - 1].t - inside[0].t) * 0.03;
+  const start = before ? { t: cutoff, v: before.v } : range === 'all' ? { t: inside[0].t - lead, v: 0 } : inside[0];
+  // Whole cents: stored and live figures can disagree by a fraction of one, and
+  // the chart would stretch that fraction to full height.
+  const cents = (v: number) => Math.round(v * 100) / 100;
+  return { data: [start, ...inside].map((p) => ({ t: p.t, v: cents(p.v - start.v) })), quietSince };
+}
+
 /** The page's one rich element: the total-PnL curve, with the calendar as its other view. */
-function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
+function PnlPanel({ curve, address, onCard }: { curve: PnlCurve; address: string; onCard?: (range: Range) => void }) {
   // The rail already carries the all-time figure, so open on the last week and
   // show something new. A wallet that didn't move this week opens on everything instead.
   const [picked, setPicked] = useState<Range | null>(null);
@@ -140,27 +158,20 @@ function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
 
   // The line is PnL made inside the window, so it starts at zero and ends on the
   // headline. All time starts from zero too: the wallet's first day.
-  const { data, quietSince } = useMemo(() => {
-    const span = RANGES.find(([r]) => r === range)?.[1] ?? Infinity;
-    const cutoff = Date.now() - span;
-    const thinned = thinCurve(curve.points.filter((p) => p.t >= cutoff), curve.realizedOnlyUntil);
-    if (!thinned.length) return { data: [], quietSince: null };
-    const { points: inside, quietSince } = range === 'all' ? trimQuietTail(thinned) : { points: thinned, quietSince: null };
-    const before = curve.points.filter((p) => p.t < cutoff).pop();
-    // All time rises from zero just ahead of the first close, not in one vertical jump.
-    const lead = (inside[inside.length - 1].t - inside[0].t) * 0.03;
-    const start = before ? { t: cutoff, v: before.v } : range === 'all' ? { t: inside[0].t - lead, v: 0 } : inside[0];
-    // Whole cents: stored and live figures can disagree by a fraction of one, and
-    // the chart would stretch that fraction to full height.
-    const cents = (v: number) => Math.round(v * 100) / 100;
-    return { data: [start, ...inside].map((p) => ({ t: p.t, v: cents(p.v - start.v) })), quietSince };
-  }, [curve.points, curve.realizedOnlyUntil, range]);
+  const { data, quietSince } = useMemo(() => curveWindow(curve, range), [curve, range]);
 
   const headline = data.length ? data[data.length - 1].v : 0;
   const showsGap = !quietSince && curve.realizedOnlyUntil !== null && data.length > 0 && data[0].t < curve.realizedOnlyUntil;
   const shown = hover ? hover.point.v : headline;
 
   const ranges = (
+    <div className="flex items-center gap-2">
+    {onCard && data.length >= 2 && (
+      <button type="button" onClick={() => onCard(range)} title="Share your whole portfolio's PnL as a card"
+        className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-lg border border-[var(--border-color)] text-[12px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
+        <ImageIcon className="w-3.5 h-3.5" />Card
+      </button>
+    )}
     <div className="flex items-center rounded-lg border border-[var(--border-color)] p-0.5 text-[12px]">
       {RANGES.map(([r]) => (
         <button key={r} type="button" onClick={() => setPicked(r)}
@@ -168,6 +179,7 @@ function PnlPanel({ curve, address }: { curve: PnlCurve; address: string }) {
           {r === 'all' ? 'All' : r}
         </button>
       ))}
+    </div>
     </div>
   );
 
@@ -369,6 +381,8 @@ export default function WalletPage() {
   // Share-card state: reconstruct a trade's lifecycle (fills + klines) and open
   // the animated card for it — same card the observe page uses.
   const [cardData, setCardData] = useState<ShareCardData | null>(null);
+  // The portfolio card: the whole account's PnL over a window, legs underneath.
+  const [portfolioCard, setPortfolioCard] = useState<Range | null>(null);
 
   // Per-symbol "when did this position open" map. We compute this client-side
   // by walking the wallet's fill history for each symbol — BULK doesn't
@@ -855,6 +869,14 @@ export default function WalletPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)] animate-[whale-reveal_0.45s_ease-out]">
       {cardData && <TradeShareCard data={cardData} onClose={() => setCardData(null)} />}
+      {portfolioCard && (
+        <PortfolioShareCard address={address} initial={portfolioCard} onClose={() => setPortfolioCard(null)}
+          ranges={RANGES.map(([r]) => ({ key: r, label: RANGE_LABEL[r], short: r === 'all' ? 'all time' : `last ${r}`, points: curveWindow(curve, r).data }))}
+          trades={[
+            ...closedPositions.map((c) => ({ coin: coinOf(c.symbol), side: c.side, notional: Math.abs(c.size * c.openPrice), openedAt: c.openedAt || null, closedAt: c.closedAt, pnl: c.realizedPnl })),
+            ...positions.map((p) => ({ coin: coinOf(p.symbol), side: p.size > 0 ? 'long' as const : 'short' as const, notional: Math.abs(p.notional || 0), openedAt: positionOpenTimes[p.symbol]?.openedAt ?? null, closedAt: null, pnl: p.unrealizedPnl })),
+          ]} />
+      )}
       <main className="flex-1 w-full">
         {error && !hasTrackedData ? (
           <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-10 text-center max-w-xl mx-auto mt-8">
@@ -959,7 +981,7 @@ export default function WalletPage() {
               <div className="flex-1 min-w-0 bg-[var(--bg-muted)]">
                 {tab === 'overview' && (
                   <>
-                    <PnlPanel curve={curve} address={address} />
+                    <PnlPanel curve={curve} address={address} onCard={setPortfolioCard} />
                     {analysisReady ? (
                       <MarketBreakdown rows={breakdown.rows} exact={breakdown.exact} fills={allFills.length} oldest={fillSummary.oldest}
                         totalVolume={fillSummary.volume} makerShare={fillSummary.volume > 0 ? fillSummary.maker.volume / fillSummary.volume : 0} />
@@ -981,6 +1003,15 @@ export default function WalletPage() {
                       { label: 'Long', hint: `${positions.filter((p) => p.size > 0).length} markets`, value: `$${formatCompact(longValue)}`, color: 'var(--pos)', bar: { pct: totalNotional ? longValue / totalNotional : 0, color: 'var(--pos)' }, series: exposure.long, seriesColor: 'var(--pos)' },
                       { label: 'Short', hint: `${positions.filter((p) => p.size < 0).length} markets`, value: `$${formatCompact(shortValue)}`, color: 'var(--neg)', bar: { pct: totalNotional ? shortValue / totalNotional : 0, color: 'var(--neg)' }, series: exposure.short, seriesColor: 'var(--neg)' },
                     ]} />
+                    {positions.length > 1 && (
+                      <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-b border-[var(--border-color)] text-[13px]">
+                        <span className="text-[var(--role-content-muted)]">Hedged? Share the whole book: every leg on one card, with the net.</span>
+                        <button type="button" onClick={() => setPortfolioCard('7d')}
+                          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors shrink-0">
+                          <ImageIcon className="w-3.5 h-3.5" />Portfolio card
+                        </button>
+                      </div>
+                    )}
                     {!hasLiveData && positions.length === 0 ? (
                       <div className="p-6 text-[14px] text-[var(--role-content-muted)] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />Fetching positions</div>
                     ) : <PositionsTable positions={positions} markPrices={markPrices} openTimes={positionOpenTimes} onOpen={openLiveChart} onShare={openShareCard} />}

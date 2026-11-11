@@ -52,6 +52,9 @@ const FONT = "'BULK', ui-sans-serif, -apple-system, \"Segoe UI\", Roboto, sans-s
 const VISIBLE = 22;          // candles on screen at once (the scrolling window)
 const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
 const HOLD_MS = 1100;        // linger on the final frame
+/** Card length: stretches or squeezes the replay (and so the video). */
+const LENGTHS = [['short', 'Short', 0.55], ['normal', 'Normal', 1], ['long', 'Long', 1.9]] as const;
+type Length = (typeof LENGTHS)[number][0];
 const LIQ_HOLD_MS = 1500;    // the same on a liquidation card, with the embers still going
 const RESUME_MAX_MS = 1600;  // playing out what happened after the blast
 const FADE_SEC = 1.0;        // marker fade in/out duration
@@ -76,21 +79,21 @@ const WALLET_GRADS: [string, string][] = [
   ['#E8A33D', '#8F5213'], ['#F7C873', '#CB8A2A'], ['#FFCC80', '#E06D1C'],
   ['#D9A441', '#7E4E14'], ['#FFE0A3', '#D98A2B'], ['#F0B24C', '#A35A17'],
 ];
-function avatarHues(addr: string): [string, string, string] {
+export function avatarHues(addr: string): [string, string, string] {
   let h = 7;
   for (const c of addr) h = (h * 31 + c.charCodeAt(0)) | 0;
   const [a1, a2] = WALLET_GRADS[Math.abs(h) % WALLET_GRADS.length];
   return [a1, a2, addr.replace(/^0x/, '').slice(0, 2).toUpperCase()];
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   if (typeof (ctx as any).roundRect === 'function') { ctx.beginPath(); (ctx as any).roundRect(x, y, w, h, r); return; }
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
-function pickMime(): string {
+export function pickMime(): string {
   // Prefer WebM: Chrome/Firefox produce a VALID WebM, whereas Chrome's
   // MediaRecorder reports video/mp4 as supported but often emits a malformed,
   // unplayable MP4. Safari doesn't do WebM, so it falls through to its working
@@ -147,6 +150,8 @@ export function TradeShareCard({ data, onClose }: Props) {
   const [hideWallet, setHideWallet] = useState(false);
   const [showRef, setShowRef] = useState(false);
   const [refCode, setRefCode] = useState('');
+  const [length, setLength] = useState<Length>('normal');
+  const speed = LENGTHS.find(([k]) => k === length)?.[2] ?? 1;
   const rafRef = useRef<number | null>(null);
   const holdRef = useRef<number | null>(null);
   const varsRef = useRef<Record<string, string> | null>(null);
@@ -697,7 +702,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       scaleRef.current = null; // re-init the smoothed y-axis for this pass
       const N = cs.length;
       const screens = N / VISIBLE;
-      const dur = Math.max(4500, Math.min(11000, screens * SECONDS_PER_SCREEN * 1000));
+      const dur = Math.max(4500, Math.min(11000, screens * SECONDS_PER_SCREEN * 1000)) * speed;
       const t0 = performance.now();
 
       if (blast) {
@@ -706,7 +711,7 @@ export function TradeShareCard({ data, onClose }: Props) {
         const boomIdx = idxAtTime(cs, blast.t);
         const closeIdx = closedAt ? idxAtTime(cs, closedAt) : N - 1;
         const rest = Math.max(0, closeIdx - boomIdx);
-        const lead = Math.max(3200, dur * (boomIdx / (N - 1)));
+        const lead = Math.max(3200 * speed, dur * (boomIdx / (N - 1)));
         const after = rest > 0.5 ? Math.min(RESUME_MAX_MS, 300 + rest * 120) : 0;
         const total = lead + FREEZE_MS + after + LIQ_HOLD_MS;
         const approach = (p: number) => (p < 0.8 ? (p / 0.8) * 0.9 : 0.9 + 0.1 * (1 - (1 - (p - 0.8) / 0.2) ** 2));
@@ -737,7 +742,7 @@ export function TradeShareCard({ data, onClose }: Props) {
       };
       rafRef.current = requestAnimationFrame(frame);
     });
-  }, [candles, draw, blast, closedAt, idxAtTime]);
+  }, [candles, draw, blast, closedAt, idxAtTime, speed]);
 
   const stop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -779,6 +784,14 @@ export function TradeShareCard({ data, onClose }: Props) {
   }, [hideWallet, showRef, refCode, candles, displayH]);
 
   const replay = () => { if (playing || recording) return; stop(); setPlaying(true); play().then(() => setPlaying(false)); };
+  // A new length replays straight away, so the change is visible.
+  const lengthSeen = useRef(length);
+  useEffect(() => {
+    if (lengthSeen.current === length) return;
+    lengthSeen.current = length;
+    stop(); setPlaying(true); play().then(() => setPlaying(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [length]);
 
   const download = async () => {
     const canvas = canvasRef.current;
@@ -835,6 +848,17 @@ export function TradeShareCard({ data, onClose }: Props) {
 
         {/* Share options */}
         <div data-tour="card-options" className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
+          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>Length</span>
+            <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">
+              {LENGTHS.map(([k, label]) => (
+                <button key={k} type="button" disabled={recording || converting} onClick={() => { setLength(k); }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35 ${k === length ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
             <span>Hide wallet</span>
             <input type="checkbox" checked={hideWallet} onChange={(e) => setHideWallet(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />

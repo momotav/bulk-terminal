@@ -64,9 +64,9 @@ export const ASSET_CLASSES: readonly { key: AssetClass; label: string }[] = [
   { key: 'stock', label: 'TradFi' },
 ];
 
-/** Base symbols BULK lists that are equities or equity-like (SPACEX, the US500 index). */
+/** Base symbols BULK lists that are equities or equity-like (SPACEX, the US500 index, the SOXL ETF). */
 export const STOCK_COINS: readonly string[] = [
-  'NVDA', 'TSLA', 'MSTR', 'MU', 'SNDK', 'SKHYNIX', 'CRCL', 'SPACEX', 'US500',
+  'NVDA', 'TSLA', 'MSTR', 'MU', 'SNDK', 'SKHYNIX', 'CRCL', 'SPACEX', 'US500', 'SOXL',
 ];
 
 /** Human names for the tickers — shown as a hint in pickers and the markets table. */
@@ -80,6 +80,7 @@ export const STOCK_NAMES: Record<string, string> = {
   CRCL: 'Circle',
   SPACEX: 'SpaceX',
   US500: 'S&P 500',
+  SOXL: 'Semiconductors 3x',
 };
 
 const STOCK_SET = new Set(STOCK_COINS);
@@ -180,6 +181,7 @@ export const COIN_COLORS: Record<string, string> = {
   CRCL: 'var(--coin-3)',
   SPACEX: 'var(--coin-5)',
   US500: 'var(--coin-3)',
+  SOXL: 'var(--coin-4)',
 
   // Aggregate bucket — neutral so it doesn't compete with named series.
   [OTHER_KEY]: 'var(--coin-other)',

@@ -29,7 +29,7 @@ const LOCAL: Record<string, string> = {
   ENA: '/coins/ENA.svg', ETH: '/coins/ETH.svg', FARTCOIN: '/coins/FARTCOIN.svg', HYPE: '/coins/HYPE.svg', JTO: '/coins/JTO.svg',
   JUP: '/coins/JUP.svg', LIT: '/coins/LIT.svg', MEGA: '/coins/MEGA.svg', MON: '/coins/MON.svg', MSTR: '/coins/MSTR.svg',
   MU: '/coins/MU.svg', NEAR: '/coins/NEAR.svg', NVDA: '/coins/NVDA.svg', PAPER: '/coins/PAPER.svg', PAXG: '/coins/PAXG.svg',
-  PUMP: '/coins/PUMP.svg', SKHYNIX: '/coins/SKHYNIX.svg', SNDK: '/coins/SNDK.svg', SOL: '/coins/SOL.svg', SPACEX: '/coins/SPACEX.svg',
+  PUMP: '/coins/PUMP.svg', SKHYNIX: '/coins/SKHYNIX.svg', SNDK: '/coins/SNDK.svg', SOL: '/coins/SOL.svg', SPACEX: '/coins/SPACEX.svg', SOXL: '/coins/SOXL.svg',
   SUI: '/coins/SUI.svg', TAO: '/coins/TAO.svg', TSLA: '/coins/TSLA.svg', US500: '/coins/US500.svg', XPL: '/coins/XPL.svg',
   XRP: '/coins/XRP.svg', ZEC: '/coins/ZEC.svg',
   XAU: '/coins/XAU.png',
