@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CrosshairMode, type IChartApi, type UTCTimestamp } from 'lightweight-charts';
+import { createChart, ColorType, CrosshairMode, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { Candle } from '@/lib/api';
 import type { BasketLeg } from '@/lib/basket';
+import { intervalSeconds, subscribePrice } from './live';
 
 const resolve = (expr: string, fallback: string): string => {
   if (typeof document === 'undefined') return fallback;
@@ -57,29 +58,73 @@ function useResize(ref: React.RefObject<HTMLDivElement | null>, chart: React.Mut
   }, [ref, chart]);
 }
 
-export function DockCandleChart({ candles }: { candles: Candle[] }) {
+type Bar = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
+
+/**
+ * A market's candles that keep moving: the last candle follows every trade print
+ * and a new one starts when the interval rolls over. The chart is built once per
+ * market and interval; the minute refresh swaps the data underneath without
+ * resetting where the viewer has zoomed or scrolled to.
+ */
+export function DockCandleChart({ candles, coin, interval }: { candles: Candle[]; coin?: string; interval?: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const chart = useRef<IChartApi | null>(null);
+  const series = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const liveBar = useRef<Bar | null>(null);
+  const fitted = useRef(false);
   const theme = useThemeKey();
   useResize(ref, chart);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !candles.length) return;
+    if (!el) return;
     const c = createChart(el, baseOptions(el));
     chart.current = c;
     const pos = resolve('var(--pos)', '#21C07A'); const neg = resolve('var(--neg)', '#E5484D');
-    const s = c.addCandlestickSeries({ upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg });
+    series.current = c.addCandlestickSeries({ upColor: pos, downColor: neg, borderUpColor: pos, borderDownColor: neg, wickUpColor: pos, wickDownColor: neg });
+    fitted.current = false;
+    return () => { c.remove(); chart.current = null; series.current = null; liveBar.current = null; };
+  }, [theme, coin, interval]);
+
+  useEffect(() => {
+    const s = series.current; const c = chart.current;
+    if (!s || !c || !candles.length) return;
     const seen = new Set<number>();
-    s.setData(candles.flatMap((k) => {
+    const bars: Bar[] = candles.flatMap((k) => {
       const t = Math.floor(k.t / 1000);
       if (seen.has(t)) return [];
       seen.add(t);
       return [{ time: t as UTCTimestamp, open: k.o, high: k.h, low: k.l, close: k.c }];
-    }));
-    c.timeScale().fitContent();
-    return () => { c.remove(); chart.current = null; };
-  }, [candles, theme]);
+    });
+    // Keep the live candle if it is newer than (or the same as) the refreshed data's last bar.
+    const lb = liveBar.current;
+    const last = bars[bars.length - 1];
+    if (lb && last && lb.time >= last.time) {
+      if (lb.time === last.time) bars[bars.length - 1] = { ...last, high: Math.max(last.high, lb.high), low: Math.min(last.low, lb.low), close: lb.close };
+      else bars.push(lb);
+    }
+    const view = fitted.current ? c.timeScale().getVisibleLogicalRange() : null;
+    s.setData(bars);
+    liveBar.current = bars[bars.length - 1] ?? null;
+    if (view) c.timeScale().setVisibleLogicalRange(view);
+    else { c.timeScale().fitContent(); fitted.current = true; }
+  }, [candles, theme, coin, interval]);
+
+  useEffect(() => {
+    if (!coin) return;
+    const step = intervalSeconds(interval ?? '1h');
+    return subscribePrice(coin, ({ price, ts }) => {
+      const s = series.current; const lb = liveBar.current;
+      if (!s || !lb) return; // wait for the history, or a lone candle flashes on an empty chart
+      const bucket = (Math.floor(ts / 1000 / step) * step) as UTCTimestamp;
+      try {
+        if (bucket > lb.time) liveBar.current = { time: bucket, open: lb.close, high: Math.max(lb.close, price), low: Math.min(lb.close, price), close: price };
+        else if (bucket === lb.time) liveBar.current = { ...lb, high: Math.max(lb.high, price), low: Math.min(lb.low, price), close: price };
+        else return; // a late print for an older candle
+        s.update(liveBar.current);
+      } catch { /* out-of-order print: never break the stream */ }
+    });
+  }, [coin, interval, theme]);
 
   return <div ref={ref} className="absolute inset-0" />;
 }

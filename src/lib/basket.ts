@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 import type { Side } from '@/lib/portfolioMargin';
 
 export interface BasketLeg { coin: string; side: Side; weight: number }
-export type WinKind = 'chart' | 'basket';
+export type WinKind = 'chart' | 'basket' | 'book';
 export interface Win {
   id: string;
   kind: WinKind;
@@ -21,6 +21,8 @@ export interface Win {
   max: boolean;
   /** Open in its own browser window (another monitor), so hidden here. */
   popped?: boolean;
+  /** Chart windows: the market's order book is attached on the right, inside the window. */
+  book?: boolean;
 }
 export interface DockState {
   windows: Win[];
@@ -33,6 +35,9 @@ export interface DockState {
 }
 
 export const MAX_LEGS = 6;
+/** Width an attached order book adds to its chart window. */
+export const BOOK_W = 252;
+const BOOK_FLOAT_W = 268;
 export const MAX_WINDOWS = MAX_LEGS + 1; // every chart plus the basket
 const KEY = 'bulkstats-workspace';
 const INITIAL: DockState = { windows: [], legs: [], size: 10_000, leverage: 5, autoBalance: true };
@@ -159,6 +164,51 @@ export const dock = {
   move: (id: string, x: number, y: number) => patchWin(id, { x, y }),
   resize: (id: string, w: number, h: number) => patchWin(id, { w, h }),
   setWinInterval: (id: string, interval: string) => patchWin(id, { interval }),
+
+  // Order books
+  /** Show or hide the book attached to a chart. A floating book of the same market snaps in. */
+  toggleBook: (chartId: string) => set((s) => {
+    const c = s.windows.find((w) => w.id === chartId);
+    if (!c || c.kind !== 'chart') return {};
+    if (c.book) return { windows: s.windows.map((w) => (w.id === chartId ? { ...w, book: false, w: Math.max(300, w.w - BOOK_W) } : w)) };
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const grow = Math.min(c.w + BOOK_W, vw - 16);
+    return {
+      windows: s.windows
+        .filter((w) => !(w.kind === 'book' && w.coin === c.coin))
+        .map((w) => (w.id === chartId ? { ...w, book: true, w: grow, x: Math.min(w.x, vw - grow - 8) } : w)),
+    };
+  }),
+  /** Pull a chart's book out into its own window, right next to the chart. */
+  detachBook: (chartId: string) => set((s) => {
+    const c = s.windows.find((w) => w.id === chartId);
+    if (!c || !c.book || !c.coin) return {};
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const cw = Math.max(300, c.w - BOOK_W);
+    const x = c.x + cw + 12 + BOOK_FLOAT_W <= vw - 8 ? c.x + cw + 12 : Math.max(8, c.x + cw - BOOK_FLOAT_W - 24);
+    const book: Win = { id: `book-${c.coin}`, kind: 'book', coin: c.coin, interval: c.interval, x, y: c.y + (x < c.x + cw ? 24 : 0), w: BOOK_FLOAT_W, h: c.h, z: topZ(s.windows) + 1, min: false, max: false };
+    return { windows: [...s.windows.filter((w) => w.id !== book.id).map((w) => (w.id === chartId ? { ...w, book: false, w: cw } : w)), book] };
+  }),
+  /** Snap a floating book back into its market's chart (opening the chart if needed). */
+  attachBook: (bookId: string) => {
+    const b = state.windows.find((w) => w.id === bookId);
+    if (!b?.coin) return;
+    if (!state.windows.some((w) => w.kind === 'chart' && w.coin === b.coin)) dock.openChart(b.coin);
+    const c = state.windows.find((w) => w.kind === 'chart' && w.coin === b.coin);
+    if (c && !c.book) dock.toggleBook(c.id);
+    else set((s) => ({ windows: s.windows.filter((w) => w.id !== bookId) }));
+  },
+  /** Open a market's book on its own (from the "+" menu). */
+  openBook(coin: string) {
+    const c = coin.replace(/-USD$/i, '').toUpperCase();
+    set((s) => {
+      const attached = s.windows.find((w) => w.kind === 'chart' && w.coin === c && w.book);
+      const have = attached ?? s.windows.find((w) => w.kind === 'book' && w.coin === c);
+      if (have) return { windows: s.windows.map((w) => (w.id === have.id ? { ...w, min: false, z: topZ(s.windows) + 1 } : w)) };
+      const h = Math.min(560, (typeof window !== 'undefined' ? window.innerHeight : 800) - 100);
+      return { windows: [...s.windows, { id: `book-${c}`, kind: 'book', coin: c, interval: '1h', ...placement(s.windows, BOOK_FLOAT_W, h), w: BOOK_FLOAT_W, h, z: topZ(s.windows) + 1, min: false, max: false }] };
+    });
+  },
 
   // Basket
   /** Adding a market to the basket opens its chart: the two always match. */

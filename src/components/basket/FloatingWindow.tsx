@@ -22,8 +22,10 @@ function clampBox(x: number, y: number, w: number, h: number) {
   return { x: Math.min(vw - 120, Math.max(120 - w, x)), y: Math.min(vh - 40, Math.max(TOP, y)), w, h };
 }
 
-export function FloatingWindow({ win, layer, title, icon, onPopOut, children, mobile }: {
+export function FloatingWindow({ win, layer, title, icon, onPopOut, children, mobile, extra }: {
   win: Win; layer: number; title: ReactNode; icon?: ReactNode; onPopOut?: () => void; children: ReactNode; mobile: boolean;
+  /** Extra title-bar controls, before the standard ones. */
+  extra?: ReactNode;
 }) {
   const el = useRef<HTMLDivElement | null>(null);
   const fx = useWindowMotion(el, win);
@@ -89,6 +91,7 @@ export function FloatingWindow({ win, layer, title, icon, onPopOut, children, mo
         <span className="flex items-center gap-1.5 min-w-0 text-[13px] font-medium text-[var(--text-primary)] truncate">{icon}{title}</span>
         <div className="flex-1" />
         <div className="flex items-center gap-0.5">
+          {extra}
           {onPopOut && !mobile && <Ctl label="Open in its own window (move it to another screen)" onClick={onPopOut}><ExternalLink className="w-3.5 h-3.5" /></Ctl>}
           <Ctl label="Minimise" onClick={fx.minimize}><Minus className="w-3.5 h-3.5" /></Ctl>
           {!mobile && <Ctl label={win.max ? 'Restore' : 'Fill the screen'} onClick={fx.toggleMax}>{win.max ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}</Ctl>}
