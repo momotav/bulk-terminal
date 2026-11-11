@@ -210,7 +210,7 @@ export function LeaderboardTable({
             {data.map((entry, i) => (
               <Link
                 key={entry.wallet_address}
-                href={`/whales/${entry.wallet_address}`}
+                href={`/wallet/${entry.wallet_address}`}
                 prefetch={false}
                 style={
                   {

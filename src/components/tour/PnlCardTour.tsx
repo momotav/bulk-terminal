@@ -92,7 +92,7 @@ export function PnlCardTour() {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const lastBox = useRef<Box | null>(null);
 
-  const onWalletPage = pathname?.startsWith('/whales/') ?? false;
+  const onWalletPage = pathname?.startsWith('/wallet/') ?? false;
   const current = step === null ? null : STEPS[step];
   // Step one sends you through search; until a wallet page opens, the guide stands aside.
   const waitingForWallet = current !== null && current.onWalletPage && !onWalletPage;
@@ -101,7 +101,7 @@ export function PnlCardTour() {
   const stop = useCallback(() => { setStep(null); setFound(false); lastBox.current = null; searchedAt.current = 0; setSearching(false); }, []);
 
   useEffect(() => {
-    const begin = () => { searchedAt.current = 0; setSearching(false); setMissing(false); setStep(window.location.pathname.startsWith('/whales/') ? 1 : 0); };
+    const begin = () => { searchedAt.current = 0; setSearching(false); setMissing(false); setStep(window.location.pathname.startsWith('/wallet/') ? 1 : 0); };
     window.addEventListener(START_EVENT, begin);
     return () => window.removeEventListener(START_EVENT, begin);
   }, []);
@@ -247,7 +247,7 @@ export function PnlCardTour() {
           </p>
           <button type="button" onClick={stop} aria-label="Close guide" className="p-1 -m-1 text-[var(--role-content-subtle)] hover:text-[var(--role-content)]"><X className="h-4 w-4" /></button>
         </div>
-        <button type="button" onClick={() => { searchedAt.current = 0; window.dispatchEvent(new Event('bulkstats:close-command')); router.push(`/whales/${EXAMPLE_WALLET}`); }}
+        <button type="button" onClick={() => { searchedAt.current = 0; window.dispatchEvent(new Event('bulkstats:close-command')); router.push(`/wallet/${EXAMPLE_WALLET}`); }}
           className="mt-2 text-[13px] text-[var(--role-content)] underline underline-offset-4 decoration-[var(--role-line)] hover:decoration-[var(--role-content)]">
           Use an example wallet instead
         </button>
@@ -276,7 +276,7 @@ export function PnlCardTour() {
             : current.body}
         </p>
         {step === 0 && (
-          <button type="button" onClick={() => router.push(`/whales/${EXAMPLE_WALLET}`)}
+          <button type="button" onClick={() => router.push(`/wallet/${EXAMPLE_WALLET}`)}
             className="mt-2 text-[13px] text-[var(--role-content)] underline underline-offset-4 decoration-[var(--role-line)] hover:decoration-[var(--role-content)]">
             Or see it on an example wallet
           </button>

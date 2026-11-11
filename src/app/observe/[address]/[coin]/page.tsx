@@ -238,7 +238,7 @@ export default function ObserveTradePage() {
           <p className="mt-2 text-xs text-[var(--text-tertiary)]">
             BULK keeps a limited window of fills — very old trades may have aged out.
           </p>
-          <Link href={`/whales/${address}`} className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-text)] hover:underline">
+          <Link href={`/wallet/${address}`} className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-text)] hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to wallet
           </Link>
         </div>
@@ -279,7 +279,7 @@ export default function ObserveTradePage() {
     <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] lg:min-h-[calc(100vh-57px)]">
       {/* Left rail: the trade at a glance, same structure as the wallet page. */}
       <aside className="bg-[var(--role-surface-raised)] lg:border-r border-b lg:border-b-0 border-[var(--border-color)] px-5 py-5 flex flex-col gap-5 min-w-0">
-        <Link href={`/whales/${address}`} className="inline-flex items-center gap-1.5 self-start text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
+        <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 self-start text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> {formatAddress(address)}
         </Link>
 

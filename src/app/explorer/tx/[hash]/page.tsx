@@ -173,7 +173,7 @@ export default function TxDetailPage() {
             <span className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] pt-1">Account</span>
             <div className="flex items-center gap-2 text-sm flex-wrap">
               <Link
-                href={`/whales/${tx.account}`}
+                href={`/wallet/${tx.account}`}
                 className="font-mono text-bulk-accent hover:underline break-all"
               >
                 {tx.account}

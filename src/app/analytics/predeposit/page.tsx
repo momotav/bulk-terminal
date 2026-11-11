@@ -686,7 +686,7 @@ export default function PreDepositPage() {
                     <tr key={row.address} className="border-b border-[var(--border-color)]/50 hover:bg-[var(--bg-secondary-20)]/30 transition-colors">
                       <td className="px-2 py-2.5 text-[var(--text-tertiary)] tabular-nums">{row.rank}</td>
                       <td className="px-2 py-2.5">
-                        <Link href={`/whales/${row.address}`} className="flex items-center gap-2 hover:text-[var(--accent)] transition-colors">
+                        <Link href={`/wallet/${row.address}`} className="flex items-center gap-2 hover:text-[var(--accent)] transition-colors">
                           {row.twitterAvatar ? (
                             <img src={row.twitterAvatar} alt="" width={24} height={24} className="w-6 h-6 rounded-full border border-[var(--border-color)] shrink-0" />
                           ) : (

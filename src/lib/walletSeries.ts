@@ -4,11 +4,11 @@
 // a trend; the tile's headline figure stays the exact one.
 
 import type { ActivityEvent, ClosedPosition } from '@/lib/api';
-import type { WalletFillLite } from '@/lib/walletMetrics';
+import { bookKey, type WalletFillLite } from '@/lib/walletMetrics';
 
 export const SERIES_POINTS = 48;
 
-interface LivePos { symbol: string; size: number; price: number; fairPrice?: number }
+interface LivePos { symbol: string; size: number; price: number; fairPrice?: number; account?: string }
 
 /**
  * Open positions over time, walked BACK from the live account: the size of each
@@ -41,7 +41,7 @@ export function exposureSeries(fills: WalletFillLite[], live: LivePos[], now = D
   };
 
   // Sizes now, then undo fills newest-first as we step back through the buckets.
-  const size = new Map<string, number>(live.map((p) => [p.symbol, p.size]));
+  const size = new Map<string, number>(live.map((p) => [bookKey(p), p.size]));
   const times = [...Array.from({ length: SERIES_POINTS - 1 }, (_, i) => start + ((end - start) * i) / (SERIES_POINTS - 2)), Math.max(now, end)];
   const out = { count: [] as number[], gross: [] as number[], long: [] as number[], short: [] as number[] };
   let k = sorted.length - 1;
@@ -49,13 +49,13 @@ export function exposureSeries(fills: WalletFillLite[], live: LivePos[], now = D
     const t = times[i];
     while (k >= 0 && sorted[k].timestamp > t) {
       const f = sorted[k];
-      size.set(f.symbol, (size.get(f.symbol) ?? 0) - (f.isBuy ? f.size : -f.size));
+      size.set(bookKey(f), (size.get(bookKey(f)) ?? 0) - (f.isBuy ? f.size : -f.size));
       k--;
     }
     let n = 0, lg = 0, sh = 0;
-    for (const [sym, s] of size) {
+    for (const [key, s] of size) {
       if (Math.abs(s) < 1e-9) continue;
-      const v = Math.abs(s) * priceAt(sym, t);
+      const v = Math.abs(s) * priceAt(key.slice(key.indexOf('|') + 1), t);
       n++;
       if (s > 0) lg += v; else sh += v;
     }
@@ -97,15 +97,16 @@ export function closedCountSeries(closed: ClosedPosition[]): number[] {
 
 /** Money in, money out and what stayed, as running totals stepped over real time
  *  (first transfer to now), so a few deposits read as steps, not one diagonal. */
-export function transferSeries(events: ActivityEvent[] | null, address: string, now = Date.now()) {
+export function transferSeries(events: ActivityEvent[] | null, address: string | Set<string>, now = Date.now()) {
+  const mine = typeof address === 'string' ? new Set([address]) : address;
   const inn: number[] = [], out: number[] = [], net: number[] = [];
   if (!events?.length) return { inn, out, net };
   const rows = events
     .filter((e) => !e.status || e.status === 'completed')
     .map((e) => {
       const amount = Number(e.amount) || 0;
-      const incoming = e.activityType === 'deposit' || (e.to === address && e.from !== address && /transfer/i.test(e.activityType));
-      const outgoing = e.activityType === 'withdrawal' || (e.from === address && e.to !== address && /transfer/i.test(e.activityType));
+      const incoming = e.activityType === 'deposit' || (mine.has(e.to ?? '') && !mine.has(e.from ?? '') && /transfer/i.test(e.activityType));
+      const outgoing = e.activityType === 'withdrawal' || (mine.has(e.from ?? '') && !mine.has(e.to ?? '') && /transfer/i.test(e.activityType));
       return { t: e.timestamp / 1e6, in: incoming ? amount : 0, out: outgoing ? amount : 0 };
     })
     .filter((r) => r.in || r.out)
@@ -139,7 +140,7 @@ export function fillSeries(fills: WalletFillLite[]) {
     while (k < sorted.length && sorted[k].timestamp <= t) {
       const f = sorted[k++];
       const delta = f.isBuy ? f.size : -f.size;
-      const m = book.get(f.symbol) ?? { net: 0, avg: 0 };
+      const m = book.get(bookKey(f)) ?? { net: 0, avg: 0 };
       vol += Math.abs(f.size) * f.price;
       // Fill fees carry the account's sign: negative is a cost, positive a rebate.
       fee += f.fee ?? 0;
@@ -156,7 +157,7 @@ export function fillSeries(fills: WalletFillLite[]) {
         m.avg = after !== 0 ? (m.avg * Math.abs(m.net) + f.price * Math.abs(delta)) / Math.abs(after) : 0;
         m.net = after;
       }
-      book.set(f.symbol, m);
+      book.set(bookKey(f), m);
     }
     out.volume.push(vol); out.realized.push(real); out.fees.push(fee);
   }

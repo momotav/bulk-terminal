@@ -184,7 +184,13 @@ export function trackRecord(closed: ClosedPosition[]): TrackRecord | null {
 }
 
 /** A fill with the fields the full-history (lite) feed adds. */
-export type WalletFillLite = WalletFill & { fee?: number; isMaker?: boolean };
+/** `account` is set when fills from several accounts (a master and its subs) are
+ *  combined: positions are replayed per account, so a long in one and a short in
+ *  another never net against each other. */
+export type WalletFillLite = WalletFill & { fee?: number; isMaker?: boolean; account?: string };
+
+/** The position a fill belongs to: its market, within its account when combined. */
+export const bookKey = (f: { symbol: string; account?: string }) => (f.account ? `${f.account}|${f.symbol}` : f.symbol);
 
 export interface SideStats { volume: number; fills: number; fees: number }
 
@@ -212,7 +218,8 @@ const localDay = (t: number) => {
 /** One pass over the fills: volume, fees, maker/taker and realized PnL per market. */
 export function summarizeFills(fills: WalletFillLite[]): FillSummary {
   const sorted = [...fills].sort((a, b) => a.timestamp - b.timestamp);
-  const bySymbol = new Map<string, FillSummary['markets'][number] & { net: number; avg: number }>();
+  const bySymbol = new Map<string, FillSummary['markets'][number]>();
+  const book = new Map<string, { net: number; avg: number }>();
   const maker: SideStats = { volume: 0, fills: 0, fees: 0 };
   const taker: SideStats = { volume: 0, fills: 0, fees: 0 };
   const dailyVolume = new Map<string, number>();
@@ -220,7 +227,8 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
   const dailyFees = new Map<string, number>();
   const add = (map: Map<string, number>, day: string, v: number) => map.set(day, (map.get(day) ?? 0) + v);
   for (const f of sorted) {
-    const m = bySymbol.get(f.symbol) ?? { symbol: f.symbol, volume: 0, makerVolume: 0, fills: 0, fees: 0, realized: 0, net: 0, avg: 0 };
+    const m = bySymbol.get(f.symbol) ?? { symbol: f.symbol, volume: 0, makerVolume: 0, fills: 0, fees: 0, realized: 0 };
+    const b = book.get(bookKey(f)) ?? { net: 0, avg: 0 };
     const value = Math.abs(f.size) * f.price;
     const fee = f.fee ?? 0;
     m.volume += value; m.fills += 1; m.fees += fee;
@@ -232,22 +240,23 @@ export function summarizeFills(fills: WalletFillLite[]): FillSummary {
     if (fee) add(dailyFees, day, fee);
 
     const delta = f.isBuy ? f.size : -f.size;
-    if (m.net === 0 || m.net > 0 === delta > 0) {
-      m.avg = (Math.abs(m.net) * m.avg + Math.abs(delta) * f.price) / (Math.abs(m.net) + Math.abs(delta));
-      m.net += delta;
+    if (b.net === 0 || b.net > 0 === delta > 0) {
+      b.avg = (Math.abs(b.net) * b.avg + Math.abs(delta) * f.price) / (Math.abs(b.net) + Math.abs(delta));
+      b.net += delta;
     } else {
-      const closed = Math.min(Math.abs(m.net), Math.abs(delta));
-      const booked = closed * (f.price - m.avg) * Math.sign(m.net);
+      const closed = Math.min(Math.abs(b.net), Math.abs(delta));
+      const booked = closed * (f.price - b.avg) * Math.sign(b.net);
       m.realized += booked;
       add(dailyRealized, day, booked);
-      const after = m.net + delta;
-      if (Math.abs(after) < 1e-9) { m.net = 0; m.avg = 0; }
-      else if (after > 0 !== m.net > 0) { m.net = after; m.avg = f.price; }
-      else m.net = after;
+      const after = b.net + delta;
+      if (Math.abs(after) < 1e-9) { b.net = 0; b.avg = 0; }
+      else if (after > 0 !== b.net > 0) { b.net = after; b.avg = f.price; }
+      else b.net = after;
     }
     bySymbol.set(f.symbol, m);
+    book.set(bookKey(f), b);
   }
-  const markets = Array.from(bySymbol.values()).map(({ net: _net, avg: _avg, ...m }) => m);
+  const markets = Array.from(bySymbol.values());
   return {
     markets,
     maker,

@@ -3,7 +3,7 @@
 // bots, treasury). The backend already filters these out of every
 // leaderboard surface — this frontend copy exists so the wallet detail
 // page can render a "Bulk System Account" badge when someone visits
-// /whales/<system-address> directly.
+// /wallet/<system-address> directly.
 //
 // Keep this list in sync with backend/src/services/systemWallets.ts.
 const SYSTEM_WALLETS = new Set<string>([

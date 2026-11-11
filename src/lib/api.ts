@@ -1547,7 +1547,7 @@ export const wallet = {
   // Account hierarchy from BULK v1.0.14: kind (Master/Sub), parent, sub-accounts,
   // multisig membership, plus per-account financial summaries. Backend resolver
   // service caches hierarchy 24h and per-account summaries 60s — this is the
-  // single source of truth used by /whales/[address] and (eventually) the
+  // single source of truth used by /wallet/[address] and (eventually) the
   // leaderboard / liquidations feed.
   async getHierarchy(address: string): Promise<HierarchyResponse> {
     return request(`/api/wallet/${address}/hierarchy`);

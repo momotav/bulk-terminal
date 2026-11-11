@@ -12,6 +12,7 @@
 // Mounted once in the root layout. Opens on ⌘K/Ctrl-K or the header button,
 // closes on Esc / backdrop / select. Arrow keys move, Enter selects.
 
+import { hiResAvatar } from '@/lib/avatar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, BarChart3, CornerDownLeft, CandlestickChart } from 'lucide-react';
@@ -34,7 +35,6 @@ const PAGES: { label: string; href: string; hint: string }[] = [
   { label: 'Network', href: '/analytics/network', hint: 'Sequencer latency, throughput and account growth' },
   { label: 'Order Book', href: '/analytics/orderbook', hint: 'Live depth, slippage and price-impact tools' },
   { label: 'Leaderboard', href: '/leaderboard', hint: 'Top traders by PnL, volume and activity' },
-  { label: 'Whale Tracker', href: '/whales', hint: 'Largest accounts and their live positions' },
   { label: 'Explorer', href: '/explorer', hint: 'Blocks, transactions and live network throughput' },
   { label: 'Following', href: '/following', hint: 'Wallets you follow and their recent moves' },
   { label: 'Profile', href: '/profile', hint: 'Your claimed wallet and account settings' },
@@ -219,7 +219,7 @@ export function CommandPalette() {
       const name = w.twitter_name || (w.twitter_handle ? `@${w.twitter_handle}` : formatAddress(w.wallet_address));
       const parts: string[] = [formatAddress(w.wallet_address)];
       if (w.total_pnl != null) parts.push(`PnL ${w.total_pnl >= 0 ? '+' : ''}$${formatCompact(w.total_pnl)}`);
-      out.push({ kind: 'wallet', key: `w:${w.wallet_address}`, label: name, sub: parts.join(' · '), address: w.wallet_address, avatar: w.twitter_avatar });
+      out.push({ kind: 'wallet', key: `w:${w.wallet_address}`, label: name, sub: parts.join(' · '), address: w.wallet_address, avatar: hiResAvatar(w.twitter_avatar) });
     }
 
     return out;
@@ -242,7 +242,7 @@ export function CommandPalette() {
     } else if (row.kind === 'market') {
       router.push(`/analytics/orderbook?coin=${encodeURIComponent(row.symbol)}`);
     } else {
-      router.push(`/whales/${row.address}`);
+      router.push(`/wallet/${row.address}`);
     }
   }, [router]);
 

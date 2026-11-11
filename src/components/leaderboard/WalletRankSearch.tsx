@@ -117,14 +117,14 @@ export function WalletRankSearch() {
             <div>
               <p className="text-xs text-[var(--text-secondary)] mb-1">Wallet</p>
               <Link 
-                href={`/whales/${result.wallet_address}`}
+                href={`/wallet/${result.wallet_address}`}
                 className="font-mono text-sm text-bulk-green hover:underline"
               >
                 {formatAddress(result.wallet_address)}
               </Link>
             </div>
             <Link
-              href={`/whales/${result.wallet_address}`}
+              href={`/wallet/${result.wallet_address}`}
               className="text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors"
             >
               View Profile →

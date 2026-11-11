@@ -1,5 +1,6 @@
 'use client';
 
+import { hiResAvatar } from '@/lib/avatar';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,7 +15,6 @@ const navItems = [
   { href: '/', label: 'Dashboard' },
   { href: '/leaderboard', label: 'Leaderboard' },
   { href: '/analytics', label: 'Analytics' },
-  { href: '/whales', label: 'Whale Tracker' },
   { href: '/explorer', label: 'Explorer' },
 ];
 
@@ -51,7 +51,7 @@ export function Header() {
   
   const twitterHandle = twitterAccount?.username || user?.twitter_handle;
   const twitterName = twitterAccount?.name || user?.twitter_name;
-  const twitterAvatar = twitterAccount?.profilePictureUrl || user?.twitter_avatar;
+  const twitterAvatar = hiResAvatar(twitterAccount?.profilePictureUrl || user?.twitter_avatar);
 
   useEffect(() => {
     async function syncAuth() {
@@ -332,7 +332,7 @@ export function Header() {
                       </Link>
                       
                       {effectiveWallet && (
-                        <Link href={`/whales/${effectiveWallet}`} onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors">
+                        <Link href={`/wallet/${effectiveWallet}`} onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)] transition-colors">
                           <Wallet className="w-4 h-4 text-[var(--text-secondary)]" />
                           My Wallet Stats
                         </Link>

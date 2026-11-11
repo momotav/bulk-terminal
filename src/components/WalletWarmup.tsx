@@ -11,7 +11,7 @@ const AGAIN_AFTER_MS = 2 * 60_000;
  * backend has it cached by the time they've clicked. Fills are the slow part of a
  * wallet page: a busy wallet's history is two or more sequential BULK pages.
  *
- * Mounted once for the whole site; any link to /whales/<address> qualifies. Only after
+ * Mounted once for the whole site; any link to /wallet/<address> qualifies. Only after
  * a short dwell, so sweeping the mouse down a leaderboard doesn't fire a request per
  * row, and once per wallet every couple of minutes.
  */
@@ -22,7 +22,7 @@ export function WalletWarmup() {
     let pending: string | null = null;
 
     const onOver = (e: MouseEvent) => {
-      const link = (e.target as Element | null)?.closest?.('a[href^="/whales/"]') as HTMLAnchorElement | null;
+      const link = (e.target as Element | null)?.closest?.('a[href^="/wallet/"]') as HTMLAnchorElement | null;
       const address = link?.getAttribute('href')?.split('/')[2]?.split(/[?#]/)[0];
       if (!address || address === pending) return;
       if (timer) window.clearTimeout(timer);
@@ -37,8 +37,8 @@ export function WalletWarmup() {
       }, DWELL_MS);
     };
     const onOut = (e: MouseEvent) => {
-      const from = (e.target as Element | null)?.closest?.('a[href^="/whales/"]');
-      const to = (e.relatedTarget as Element | null)?.closest?.('a[href^="/whales/"]');
+      const from = (e.target as Element | null)?.closest?.('a[href^="/wallet/"]');
+      const to = (e.relatedTarget as Element | null)?.closest?.('a[href^="/wallet/"]');
       if (from && from !== to && timer) { window.clearTimeout(timer); timer = null; pending = null; }
     };
     document.addEventListener('mouseover', onOver, { passive: true });

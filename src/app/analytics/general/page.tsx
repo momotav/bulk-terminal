@@ -1938,7 +1938,7 @@ export default function AnalyticsPage() {
                       {paginatedUsers.map((user) => (
                         <div key={user.wallet_address} className="flex items-center justify-between py-3 hover:bg-[var(--bg-muted)] -mx-4 px-4 transition-colors">
                           <div className="flex items-center gap-2">
-                            <Link href={`/whales/${user.wallet_address}`} className="text-sm text-gray-300 hover:text-[var(--text-primary)] font-mono transition-colors">
+                            <Link href={`/wallet/${user.wallet_address}`} className="text-sm text-gray-300 hover:text-[var(--text-primary)] font-mono transition-colors">
                               {formatAddress(user.wallet_address)}
                             </Link>
                             <button onClick={() => copyAddress(user.wallet_address)} className="p-1 hover:bg-[var(--border-color)] rounded transition-colors">

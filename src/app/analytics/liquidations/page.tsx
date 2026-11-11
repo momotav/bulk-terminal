@@ -1092,7 +1092,7 @@ export default function LiquidationsPage() {
                     </td>
                     <td className="py-3 md:py-4">
                       <a 
-                        href={`/whales/${liq.wallet}`}
+                        href={`/wallet/${liq.wallet}`}
                         className="text-xs md:text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-1"
                       >
                         {formatAddress(liq.wallet)}

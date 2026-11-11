@@ -1,5 +1,6 @@
 'use client';
 
+import { hiResAvatar } from '@/lib/avatar';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -35,8 +36,8 @@ export default function FollowingPage() {
 
   useEffect(() => {
     if (ready && !authenticated) {
-      // Redirect to whales page if not logged in
-      router.push('/whales');
+      // Redirect home if not logged in
+      router.push("/");
       return;
     }
     
@@ -135,7 +136,7 @@ export default function FollowingPage() {
           </div>
           
           <Link
-            href="/whales"
+            href="/leaderboard"
             className="flex items-center gap-2 px-4 py-2 bg-bulk-green text-dark-primary rounded-lg font-medium hover:bg-bulk-green/90"
           >
             <Users className="w-4 h-4" />
@@ -165,7 +166,7 @@ export default function FollowingPage() {
               Start following wallets to track their trading activity.
             </p>
             <Link 
-              href="/whales"
+              href="/leaderboard"
               className="inline-flex items-center gap-2 px-4 py-2 bg-bulk-green text-dark-primary rounded-lg font-medium hover:bg-bulk-green/90"
             >
               <Users className="w-4 h-4" />
@@ -182,7 +183,7 @@ export default function FollowingPage() {
                 {/* Avatar */}
                 {w.twitter_avatar ? (
                   <img 
-                    src={w.twitter_avatar} 
+                    src={hiResAvatar(w.twitter_avatar)} 
                     alt="" 
                     className="w-12 h-12 rounded-full border border-[var(--border-color)]"
                   />
@@ -240,7 +241,7 @@ export default function FollowingPage() {
                 {/* Actions */}
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/whales/${w.wallet_address}`}
+                    href={`/wallet/${w.wallet_address}`}
                     prefetch={false}
                     className="p-2 hover:bg-[var(--bg-secondary-20)] rounded-lg transition-colors"
                     title="View wallet"

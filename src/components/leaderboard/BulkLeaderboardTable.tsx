@@ -336,7 +336,7 @@ export function BulkLeaderboardTable({
               return (
                 <Link
                   key={row.wallet}
-                  href={`/whales/${row.wallet}`}
+                  href={`/wallet/${row.wallet}`}
                   prefetch={false}
                   className={cn(
                     'grid gap-3 items-center px-4 py-2.5 hover:bg-[var(--bg-secondary-20)] transition-colors group',
