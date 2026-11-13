@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { CoinIcon } from '@/components/CoinIcon';
 import { CopyLinkButton } from '@/components/CopyLinkButton';
+import { ExecChart } from '@/components/ExecChart';
+import { TradeContext } from '@/components/TradeContext';
 import { fmtPx, fmtUsd, getOrder, orderStatus, shortAddr } from '@/lib/positionShare';
 
 // One order, shareable by its BULK order id: what it asked for, how much filled,
@@ -53,7 +55,7 @@ export default async function OrderPage(props: Props) {
   const path = `/wallet/${address}/order/${orderId}${o.slot ? `?slot=${o.slot}` : ''}`;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
         <ArrowLeft className="w-4 h-4" />Wallet {shortAddr(address)}
       </Link>
@@ -64,12 +66,19 @@ export default async function OrderPage(props: Props) {
           <h1 className="text-[22px] font-medium text-[var(--role-content)]">{coin}-USD</h1>
           <span className="text-[13px] px-2.5 py-1 rounded-lg" style={{ color: buy ? 'var(--pos)' : 'var(--neg)', background: buy ? 'rgb(var(--pos-rgb) / 0.12)' : 'rgb(var(--neg-rgb) / 0.12)' }}>{buy ? 'Buy' : 'Sell'}</span>
           <span className="text-[13px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--role-content-muted)] first-letter:uppercase">{typeWord(o.orderType, o.tif)}{o.reduceOnly ? ', reduce only' : ''}</span>
-          <span className="ml-auto text-[13px] px-2.5 py-1 rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content)]">{orderStatus(o.status)}</span>
+          <span className="text-[13px] px-2.5 py-1 rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content)]">{orderStatus(o.status)}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <Link href={`/observe/${address}/${coin}`} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
+              Position <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+            <CopyLinkButton path={path} />
+          </div>
         </div>
 
-        <div className="px-6 pt-5 pb-6">
-          <div className="text-[13px] text-[var(--role-content-muted)]">{o.trigger?.px ? `Trigger ${o.trigger.isAbove ? 'above' : 'below'}` : 'Limit price'}</div>
-          <div className="mt-1 text-[34px] sm:text-[40px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)]">{px ? fmtPx(px) : 'Market'}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-center gap-x-6 gap-y-3 px-6 pt-4 pb-5">
+          <div>
+          <div className="text-[13px] text-[var(--role-content-muted)]">{o.inferred ? 'Average fill' : o.trigger?.px ? `Trigger ${o.trigger.isAbove ? 'above' : 'below'}` : px ? 'Limit price' : 'Market order'}</div>
+          <div className="mt-1 text-[34px] sm:text-[40px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)]">{o.inferred ? fmtPx(o.vwap) : px ? fmtPx(px) : o.vwap ? fmtPx(o.vwap) : 'Market'}</div>
           <div className="mt-4 flex items-center justify-between text-[13px] tabular-nums">
             <span className="text-[var(--role-content-muted)]">Filled {o.executedSize.toLocaleString('en-US', { maximumFractionDigits: 6 })} of {o.originalSize.toLocaleString('en-US', { maximumFractionDigits: 6 })} {coin}</span>
             <span className="text-[var(--role-content)]">{Math.round(pct * 100)}%</span>
@@ -77,13 +86,20 @@ export default async function OrderPage(props: Props) {
           <div className="mt-2 h-1.5 rounded-full bg-[var(--role-surface-raised)] overflow-hidden">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct * 100}%` }} />
           </div>
+          </div>
+          {o.inferred && <p className="sm:col-span-2 -mt-1 text-[12px] text-[var(--role-content-subtle)]">BULK&apos;s record of this order is too far back in a busy history, so this view is built from its fills.</p>}
+          <ExecChart symbol={o.symbol} className="h-[160px] -mr-2"
+            marks={fills.map((f) => ({ t: f.timestamp, price: f.price, buy: f.isBuy, size: Math.abs(f.size), coin }))}
+            from={fills.length ? fills[0].timestamp : o.open ? Math.min(o.timestamp, Date.now() - 2 * 3600e3) : o.timestamp}
+            to={fills.length ? fills[fills.length - 1].timestamp : o.open ? Date.now() : o.timestamp}
+            level={px ? { price: px, label: o.trigger?.px ? 'Trigger' : 'Limit' } : null} />
         </div>
 
         <dl className="grid grid-cols-1 sm:grid-cols-2 border-t border-[var(--border-color)] text-[14px]">
           {[
             ['Average fill', o.vwap && o.executedSize > 0 ? fmtPx(o.vwap) : '—'],
             ['Size', fmtUsd(o.originalSize * (px || o.vwap))],
-            ['Placed', o.timestamp ? `${new Date(o.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'UTC' })} UTC` : '—'],
+            [o.open ? 'Last updated' : o.status === 'cancelled' || o.status === 'canceled' ? 'Cancelled' : 'Completed', o.timestamp ? `${new Date(o.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'UTC' })} UTC` : '—'],
             ['Fees', fills.length ? `${fees >= 0 ? '+' : '−'}${fmtUsd(Math.abs(fees))}` : '—'],
             ['Order ID', <span key="o" className="font-mono text-[13px]" title={orderId}>{shortAddr(orderId)}</span>],
             ['Fills', String(fills.length)],
@@ -118,14 +134,9 @@ export default async function OrderPage(props: Props) {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-t border-[var(--border-color)]">
-          <CopyLinkButton path={path} />
-          <Link href={`/observe/${address}/${coin}`} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[13px] border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
-            {coin} position <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
-          <span className="ml-auto text-[12px] text-[var(--role-content-subtle)]">Data from BULK</span>
-        </div>
       </section>
+
+      <TradeContext address={address} symbol={o.symbol} tradeId={fills.length ? fills[fills.length - 1].tradeId : null} showNearby={false} />
     </div>
   );
 }

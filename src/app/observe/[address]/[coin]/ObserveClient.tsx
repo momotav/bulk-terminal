@@ -142,6 +142,16 @@ export default function ObserveTradePage() {
   }, [coinFills, pinned, fromMs, toMs]);
 
   // Live position + mark (if this market is currently open in the wallet).
+  // This market's orders still on the book, for the chart: what the trader has queued.
+  const waitingOrders = useMemo(() => {
+    const word = (t?: string) => {
+      const k = (t ?? '').toLowerCase().replace(/[_\s]/g, '');
+      return k.includes('takeprofit') || k === 'tp' ? 'TP' : k.includes('stoploss') || k === 'sl' ? 'SL' : k.includes('stop') ? 'Stop' : 'Limit';
+    };
+    return (walletData?.live?.openOrders ?? [])
+      .filter((o) => o.symbol.replace(/-USD$/, '').toUpperCase() === coin)
+      .map((o) => ({ price: o.trigger?.px ?? o.price, label: word(o.orderType) }));
+  }, [walletData, coin]);
   const livePos = useMemo(
     () => walletData?.live?.positions.find((p) => p.symbol.replace(/-USD$/, '').toUpperCase() === coin) ?? null,
     [walletData, coin],
@@ -356,6 +366,7 @@ export default function ObserveTradePage() {
               openedAt={life.openedAt}
               closedAt={life.closedAt}
               isOpen={life.isOpen}
+              orders={waitingOrders}
               onCandles={(cs) => {
                 // The journey is marked against these. Keep the finest set seen for this
                 // trade, or switching the chart to 1D would flatten it to a straight line.

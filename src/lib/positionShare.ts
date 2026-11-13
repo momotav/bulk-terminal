@@ -106,7 +106,7 @@ export interface TradeFill {
   makerFee?: number; takerFee?: number; tradeId?: string; slot?: number; counterpartyHint?: string;
 }
 export interface OrderInfo {
-  orderId: string; open: boolean; symbol: string; side: string; orderType: string; tif: string | null; price: number; vwap: number;
+  orderId: string; open: boolean; inferred?: boolean; symbol: string; side: string; orderType: string; tif: string | null; price: number; vwap: number;
   originalSize: number; executedSize: number; reduceOnly: boolean; status: string; reason: string | null;
   trigger: { isAbove?: boolean; px?: number } | null; slot: number | null; timestamp: number;
 }

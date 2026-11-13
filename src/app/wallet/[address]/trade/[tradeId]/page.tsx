@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { CoinIcon } from '@/components/CoinIcon';
 import { CopyLinkButton } from '@/components/CopyLinkButton';
+import { ExecChart } from '@/components/ExecChart';
+import { TradeContext } from '@/components/TradeContext';
 import { fmtPx, fmtUsd, getTrade, shortAddr, sideWord } from '@/lib/positionShare';
 
 // One execution (a fill), shareable by BULK's trade id "<slot>:<sequence>".
@@ -40,7 +42,7 @@ export default async function TradePage({ params }: Props) {
   const when = new Date(f.timestamp);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors">
         <ArrowLeft className="w-4 h-4" />Wallet {shortAddr(address)}
       </Link>
@@ -52,20 +54,29 @@ export default async function TradePage({ params }: Props) {
           <span className="text-[13px] px-2.5 py-1 rounded-lg" style={{ color: f.isBuy ? 'var(--pos)' : 'var(--neg)', background: f.isBuy ? 'rgb(var(--pos-rgb) / 0.12)' : 'rgb(var(--neg-rgb) / 0.12)' }}>{sideWord(f.isBuy)}</span>
           <span className="text-[13px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--role-content-muted)]">{f.isMaker ? 'Maker' : 'Taker'}</span>
           {special && <span className="text-[13px] px-2.5 py-1 rounded-lg text-[var(--neg)] bg-[rgb(var(--neg-rgb)/0.12)]">{special}</span>}
+          <div className="ml-auto flex items-center gap-2">
+            <Link href={`/observe/${address}/${coin}`} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
+              Position <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+            <CopyLinkButton path={`/wallet/${address}/trade/${tradeId}`} />
+          </div>
         </div>
 
-        <div className="px-6 pt-5 pb-6">
-          <div className="text-[13px] text-[var(--role-content-muted)]">Filled</div>
-          <div className="mt-1 text-[34px] sm:text-[40px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)]">{fmtUsd(value)}</div>
-          <div className="mt-1 text-[14px] tabular-nums text-[var(--role-content-muted)]">
-            {Math.abs(f.size).toLocaleString('en-US', { maximumFractionDigits: 6 })} {coin} at {fmtPx(f.price)}
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-center gap-x-6 gap-y-3 px-6 pt-4 pb-5">
+          <div>
+            <div className="text-[13px] text-[var(--role-content-muted)]">Filled</div>
+            <div className="mt-1 text-[34px] sm:text-[40px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)]">{fmtUsd(value)}</div>
+            <div className="mt-1 text-[14px] tabular-nums text-[var(--role-content-muted)]">
+              {Math.abs(f.size).toLocaleString('en-US', { maximumFractionDigits: 6 })} {coin} at {fmtPx(f.price)}
+            </div>
           </div>
+          <ExecChart symbol={f.symbol} marks={[{ t: f.timestamp, price: f.price, buy: f.isBuy, size: Math.abs(f.size), coin }]} from={f.timestamp - 25 * 60e3} to={f.timestamp + 25 * 60e3} className="h-[150px] -mr-2" />
         </div>
 
         <dl className="grid grid-cols-1 sm:grid-cols-2 border-t border-[var(--border-color)] text-[14px]">
           {[
             ['Time', `${when.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'UTC' })} UTC`],
-            ['Fee', f.fee ? `${f.fee > 0 ? '+' : '−'}${fmtUsd(Math.abs(f.fee))}${f.fee > 0 ? ' rebate' : ''}` : '—'],
+            ['Fee', f.fee ? `${f.fee > 0 ? '+' : '−'}${Math.abs(f.fee) < 0.01 ? `$${Math.abs(f.fee).toPrecision(2)}` : fmtUsd(Math.abs(f.fee))}${f.fee > 0 ? ' rebate' : ''}` : '—'],
             ['Trade ID', <span key="t" className="font-mono text-[13px]">{tradeId}</span>],
             ['Counterparty', other ? <Link key="c" href={`/wallet/${other}`} className="font-mono text-[13px] hover:underline">{shortAddr(other)}</Link> : '—'],
             ['Order', own ? <Link key="o" href={`/wallet/${address}/order/${own}${f.slot ? `?slot=${f.slot}` : ''}`} className="font-mono text-[13px] hover:underline">{shortAddr(own)}</Link> : '—'],
@@ -78,14 +89,9 @@ export default async function TradePage({ params }: Props) {
           ))}
         </dl>
 
-        <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-t border-[var(--border-color)]">
-          <CopyLinkButton path={`/wallet/${address}/trade/${tradeId}`} />
-          <Link href={`/observe/${address}/${coin}`} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[13px] border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
-            {coin} position <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
-          <span className="ml-auto text-[12px] text-[var(--role-content-subtle)]">Data from BULK</span>
-        </div>
       </section>
+
+      <TradeContext address={address} symbol={f.symbol} tradeId={tradeId} />
     </div>
   );
 }

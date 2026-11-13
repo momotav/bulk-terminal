@@ -13,7 +13,7 @@ export function CopyLinkButton({ path, label, className, iconOnly = false }: { p
   };
   return (
     <button type="button" onClick={copy} title={done ? 'Copied' : label ?? 'Copy link'} aria-label={label ?? 'Copy link'}
-      className={cn('inline-flex items-center justify-center gap-1.5 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', iconOnly ? 'w-7 h-7' : 'h-8 px-2.5 text-[13px] border border-[var(--border-color)]', className)}>
+      className={cn('inline-flex items-center justify-center gap-1.5 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', iconOnly ? 'w-7 h-7' : 'h-8 px-3 rounded-lg text-[13px] !text-[var(--role-content)] border border-[var(--border-color)]', className)}>
       {done ? <Check className="w-3.5 h-3.5 text-[var(--pos)]" /> : <Link2 className="w-3.5 h-3.5" />}
       {!iconOnly && <span>{done ? 'Copied' : label ?? 'Copy link'}</span>}
     </button>

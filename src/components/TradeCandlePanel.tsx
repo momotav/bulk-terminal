@@ -38,6 +38,9 @@ interface Props {
   /** Reports the loaded candle set back to the parent so the PnL journey can
    *  be marked against the same prices without a second fetch. */
   onCandles?: (candles: Candle[]) => void;
+  /** Orders still waiting on this market (take-profit, stop, limits): drawn as thin
+   *  dashed levels so the chart shows what is queued as well as what filled. */
+  orders?: { price: number; label: string }[];
 }
 
 const INTERVALS: [string, string][] = [['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']];
@@ -98,7 +101,7 @@ function tradeInterval(tradeMs: number): string {
   return '1d';
 }
 
-export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, events, openedAt, closedAt, isOpen, interval, onCandles }: Props) {
+export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, events, openedAt, closedAt, isOpen, interval, onCandles, orders }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -258,7 +261,15 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       priceLineVisible: isOpen, lastValueVisible: isOpen,
       autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
         if (scaleFrozenRef.current && scaleRef.current) return scaleRef.current;
-        scaleRef.current = original();
+        const base = original();
+        // Keep nearby waiting orders (within 6% of the last price) on screen; a far-off
+        // stop would squash the candles, so those only show as an axis label.
+        const last = plotted[plotted.length - 1]?.c ?? 0;
+        const near = (orders ?? []).map((o) => o.price).filter((p) => p > 0 && last > 0 && Math.abs(p / last - 1) <= 0.06);
+        if (base?.priceRange && near.length) {
+          base.priceRange = { minValue: Math.min(base.priceRange.minValue, ...near), maxValue: Math.max(base.priceRange.maxValue, ...near) };
+        }
+        scaleRef.current = base;
         return scaleRef.current;
       },
     });
@@ -277,6 +288,11 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
     }
     if (isOpen && liqPrice && liqPrice > 0) {
       series.createPriceLine({ price: liqPrice, color: neg, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Liq.' });
+    }
+    // Waiting orders: quiet, so the entry and liquidation levels stay the loud ones.
+    const orderColor = resolveColor('var(--role-content-subtle)', '#8a8478');
+    for (const o of orders ?? []) {
+      if (o.price > 0) series.createPriceLine({ price: o.price, color: orderColor, lineWidth: 1, lineStyle: LineStyle.SparseDotted, axisLabelVisible: true, title: o.label });
     }
 
     // Marker de-collision layout: snap each fill onto the nearest bar, anchor it
@@ -487,7 +503,7 @@ export function TradeCandlePanel({ symbol, side, avgEntry, liqPrice, markPrice, 
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [plotted, candles, events, avgEntry, liqPrice, markPrice, side, isOpen, symbol, loadedIv]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plotted, candles, events, avgEntry, liqPrice, markPrice, side, isOpen, symbol, loadedIv, orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- replay ---------------------------------------------------------------
   useEffect(() => {
