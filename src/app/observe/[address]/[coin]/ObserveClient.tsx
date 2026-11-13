@@ -14,7 +14,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Check, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { CopyLinkButton } from '@/components/CopyLinkButton';
 import { wallet, cn, formatNumber, formatCompact, formatAddress, type WalletData, type WalletFill, type ClosedPosition } from '@/lib/api';
 import { buildTradeLifecycle, closedTradeLifecycle, formatDuration, type TradeLifecycle } from '@/lib/positionWalk';
 import { anchorFills } from '@/lib/walletMetrics';
@@ -49,6 +50,13 @@ export default function ObserveTradePage() {
   const [showCard, setShowCard] = useState(false);
   const [tab, setTab] = useState<'journey' | 'fills'>('journey');
   const [journeyHover, setJourneyHover] = useState<PnlHover | null>(null);
+  // Each fill row comes from one BULK fill: find its trade id (time + price) so the
+  // row can link to /wallet/<address>/trade/<id> and be shared on its own.
+  const tradeIdAt = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of fills ?? []) if (f.tradeId) m.set(`${f.timestamp}|${f.price}`, f.tradeId);
+    return m;
+  }, [fills]);
 
   // Resolve the full symbol ("BTC" → "BTC-USD") from the wallet's own fills so
   // we never guess a quote the market doesn't use.
@@ -397,20 +405,31 @@ export default function ObserveTradePage() {
                       <th className="px-3 py-2.5 font-normal">Action</th>
                       <th className="px-3 py-2.5 font-normal text-right">Size</th>
                       <th className="px-3 py-2.5 font-normal text-right">Price</th>
-                      <th className="px-5 py-2.5 font-normal text-right">Realized</th>
+                      <th className="px-3 py-2.5 font-normal text-right">Realized</th>
+                      <th className="pl-1 pr-4 py-2.5 font-normal w-px"><span className="sr-only">Share</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {life.events.map((e, i) => {
                       const liq = e.liq === 'partial' || e.liq === 'full';
+                      const tid = tradeIdAt.get(`${e.t}|${e.price}`);
                       return (
                         <tr key={`${e.t}-${i}`} className="border-t border-[var(--role-line-subtle)]">
                           <td className="px-5 py-2.5 tabular-nums text-[var(--role-content-muted)] whitespace-nowrap">{when(e.t)}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: liq ? 'var(--neg)' : 'var(--role-content)' }}>{e.actionLabel}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{formatNumber(Math.abs(e.sizeDelta), 4)}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{money(e.price)}</td>
-                          <td className="px-5 py-2.5 text-right tabular-nums" style={{ color: Math.abs(e.realizedDelta) > 1e-6 ? pnlColor(e.realizedDelta) : 'var(--role-content-subtle)' }}>
+                          <td className="px-3 py-2.5 text-right tabular-nums" style={{ color: Math.abs(e.realizedDelta) > 1e-6 ? pnlColor(e.realizedDelta) : 'var(--role-content-subtle)' }}>
                             {Math.abs(e.realizedDelta) > 1e-6 ? signed2(e.realizedDelta) : '—'}
+                          </td>
+                          <td className="pl-1 pr-4 py-1.5 text-right whitespace-nowrap">
+                            {tid && (
+                              <span className="inline-flex items-center gap-0.5">
+                                <Link href={`/wallet/${address}/trade/${tid}`} title={`Trade ${tid}`} aria-label="Open this fill"
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors"><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                                <CopyLinkButton iconOnly path={`/wallet/${address}/trade/${tid}`} label="Copy link to this fill" />
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
