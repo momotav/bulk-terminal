@@ -50,7 +50,7 @@ export function BookView({ coin, actions, className }: { coin: string; actions?:
   const maxSum = Math.max(asks[asks.length - 1]?.sum ?? 0, bids[bids.length - 1]?.sum ?? 0, 1);
   const spread = bestAsk && bestBid ? bestAsk - bestBid : null;
   const spreadBps = spread !== null && mid ? (spread / mid) * 1e4 : null;
-  const bpsTxt = spreadBps === null ? null : spreadBps >= 1 ? spreadBps.toFixed(2) : spreadBps >= 0.01 ? spreadBps.toFixed(3) : '<0.01';
+  const bpsTxt = spreadBps === null ? null : spreadBps >= 1 ? spreadBps.toFixed(2) : spreadBps >= 0.01 ? spreadBps.toFixed(3) : 'under 0.01';
   const bidShare = (() => {
     const b = bids[bids.length - 1]?.sum ?? 0; const a = asks[asks.length - 1]?.sum ?? 0;
     return a + b > 0 ? b / (a + b) : 0.5;
