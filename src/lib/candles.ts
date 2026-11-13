@@ -45,3 +45,10 @@ export function clampWicks(candles: Candle[]): Candle[] {
     return h === c.h && l === c.l ? c : { ...c, h, l };
   });
 }
+
+/** BULK fills minutes with no trades (a stock perp's quiet spell, a paused market) with flat
+ *  placeholder candles: zero volume, zero trades, open = high = low = close. Drawn, they look
+ *  like a frozen price followed by a fake jump; dropped, the chart simply skips the quiet stretch. */
+export function dropFillers<T extends { o: number; h: number; l: number; c: number; v?: number; n?: number }>(cs: T[]): T[] {
+  return cs.filter((k) => !(!(Number(k.v) > 0) && !(Number(k.n) > 0) && k.o === k.h && k.h === k.l && k.l === k.c));
+}

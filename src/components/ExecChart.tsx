@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CrosshairMode, LineStyle, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { analytics, formatNumber } from '@/lib/api';
-import { clampWicks } from '@/lib/candles';
+import { clampWicks, dropFillers } from '@/lib/candles';
 
 // The market around a single fill or order: candles for the minutes either side,
 // each fill as the same B/S marker the observe chart uses (pinned to its exact time
@@ -66,7 +66,7 @@ export function ExecChart({ symbol, marks, from, to, level, className }: {
     analytics.getCandles(symbol, iv, 300, { startTime: Math.floor(start / ivMs) * ivMs, endTime: Math.ceil(end / ivMs) * ivMs })
       .then((r) => {
         if (!alive) return;
-        const cs = clampWicks((r.candles ?? []).filter((c) => c.o > 0 && c.c > 0)).sort((a, b) => a.t - b.t);
+        const cs = clampWicks(dropFillers((r.candles ?? []).filter((c) => c.o > 0 && c.c > 0))).sort((a, b) => a.t - b.t);
         if (cs.length < 2) { setState('empty'); return; }
         setState('ok');
         const pos = css('var(--pos)', '#21C07A'), neg = css('var(--neg)', '#E5484D');
