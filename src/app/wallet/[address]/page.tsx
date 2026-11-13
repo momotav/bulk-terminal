@@ -1,5 +1,6 @@
 'use client';
 
+import { CopyLinkButton } from '@/components/CopyLinkButton';
 import { loadFamilyActivity, useFamilyData, type FamilyPosition } from '@/lib/familyData';
 import { useAccountFamily } from '@/lib/accountFamily';
 import { FamilyPortfolio } from '@/components/wallet/FamilyPortfolio';
@@ -309,7 +310,7 @@ function PositionsTable({ positions, markPrices, openTimes, onOpen, onShare, acc
 }
 
 /** Resting orders, which is where a trader's stops and targets show up. */
-function OrdersList({ orders }: { orders: OpenOrder[] }) {
+function OrdersList({ orders, address }: { orders: OpenOrder[]; address: string }) {
   if (orders.length === 0) {
     return <div className="p-10 text-center text-[14px] text-[var(--role-content-subtle)]">No open orders</div>;
   }
@@ -325,7 +326,12 @@ function OrdersList({ orders }: { orders: OpenOrder[] }) {
               <span className="font-medium text-[var(--role-content)]">{coinOf(o.symbol)}</span>
               <span className="text-[12px] text-[var(--role-content-muted)] truncate first-letter:uppercase">{type} {o.size < 0 ? 'sell' : 'buy'}{o.reduceOnly ? ', reduce only' : ''}</span>
             </span>
-            <span className="tabular-nums text-right shrink-0 text-[var(--role-content)]">{formatPx(price)}<span className="block text-[11px] text-[var(--role-content-subtle)]">${formatCompact(Math.abs(o.size) * price)}</span></span>
+            <span className="flex items-center gap-2 shrink-0">
+              <span className="tabular-nums text-right text-[var(--role-content)]">{formatPx(price)}<span className="block text-[11px] text-[var(--role-content-subtle)]">${formatCompact(Math.abs(o.size) * price)}</span></span>
+              <Link href={`/wallet/${(o as OpenOrder & { account?: string }).account ?? address}/order/${o.orderId}`} title="Open this order" aria-label="Open this order"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors"><ExternalLink className="w-3.5 h-3.5" /></Link>
+              <CopyLinkButton iconOnly path={`/wallet/${(o as OpenOrder & { account?: string }).account ?? address}/order/${o.orderId}`} label="Copy link to this order" />
+            </span>
           </div>
         );
       })}
@@ -1077,7 +1083,7 @@ export default function WalletPage() {
                     {openOrders.length > 0 && (
                       <>
                         <h2 className="px-5 pt-5 pb-2 text-[15px] text-[var(--role-content)] border-t border-[var(--border-color)]">Open orders ({openOrders.length})</h2>
-                        <OrdersList orders={openOrders} />
+                        <OrdersList orders={openOrders} address={address} />
                       </>
                     )}
                   </>
@@ -1101,7 +1107,7 @@ export default function WalletPage() {
                       <PanelLoading title="Fills" className="h-[320px]" />
                     ) : tradeView === 'fills' ? (
                       <>
-                        <FillsTable fills={allFills} />
+                        <FillsTable fills={allFills} address={address} />
                         {!breakdown.exact && allFills.length > 0 && <div className="pt-3"><PartialNote fills={allFills.length} oldest={fillSummary.oldest} /></div>}
                       </>
                     ) : <ClosedPositionsList address={address} provided={closedPositions} limit={1000} density="table" onSelect={openClosedChart} />}

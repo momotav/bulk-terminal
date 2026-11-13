@@ -239,6 +239,8 @@ export interface WalletFill {
   taker?: string;
   iso?: boolean;
   counterpartyHint?: string;
+  /** BULK's execution id, "<slot>:<sequence>", the same for both sides of the fill. */
+  tradeId?: string;
 }
 
 export interface Notification {

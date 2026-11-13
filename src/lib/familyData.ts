@@ -123,7 +123,7 @@ export function mergeFamily(members: FamilyMember[], masterPubkey: string): Fami
         funding: sum('funding'),
       },
       positions,
-      openOrders: members.flatMap((m) => m.data.live?.openOrders ?? []),
+      openOrders: members.flatMap((m) => (m.data.live?.openOrders ?? []).map((o) => ({ ...o, account: m.pubkey }))),
       // BULK's fee tier is shared by the master and its subs: every account reports the
       // same family-wide rolling volume, so it is taken once, never summed.
       feeTiers: masterTier ? [masterTier] : master.data.live!.feeTiers,

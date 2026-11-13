@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
 import Link from 'next/link';
-import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon, Link2, Check } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills, buildTradeLifecycle, closedTradeLifecycle, type TradeLifecycle } from '@/lib/positionWalk';
 import { anchorFills } from '@/lib/walletMetrics';
@@ -415,6 +415,21 @@ export function PositionChartModal({ position, onClose }: Props) {
     return [{ key: 'open', timeSec: Math.floor(openMs / 1000), price: position.entryPrice, isBuy: isLong }];
   }, [position, currentPositionFills]);
   markerDataRef.current = markerData;
+
+  // The shareable page for THIS position instance: its open (and close) time pins
+  // exactly this trade, not the coin's whole history. Pasted anywhere, the link
+  // unfolds into a preview card (see /api/og/position).
+  const observeHref = (() => {
+    if (!position) return '';
+    const base = `/observe/${position.walletAddress}/${position.symbol.replace(/-USD$/, '')}`;
+    if (position.kind === 'closed') return `${base}?from=${Math.floor(position.openedAt)}&to=${Math.floor(position.closedAt)}`;
+    const openMs = currentPositionFills[0]?.timestamp;
+    return openMs ? `${base}?from=${Math.floor(openMs)}` : base;
+  })();
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(`${window.location.origin}${observeHref}`); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch { /* clipboard blocked */ }
+  };
 
   // Build / rebuild the chart whenever candles arrive. We tear down and
   // recreate on every change rather than mutating in place — the data
@@ -937,15 +952,13 @@ export function PositionChartModal({ position, onClose }: Props) {
                 position instance — carry its open (and close) time so the
                 observer reconstructs exactly this trade, not the coin's whole
                 position history. */}
+            <button type="button" onClick={copyLink} title="Copy a link to this position (it unfurls into a card on X and Telegram)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-bulk-green hover:text-[var(--text-primary)]">
+              {linkCopied ? <Check className="w-3.5 h-3.5 text-bulk-green" /> : <Link2 className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{linkCopied ? 'Copied' : 'Copy link'}</span>
+            </button>
             <Link
-              href={(() => {
-                const base = `/observe/${position.walletAddress}/${position.symbol.replace(/-USD$/, '')}`;
-                if (position.kind === 'closed') {
-                  return `${base}?from=${Math.floor(position.openedAt)}&to=${Math.floor(position.closedAt)}`;
-                }
-                const openMs = currentPositionFills[0]?.timestamp;
-                return openMs ? `${base}?from=${Math.floor(openMs)}` : base;
-              })()}
+              href={observeHref}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-bulk-green hover:text-[var(--text-primary)]"
             >
               <ExternalLink className="w-3.5 h-3.5" />

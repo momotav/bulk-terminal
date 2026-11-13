@@ -8,7 +8,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Sparkline } from '@/components/Sparkline';
 import { drawable } from '@/lib/walletSeries';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CopyLinkButton } from '@/components/CopyLinkButton';
 import { cn, formatCompact, type WalletFunding } from '@/lib/api';
 import { coinOf, dayKey, formatPx, money, pnlColor, shortDate, signed } from '@/lib/walletFormat';
 import { gridCells, squarify, type MarketRow, type SideStats, type WalletFillLite } from '@/lib/walletMetrics';
@@ -430,7 +432,7 @@ export function PnlCalendar({ daily, volume }: { daily: Map<string, number> | nu
 const PAGE = 50;
 
 /** Every fill, newest first, with a market filter. */
-export function FillsTable({ fills }: { fills: WalletFillLite[] }) {
+export function FillsTable({ fills, address }: { fills: WalletFillLite[]; address?: string }) {
   const [market, setMarket] = useState('all');
   const [shown, setShown] = useState(PAGE);
   const markets = useMemo(() => Array.from(new Set(fills.map((f) => f.symbol))).sort(), [fills]);
@@ -456,7 +458,8 @@ export function FillsTable({ fills }: { fills: WalletFillLite[] }) {
               <th className="text-right font-normal px-3 py-2.5">Price</th>
               <th className="text-right font-normal px-3 py-2.5">Value</th>
               <th className="text-right font-normal px-3 py-2.5">Fee</th>
-              <th className="text-right font-normal px-5 py-2.5">Role</th>
+              <th className="text-right font-normal px-3 py-2.5">Role</th>
+              <th className="w-px px-3 py-2.5"><span className="sr-only">Share</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--role-line-subtle)]">
@@ -468,7 +471,15 @@ export function FillsTable({ fills }: { fills: WalletFillLite[] }) {
                 <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{formatPx(f.price)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content)]">{money(Math.abs(f.size) * f.price)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-[var(--role-content-muted)]">{f.fee ? signed(f.fee) : '—'}</td>
-                <td className="px-5 py-2.5 text-right text-[13px] text-[var(--role-content-muted)]">{f.isMaker ? 'Maker' : 'Taker'}</td>
+                <td className="px-3 py-2.5 text-right text-[13px] text-[var(--role-content-muted)]">{f.isMaker ? 'Maker' : 'Taker'}</td>
+                <td className="pl-1 pr-3 py-1.5 text-right">
+                  {f.tradeId && (f.account || address) && (
+                    <span className="inline-flex items-center gap-0.5">
+                      <Link href={`/wallet/${f.account || address}/trade/${f.tradeId}`} title={`Trade ${f.tradeId}`} aria-label="Open this trade" className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors"><ArrowUpRight className="w-3.5 h-3.5" /></Link>
+                      <CopyLinkButton iconOnly path={`/wallet/${f.account || address}/trade/${f.tradeId}`} label="Copy link to this trade" />
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
