@@ -111,13 +111,43 @@ export interface OrderInfo {
   trigger: { isAbove?: boolean; px?: number } | null; slot: number | null; timestamp: number;
 }
 
+/** 'missing' only when the backend says so (404/400). A timeout or a busy upstream is
+ *  'error' after a couple of retries: a valid link must never show "not found" because
+ *  BULK was slow for a moment. Not cached here; the backend caches these for a day. */
+export type Lookup<T> = { status: 'ok'; data: T } | { status: 'missing' } | { status: 'error' };
+
+async function lookup<T>(path: string, ms: number, tries = 3): Promise<Lookup<T>> {
+  for (let i = 0; i < tries; i++) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch(`${API}${path}`, { signal: ctl.signal, cache: 'no-store' });
+      if (r.ok) return { status: 'ok', data: (await r.json()) as T };
+      if (r.status === 404 || r.status === 400) return { status: 'missing' };
+    } catch { /* timeout or network: retry */ } finally { clearTimeout(t); }
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 600 * (i + 1)));
+  }
+  return { status: 'error' };
+}
+
+export async function lookupTrade(address: string, tradeId: string): Promise<Lookup<TradeFill>> {
+  if (!/^\d+:\d+$/.test(tradeId)) return { status: 'missing' };
+  const r = await lookup<{ fill: TradeFill }>(`/api/wallet/${address}/trade/${encodeURIComponent(tradeId)}`, 8000);
+  return r.status === 'ok' ? { status: 'ok', data: r.data.fill } : r;
+}
+
+export async function lookupOrder(address: string, orderId: string, slot = 0): Promise<Lookup<{ order: OrderInfo; fills: TradeFill[] }>> {
+  return lookup(`/api/wallet/${address}/order/${encodeURIComponent(orderId)}${slot ? `?slot=${slot}` : ''}`, 9000);
+}
+
 export async function getTrade(address: string, tradeId: string): Promise<TradeFill | null> {
-  if (!/^\d+:\d+$/.test(tradeId)) return null;
-  return (await get<{ fill: TradeFill }>(`/api/wallet/${address}/trade/${encodeURIComponent(tradeId)}`, 6000))?.fill ?? null;
+  const r = await lookupTrade(address, tradeId);
+  return r.status === 'ok' ? r.data : null;
 }
 
 export async function getOrder(address: string, orderId: string, slot = 0): Promise<{ order: OrderInfo; fills: TradeFill[] } | null> {
-  return get<{ order: OrderInfo; fills: TradeFill[] }>(`/api/wallet/${address}/order/${encodeURIComponent(orderId)}${slot ? `?slot=${slot}` : ''}`, 9000);
+  const r = await lookupOrder(address, orderId, slot);
+  return r.status === 'ok' ? r.data : null;
 }
 
 export const sideWord = (buy: boolean) => (buy ? 'Buy' : 'Sell');

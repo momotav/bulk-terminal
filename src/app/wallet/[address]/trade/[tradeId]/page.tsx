@@ -6,7 +6,10 @@ import { CoinIcon } from '@/components/CoinIcon';
 import { CopyLinkButton } from '@/components/CopyLinkButton';
 import { ExecChart } from '@/components/ExecChart';
 import { TradeContext } from '@/components/TradeContext';
-import { fmtPx, fmtUsd, getTrade, shortAddr, sideWord } from '@/lib/positionShare';
+import { fmtPx, fmtUsd, getTrade, lookupTrade, shortAddr, sideWord } from '@/lib/positionShare';
+import { LoadRetry } from '@/components/LoadRetry';
+
+export const maxDuration = 30;
 
 // One execution (a fill), shareable by BULK's trade id "<slot>:<sequence>".
 // Server-rendered from BULK through our backend; the link unfolds into a card.
@@ -32,8 +35,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function TradePage({ params }: Props) {
   const { address, tradeId } = ids(params);
-  const f = await getTrade(address, tradeId);
-  if (!f) notFound();
+  const res = await lookupTrade(address, tradeId);
+  if (res.status === 'missing') notFound();
+  if (res.status === 'error') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors"><ArrowLeft className="w-4 h-4" />Wallet {shortAddr(address)}</Link>
+        <div className="mt-4"><LoadRetry what="trade" /></div>
+      </div>
+    );
+  }
+  const f = res.data;
   const coin = f.symbol.replace(/-USD$/, '');
   const value = Math.abs(f.size) * f.price;
   const own = f.isMaker ? f.orderIdMaker : f.orderIdTaker;

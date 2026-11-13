@@ -6,7 +6,10 @@ import { CoinIcon } from '@/components/CoinIcon';
 import { CopyLinkButton } from '@/components/CopyLinkButton';
 import { ExecChart } from '@/components/ExecChart';
 import { TradeContext } from '@/components/TradeContext';
-import { fmtPx, fmtUsd, getOrder, orderStatus, shortAddr } from '@/lib/positionShare';
+import { fmtPx, fmtUsd, getOrder, lookupOrder, orderStatus, shortAddr } from '@/lib/positionShare';
+import { LoadRetry } from '@/components/LoadRetry';
+
+export const maxDuration = 30;
 
 // One order, shareable by its BULK order id: what it asked for, how much filled,
 // at what average, and every fill (each linking to its own trade page).
@@ -44,8 +47,17 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 
 export default async function OrderPage(props: Props) {
   const { address, orderId, slot } = ids(props);
-  const r = await getOrder(address, orderId, slot);
-  if (!r) notFound();
+  const res = await lookupOrder(address, orderId, slot);
+  if (res.status === 'missing') notFound();
+  if (res.status === 'error') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors"><ArrowLeft className="w-4 h-4" />Wallet {shortAddr(address)}</Link>
+        <div className="mt-4"><LoadRetry what="order" /></div>
+      </div>
+    );
+  }
+  const r = res.data;
   const { order: o, fills } = r;
   const coin = o.symbol.replace(/-USD$/, '');
   const buy = o.side.toLowerCase().startsWith('b');
@@ -65,7 +77,7 @@ export default async function OrderPage(props: Props) {
           <CoinIcon symbol={o.symbol} size={28} />
           <h1 className="text-[22px] font-medium text-[var(--role-content)]">{coin}-USD</h1>
           <span className="text-[13px] px-2.5 py-1 rounded-lg" style={{ color: buy ? 'var(--pos)' : 'var(--neg)', background: buy ? 'rgb(var(--pos-rgb) / 0.12)' : 'rgb(var(--neg-rgb) / 0.12)' }}>{buy ? 'Buy' : 'Sell'}</span>
-          <span className="text-[13px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--role-content-muted)] first-letter:uppercase">{typeWord(o.orderType, o.tif)}{o.reduceOnly ? ', reduce only' : ''}</span>
+          {(o.orderType || !o.inferred) && <span className="text-[13px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--role-content-muted)] first-letter:uppercase">{typeWord(o.orderType, o.tif)}{o.reduceOnly ? ', reduce only' : ''}</span>}
           <span className="text-[13px] px-2.5 py-1 rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content)]">{orderStatus(o.status)}</span>
           <div className="ml-auto flex items-center gap-2">
             <Link href={`/observe/${address}/${coin}`} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">
@@ -87,13 +99,13 @@ export default async function OrderPage(props: Props) {
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct * 100}%` }} />
           </div>
           </div>
-          {o.inferred && <p className="sm:col-span-2 -mt-1 text-[12px] text-[var(--role-content-subtle)]">BULK&apos;s record of this order is too far back in a busy history, so this view is built from its fills.</p>}
           <ExecChart symbol={o.symbol} className="h-[160px] -mr-2"
             marks={fills.map((f) => ({ t: f.timestamp, price: f.price, buy: f.isBuy, size: Math.abs(f.size), coin }))}
             from={fills.length ? fills[0].timestamp : o.open ? Math.min(o.timestamp, Date.now() - 2 * 3600e3) : o.timestamp}
             to={fills.length ? fills[fills.length - 1].timestamp : o.open ? Date.now() : o.timestamp}
             level={px ? { price: px, label: o.trigger?.px ? 'Trigger' : 'Limit' } : null} />
         </div>
+        {o.inferred && <p className="px-6 -mt-2 pb-4 text-[12px] text-[var(--role-content-subtle)]">BULK&apos;s record of this order is too far back in a busy history, so this view is built from its fills.</p>}
 
         <dl className="grid grid-cols-1 sm:grid-cols-2 border-t border-[var(--border-color)] text-[14px]">
           {[
