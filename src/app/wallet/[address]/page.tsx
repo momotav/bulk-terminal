@@ -914,6 +914,10 @@ export default function WalletPage() {
       {cardData && <TradeShareCard data={cardData} onClose={() => setCardData(null)} />}
       {portfolioCard && (
         <PortfolioShareCard address={address} initial={portfolioCard} onClose={() => setPortfolioCard(null)}
+          margin={margin && positions.length > 1 ? {
+            bulk: margin.marginUsed,
+            separate: positions.reduce((s, p) => s + (p.leverage > 0 ? Math.abs(p.notional || 0) / p.leverage : 0), 0),
+          } : null}
           ranges={RANGES.map(([r]) => ({ key: r, label: RANGE_LABEL[r], short: r === 'all' ? 'all time' : `last ${r}`, points: curveWindow(curve, r).data }))}
           trades={[
             ...closedPositions.map((c) => ({ coin: coinOf(c.symbol), side: c.side, notional: Math.abs(c.size * c.openPrice), openedAt: c.openedAt || null, closedAt: c.closedAt, pnl: c.realizedPnl })),

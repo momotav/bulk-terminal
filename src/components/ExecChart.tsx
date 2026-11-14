@@ -63,10 +63,33 @@ export function ExecChart({ symbol, marks, from, to, level, className }: {
     };
     const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(place); };
 
-    analytics.getCandles(symbol, iv, 300, { startTime: Math.floor(start / ivMs) * ivMs, endTime: Math.ceil(end / ivMs) * ivMs })
+    // A busy moment upstream shouldn't leave the chart blank: try a few times.
+    const load = async () => {
+      for (let i = 0; ; i++) {
+        try {
+          const r = await analytics.getCandles(symbol, iv, 300, { startTime: Math.floor(start / ivMs) * ivMs, endTime: Math.ceil(end / ivMs) * ivMs });
+          if ((r.candles?.length ?? 0) > 0 || i >= 2) return r;
+        } catch (e) { if (i >= 2) throw e; }
+        await new Promise((ok) => setTimeout(ok, 1200 * (i + 1)));
+        if (!alive) throw new Error('gone');
+      }
+    };
+    load()
       .then((r) => {
         if (!alive) return;
-        const cs = clampWicks(dropFillers((r.candles ?? []).filter((c) => c.o > 0 && c.c > 0))).sort((a, b) => a.t - b.t);
+        const all = clampWicks(dropFillers((r.candles ?? []).filter((c) => c.o > 0 && c.c > 0))).sort((a, b) => a.t - b.t);
+        // A market that stopped trading (a stock perp's pause) leaves a hole, and the restart
+        // after it is thin and spiky. Keep only the unbroken stretch the fills happened in.
+        const anchor = shown.length ? shown[0].t : (from + to) / 2;
+        let lo = 0, hi = all.length - 1;
+        const gapAt = (k: number) => all[k + 1].t - all[k].t > ivMs * 4;
+        let mid = all.findIndex((c) => c.t + ivMs > anchor); if (mid < 0) mid = all.length - 1;
+        for (let k = mid - 1; k >= 0; k--) if (gapAt(k)) { lo = k + 1; break; }
+        for (let k = mid; k < all.length - 1; k++) if (gapAt(k)) { hi = k; break; }
+        // ...and its edges start and end on minutes that actually traded.
+        while (hi > lo && !(Number(all[hi].v) > 0)) hi--;
+        while (lo < hi && !(Number(all[lo].v) > 0)) lo++;
+        const cs = all.slice(lo, hi + 1);
         if (cs.length < 2) { setState('empty'); return; }
         setState('ok');
         const pos = css('var(--pos)', '#21C07A'), neg = css('var(--neg)', '#E5484D');

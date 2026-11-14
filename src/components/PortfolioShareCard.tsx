@@ -30,6 +30,9 @@ interface Props {
   initial: string;
   /** Every position: the closed ones and the open ones. */
   trades: PortfolioTrade[];
+  /** Margin on the open book right now: what BULK asks for the whole book (its own
+   *  figure) against each position on its own (size ÷ its leverage, summed). */
+  margin?: { bulk: number; separate: number } | null;
   onClose: () => void;
 }
 
@@ -49,7 +52,7 @@ const fmtDate = (t: number) => { const d = new Date(t); return `${pad2(d.getDate
 const money = (n: number) => `${n >= 0 ? '+' : '−'}$${Math.abs(n) >= 100_000 ? formatCompact(Math.abs(n)) : formatNumber(Math.abs(n), 2)}`;
 const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
 
-export function PortfolioShareCard({ address, ranges, initial, trades, onClose }: Props) {
+export function PortfolioShareCard({ address, ranges, initial, trades, margin, onClose }: Props) {
   const open = useMemo(() => trades.filter((t) => t.closedAt == null), [trades]);
   const closed = useMemo(() => trades.filter((t): t is PortfolioTrade & { closedAt: number } => t.closedAt != null), [trades]);
   const [length, setLength] = useState<Length>('normal');
@@ -281,8 +284,11 @@ export function PortfolioShareCard({ address, ranges, initial, trades, onClose }
         title: `POSITIONS · ${active.length} OPEN`,
       };
     };
+    // The margin BULK saves on the open book, as the last line once the card settles.
+    const saved = margin && open.length > 1 && margin.separate > margin.bulk * 1.01 ? margin.separate - margin.bulk : 0;
+    const settledMax = saved > 0 ? MAX_LEGS - 1 : MAX_LEGS;
     const settledRows: Row[] = legs.rows.map((l) => ({ key: `${l.coin}:${l.side}`, coin: l.coin, side: l.side, notional: l.notional, pnl: l.pnl, alpha: 1, closedNow: false }));
-    const settledTitle = `${legs.title.toUpperCase()}${legs.rows.length > MAX_LEGS ? ` · ${legs.rows.length}` : ''}`;
+    const settledTitle = `${legs.title.toUpperCase()}${legs.rows.length > settledMax ? ` · ${legs.rows.length}` : ''}`;
     const settledRight = legs.rows.length ? `${open.length ? 'OPEN PnL' : 'TOTAL'} ${money(legs.net)}` : '';
     const st = p < 1 ? 0 : clamp01((performance.now() - settleAtRef.current) / 1000);
     // Three beats, so nothing crosses: leavers go, stayers move, newcomers arrive.
@@ -330,15 +336,27 @@ export function PortfolioShareCard({ address, ranges, initial, trades, onClose }
       feed.rows.slice(0, MAX_LEGS).forEach((l, i) => drawRow(l, yRow(i), l.alpha, l.pnl === null ? 1 : 0));
     } else {
       const fromIdx = new Map(feed.rows.slice(0, MAX_LEGS).map((r, i) => [r.key, i]));
-      const toIdx = new Map(settledRows.slice(0, MAX_LEGS).map((r, i) => [r.key, i]));
+      const toIdx = new Map(settledRows.slice(0, settledMax).map((r, i) => [r.key, i]));
       // leaving: feed rows with no place in the settled list
       feed.rows.slice(0, MAX_LEGS).forEach((r, i) => { if (!toIdx.has(r.key)) drawRow(r, yRow(i) - 6 * leave, r.alpha * (1 - leave), r.pnl === null ? 1 : 0); });
       // staying or arriving
-      settledRows.slice(0, MAX_LEGS).forEach((r, i) => {
+      settledRows.slice(0, settledMax).forEach((r, i) => {
         const fi = fromIdx.get(r.key);
         if (fi !== undefined) drawRow(r, yRow(fi) + (yRow(i) - yRow(fi)) * move, 1, 1 - move);
         else { const a = easeInOut(clamp01(arrive * 1.3 - i * 0.1)); drawRow(r, yRow(i) + 6 * (1 - a), a, 0); }
       });
+    }
+    if (saved > 0 && margin && arrive > 0) {
+      const a = easeInOut(clamp01(arrive * 1.2 - 0.2));
+      const y = yRow(settledMax) + 4;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = alpha(V.text3, 0.25); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD + 26, y - 15); ctx.lineTo(W - PAD - 26, y - 15); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `500 10px ${FONT}`;
+      ctx.fillText(`BULK MARGIN $${formatCompact(margin.bulk)} · SEPARATE $${formatCompact(margin.separate)}`, PAD + 26, y);
+      ctx.textAlign = 'right'; ctx.fillStyle = V.accent; ctx.font = `500 12px ${FONT}`;
+      ctx.fillText(`Saved $${formatCompact(saved)} · ${Math.round((saved / margin.separate) * 100)}%`, W - PAD - 26, y);
+      ctx.globalAlpha = 1;
     }
     const emptyNow = st < 0.5 ? feed.rows.length === 0 : settledRows.length === 0;
     if (emptyNow) {
@@ -352,7 +370,7 @@ export function PortfolioShareCard({ address, ranges, initial, trades, onClose }
     ctx.textBaseline = 'alphabetic';
     void final;
     ctx.restore();
-  }, [points, valueAt, address, range.label, range.short, legs, open.length, trades, closed]);
+  }, [points, valueAt, address, range.label, range.short, legs, open.length, trades, closed, margin]);
 
   const play = useCallback((): Promise<void> => new Promise((resolve) => {
     const start = performance.now();
