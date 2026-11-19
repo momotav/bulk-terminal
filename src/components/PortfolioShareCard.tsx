@@ -15,13 +15,18 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Play, Download, Loader2 } from 'lucide-react';
-import { formatNumber, formatCompact, formatAddress, cn } from '@/lib/api';
+import { X, Play, Download, Loader2, Check } from 'lucide-react';
+import { CoinIcon } from '@/components/CoinIcon';
+import { analytics, formatNumber, formatCompact, formatAddress, cn } from '@/lib/api';
 import { avatarHues, pickMime, roundRect } from '@/components/TradeShareCard';
 
 export interface PortfolioLeg { coin: string; side: 'long' | 'short'; notional: number; pnl: number }
 /** One position's life: opened, maybe closed, and its PnL (realized, or unrealized if still open). */
-export interface PortfolioTrade { coin: string; side: 'long' | 'short'; notional: number; openedAt: number | null; closedAt: number | null; pnl: number }
+export interface PortfolioTrade {
+  coin: string; side: 'long' | 'short'; notional: number; openedAt: number | null; closedAt: number | null; pnl: number;
+  /** Entry price and size (units): let a picked position be marked to market over its life. */
+  entry?: number; size?: number;
+}
 export interface PortfolioRange { key: string; label: string; short: string; points: { t: number; v: number }[] }
 
 interface Props {
@@ -52,33 +57,155 @@ const fmtDate = (t: number) => { const d = new Date(t); return `${pad2(d.getDate
 const money = (n: number) => `${n >= 0 ? '+' : '−'}$${Math.abs(n) >= 100_000 ? formatCompact(Math.abs(n)) : formatNumber(Math.abs(n), 2)}`;
 const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
 
-export function PortfolioShareCard({ address, ranges, initial, trades, margin, onClose }: Props) {
-  const open = useMemo(() => trades.filter((t) => t.closedAt == null), [trades]);
-  const closed = useMemo(() => trades.filter((t): t is PortfolioTrade & { closedAt: number } => t.closedAt != null), [trades]);
+const tkey = (t: PortfolioTrade) => `${t.coin}|${t.side}|${t.openedAt ?? 'x'}|${t.closedAt ?? 'open'}`;
+const MAX_PICK = 8;
+const dayLabel = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const toInput = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+
+/**
+ * One line for a hand-picked set of positions: each marked to market against its coin's
+ * candles while open (its fees and funding spread evenly over that time), then locked at
+ * BULK's own result once closed, so the end of the line is exactly the real PnL.
+ */
+async function pickedCurve(ts: PortfolioTrade[]): Promise<{ t: number; v: number }[]> {
+  const now = Date.now();
+  const opens = ts.map((t) => t.openedAt).filter((x): x is number => x != null);
+  const ends = ts.map((t) => t.closedAt ?? now);
+  const tA = Math.min(...(opens.length ? opens : [Math.min(...ends) - 86_400_000]));
+  const tB = Math.max(...ends);
+  const span = Math.max(tB - tA, 3_600_000);
+  const ivs: [string, number][] = [['1m', 60e3], ['5m', 300e3], ['15m', 900e3], ['1h', 3600e3], ['4h', 14400e3], ['1d', 86400e3]];
+  const [iv, ivMs] = ivs.find(([, ms]) => span / ms <= 400) ?? ivs[ivs.length - 1];
+  const px: Record<string, { t: number; c: number }[]> = {};
+  await Promise.all(Array.from(new Set(ts.map((t) => t.coin))).map(async (c) => {
+    try {
+      const r = await analytics.getCandles(`${c}-USD`, iv, 1000, { startTime: Math.floor(tA / ivMs) * ivMs - ivMs, endTime: Math.ceil(tB / ivMs) * ivMs + ivMs });
+      px[c] = (r.candles ?? []).filter((k) => k.c > 0).map((k) => ({ t: k.t, c: k.c })).sort((a, b) => a.t - b.t);
+    } catch { /* no candles: that leg is drawn as a straight line to its result */ }
+  }));
+  const priceAt = (c: string, t: number) => {
+    const a = px[c]; if (!a?.length) return null;
+    let lo = 0, hi = a.length - 1, best = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (a[m].t <= t) { best = m; lo = m + 1; } else hi = m - 1; }
+    return a[Math.max(0, best)].c;
+  };
+  const legValue = (tr: PortfolioTrade, t: number) => {
+    const o = tr.openedAt ?? tA, e = tr.closedAt ?? now;
+    if (t < o) return 0;
+    if (t >= e) return tr.pnl;
+    const frac = (t - o) / (e - o || 1);
+    const p = priceAt(tr.coin, t), pe = priceAt(tr.coin, e);
+    if (!tr.entry || !tr.size || p == null || pe == null) return tr.pnl * frac;
+    const sign = tr.side === 'long' ? 1 : -1;
+    const mtm = sign * (p - tr.entry) * tr.size, mtmEnd = sign * (pe - tr.entry) * tr.size;
+    return mtm + (tr.pnl - mtmEnd) * frac;
+  };
+  const times = new Set<number>();
+  for (let i = 0; i <= 240; i++) times.add(Math.round(tA + ((tB - tA) * i) / 240));
+  for (const tr of ts) { if (tr.openedAt != null) times.add(tr.openedAt); if (tr.closedAt != null) times.add(tr.closedAt); }
+  const grid = Array.from(times).filter((t) => t >= tA && t <= tB).sort((a, b) => a - b);
+  const lead = (tB - tA) * 0.03;
+  const line = grid.map((t) => ({ t, v: Math.round(ts.reduce((s, tr) => s + legValue(tr, t), 0) * 100) / 100 }));
+  // A position opened before the wallet's history starts already had PnL here: the line
+  // begins there instead of dropping from $0 like a sudden loss.
+  return ts.some((t) => t.openedAt == null) ? line : [{ t: tA - lead, v: 0 }, ...line];
+
+}
+
+export function PortfolioShareCard({ address, ranges, initial, trades: allTrades, margin, onClose }: Props) {
   const [length, setLength] = useState<Length>('normal');
   const playMs = LENGTHS.find(([k]) => k === length)?.[2] ?? 9000;
   const usable = ranges.filter((r) => r.points.length >= 2);
   const [rangeKey, setRangeKey] = useState(usable.some((r) => r.key === initial) ? initial : usable[0]?.key ?? initial);
   const range = ranges.find((r) => r.key === rangeKey) ?? ranges[0];
-  const points = range.points;
+
+  // What the card covers: a preset window, a custom date range, or hand-picked positions.
+  const [custom, setCustom] = useState<{ from: number; to: number } | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [pickQuery, setPickQuery] = useState('');
+  const pickedTrades = useMemo(() => allTrades.filter((t) => picked.includes(tkey(t))), [allTrades, picked]);
+  // The wallet page refreshes every few seconds and hands down fresh arrays; the card
+  // must react to what the viewer picked, not to every refresh.
+  const pickedKey = picked.join(',');
+  const pickedRef = useRef(pickedTrades);
+  pickedRef.current = pickedTrades;
+  const mode: 'window' | 'custom' | 'picked' = pickedTrades.length ? 'picked' : custom ? 'custom' : 'window';
+  const allPts = (ranges.find((r) => r.key === 'all') ?? ranges[ranges.length - 1]).points;
+  const allSig = `${allPts.length}|${allPts[0]?.t ?? 0}`;
+  const customPts = useMemo(() => {
+    if (!custom || allPts.length < 2) return [];
+    const at = (t: number) => {
+      if (t <= allPts[0].t) return allPts[0].v;
+      const after = allPts.findIndex((q) => q.t > t);
+      if (after < 0) return allPts[allPts.length - 1].v;
+      const a = allPts[after - 1], b = allPts[after];
+      return a.v + (b.v - a.v) * ((t - a.t) / (b.t - a.t || 1));
+    };
+    const from = Math.max(custom.from, allPts[0].t), to = Math.min(custom.to, Date.now());
+    if (to <= from) return [];
+    const base = at(from);
+    // PnL made inside the range: it starts at zero, like the preset windows.
+    return [{ t: from, v: 0 }, ...allPts.filter((q) => q.t > from && q.t < to).map((q) => ({ t: q.t, v: Math.round((q.v - base) * 100) / 100 })), { t: to, v: Math.round((at(to) - base) * 100) / 100 }];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [custom, allSig]);
+  const [pickedPts, setPickedPts] = useState<{ t: number; v: number }[] | null>(null);
+  const [pickedLoading, setPickedLoading] = useState(false);
+  useEffect(() => {
+    const ts = pickedRef.current;
+    if (!ts.length) { setPickedPts(null); return; }
+    let alive = true;
+    setPickedLoading(true);
+    pickedCurve(ts).then((pts) => { if (alive) setPickedPts(pts); }).finally(() => { if (alive) setPickedLoading(false); });
+    return () => { alive = false; };
+  }, [pickedKey]);
+  const pickList = useMemo(() => {
+    const q = pickQuery.trim().toUpperCase();
+    return [...allTrades]
+      .filter((t) => !q || t.coin.toUpperCase().includes(q))
+      .sort((a, b) => (b.closedAt ?? Date.now()) - (a.closedAt ?? Date.now()))
+      .slice(0, 150);
+  }, [allTrades, pickQuery]);
+  const points = mode === 'picked' ? (pickedPts ?? []) : mode === 'custom' ? customPts : range.points;
+  const trades = mode === 'picked' ? pickedTrades : allTrades;
+  const open = useMemo(() => trades.filter((t) => t.closedAt == null), [trades]);
+  const closed = useMemo(() => trades.filter((t): t is PortfolioTrade & { closedAt: number } => t.closedAt != null), [trades]);
+  const view = mode === 'picked'
+    ? { key: 'picked', label: `${pickedTrades.length} position${pickedTrades.length === 1 ? '' : 's'}`, short: 'these positions' }
+    : mode === 'custom' && custom
+      ? { key: 'custom', label: `${dayLabel(custom.from)} – ${dayLabel(custom.to)}`, short: `${dayLabel(custom.from)} – ${dayLabel(custom.to)}` }
+      : { key: range.key, label: range.label, short: range.short };
   const t0 = points[0]?.t ?? Date.now();
 
   // The legs: what's open now, or with nothing open, what closed in the window,
   // summed per market so a trade cut into pieces reads as one.
   const legs = useMemo(() => {
-    if (open.length) {
+    if (mode === 'picked') {
+      const by = new Map<string, PortfolioLeg>();
+      for (const t of pickedTrades) {
+        const k = `${t.coin}:${t.side}`;
+        const cur = by.get(k) ?? { coin: t.coin, side: t.side, notional: 0, pnl: 0 };
+        cur.pnl += t.pnl; cur.notional += t.notional; by.set(k, cur);
+      }
+      const rows = Array.from(by.values()).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+      return { title: 'Picked positions', rows, net: rows.reduce((s, l) => s + l.pnl, 0) };
+    }
+    // A custom range that ended in the past is about what closed inside it, not today's book.
+    const pastRange = mode === 'custom' && custom && custom.to < Date.now() - 3_600_000;
+    if (open.length && !pastRange) {
       return { title: 'Open positions', rows: [...open].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)), net: open.reduce((s, l) => s + l.pnl, 0) };
     }
     const by = new Map<string, PortfolioLeg>();
     for (const c of closed) {
       if (c.closedAt < t0) continue;
+      if (pastRange && custom && c.closedAt > custom.to) continue;
       const k = `${c.coin}:${c.side}`;
       const cur = by.get(k) ?? { coin: c.coin, side: c.side, notional: 0, pnl: 0 };
       cur.pnl += c.pnl; by.set(k, cur);
     }
     const rows = Array.from(by.values()).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
     return { title: 'Closed in this window', rows, net: rows.reduce((s, l) => s + l.pnl, 0) };
-  }, [open, closed, t0]);
+  }, [open, closed, t0, mode, pickedTrades, custom]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -233,8 +360,8 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
     ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.stroke();
     // row: range + market logos
     ctx.textAlign = 'left'; ctx.fillStyle = V.text; ctx.font = `500 16px ${FONT}`;
-    ctx.fillText(range.label, PAD + 18, by + 30);
-    const lw0 = ctx.measureText(range.label).width;
+    ctx.fillText(view.label, PAD + 18, by + 30);
+    const lw0 = ctx.measureText(view.label).width;
     // Every market traded in the window, not just what's still open.
     const coins = Array.from(new Set(trades
       .filter((t) => (t.openedAt ?? tA) <= tB && (t.closedAt == null || t.closedAt >= tA))
@@ -259,7 +386,7 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
     ctx.textAlign = 'left'; ctx.fillStyle = tone; ctx.font = `600 40px ${FONT}`;
     ctx.fillText(money(now), PAD + 18, by + 78);
     ctx.fillStyle = V.text3; ctx.font = `500 12px ${FONT}`;
-    ctx.fillText(p >= 1 ? `Net PnL, ${range.short}` : `Net PnL so far`, PAD + 18, by + 98);
+    ctx.fillText(p >= 1 ? `Net PnL, ${view.short}` : `Net PnL so far`, PAD + 18, by + 98);
 
     // legs: the live feed while playing, then a hand-off to the settled book. Rows
     // in both glide to their new place and "Open" crossfades into the PnL; rows
@@ -285,11 +412,11 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
       };
     };
     // The margin BULK saves on the open book, as the last line once the card settles.
-    const saved = margin && open.length > 1 && margin.separate > margin.bulk * 1.01 ? margin.separate - margin.bulk : 0;
+    const saved = mode === 'window' && margin && open.length > 1 && margin.separate > margin.bulk * 1.01 ? margin.separate - margin.bulk : 0;
     const settledMax = saved > 0 ? MAX_LEGS - 1 : MAX_LEGS;
     const settledRows: Row[] = legs.rows.map((l) => ({ key: `${l.coin}:${l.side}`, coin: l.coin, side: l.side, notional: l.notional, pnl: l.pnl, alpha: 1, closedNow: false }));
     const settledTitle = `${legs.title.toUpperCase()}${legs.rows.length > settledMax ? ` · ${legs.rows.length}` : ''}`;
-    const settledRight = legs.rows.length ? `${open.length ? 'OPEN PnL' : 'TOTAL'} ${money(legs.net)}` : '';
+    const settledRight = legs.rows.length ? `${legs.title === 'Open positions' ? 'OPEN PnL' : 'TOTAL'} ${money(legs.net)}` : '';
     const st = p < 1 ? 0 : clamp01((performance.now() - settleAtRef.current) / 1000);
     // Three beats, so nothing crosses: leavers go, stayers move, newcomers arrive.
     const leave = easeInOut(clamp01(st / 0.3)), move = easeInOut(clamp01((st - 0.25) / 0.45)), arrive = clamp01((st - 0.65) / 0.35);
@@ -370,7 +497,7 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
     ctx.textBaseline = 'alphabetic';
     void final;
     ctx.restore();
-  }, [points, valueAt, address, range.label, range.short, legs, open.length, trades, closed, margin]);
+  }, [points, valueAt, address, view.label, view.short, legs, open.length, trades, closed, margin, mode]);
 
   const play = useCallback((): Promise<void> => new Promise((resolve) => {
     const start = performance.now();
@@ -420,7 +547,7 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
     if (fonts?.load) Promise.all([fonts.load('500 16px BULK'), fonts.load('600 16px BULK')]).then(go).catch(go); else go();
     return () => { cancelled = true; stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeKey, length]);
+  }, [rangeKey, length, view.key, custom?.from, custom?.to, pickedKey, pickedPts]);
 
   useEffect(() => { if (!playing && !recording) draw(lastPRef.current); }, [hideWallet, showRef, refCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -444,7 +571,7 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
       finally { setConverting(false); }
       const url = URL.createObjectURL(out);
       const a = document.createElement('a');
-      a.href = url; a.download = `bulkstats-portfolio-${range.key}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.href = url; a.download = `bulkstats-portfolio-${view.key}-${new Date().toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     } finally { setRecording(false); setConverting(false); }
@@ -466,13 +593,71 @@ export function PortfolioShareCard({ address, ranges, initial, trades, margin, o
             <span>Window</span>
             <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">
               {ranges.map((r) => (
-                <button key={r.key} type="button" disabled={recording || converting || r.points.length < 2} onClick={() => setRangeKey(r.key)}
-                  className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', r.key === rangeKey ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                <button key={r.key} type="button" disabled={recording || converting || r.points.length < 2 || mode === 'picked'} onClick={() => { setCustom(null); setRangeKey(r.key); }}
+                  className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', mode === 'window' && r.key === rangeKey ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
                   {r.key === 'all' ? 'All' : r.key}
                 </button>
               ))}
+              <button type="button" disabled={recording || converting || mode === 'picked' || allPts.length < 2}
+                onClick={() => setCustom((c) => c ?? { from: Date.now() - 7 * 86_400_000, to: Date.now() })}
+                className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', mode === 'custom' ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                Custom
+              </button>
             </div>
           </div>
+          {mode === 'custom' && custom && (
+            <div className="flex items-center justify-end gap-2 text-xs text-[var(--text-secondary)]">
+              <input type="date" value={toInput(custom.from)} max={toInput(custom.to)} min={allPts.length ? toInput(allPts[0].t) : undefined}
+                onChange={(e) => { const t = new Date(`${e.target.value}T00:00:00`).getTime(); if (Number.isFinite(t)) setCustom((c) => c && { ...c, from: t }); }}
+                className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" aria-label="From" />
+              <span className="text-[var(--text-tertiary)]">to</span>
+              <input type="date" value={toInput(custom.to)} min={toInput(custom.from)} max={toInput(Date.now())}
+                onChange={(e) => { const t = new Date(`${e.target.value}T23:59:59`).getTime(); if (Number.isFinite(t)) setCustom((c) => c && { ...c, to: Math.min(t, Date.now()) }); }}
+                className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" aria-label="To" />
+            </div>
+          )}
+          {mode === 'custom' && customPts.length < 2 && <p className="text-right text-[11px] text-[var(--text-tertiary)]">No PnL recorded in that range.</p>}
+          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>Positions</span>
+            <div className="flex items-center gap-2">
+              {pickedTrades.length > 0 && (
+                <button type="button" disabled={recording || converting} onClick={() => setPicked([])} className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-35">Clear</button>
+              )}
+              <button type="button" disabled={recording || converting} onClick={() => setPicking((v) => !v)}
+                className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-35', picking || pickedTrades.length ? 'bg-[var(--bg-base)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                {pickedTrades.length ? `${pickedTrades.length} picked` : 'All in window'}{pickedLoading ? '…' : ''} · {picking ? 'Done' : 'Pick'}
+              </button>
+            </div>
+          </div>
+          {picking && (
+            <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)]">
+              <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5">
+                <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Filter by coin"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]" />
+                <span className="shrink-0 text-[10px] text-[var(--text-tertiary)]">{picked.length}/{MAX_PICK}</span>
+              </div>
+              <div className="max-h-[220px] overflow-y-auto">
+                {pickList.length === 0 && <p className="px-3 py-4 text-center text-[11px] text-[var(--text-tertiary)]">No positions match.</p>}
+                {pickList.map((t) => {
+                  const k = tkey(t); const on = picked.includes(k); const full = !on && picked.length >= MAX_PICK;
+                  return (
+                    <button key={k} type="button" disabled={full}
+                      onClick={() => setPicked((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
+                      className={cn('flex w-full items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5 text-left text-[11px] last:border-b-0 transition-colors disabled:opacity-35', on ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]')}>
+                      <span className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border', on ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border-color)]')}>
+                        {on && <Check className="h-2.5 w-2.5 text-[var(--accent-text)]" />}
+                      </span>
+                      <CoinIcon symbol={t.coin} size={14} />
+                      <span className="font-medium text-[var(--text-primary)]">{t.coin}</span>
+                      <span style={{ color: t.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>{t.side === 'long' ? 'Long' : 'Short'}</span>
+                      <span className="min-w-0 flex-1 truncate text-[var(--text-tertiary)]">{t.openedAt ? dayLabel(t.openedAt) : '…'} → {t.closedAt ? dayLabel(t.closedAt) : 'open'}</span>
+                      <span className="shrink-0 tabular-nums" style={{ color: t.pnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{money(t.pnl)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
             <span>Length</span>
             <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">

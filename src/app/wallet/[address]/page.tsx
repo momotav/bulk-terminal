@@ -920,8 +920,8 @@ export default function WalletPage() {
           } : null}
           ranges={RANGES.map(([r]) => ({ key: r, label: RANGE_LABEL[r], short: r === 'all' ? 'all time' : `last ${r}`, points: curveWindow(curve, r).data }))}
           trades={[
-            ...closedPositions.map((c) => ({ coin: coinOf(c.symbol), side: c.side, notional: Math.abs(c.size * c.openPrice), openedAt: c.openedAt || null, closedAt: c.closedAt, pnl: c.realizedPnl })),
-            ...positions.map((p) => ({ coin: coinOf(p.symbol), side: p.size > 0 ? 'long' as const : 'short' as const, notional: Math.abs(p.notional || 0), openedAt: positionOpenTimes[p.symbol]?.openedAt ?? null, closedAt: null, pnl: p.unrealizedPnl })),
+            ...closedPositions.map((c) => ({ coin: coinOf(c.symbol), side: c.side, notional: Math.abs(c.size * c.openPrice), openedAt: c.openedAt || null, closedAt: c.closedAt, pnl: c.realizedPnl, entry: c.openPrice, size: Math.abs(c.size) })),
+            ...positions.map((p) => ({ coin: coinOf(p.symbol), side: p.size > 0 ? 'long' as const : 'short' as const, notional: Math.abs(p.notional || 0), openedAt: positionOpenTimes[bookKey(p as FamilyPosition)]?.openedAt ?? positionOpenTimes[p.symbol]?.openedAt ?? null, closedAt: null, pnl: p.unrealizedPnl, entry: p.price, size: Math.abs(p.size) })),
           ]} />
       )}
       <main className="flex-1 w-full">
