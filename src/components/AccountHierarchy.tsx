@@ -29,7 +29,7 @@ export function AccountHierarchy({ address, onOpenPortfolio }: { address: string
     return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key); };
   }, [open]);
 
-  if (loading) return <div className="h-9 w-full rounded-lg bg-[var(--role-surface-raised)] animate-pulse" />;
+  if (loading) return <div className="h-12 w-full rounded-xl bg-[var(--role-surface-raised)] animate-pulse" />;
   if (!family) return null;
 
   const me = family.accounts.find((a) => a.pubkey === address);
@@ -40,12 +40,19 @@ export function AccountHierarchy({ address, onOpenPortfolio }: { address: string
   return (
     <div className="relative w-full" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="dialog"
-        className={cn(pill, 'w-full h-9 px-3 text-[13px]', open && 'text-[var(--role-content)] bg-[var(--role-surface-raised)]')}>
-        <Layers className="w-3.5 h-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left" title={isSub ? me!.name : undefined}>
-          {isSub ? <>Sub-account · <span className="text-[var(--role-content)]">{me!.name}</span></> : <>Master · {subs} sub-account{subs === 1 ? '' : 's'}</>}
+        className={cn('group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors', open ? 'bg-[var(--role-surface-raised)]' : 'hover:bg-[var(--role-surface-raised)]')}>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content-muted)] group-hover:text-[var(--role-content)]">
+          <Layers className="h-4 w-4" />
         </span>
-        <ChevronDown className={cn('w-3.5 h-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] text-[var(--role-content)]">
+            {isSub ? <>Sub-account <span className="font-medium">{me!.name}</span></> : 'Master account'}
+          </span>
+          <span className="block truncate text-[11px] text-[var(--role-content-muted)]">
+            {isSub ? `of master ${short(family.master)}` : `${subs} sub-account${subs === 1 ? '' : 's'}`}
+          </span>
+        </span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-[var(--role-content-subtle)] transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (

@@ -307,7 +307,7 @@ export default function ObserveTradePage() {
             <div className="text-[18px] leading-tight text-[var(--role-content)]">{coin}/USD</div>
             <div className="mt-0.5 text-[13px] text-[var(--role-content-muted)]">
               <span style={{ color: life.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>{life.side === 'long' ? 'Long' : 'Short'}</span>
-              {liveLeverage > 0 ? ` ${Number(liveLeverage.toFixed(1))}×` : ''} · {liquidated ? 'Liquidated' : life.isOpen ? 'Open' : 'Closed'}
+              {liveLeverage > 0 ? ` ${Math.round(liveLeverage)}×` : ''} · {liquidated ? 'Liquidated' : life.isOpen ? 'Open' : 'Closed'}
             </div>
           </div>
         </div>
@@ -340,7 +340,7 @@ export default function ObserveTradePage() {
           <Row label="Value" value={`$${formatCompact(notionalPeak)}`} />
           {/* BULK records no leverage on a closed trade. The only figure it exposes is
               the market maximum, so a closed trade shows that bound, not the trader's pick. */}
-          <Row label={leverageIsBound ? 'Max leverage' : 'Leverage'} value={shownLeverage > 0 ? `${Number(shownLeverage.toFixed(1))}×` : '—'} />
+          <Row label={leverageIsBound ? 'Max leverage' : 'Leverage'} value={shownLeverage > 0 ? `${Math.round(shownLeverage)}×` : '—'} />
           {shownLeverage > 0 && <Row label={leverageIsBound ? 'Min margin' : 'Margin'} value={`${leverageIsBound ? '≥ ' : ''}$${formatCompact(notionalPeak / shownLeverage)}`} />}
           {life.isOpen && livePos && livePos.liquidationPrice > 0 && <Row label="Liq. price" value={money(livePos.liquidationPrice)} color="var(--neg)" />}
           {life.isOpen && <Row label="Realized" value={signed2(life.realizedTotal)} color={pnlColor(life.realizedTotal)} />}

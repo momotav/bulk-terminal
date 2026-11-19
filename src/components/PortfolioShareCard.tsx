@@ -15,7 +15,8 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Play, Download, Loader2, Check } from 'lucide-react';
+import { X, Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CardBar, DateRange, Popover, Segmented, Switch, barBtn } from '@/components/share/controls';
 import { CoinIcon } from '@/components/CoinIcon';
 import { analytics, formatNumber, formatCompact, formatAddress, cn } from '@/lib/api';
 import { avatarHues, pickMime, roundRect } from '@/components/TradeShareCard';
@@ -41,7 +42,9 @@ interface Props {
   onClose: () => void;
 }
 
-const W = 440, H = 540, SCALE = 2, PAD = 20;
+// Drawn at 3x on high-density screens: 2x went soft as soon as the card was scaled at all.
+const SCALE = typeof window !== 'undefined' && (window.devicePixelRatio || 1) >= 1.5 ? 3 : 2;
+const W = 440, H = 540, PAD = 20;
 const FONT = "'BULK', ui-sans-serif, -apple-system, \"Segoe UI\", Roboto, sans-serif";
 const CHART_Y = 80, CHART_H = 176;
 const BODY_Y = 272, BODY_H = 236;
@@ -60,7 +63,6 @@ const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 
 const tkey = (t: PortfolioTrade) => `${t.coin}|${t.side}|${t.openedAt ?? 'x'}|${t.closedAt ?? 'open'}`;
 const MAX_PICK = 8;
 const dayLabel = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const toInput = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 
 /**
  * One line for a hand-picked set of positions: each marked to market against its coin's
@@ -124,6 +126,12 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
   const [picked, setPicked] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const [pickQuery, setPickQuery] = useState('');
+  const [pickStatus, setPickStatus] = useState<'all' | 'open' | 'closed'>('all');
+  const [pickSide, setPickSide] = useState<'all' | 'long' | 'short'>('all');
+  const [pickSort, setPickSort] = useState<'new' | 'old' | 'win' | 'loss' | 'size' | 'coin'>('new');
+  const [pop, setPop] = useState<'custom' | 'window' | 'pos' | null>(null);
+  const [showCal, setShowCal] = useState(false);
+  useEffect(() => { if (pop !== 'window') setShowCal(false); }, [pop]);
   const pickedTrades = useMemo(() => allTrades.filter((t) => picked.includes(tkey(t))), [allTrades, picked]);
   // The wallet page refreshes every few seconds and hands down fresh arrays; the card
   // must react to what the viewer picked, not to every refresh.
@@ -161,11 +169,22 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
   }, [pickedKey]);
   const pickList = useMemo(() => {
     const q = pickQuery.trim().toUpperCase();
-    return [...allTrades]
-      .filter((t) => !q || t.coin.toUpperCase().includes(q))
-      .sort((a, b) => (b.closedAt ?? Date.now()) - (a.closedAt ?? Date.now()))
-      .slice(0, 150);
-  }, [allTrades, pickQuery]);
+    const when = (t: PortfolioTrade) => t.closedAt ?? Date.now();
+    const order: Record<typeof pickSort, (a: PortfolioTrade, b: PortfolioTrade) => number> = {
+      new: (a, b) => when(b) - when(a),
+      old: (a, b) => when(a) - when(b),
+      win: (a, b) => b.pnl - a.pnl,
+      loss: (a, b) => a.pnl - b.pnl,
+      size: (a, b) => b.notional - a.notional,
+      coin: (a, b) => a.coin.localeCompare(b.coin) || when(b) - when(a),
+    };
+    return allTrades
+      .filter((t) => (!q || t.coin.toUpperCase().includes(q))
+        && (pickStatus === 'all' || (pickStatus === 'open') === (t.closedAt == null))
+        && (pickSide === 'all' || t.side === pickSide))
+      .sort(order[pickSort])
+      .slice(0, 200);
+  }, [allTrades, pickQuery, pickStatus, pickSide, pickSort]);
   const points = mode === 'picked' ? (pickedPts ?? []) : mode === 'custom' ? customPts : range.points;
   const trades = mode === 'picked' ? pickedTrades : allTrades;
   const open = useMemo(() => trades.filter((t) => t.closedAt == null), [trades]);
@@ -474,15 +493,25 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
       });
     }
     if (saved > 0 && margin && arrive > 0) {
+      // Three columns, label over value: what BULK asks, what it would be leg by leg, the saving.
       const a = easeInOut(clamp01(arrive * 1.2 - 0.2));
-      const y = yRow(settledMax) + 4;
+      const top = yRow(settledMax) - 16;
       ctx.globalAlpha = a;
-      ctx.strokeStyle = alpha(V.text3, 0.25); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(PAD + 26, y - 15); ctx.lineTo(W - PAD - 26, y - 15); ctx.stroke();
-      ctx.textAlign = 'left'; ctx.fillStyle = V.text3; ctx.font = `500 10px ${FONT}`;
-      ctx.fillText(`BULK MARGIN $${formatCompact(margin.bulk)} · SEPARATE $${formatCompact(margin.separate)}`, PAD + 26, y);
-      ctx.textAlign = 'right'; ctx.fillStyle = V.accent; ctx.font = `500 12px ${FONT}`;
-      ctx.fillText(`Saved $${formatCompact(saved)} · ${Math.round((saved / margin.separate) * 100)}%`, W - PAD - 26, y);
+      ctx.strokeStyle = alpha(V.text3, 0.22); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD + 26, top); ctx.lineTo(W - PAD - 26, top); ctx.stroke();
+      const colW = (W - 2 * PAD - 52) / 3;
+      const cols: [string, string, string][] = [
+        ['BULK MARGIN', `$${formatCompact(margin.bulk)}`, V.text],
+        ['SEPARATE', `$${formatCompact(margin.separate)}`, V.text2],
+        [`SAVED ${Math.round((saved / margin.separate) * 100)}%`, `$${formatCompact(saved)}`, V.pos],
+      ];
+      cols.forEach(([label, value, color], i) => {
+        const right = i === 2;
+        const x = right ? W - PAD - 26 : PAD + 26 + colW * i;
+        ctx.textAlign = right ? 'right' : 'left';
+        ctx.fillStyle = V.text3; ctx.font = `500 9px ${FONT}`; ctx.fillText(label, x, top + 13);
+        ctx.fillStyle = color; ctx.font = `500 13px ${FONT}`; ctx.fillText(value, x, top + 29);
+      });
       ctx.globalAlpha = 1;
     }
     const emptyNow = st < 0.5 ? feed.rows.length === 0 : settledRows.length === 0;
@@ -580,118 +609,121 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
   const busy = playing || recording || converting;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
       onClick={(e) => { if (e.target === e.currentTarget && !recording) onClose(); }}>
-      <div className="relative flex flex-col items-center gap-3">
+      <div data-card-root className="relative flex flex-col items-center gap-3">
         <button onClick={onClose} aria-label="Close" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
           <X className="h-4 w-4" />
         </button>
-        <canvas ref={canvasRef} style={{ width: W, height: H }} className="rounded-[22px] shadow-2xl max-w-[calc(100vw-32px)] h-auto" />
+        <canvas ref={canvasRef} style={{ width: W, height: H }} className="rounded-[22px] shadow-2xl max-w-[calc(100vw-32px)] h-auto cursor-pointer" onClick={replay} title="Click to replay" />
 
-        <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Window</span>
-            <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">
-              {ranges.map((r) => (
-                <button key={r.key} type="button" disabled={recording || converting || r.points.length < 2 || mode === 'picked'} onClick={() => { setCustom(null); setRangeKey(r.key); }}
-                  className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', mode === 'window' && r.key === rangeKey ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
-                  {r.key === 'all' ? 'All' : r.key}
-                </button>
-              ))}
-              <button type="button" disabled={recording || converting || mode === 'picked' || allPts.length < 2}
-                onClick={() => setCustom((c) => c ?? { from: Date.now() - 7 * 86_400_000, to: Date.now() })}
-                className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', mode === 'custom' ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
-                Custom
-              </button>
-            </div>
-          </div>
-          {mode === 'custom' && custom && (
-            <div className="flex items-center justify-end gap-2 text-xs text-[var(--text-secondary)]">
-              <input type="date" value={toInput(custom.from)} max={toInput(custom.to)} min={allPts.length ? toInput(allPts[0].t) : undefined}
-                onChange={(e) => { const t = new Date(`${e.target.value}T00:00:00`).getTime(); if (Number.isFinite(t)) setCustom((c) => c && { ...c, from: t }); }}
-                className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" aria-label="From" />
-              <span className="text-[var(--text-tertiary)]">to</span>
-              <input type="date" value={toInput(custom.to)} min={toInput(custom.from)} max={toInput(Date.now())}
-                onChange={(e) => { const t = new Date(`${e.target.value}T23:59:59`).getTime(); if (Number.isFinite(t)) setCustom((c) => c && { ...c, to: Math.min(t, Date.now()) }); }}
-                className="rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" aria-label="To" />
-            </div>
-          )}
-          {mode === 'custom' && customPts.length < 2 && <p className="text-right text-[11px] text-[var(--text-tertiary)]">No PnL recorded in that range.</p>}
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Positions</span>
-            <div className="flex items-center gap-2">
-              {pickedTrades.length > 0 && (
-                <button type="button" disabled={recording || converting} onClick={() => setPicked([])} className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-35">Clear</button>
-              )}
-              <button type="button" disabled={recording || converting} onClick={() => setPicking((v) => !v)}
-                className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-35', picking || pickedTrades.length ? 'bg-[var(--bg-base)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
-                {pickedTrades.length ? `${pickedTrades.length} picked` : 'All in window'}{pickedLoading ? '…' : ''} · {picking ? 'Done' : 'Pick'}
-              </button>
-            </div>
-          </div>
-          {picking && (
-            <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)]">
-              <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5">
-                <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Filter by coin"
-                  className="min-w-0 flex-1 bg-transparent text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]" />
-                <span className="shrink-0 text-[10px] text-[var(--text-tertiary)]">{picked.length}/{MAX_PICK}</span>
-              </div>
-              <div className="max-h-[220px] overflow-y-auto">
-                {pickList.length === 0 && <p className="px-3 py-4 text-center text-[11px] text-[var(--text-tertiary)]">No positions match.</p>}
-                {pickList.map((t) => {
-                  const k = tkey(t); const on = picked.includes(k); const full = !on && picked.length >= MAX_PICK;
-                  return (
-                    <button key={k} type="button" disabled={full}
-                      onClick={() => setPicked((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
-                      className={cn('flex w-full items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5 text-left text-[11px] last:border-b-0 transition-colors disabled:opacity-35', on ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]')}>
-                      <span className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border', on ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border-color)]')}>
-                        {on && <Check className="h-2.5 w-2.5 text-[var(--accent-text)]" />}
-                      </span>
-                      <CoinIcon symbol={t.coin} size={14} />
-                      <span className="font-medium text-[var(--text-primary)]">{t.coin}</span>
-                      <span style={{ color: t.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>{t.side === 'long' ? 'Long' : 'Short'}</span>
-                      <span className="min-w-0 flex-1 truncate text-[var(--text-tertiary)]">{t.openedAt ? dayLabel(t.openedAt) : '…'} → {t.closedAt ? dayLabel(t.closedAt) : 'open'}</span>
-                      <span className="shrink-0 tabular-nums" style={{ color: t.pnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{money(t.pnl)}</span>
+        <div className="w-full max-w-[440px]">
+          <CardBar
+            canvas={() => canvasRef.current}
+            shareText={`${money(points[points.length - 1]?.v ?? 0)} PnL, ${view.short}, trading on @bulktrade`}
+            shareUrl={`https://www.bulkstats.com/wallet/${address}`}
+            onReplay={replay} onDownload={download} busy={busy} recording={recording} converting={converting} convertPct={convertPct} canExport={canExport}
+            left={<>
+              <Popover open={pop === 'custom'} onOpenChange={(v) => setPop(v ? 'custom' : null)} width={300}
+                trigger={<button type="button" className={barBtn} onClick={() => setPop(pop === 'custom' ? null : 'custom')}>Customise</button>}>
+                <Switch label="Hide wallet" checked={hideWallet} onChange={setHideWallet} disabled={recording || converting} />
+                <Switch label="Referral code" checked={showRef} onChange={setShowRef} disabled={recording || converting} />
+                {showRef && (
+                  <input value={refCode} onChange={(e) => setRefCode(e.target.value)} placeholder="Your referral code" maxLength={48} autoFocus
+                    className="mb-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
+                )}
+                <div className="flex items-center justify-between gap-3 pt-2 text-[13px] text-[var(--text-primary)]">
+                  <span>Video length</span>
+                  <Segmented value={length} onChange={setLength} disabled={recording || converting} options={LENGTHS.map(([k, label]) => [k, label] as [Length, string])} />
+                </div>
+              </Popover>
+
+              <Popover open={pop === 'window'} onOpenChange={(v) => setPop(v ? 'window' : null)} width={292}
+                trigger={
+                  <button type="button" className={barBtn} disabled={mode === 'picked'} title={mode === 'picked' ? 'The picked positions set the window' : 'Time window'}
+                    onClick={() => setPop(pop === 'window' ? null : 'window')}>
+                    {mode === 'picked' ? 'Auto' : mode === 'custom' && custom ? `${dayLabel(custom.from)} – ${dayLabel(custom.to)}` : rangeKey === 'all' ? 'All' : rangeKey}
+                    <ChevronDown className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+                  </button>
+                }>
+                {!showCal ? (
+                  <div className="flex flex-col">
+                    {ranges.map((r) => (
+                      <button key={r.key} type="button" disabled={r.points.length < 2} onClick={() => { setCustom(null); setRangeKey(r.key); setPop(null); }}
+                        className={cn('flex items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors disabled:opacity-35', mode === 'window' && r.key === rangeKey ? 'bg-[var(--bg-base)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]')}>
+                        {r.label}
+                        {mode === 'window' && r.key === rangeKey && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    ))}
+                    <div className="my-1 h-px bg-[var(--border-color)]" />
+                    <button type="button" disabled={allPts.length < 2} onClick={() => setShowCal(true)}
+                      className={cn('flex items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors disabled:opacity-35', mode === 'custom' ? 'bg-[var(--bg-base)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]')}>
+                      {mode === 'custom' && custom ? `Custom · ${dayLabel(custom.from)} – ${dayLabel(custom.to)}` : 'Custom range…'}
+                      <ChevronRight className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Length</span>
-            <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">
-              {LENGTHS.map(([k, label, ms]) => (
-                <button key={k} type="button" disabled={recording || converting} onClick={() => setLength(k)} title={`${ms / 1000}s`}
-                  className={cn('px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35', k === length ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Hide wallet</span>
-            <input type="checkbox" checked={hideWallet} onChange={(e) => setHideWallet(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-          </label>
-          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Show referral code</span>
-            <input type="checkbox" checked={showRef} onChange={(e) => setShowRef(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-          </label>
-          {showRef && (
-            <input value={refCode} onChange={(e) => setRefCode(e.target.value)} placeholder="your referral code" maxLength={48}
-              className="mt-0.5 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
-          )}
-        </div>
+                  </div>
+                ) : (
+                  <div>
+                    <button type="button" onClick={() => setShowCal(false)} className="mb-2 inline-flex items-center gap-1 text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                      <ChevronLeft className="h-3.5 w-3.5" />Windows
+                    </button>
+                    <DateRange from={custom?.from ?? Date.now() - 7 * 86_400_000} to={custom?.to ?? Date.now()}
+                      min={allPts.length ? allPts[0].t : Date.now() - 365 * 86_400_000} max={Date.now()}
+                      onChange={(from, to) => { setCustom({ from, to }); setShowCal(false); setPop(null); }} />
+                    {mode === 'custom' && customPts.length < 2 && <p className="mt-1 text-center text-[11px] text-[var(--neg)]">No PnL recorded in that range.</p>}
+                  </div>
+                )}
+              </Popover>
 
-        <div className="flex items-center gap-2">
-          <button onClick={replay} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50">
-            <Play className="h-3.5 w-3.5" /> Replay
-          </button>
-          <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] disabled:opacity-50">
-            {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</>
-              : converting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Converting{convertPct ? ` ${convertPct}%` : ''}…</>
-              : <><Download className="h-3.5 w-3.5" /> Download video</>}
-          </button>
+              <Popover open={pop === 'pos'} onOpenChange={(v) => setPop(v ? 'pos' : null)} width={400} align="right"
+                trigger={
+                  <button type="button" className={cn(barBtn, pickedTrades.length > 0 && 'border-[var(--accent)]')} onClick={() => setPop(pop === 'pos' ? null : 'pos')}>
+                    Positions{pickedTrades.length ? ` · ${pickedTrades.length}` : ''}{pickedLoading ? '…' : ''}
+                  </button>
+                }>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-[var(--text-primary)]">Pick up to {MAX_PICK}</span>
+                  {picked.length > 0
+                    ? <button type="button" onClick={() => setPicked([])} className="text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Clear {picked.length}</button>
+                    : <span className="text-[12px] text-[var(--text-tertiary)]">All in window</span>}
+                </div>
+                <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Search coin"
+                  className="mb-2 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-2 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]" />
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Segmented value={pickStatus} onChange={setPickStatus} options={[['all', 'All'], ['open', 'Open'], ['closed', 'Closed']]} />
+                  <Segmented value={pickSide} onChange={setPickSide} options={[['all', 'Both'], ['long', 'Long'], ['short', 'Short']]} />
+                </div>
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {([['new', 'Newest'], ['old', 'Oldest'], ['win', 'Best PnL'], ['loss', 'Worst PnL'], ['size', 'Largest'], ['coin', 'A–Z']] as const).map(([k, label]) => (
+                    <button key={k} type="button" onClick={() => setPickSort(k)}
+                      className={cn('rounded-full border px-2.5 py-1 text-[11px] transition-colors', pickSort === k ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="max-h-[260px] overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)]">
+                  {pickList.length === 0 && <p className="px-3 py-6 text-center text-[12px] text-[var(--text-tertiary)]">No positions match.</p>}
+                  {pickList.map((t) => {
+                    const k = tkey(t); const on = picked.includes(k); const full = !on && picked.length >= MAX_PICK;
+                    return (
+                      <button key={k} type="button" disabled={full}
+                        onClick={() => setPicked((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
+                        className={cn('flex w-full items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-2 text-left text-[12px] last:border-b-0 transition-colors disabled:opacity-35', on ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]')}>
+                        <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors', on ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border-color)]')}>
+                          {on && <Check className="h-3 w-3 text-[var(--accent-text)]" />}
+                        </span>
+                        <CoinIcon symbol={t.coin} size={16} />
+                        <span className="font-medium text-[var(--text-primary)]">{t.coin}</span>
+                        <span style={{ color: t.side === 'long' ? 'var(--pos)' : 'var(--neg)' }}>{t.side === 'long' ? 'Long' : 'Short'}</span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-tertiary)]">{t.openedAt ? dayLabel(t.openedAt) : '…'} → {t.closedAt ? dayLabel(t.closedAt) : 'open'}</span>
+                        <span className="shrink-0 tabular-nums" style={{ color: t.pnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{money(t.pnl)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Popover>
+            </>}
+          />
         </div>
       </div>
     </div>

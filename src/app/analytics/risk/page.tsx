@@ -635,9 +635,13 @@ export default function RiskPage() {
               {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Fair vs Mark Spread</h3>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
+                      <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Mark vs fair price</h3>
+                    </div>
+                    {/* Not a bid/ask spread: that is on the Order book page, and is far tighter. */}
+                    <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">Gap between BULK&apos;s mark and fair price, in bps. Not the order-book spread.</p>
                   </div>
                   <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
                     {timeRanges.map(r => (
@@ -669,7 +673,7 @@ export default function RiskPage() {
 
                 {fairSpreadData.length > 0 ? (
                   <div className="flex-1 min-h-0" style={{ minHeight: 'var(--chart-h, 250px)' }}>
-                    <ChartFrame title="Fair vs Mark Spread" className="h-full" yLabel="Spread (bps)" legend={[{ label: 'Positive', color: 'var(--pos)' }, { label: 'Negative', color: 'var(--neg)' }]}>
+                    <ChartFrame title="Mark vs fair price" className="h-full" yLabel="Gap (bps)" legend={[{ label: 'Positive', color: 'var(--pos)' }, { label: 'Negative', color: 'var(--neg)' }]}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairSpreadSliced}>
                         <defs>
@@ -703,7 +707,7 @@ export default function RiskPage() {
                         <Area
                           type="monotone"
                           dataKey="spreadBps"
-                          name="Spread (bps)"
+                          name="Gap (bps)"
                           stroke={fairSpreadSliced[fairSpreadSliced.length - 1]?.spreadBps >= 0 ? 'var(--pos)' : 'var(--neg)'}
                           fill={fairSpreadSliced[fairSpreadSliced.length - 1]?.spreadBps >= 0 ? 'url(#spreadGradientPos)' : 'url(#spreadGradientNeg)'}
                           strokeWidth={2}

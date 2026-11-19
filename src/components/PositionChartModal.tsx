@@ -390,7 +390,7 @@ export function PositionChartModal({ position, onClose }: Props) {
     return {
       ...shared, ...series(life),
       side: position.side, isOpen: true, openedAt: life.openedAt, closedAt: null,
-      avgEntry: position.entryPrice, size: Math.abs(position.size), leverage: Number((position.leverage ?? 0).toFixed(1)),
+      avgEntry: position.entryPrice, size: Math.abs(position.size), leverage: Math.round(position.leverage ?? 0),
       markPrice: mark, exitPrice: mark, pnl: position.unrealizedPnl,
     };
   }, [position, fills, plottedCandles, liveMark]);
@@ -928,7 +928,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             </span>
             <h2 className="text-lg font-semibold">{position.symbol}</h2>
             <span className="text-sm text-[var(--text-tertiary)]">
-              {position.leverage > 0 && `${position.leverage}× · `}
+              {position.leverage > 0 && `${Math.round(position.leverage)}× · `}
               {formatNumber(position.size, 4)} units
               {position.kind === 'closed' && (
                 <>

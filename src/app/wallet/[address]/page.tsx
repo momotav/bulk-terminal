@@ -67,7 +67,8 @@ type WalletTab = 'overview' | 'positions' | 'accounts' | 'trades' | 'calendar' |
 type OpenPos = NonNullable<WalletData['live']>['positions'][number];
 type OpenOrder = NonNullable<NonNullable<WalletData['live']>['openOrders']>[number];
 
-const fmtLev = (x: number) => `${Number(x.toFixed(1))}×`;
+// Whole numbers: BULK's live leverage drifts with price (38.16…); traders think in 38×.
+const fmtLev = (x: number) => `${Math.round(x)}×`;
 
 /** BULK's own fair price on the position. The page-level markPrices map comes
  *  from the ticker feed, which is sometimes partial, so it is only a fallback. */
@@ -83,7 +84,7 @@ const liqColor = (d: number) => (d < 0.05 ? 'var(--neg)' : d < 0.15 ? 'var(--war
 /** A flush panel: separated by hairlines, not floated as a card. */
 function Card({ title, right, children }: { title?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="bg-[var(--bg-muted)] border-b border-[var(--border-color)] flex flex-col min-w-0">
+    <section className="bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] border-b border-[var(--border-color)] flex flex-col min-w-0">
       {(title || right) && (
         <div className="flex items-center justify-between gap-x-3 gap-y-2 px-5 min-h-12 py-2 flex-wrap border-b border-[var(--border-color)] shrink-0">
           <div className="min-w-0">{title}</div>
@@ -197,7 +198,7 @@ function PnlPanel({ curve, address, onCard }: { curve: PnlCurve; address: string
       ) : (
         <div className="px-5 pb-3 pt-4">
           <div className="text-[28px] leading-none font-medium tabular-nums tracking-tight" style={{ color: pnlColor(shown) }}>{signed(shown)}</div>
-          <div className="mt-2 mb-4 text-[13px] text-[var(--role-content-muted)] truncate">
+          <div className="mt-2 mb-2 text-[13px] text-[var(--role-content-muted)] truncate">
             {hover ? (
               new Date(hover.point.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
             ) : (
@@ -208,7 +209,7 @@ function PnlPanel({ curve, address, onCard }: { curve: PnlCurve; address: string
               </>
             )}
           </div>
-          <ChartFrame title="PnL history" className="h-[280px] sm:h-[400px]" walletAddress={address}>
+          <ChartFrame title="PnL history" className="h-[300px] sm:h-[440px]" walletAddress={address}>
             <PnlChart points={data}
               onHover={setHover} ariaLabel={`PnL ${RANGE_LABEL[range].toLowerCase()}: ${signed(headline)}`} />
           </ChartFrame>
@@ -758,7 +759,7 @@ export default function WalletPage() {
       address: account ?? address, symbol: sym, coin: coin2,
       // An open position's facts come from BULK, not from replaying fills.
       side: lp ? (lp.size > 0 ? 'long' : 'short') : life.side, isOpen: life.isOpen, openedAt: life.openedAt, closedAt: life.closedAt,
-      avgEntry: lp ? lp.price : life.avgEntry, size: lp ? Math.abs(lp.size) : life.peakSize, leverage: lp ? Number(lp.leverage.toFixed(1)) : 0,
+      avgEntry: lp ? lp.price : life.avgEntry, size: lp ? Math.abs(lp.size) : life.peakSize, leverage: lp ? Math.round(lp.leverage) : 0,
       markPrice: mark, exitPrice: life.isOpen ? mark : lastPrice, pnl: lp ? lp.unrealizedPnl : life.finalPnl,
       events: life.events.map((e) => ({ t: e.t, price: e.price, buy: e.sizeDelta > 0, action: e.action, label: e.actionLabel, realized: e.realizedDelta, units: Math.abs(e.sizeDelta), liq: e.liq ?? null })),
       pnlCurve: life.pnlCurve.map((p) => ({ t: p.t, pnl: p.pnl })),
@@ -939,7 +940,7 @@ export default function WalletPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] min-h-[calc(100vh-57px)]">
 
             {/* ── RAIL, TOP ────────────────────────────────────────────── */}
-            <section className="bg-[var(--bg-muted)] lg:border-r border-[var(--border-color)] px-5 pt-5 pb-5 flex flex-col gap-5 min-w-0">
+            <section className="bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] lg:border-r border-[var(--border-color)] px-5 pt-5 pb-5 flex flex-col gap-4 min-w-0">
               <div className="flex items-center gap-3 min-w-0">
                 <Link href="/leaderboard" aria-label="Back to Leaderboard" title="Leaderboard" className="p-1 -ml-1 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] transition-colors"><ArrowLeft className="w-4 h-4" /></Link>
                 {twitterAvatar && (
@@ -992,9 +993,9 @@ export default function WalletPage() {
 
               <div>
                 <div className="text-[14px] text-[var(--role-content-muted)]">Total PnL</div>
-                <div className="mt-2 text-[44px] leading-none font-medium tabular-nums tracking-tight" style={{ color: totalPnl === 0 ? 'var(--role-content)' : pnlColor(totalPnl) }}>{totalPnl === 0 ? '$0' : signed(totalPnl)}</div>
+                <div className="mt-1.5 text-[44px] leading-none font-medium tabular-nums tracking-tight" style={{ color: totalPnl === 0 ? 'var(--role-content)' : pnlColor(totalPnl) }}>{totalPnl === 0 ? '$0' : signed(totalPnl)}</div>
                 {margin && (
-                  <div className="mt-3 text-[13px] text-[var(--role-content-muted)] tabular-nums">{signed(margin.realizedPnl)} realized · {signed(margin.unrealizedPnl)} open</div>
+                  <div className="mt-2 text-[13px] text-[var(--role-content-muted)] tabular-nums">{signed(margin.realizedPnl)} realized · {signed(margin.unrealizedPnl)} open</div>
                 )}
               </div>
 
@@ -1005,23 +1006,31 @@ export default function WalletPage() {
                     {claimLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}This is my wallet
                   </button>
                 )}
-                {!isOwnWallet && (
-                  <button onClick={toggleFollow} disabled={followLoading}
-                    className={cn('inline-flex items-center justify-center gap-2 h-10 rounded-xl text-[14px] font-medium border transition-colors disabled:opacity-50',
-                      isFollowing ? 'border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)]' : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110')}>
-                    {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <StarOff className="w-4 h-4" /> : <Star className="w-4 h-4" />}
-                    {isFollowing ? 'Following' : 'Follow'}
-                  </button>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-[14px] border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">Explorer <ExternalLink className="w-3.5 h-3.5 text-[var(--role-content-subtle)]" /></a>
-                  <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-[14px] border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">Solscan <ExternalLink className="w-3.5 h-3.5 text-[var(--role-content-subtle)]" /></a>
+                <div className="flex items-center gap-2">
+                  {!isOwnWallet && (
+                    <button onClick={toggleFollow} disabled={followLoading}
+                      className={cn('inline-flex flex-1 items-center justify-center gap-2 h-9 rounded-xl text-[14px] font-medium border transition-colors disabled:opacity-50',
+                        isFollowing ? 'border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)]' : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110')}>
+                      {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <StarOff className="w-4 h-4" /> : <Star className="w-4 h-4" />}
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  )}
+                  <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer" title="Open in BULK Explorer"
+                    className={cn('inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--border-color)] px-3 text-[13px] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', isOwnWallet && 'flex-1')}>Explorer<ExternalLink className="h-3 w-3 text-[var(--role-content-subtle)]" /></a>
+                  <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer" title="Open on Solscan"
+                    className={cn('inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--border-color)] px-3 text-[13px] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', isOwnWallet && 'flex-1')}>Solscan<ExternalLink className="h-3 w-3 text-[var(--role-content-subtle)]" /></a>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-                <Tile label="Account value" value={accountValue !== null ? money(accountValue) : '—'} />
-                <Tile label={`Volume (${feeTier?.windowDays ?? 14}d)`} value={feeTier ? money(feeTier.rollingVolume) : '—'} />
+              <div className="grid grid-cols-2 rounded-xl bg-[var(--role-surface-raised)]">
+                <div className="min-w-0 px-4 py-3">
+                  <div className="text-[12px] text-[var(--role-content-muted)]">Account value</div>
+                  <div className="mt-1 text-[17px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)] truncate">{accountValue !== null ? money(accountValue) : '—'}</div>
+                </div>
+                <div className="min-w-0 border-l border-[var(--border-color)] px-4 py-3">
+                  <div className="text-[12px] text-[var(--role-content-muted)]">Volume ({feeTier?.windowDays ?? 14}d)</div>
+                  <div className="mt-1 text-[17px] leading-tight font-medium tabular-nums tracking-tight text-[var(--role-content)] truncate">{feeTier ? `$${formatCompact(feeTier.rollingVolume)}` : '—'}</div>
+                </div>
               </div>
             </section>
 
@@ -1157,7 +1166,7 @@ export default function WalletPage() {
                 {netDeposited !== null && netDeposited > 0 && <Row label="Net deposited" value={money(netDeposited)} title="Deposits less withdrawals" />}
                 {netDeposited !== null && netDeposited > 0 && <Row label="Return on deposits" value={`${totalPnl >= 0 ? '+' : '−'}${Math.abs((totalPnl / netDeposited) * 100).toFixed(1)}%`} color={pnlColor(totalPnl)} title="Total PnL ÷ net deposited. Doesn't weight for when money came in or out." />}
                 <Row label="Exposure" value={totalNotional > 0 ? money(totalNotional) : '—'} />
-                {leverage !== null && <Row label="Leverage" value={`${leverage.toFixed(1)}×`} />}
+                {leverage !== null && <Row label="Leverage" value={`${leverage < 10 ? leverage.toFixed(1) : Math.round(leverage)}×`} />}
                 {longShare !== null && <Row label="Direction" value={`${(longShare * 100).toFixed(0)}% long`} />}
                 {closestLiq && <Row label={`Liquidation, ${coinOf(closestLiq.symbol)}`} value={`${(closestLiq.dist * 100).toFixed(1)}% away`} color={liqColor(closestLiq.dist)} title={`Liquidates at ${formatPx(closestLiq.price)}`} />}
                 <Row label="All-time volume" value={!fillsDone ? '—' : lifetimeVolume > 0 ? money(lifetimeVolume) : '$0'} />

@@ -15,7 +15,8 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Play, Download, Loader2 } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
+import { CardBar, Popover, Segmented, Switch, barBtn } from '@/components/share/controls';
 import { analytics, formatNumber, formatCompact, formatAddress, type Candle } from '@/lib/api';
 import { getCoinColor } from '@/lib/coins';
 import { FREEZE_MS, drawImpact, drawLiqStamp, drawShatter, makeGlass, shakeAt } from '@/lib/liquidationFx';
@@ -47,7 +48,9 @@ export interface ShareCardData {
 
 interface Props { data: ShareCardData; onClose: () => void; }
 
-const W = 440, H = 540, SCALE = 2, PAD = 20;
+// Drawn at 3x on high-density screens: 2x went soft as soon as the card was scaled at all.
+const SCALE = typeof window !== 'undefined' && (window.devicePixelRatio || 1) >= 1.5 ? 3 : 2;
+const W = 440, H = 540, PAD = 20;
 const FONT = "'BULK', ui-sans-serif, -apple-system, \"Segoe UI\", Roboto, sans-serif";
 const VISIBLE = 22;          // candles on screen at once (the scrolling window)
 const SECONDS_PER_SCREEN = 3.2; // how long a screenful takes to scroll past
@@ -151,6 +154,7 @@ export function TradeShareCard({ data, onClose }: Props) {
   const [showRef, setShowRef] = useState(false);
   const [refCode, setRefCode] = useState('');
   const [length, setLength] = useState<Length>('normal');
+  const [custOpen, setCustOpen] = useState(false);
   const speed = LENGTHS.find(([k]) => k === length)?.[2] ?? 1;
   const rafRef = useRef<number | null>(null);
   const holdRef = useRef<number | null>(null);
@@ -204,10 +208,16 @@ export function TradeShareCard({ data, onClose }: Props) {
     const end = isOpen ? Date.now() : (closedAt ?? openedAt + 3_600_000);
     const [iv, sec] = pickInterval(Math.max(end - openedAt, 20 * 60_000));
     const bar = sec * 1000;
-    analytics
-      .getCandles(symbol, iv, 500, { startTime: openedAt - bar * 6, endTime: end + bar * 6 })
-      .then((res) => { if (!cancelled) setCandles(res.candles.filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0)); })
-      .catch(() => { if (!cancelled) setCandles([]); });
+    (async () => {
+      for (let i = 0; i < 3 && !cancelled; i++) {
+        try {
+          const res = await analytics.getCandles(symbol, iv, 500, { startTime: openedAt - bar * 6, endTime: end + bar * 6 });
+          const cs = res.candles.filter((c) => c.o > 0 && c.h > 0 && c.l > 0 && c.c > 0);
+          if (cs.length || i === 2) { if (!cancelled) setCandles(cs); return; }
+        } catch { if (i === 2 && !cancelled) { setCandles([]); return; } }
+        await new Promise((r) => setTimeout(r, 900 * (i + 1)));
+      }
+    })();
     return () => { cancelled = true; };
   }, [symbol, isOpen, openedAt, closedAt]);
 
@@ -592,7 +602,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     // match the coin-name height, bordered like the exchange UI.
     const sideColor = side === 'long' ? V.pos : V.neg;
     const dirTxt = side === 'long' ? 'Long' : 'Short';
-    const levTxt = leverage > 0 ? `${leverage}x` : '';
+    // Whole number, like the positions table (BULK's live figure drifts with price).
+    const levTxt = leverage > 0 ? `${Math.round(leverage)}x` : '';
     ctx.font = `500 15px ${FONT}`;
     const dirW = ctx.measureText(dirTxt).width;
     const gapW = levTxt ? 7 : 0;
@@ -836,57 +847,38 @@ export function TradeShareCard({ data, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
       onClick={(e) => { if (e.target === e.currentTarget && !recording) onClose(); }}
     >
-      <div className="relative flex flex-col items-center gap-3">
+      <div data-card-root className="relative flex flex-col items-center gap-3">
         <button onClick={onClose} aria-label="Close" data-tour-close="card" className="absolute -top-3 -right-3 z-10 rounded-full border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 text-[var(--text-secondary)] shadow-lg transition-colors hover:text-[var(--text-primary)]">
           <X className="h-4 w-4" />
         </button>
-        <canvas ref={canvasRef} style={{ width: W, height: displayH }} className="rounded-[22px] shadow-2xl" />
+        <canvas ref={canvasRef} style={{ width: W, maxWidth: 'calc(100vw - 32px)', height: 'auto', aspectRatio: `${W} / ${displayH}` }} className="rounded-[22px] shadow-2xl cursor-pointer" onClick={replay} title="Click to replay" />
         {!candles && <div className="absolute inset-0 grid place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--role-content-subtle)]" /></div>}
 
-        {/* Share options */}
-        <div data-tour="card-options" className="flex w-full max-w-[420px] flex-col gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3.5 py-2.5">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Length</span>
-            <div className="flex items-center gap-0.5 rounded-md bg-[var(--bg-base)] p-0.5">
-              {LENGTHS.map(([k, label]) => (
-                <button key={k} type="button" disabled={recording || converting} onClick={() => { setLength(k); }}
-                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors disabled:opacity-35 ${k === length ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Hide wallet</span>
-            <input type="checkbox" checked={hideWallet} onChange={(e) => setHideWallet(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-          </label>
-          <label className="flex cursor-pointer items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span>Show referral code</span>
-            <input type="checkbox" checked={showRef} onChange={(e) => setShowRef(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-          </label>
-          {showRef && (
-            <input
-              value={refCode}
-              onChange={(e) => setRefCode(e.target.value)}
-              placeholder="your referral code"
-              maxLength={48}
-              className="mt-0.5 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-            />
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={replay} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50">
-            <Play className="h-3.5 w-3.5" /> Replay
-          </button>
-          <button onClick={download} disabled={busy || !canExport} title={canExport ? 'Download as video' : 'Video recording not supported in this browser'} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] disabled:opacity-50">
-            {recording ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…</>
-              : converting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Converting{convertPct ? ` ${convertPct}%` : ''}…</>
-              : <><Download className="h-3.5 w-3.5" /> Download video</>}
-          </button>
+        <div className="w-full max-w-[440px]" data-tour="card-options">
+          <CardBar
+            canvas={() => canvasRef.current}
+            shareText={`${side === 'long' ? 'Long' : 'Short'} $${coin} on @bulktrade`}
+            shareUrl={`https://www.bulkstats.com/observe/${address}/${coin}`}
+            onReplay={replay} onDownload={download} busy={busy} recording={recording} converting={converting} convertPct={convertPct} canExport={canExport}
+            left={
+              <Popover open={custOpen} onOpenChange={setCustOpen} width={300}
+                trigger={<button type="button" className={barBtn} onClick={() => setCustOpen((v) => !v)}>Customise</button>}>
+                <Switch label="Hide wallet" checked={hideWallet} onChange={setHideWallet} disabled={recording || converting} />
+                <Switch label="Referral code" checked={showRef} onChange={setShowRef} disabled={recording || converting} />
+                {showRef && (
+                  <input value={refCode} onChange={(e) => setRefCode(e.target.value)} placeholder="Your referral code" maxLength={48} autoFocus
+                    className="mb-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
+                )}
+                <div className="flex items-center justify-between gap-3 pt-2 text-[13px] text-[var(--text-primary)]">
+                  <span>Video length</span>
+                  <Segmented value={length} onChange={setLength} disabled={recording || converting} options={LENGTHS.map(([k, label]) => [k, label] as [Length, string])} />
+                </div>
+              </Popover>
+            }
+          />
         </div>
       </div>
     </div>

@@ -358,7 +358,7 @@ function ClosedPositionRow({
           </span>
           {p.leverage > 0 && (
             <span className="text-[var(--text-tertiary)] text-xs font-mono">
-              {p.leverage}x
+              {Math.round(p.leverage)}x
             </span>
           )}
           {p.liquidated && (

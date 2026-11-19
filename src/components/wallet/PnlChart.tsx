@@ -5,7 +5,8 @@ import { formatCompact } from '@/lib/api';
 import { smoothCurve, type PnlPoint } from '@/lib/walletMetrics';
 
 // Top clears ChartFrame's export buttons, which sit over the plot's corner.
-const PAD = { top: 44, right: 58, bottom: 24, left: 0 };
+// Top room only for the highest axis label: more left a dead band above the curve.
+const PAD = { top: 14, right: 58, bottom: 24, left: 0 };
 const LINE_BLEED = 10;
 
 export interface PnlHover { point: PnlPoint }

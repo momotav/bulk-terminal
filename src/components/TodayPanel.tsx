@@ -180,9 +180,8 @@ const REV_RANGES: { label: string; days: number }[] = [
 function RevenueCard() {
   const { network } = useCurrentNetwork();
   const [days, setDays] = useState(30);
-  // Fetch the full daily revenue history ONCE. The headline stats (cumulative,
-  // daily-avg, annualized) are derived from ALL of it — so they're identical on
-  // every timeframe — and the timeframe pills only slice the bar window.
+  // Fetch the full daily revenue history ONCE; the timeframe pills slice it, and the
+  // headline, daily average and annualized figure all follow the selected window.
   const [allRows, setAllRows] = useState<{ timestamp: string; periodRevenue: number; cumulativeRevenue: number }[]>([]);
 
   useEffect(() => {
@@ -197,19 +196,23 @@ function RevenueCard() {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [network]);
 
-  // Constant stats from the FULL history (identical on every timeframe):
-  // cumulative = current running total; daily avg = cumulative / days elapsed.
-  const cumulative = allRows.length ? allRows[allRows.length - 1].cumulativeRevenue : 0;
-  const totalDays = allRows.length || 1;
-  const dailyAvg = cumulative / totalDays;
-  const annualized = dailyAvg * 365;
-
   const bars = useMemo(
     () => (days === Infinity ? allRows : allRows.slice(-days)).map((r) => ({ t: r.timestamp, v: Math.max(0, r.periodRevenue || 0) })),
     [allRows, days],
   );
   // The headline number DOES change with the timeframe: revenue over the window.
   const windowRevenue = useMemo(() => bars.reduce((s, b) => s + b.v, 0), [bars]);
+  // Averages over the SAME window as the headline, so a busy week moves them. Today's
+  // bucket is still filling: it counts as the part of the day that has passed, or a
+  // fresh morning would drag the average down.
+  const windowDays = useMemo(() => {
+    if (!bars.length) return 1;
+    const lastStart = new Date(bars[bars.length - 1].t).getTime();
+    const todayPart = Math.min(1, Math.max(0.05, (Date.now() - lastStart) / 86_400_000));
+    return bars.length - 1 + todayPart;
+  }, [bars]);
+  const dailyAvg = windowRevenue / windowDays;
+  const annualized = dailyAvg * 365;
   const fmtAxis = (ts: string) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (

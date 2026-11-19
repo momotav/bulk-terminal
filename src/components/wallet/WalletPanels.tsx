@@ -33,7 +33,7 @@ export function StatStrip({ items }: { items: StatItem[] }) {
       {items.map((s) => {
         const hasSeries = drawable(s.series);
         return (
-          <div key={s.label} className={cn('relative min-w-0 overflow-hidden bg-[var(--bg-muted)] px-5 py-4', charted && 'min-h-[132px]')}>
+          <div key={s.label} className={cn('relative min-w-0 overflow-hidden bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] px-5 py-4', charted && 'min-h-[132px]')}>
             {hasSeries && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[64px] opacity-90">
                 <Sparkline data={s.series!} color={s.seriesColor ?? 'var(--accent)'} height={64} className="h-full w-full" />
@@ -60,7 +60,7 @@ export function StatStrip({ items }: { items: StatItem[] }) {
 
 function Panel({ title, hint, right, children }: { title: string; hint?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="bg-[var(--bg-muted)] border-b border-[var(--border-color)] min-w-0">
+    <section className="bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] border-b border-[var(--border-color)] min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-4">
         <h2 className="text-[15px] text-[var(--role-content)]">{title}</h2>
         {right ?? (hint && <span className="text-[12px] text-[var(--role-content-subtle)]">{hint}</span>)}
