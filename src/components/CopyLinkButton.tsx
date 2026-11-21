@@ -4,12 +4,17 @@ import { useState } from 'react';
 import { Check, Link2 } from 'lucide-react';
 import { cn } from '@/lib/api';
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.bulkstats.com';
+
 /** Copies an absolute link to a site path. Pasted on X or Telegram it unfolds into a preview card. */
 export function CopyLinkButton({ path, label, className, iconOnly = false }: { path: string; label?: string; className?: string; iconOnly?: boolean }) {
   const [done, setDone] = useState(false);
   const copy = async (e: React.MouseEvent) => {
     e.stopPropagation(); e.preventDefault();
     try { await navigator.clipboard.writeText(`${window.location.origin}${path}`); setDone(true); setTimeout(() => setDone(false), 1600); } catch { /* clipboard blocked */ }
+    // A fill or order link: open it on the backend once now, which saves it for good,
+    // so the link still works after BULK drops it from history (~8 days).
+    if (/^\/wallet\/[^/]+\/(trade|order)\//.test(path)) fetch(`${API}/api${path}`, { cache: 'no-store' }).catch(() => {});
   };
   return (
     <button type="button" onClick={copy} title={done ? 'Copied' : label ?? 'Copy link'} aria-label={label ?? 'Copy link'}

@@ -114,7 +114,7 @@ export interface OrderInfo {
 /** 'missing' only when the backend says so (404/400). A timeout or a busy upstream is
  *  'error' after a couple of retries: a valid link must never show "not found" because
  *  BULK was slow for a moment. Not cached here; the backend caches these for a day. */
-export type Lookup<T> = { status: 'ok'; data: T } | { status: 'missing' } | { status: 'error' };
+export type Lookup<T> = { status: 'ok'; data: T } | { status: 'missing' } | { status: 'expired' } | { status: 'error' };
 
 async function lookup<T>(path: string, ms: number, tries = 3): Promise<Lookup<T>> {
   for (let i = 0; i < tries; i++) {
@@ -124,6 +124,8 @@ async function lookup<T>(path: string, ms: number, tries = 3): Promise<Lookup<T>
       const r = await fetch(`${API}${path}`, { signal: ctl.signal, cache: 'no-store' });
       if (r.ok) return { status: 'ok', data: (await r.json()) as T };
       if (r.status === 404 || r.status === 400) return { status: 'missing' };
+      // Older than BULK's ~8-day history and never saved by us: gone for good.
+      if (r.status === 410) return { status: 'expired' };
     } catch { /* timeout or network: retry */ } finally { clearTimeout(t); }
     if (i < tries - 1) await new Promise((res) => setTimeout(res, 600 * (i + 1)));
   }

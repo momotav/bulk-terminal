@@ -49,6 +49,18 @@ export default async function OrderPage(props: Props) {
   const { address, orderId, slot } = ids(props);
   const res = await lookupOrder(address, orderId, slot);
   if (res.status === 'missing') notFound();
+  if (res.status === 'expired') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <Link href={`/wallet/${address}`} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--role-content-muted)] hover:text-[var(--role-content)] transition-colors"><ArrowLeft className="w-4 h-4" />Wallet {shortAddr(address)}</Link>
+        <div className="mt-4 rounded-2xl border border-[var(--border-color)] bg-[var(--role-surface)] px-6 py-10 text-center">
+          <div className="text-[16px] text-[var(--role-content)]">This order is too old to show</div>
+          <p className="mx-auto mt-1.5 max-w-md text-[13px] text-[var(--role-content-muted)]">BULK keeps about 8 days of account history, and this order is older than that. Links opened or copied while it was still there are saved and keep working.</p>
+          <Link href={`/wallet/${address}`} className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] border border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors">Open the wallet</Link>
+        </div>
+      </div>
+    );
+  }
   if (res.status === 'error') {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
