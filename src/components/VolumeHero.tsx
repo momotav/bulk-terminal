@@ -233,7 +233,11 @@ export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
       </div>
 
       {/* Chart */}
-      <div className="mt-3 min-h-0 flex-1">
+      {/* The chart is laid OVER its box (absolute), so its own rendered size can't feed
+          back into the row height: inline, recharts' few extra pixels stretched the row,
+          which stretched the chart, and on some screens (2K) the page grew forever. */}
+      <div className="relative mt-3 min-h-[200px] flex-1">
+        <div className="absolute inset-0">
         {loading && data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--role-content-subtle)]">Loading…</div>
         ) : data.length < 1 ? (
@@ -271,6 +275,7 @@ export function VolumeHero({ tickers = [] }: { tickers?: BulkTicker[] }) {
             </ComposedChart>
           </ResponsiveContainer>
         )}
+        </div>
       </div>
     </div>
   );

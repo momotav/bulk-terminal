@@ -19,10 +19,10 @@ export const price = (n: number) => n >= 1000 ? formatNumber(n, 2) : n >= 1 ? fo
 export const signedPct = (n: number) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(2)}%`;
 export const usd0 = (n: number) => `$${formatNumber(n, 0)}`;
 
-/** Tradeable markets (suspended ones left out), with their max leverage. */
+/** Tradeable markets (closed and suspended ones left out), with their max leverage. */
 export function useMarkets() {
   const { allMarkets } = useAvailableCoins();
-  const markets = useMemo(() => allMarkets.filter((m) => m.status !== 'SUSPENDED'), [allMarkets]);
+  const markets = useMemo(() => allMarkets.filter((m) => m.status !== 'SUSPENDED' && m.status !== 'CLOSED'), [allMarkets]);
   const maxLev = (coin: string) => markets.find((m) => m.coin === coin)?.maxLeverage ?? 10;
   return { markets, maxLev };
 }

@@ -1244,6 +1244,19 @@ html.light .trade-cta {
 .basket-link-in { animation: basket-link-in 0.35s ease-out; }
 .basket-link-dot { animation: basket-link-pulse 1.6s ease-in-out infinite; }
 .basket-link-pill { animation: basket-link-pill 0.3s cubic-bezier(.2,.9,.3,1.2); }
+/* Link pill (Build basket | pair): dark glass on dark, parchment glass on light. */
+.link-pill {
+  --lp-bg: rgba(20, 17, 10, 0.86); --lp-edge: rgba(243, 182, 91, 0.45);
+  --lp-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --lp-a: #F3B65B; --lp-b: #F6E7C8; --lp-fill: #F3B65B; --lp-on: #1a1408;
+  --lp-glow: 0 0 18px rgba(243, 182, 91, 0.45);
+}
+.light .link-pill, [data-theme="light"] .link-pill {
+  --lp-bg: rgba(255, 252, 242, 0.92); --lp-edge: rgba(176, 118, 34, 0.42);
+  --lp-shadow: 0 8px 26px rgba(90, 64, 20, 0.16), 0 1px 2px rgba(90, 64, 20, 0.08);
+  --lp-a: #9A6414; --lp-b: #3B3222; --lp-fill: #F3B65B; --lp-on: #1a1408;
+  --lp-glow: 0 2px 12px rgba(214, 150, 50, 0.35);
+}
 @media (prefers-reduced-motion: reduce) {
   .basket-link-flow, .basket-link-dot, .basket-link-pill, .basket-link-in { animation: none; }
 }

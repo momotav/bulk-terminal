@@ -7,8 +7,8 @@
 // the gaps, and follows them live while they're dragged: positions are read each
 // frame and written straight to the SVG, never through React state.
 
-import { useEffect, useRef } from 'react';
-import { Layers } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, Layers } from 'lucide-react';
 import { dock } from '@/lib/basket';
 
 const GOLD = '#F3B65B';
@@ -42,9 +42,51 @@ function clampTo(self: Box, other: Box, axis: 'x' | 'y', fallback: number) {
   return lo <= hi ? Math.round((lo + hi) / 2) : Math.round(fallback);
 }
 
-export function BasketLink({ ids, below, above }: { ids: string[]; below: number; above: number }) {
+/**
+ * The pill on the link: dark glass with gold edges; a gold highlight glides to
+ * whichever action the mouse is on and fills it.
+ */
+function LinkPill({ basket, pair }: { basket: boolean; pair?: [string, string] | null }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [hi, setHi] = useState<{ x: number; w: number } | null>(null);
+  const [on, setOn] = useState<number | null>(null);
+  const enter = (i: number) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const b = e.currentTarget, r = box.current?.getBoundingClientRect(), br = b.getBoundingClientRect();
+    if (r) setHi({ x: br.left - r.left, w: br.width });
+    setOn(i);
+  };
+  const items: { key: string; icon: React.ReactNode; label: string; title?: string; act: () => void }[] = [];
+  if (basket) items.push({ key: 'basket', icon: <Layers className="w-3.5 h-3.5" />, label: 'Build basket', act: () => dock.openBasket() });
+  if (pair) items.push({ key: 'pair', icon: <ArrowLeftRight className="w-3.5 h-3.5" />, label: `${pair[0]}/${pair[1]}`, title: `Chart ${pair[0]} priced in ${pair[1]}`, act: () => dock.openTool('pair', { coin: pair[0], coin2: pair[1] }) });
+  return (
+    <div ref={box} onMouseLeave={() => { setOn(null); setHi((h) => h && { ...h }); }}
+      className="link-pill relative inline-flex items-center gap-0.5 h-9 p-1 rounded-full border backdrop-blur-md"
+      style={{ background: 'var(--lp-bg)', borderColor: 'var(--lp-edge)', boxShadow: 'var(--lp-shadow)' }}>
+      <span aria-hidden className="absolute top-1 bottom-1 rounded-full pointer-events-none"
+        style={{
+          left: hi?.x ?? 4, width: hi?.w ?? 0, background: 'var(--lp-fill)', opacity: on === null ? 0 : 1,
+          transform: on === null ? 'scale(0.92)' : 'scale(1)',
+          transition: 'left 320ms cubic-bezier(.22,1,.36,1), width 320ms cubic-bezier(.22,1,.36,1), opacity 200ms ease, transform 260ms cubic-bezier(.22,1,.36,1)',
+          boxShadow: 'var(--lp-glow)',
+        }} />
+      {items.map((it, i) => (
+        <button key={it.key} type="button" onClick={it.act} onMouseEnter={enter(i)} onFocus={enter(i) as unknown as React.FocusEventHandler<HTMLButtonElement>} title={it.title}
+          className="relative z-[1] inline-flex h-full items-center gap-1.5 px-3 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors duration-300"
+          style={{ color: on === i ? 'var(--lp-on)' : i === 0 ? 'var(--lp-a)' : 'var(--lp-b)' }}>
+          {it.icon}{it.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function BasketLink({ ids, below, above, basket = true, pair }: {
+  ids: string[]; below: number; above: number;
+  /** Offer "Build basket" (no basket window yet). */ basket?: boolean;
+  /** Two charts: offer their pair chart. */ pair?: [string, string] | null;
+}) {
   const svg = useRef<SVGSVGElement | null>(null);
-  const pill = useRef<HTMLButtonElement | null>(null);
+  const pill = useRef<HTMLDivElement | null>(null);
   const key = ids.join(',');
 
   useEffect(() => {
@@ -111,11 +153,9 @@ export function BasketLink({ ids, below, above }: { ids: string[]; below: number
           </g>
         ))}
       </svg>
-      <button ref={pill} type="button" onClick={() => dock.openBasket()}
-        className="fixed -translate-x-1/2 -translate-y-1/2 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full text-[12px] font-medium text-[#1a1408] shadow-lg hover:brightness-105 basket-link-pill"
-        style={{ zIndex: above, background: GOLD, visibility: 'hidden' }}>
-        <Layers className="w-3.5 h-3.5" /> Build basket
-      </button>
+      <div ref={pill} className="fixed -translate-x-1/2 -translate-y-1/2 basket-link-pill" style={{ zIndex: above, visibility: 'hidden' }}>
+        <LinkPill basket={basket} pair={pair} />
+      </div>
     </>
   );
 }

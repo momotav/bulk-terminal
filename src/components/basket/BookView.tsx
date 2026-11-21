@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { cn, formatNumber } from '@/lib/api';
 import { useLivePrice, useOrderbook } from './live';
 import { price } from './parts';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
 
 // A market's order book for the workspace: asks over bids around the live price,
 // depth bars by cumulative size, as many levels as the window has room for.
@@ -14,6 +15,9 @@ const usd = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `
 
 export function BookView({ coin, actions, className }: { coin: string; actions?: ReactNode; className?: string }) {
   const book = useOrderbook(coin);
+  const { allMarkets } = useAvailableCoins();
+  const status = allMarkets.find((m) => m.coin === coin)?.status;
+  const closed = status === 'CLOSED' || status === 'SUSPENDED';
   const tick = useLivePrice(coin, 200);
   const prev = useRef<number | null>(null);
   const [up, setUp] = useState(true);
@@ -70,6 +74,11 @@ export function BookView({ coin, actions, className }: { coin: string; actions?:
       <div ref={body} className="relative flex-1 min-h-0 flex flex-col">
         {!book ? (
           <div className="absolute inset-0 flex items-center justify-center text-[var(--text-tertiary)]">Loading book…</div>
+        ) : !book.asks?.length && !book.bids?.length ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
+            <span className="text-[12px] font-medium text-[var(--text-primary)]">{closed ? `${coin} is ${status === 'SUSPENDED' ? 'suspended' : 'closed'} on BULK` : 'The book is empty right now'}</span>
+            <span className="text-[11px] leading-snug text-[var(--text-tertiary)]">{closed ? 'No orders can rest here, so there is nothing to show. The chart keeps its history.' : 'No resting orders on either side. It fills in as soon as orders arrive.'}</span>
+          </div>
         ) : (
           <>
             <div className="flex-1 flex flex-col justify-end min-h-0 overflow-hidden">

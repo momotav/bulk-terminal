@@ -15,6 +15,8 @@ import { FloatingWindow } from './FloatingWindow';
 import { ChartView } from './ChartView';
 import { BasketView } from './BasketView';
 import { BookView } from './BookView';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
+import { TOOL_MENU, ToolBody, isTool, openTool, toolIcon, toolTitle } from './tools';
 import { CoinSearch, useMarkets } from './parts';
 import { BasketLink } from './BasketLink';
 
@@ -22,7 +24,8 @@ const BASE_LAYER = 60;
 
 export function popOut(win: Win) {
   const q = `id=${encodeURIComponent(win.id)}&` + (win.kind === 'basket' ? `kind=basket&iv=${win.interval}`
-    : `kind=${win.kind}&coin=${encodeURIComponent(win.coin ?? '')}&iv=${win.interval}${win.book ? '&book=1' : ''}`);
+    : `kind=${win.kind}&coin=${encodeURIComponent(win.coin ?? '')}&iv=${win.interval}${win.book ? '&book=1' : ''}`
+      + (win.coin2 ? `&coin2=${encodeURIComponent(win.coin2)}` : '') + (win.address ? `&address=${encodeURIComponent(win.address)}` : ''));
   const w = win.kind === 'chart' ? Math.max(win.book ? 960 : 720, win.w) : win.kind === 'book' ? Math.max(300, win.w) : Math.max(420, win.w);
   const h = Math.max(520, win.h);
   // Open to the right of this browser window, where a second screen usually is.
@@ -76,6 +79,7 @@ export function Workspace() {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [menu]);
 
+  const { allMarkets } = useAvailableCoins();
   if (path?.startsWith('/window')) return null;
 
   // Stacking by z-index only: reordering the DOM while a button is pressed swallows its click.
@@ -83,13 +87,20 @@ export function Workspace() {
   const minimized = st.windows.filter((w) => w.min || w.popped);
   const linkIds = st.windows.filter((w) => w.kind === 'chart' && !w.min && !w.popped).map((w) => w.id);
   const full = st.windows.filter((w) => w.kind === 'chart').length >= MAX_LEGS;
+  const canBasket = !st.windows.some((w) => w.kind === 'basket');
+  const closedCoins = new Set(allMarkets.filter((m) => m.status === 'CLOSED' || m.status === 'SUSPENDED').map((m) => m.coin));
+  // Exactly two charts on screen: the line between them also offers their pair chart.
+  const two = linkIds.length === 2 ? linkIds.map((id) => st.windows.find((w) => w.id === id)?.coin ?? '') : null;
+  const pairOf: [string, string] | null = two && two[0] && two[1] && two[0] !== two[1] && !two.some((c) => closedCoins.has(c))
+    && !st.windows.some((w) => w.kind === 'pair' && new Set([w.coin, w.coin2]).has(two[0]) && new Set([w.coin, w.coin2]).has(two[1]))
+    ? [two[0], two[1]] : null;
 
   return (
     <>
       {st.windows.map((w) => (
         <FloatingWindow key={w.id} win={w} layer={BASE_LAYER + (rank.get(w.id) ?? 0)} mobile={mobile}
-          icon={w.kind === 'basket' ? <Layers className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={15} className="shrink-0" />}
-          title={w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} book` : `Basket${st.legs.length ? ` · ${st.legs.length}` : ''}`}
+          icon={isTool(w.kind) ? toolIcon(w) : w.kind === 'basket' ? <Layers className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={15} className="shrink-0" />}
+          title={isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} book` : `Basket${st.legs.length ? ` · ${st.legs.length}` : ''}`}
           extra={w.kind === 'book' ? (
             <button type="button" onClick={() => dock.attachBook(w.id)} title={`Attach to the ${w.coin} chart`} aria-label={`Attach to the ${w.coin} chart`}
               className="flex items-center gap-1 h-7 px-2 rounded-md text-[11px] font-medium text-[var(--text-tertiary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)] transition-colors">
@@ -100,6 +111,8 @@ export function Workspace() {
           {w.kind === 'chart'
             ? <ChartView coin={w.coin ?? 'BTC'} interval={w.interval} onInterval={(v) => dock.setWinInterval(w.id, v)}
                 book={!!w.book} onToggleBook={() => dock.toggleBook(w.id)} onDetachBook={mobile ? undefined : () => dock.detachBook(w.id)} />
+            : isTool(w.kind)
+              ? <ToolBody win={w} patch={(p) => dock.patchTool(w.id, p)} onInterval={(v) => dock.setWinInterval(w.id, v)} />
             : w.kind === 'book'
               ? <BookView coin={w.coin ?? 'BTC'} />
               : <BasketView interval={w.interval} onInterval={(v) => dock.setWinInterval(w.id, v)} />}
@@ -107,8 +120,8 @@ export function Workspace() {
       ))}
 
       {/* Two charts on screen and no basket yet: link them, with a way in. */}
-      {!mobile && linkIds.length >= 2 && !st.windows.some((w) => w.kind === 'basket') && (
-        <BasketLink ids={linkIds} below={BASE_LAYER - 1} above={BASE_LAYER + st.windows.length + 1} />
+      {!mobile && linkIds.length >= 2 && (canBasket || pairOf) && (
+        <BasketLink ids={linkIds} below={BASE_LAYER - 1} above={BASE_LAYER + st.windows.length + 1} basket={canBasket} pair={pairOf} />
       )}
 
       {/* Dock: minimised windows, then the "+" */}
@@ -119,9 +132,9 @@ export function Workspace() {
               <button key={w.id} type="button"
                 // A popped-out window lives in its own browser window: bring that one forward.
                 onClick={() => (w.popped ? window.open('', `bulkstats-${w.id}`)?.focus() : dock.minimize(w.id, false))}
-                title={`${w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}${w.popped ? ' (in its own window)' : ''}`}
+                title={`${isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}${w.popped ? ' (in its own window)' : ''}`}
                 className={cn('ws-pop relative w-9 h-9 rounded-xl bg-[var(--bg-base)] border flex items-center justify-center hover:-translate-y-0.5 transition-transform', w.popped ? 'border-dashed border-[var(--text-tertiary)]' : 'border-[var(--border-color)]')}>
-                {w.kind === 'basket' ? <Layers className="w-4 h-4 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={20} />}
+                {isTool(w.kind) ? toolIcon(w, 20) : w.kind === 'basket' ? <Layers className="w-4 h-4 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={20} />}
                 {w.kind === 'book' && <BookOpen className="absolute -right-1 -bottom-1 w-3.5 h-3.5 p-[1px] rounded bg-[var(--bg-muted)] text-[var(--text-secondary)]" />}
               </button>
             ))}
@@ -137,6 +150,10 @@ export function Workspace() {
                   <MenuItem icon={<BookOpen className="w-4 h-4" />} title="Order book" sub="Live depth for any market" more onClick={() => setMenu('book')} />
                   <MenuItem icon={<Layers className="w-4 h-4" />} title="Basket" sub="Long and short several markets, see the margin"
                     onClick={() => { dock.openBasket(); setMenu('closed'); }} />
+                  <div className="my-1 h-px bg-[var(--border-color)]" />
+                  {TOOL_MENU.map((t) => (
+                    <MenuItem key={t.kind} icon={t.icon} title={t.title} sub={t.sub} onClick={() => { openTool(t.kind); setMenu('closed'); }} />
+                  ))}
                   {st.windows.length > 0 && (
                     <>
                       <div className="my-1 h-px bg-[var(--border-color)]" />

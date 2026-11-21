@@ -677,9 +677,12 @@ export const leaderboard = {
     return data.data;
   },
 
-  async getRecentTrades(limit: number = 50): Promise<unknown[]> {
+  async getRecentTrades(limit: number = 50, opts: { minValue?: number; symbol?: string } = {}): Promise<unknown[]> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (opts.minValue) q.set('minValue', String(opts.minValue));
+    if (opts.symbol) q.set('symbol', opts.symbol);
     const data = await request<{ data: unknown[] }>(
-      `/api/leaderboard/trades/recent?limit=${limit}`
+      `/api/leaderboard/trades/recent?${q.toString()}`
     );
     return data.data;
   },

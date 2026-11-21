@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 import type { Side } from '@/lib/portfolioMargin';
 
 export interface BasketLeg { coin: string; side: Side; weight: number }
-export type WinKind = 'chart' | 'basket' | 'book';
+export type WinKind = 'chart' | 'basket' | 'book' | 'wallet' | 'pair' | 'calc' | 'tape' | 'funding';
 export interface Win {
   id: string;
   kind: WinKind;
@@ -23,7 +23,16 @@ export interface Win {
   popped?: boolean;
   /** Chart windows: the market's order book is attached on the right, inside the window. */
   book?: boolean;
+  /** Pair chart: the second market (the line is coin / coin2). */
+  coin2?: string;
+  /** Wallet watch: the wallet shown. */
+  address?: string;
 }
+
+/** Default sizes for the tool windows. */
+const TOOL_SIZE: Record<Exclude<WinKind, 'chart' | 'basket' | 'book'>, [number, number]> = {
+  wallet: [440, 640], pair: [560, 380], calc: [360, 520], tape: [500, 560], funding: [420, 560],
+};
 export interface DockState {
   windows: Win[];
   /** The basket: exactly the markets with an open chart (closing a chart drops it). */
@@ -164,6 +173,21 @@ export const dock = {
   move: (id: string, x: number, y: number) => patchWin(id, { x, y }),
   resize: (id: string, w: number, h: number) => patchWin(id, { w, h }),
   setWinInterval: (id: string, interval: string) => patchWin(id, { interval }),
+
+  // Tools (wallet watch, pair chart, calculator, live tape, funding board)
+  /** Open a tool window; one per kind (+ market or wallet), so asking again brings it forward. */
+  openTool(kind: Exclude<WinKind, 'chart' | 'basket' | 'book'>, opts: { coin?: string; coin2?: string; address?: string } = {}) {
+    const id = kind === 'pair' ? `pair-${opts.coin}-${opts.coin2}` : kind === 'wallet' ? `wallet-${opts.address ?? 'new'}` : kind;
+    set((s) => {
+      const have = s.windows.find((w) => w.id === id);
+      if (have) return { windows: s.windows.map((w) => (w.id === id ? { ...w, min: false, z: topZ(s.windows) + 1 } : w)) };
+      const [w, h0] = TOOL_SIZE[kind];
+      const h = Math.min(h0, (typeof window !== 'undefined' ? window.innerHeight : 800) - 90);
+      return { windows: [...s.windows, { id, kind, coin: opts.coin, coin2: opts.coin2, address: opts.address, interval: '1h', ...placement(s.windows, w, h), w, h, z: topZ(s.windows) + 1, min: false, max: false }] };
+    });
+  },
+  /** Change what a tool window shows (pair markets, watched wallet...). */
+  patchTool: (id: string, p: Partial<Pick<Win, 'coin' | 'coin2' | 'address'>>) => patchWin(id, p),
 
   // Order books
   /** Show or hide the book attached to a chart. A floating book of the same market snaps in. */

@@ -243,7 +243,9 @@ function RevenueCard() {
       </div>
       {/* min-height guarantees the chart shows on mobile (natural card height);
           flex-1 lets it grow to fill the card on lg. */}
-      <div className="mt-3 h-[150px] flex-none lg:h-auto lg:min-h-0 lg:flex-1">
+      {/* Laid over its box (absolute) so the chart can't push the row taller; see VolumeHero. */}
+      <div className="relative mt-3 h-[150px] flex-none lg:h-auto lg:min-h-[120px] lg:flex-1">
+        <div className="absolute inset-0">
         {bars.length < 1 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--role-content-subtle)]">No revenue data yet.</div>
         ) : (
@@ -261,6 +263,7 @@ function RevenueCard() {
             </BarChart>
           </ResponsiveContainer>
         )}
+        </div>
       </div>
     </div>
   );
