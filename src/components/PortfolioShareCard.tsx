@@ -61,7 +61,6 @@ const money = (n: number) => `${n >= 0 ? '+' : '−'}$${Math.abs(n) >= 100_000 ?
 const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
 
 const tkey = (t: PortfolioTrade) => `${t.coin}|${t.side}|${t.openedAt ?? 'x'}|${t.closedAt ?? 'open'}`;
-const MAX_PICK = 8;
 const dayLabel = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 /**
@@ -79,12 +78,20 @@ async function pickedCurve(ts: PortfolioTrade[]): Promise<{ t: number; v: number
   const ivs: [string, number][] = [['1m', 60e3], ['5m', 300e3], ['15m', 900e3], ['1h', 3600e3], ['4h', 14400e3], ['1d', 86400e3]];
   const [iv, ivMs] = ivs.find(([, ms]) => span / ms <= 400) ?? ivs[ivs.length - 1];
   const px: Record<string, { t: number; c: number }[]> = {};
-  await Promise.all(Array.from(new Set(ts.map((t) => t.coin))).map(async (c) => {
-    try {
-      const r = await analytics.getCandles(`${c}-USD`, iv, 1000, { startTime: Math.floor(tA / ivMs) * ivMs - ivMs, endTime: Math.ceil(tB / ivMs) * ivMs + ivMs });
-      px[c] = (r.candles ?? []).filter((k) => k.c > 0).map((k) => ({ t: k.t, c: k.c })).sort((a, b) => a.t - b.t);
-    } catch { /* no candles: that leg is drawn as a straight line to its result */ }
-  }));
+  // One candle fetch per market (not per position), four at a time so a pick across
+  // many markets doesn't get turned away by BULK's rate limit.
+  const queue = Array.from(new Set(ts.map((t) => t.coin)));
+  const one = async (c: string) => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await analytics.getCandles(`${c}-USD`, iv, 1000, { startTime: Math.floor(tA / ivMs) * ivMs - ivMs, endTime: Math.ceil(tB / ivMs) * ivMs + ivMs });
+        px[c] = (r.candles ?? []).filter((k) => k.c > 0).map((k) => ({ t: k.t, c: k.c })).sort((a, b) => a.t - b.t);
+        return;
+      } catch { await new Promise((ok) => setTimeout(ok, 600 * (i + 1))); }
+    }
+    /* no candles: that leg is drawn as a straight line to its result */
+  };
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => { for (let c = queue.shift(); c; c = queue.shift()) await one(c); }));
   const priceAt = (c: string, t: number) => {
     const a = px[c]; if (!a?.length) return null;
     let lo = 0, hi = a.length - 1, best = -1;
@@ -182,9 +189,12 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
       .filter((t) => (!q || t.coin.toUpperCase().includes(q))
         && (pickStatus === 'all' || (pickStatus === 'open') === (t.closedAt == null))
         && (pickSide === 'all' || t.side === pickSide))
-      .sort(order[pickSort])
-      .slice(0, 200);
+      .sort(order[pickSort]);
   }, [allTrades, pickQuery, pickStatus, pickSide, pickSort]);
+  // Every match is pickable ("Select all" takes them all); the list draws them in pages.
+  const [pickShown, setPickShown] = useState(200);
+  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  useEffect(() => setPickShown(200), [pickQuery, pickStatus, pickSide, pickSort]);
   const points = mode === 'picked' ? (pickedPts ?? []) : mode === 'custom' ? customPts : range.points;
   const trades = mode === 'picked' ? pickedTrades : allTrades;
   const open = useMemo(() => trades.filter((t) => t.closedAt == null), [trades]);
@@ -682,10 +692,16 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
                   </button>
                 }>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-[13px] text-[var(--text-primary)]">Pick up to {MAX_PICK}</span>
-                  {picked.length > 0
-                    ? <button type="button" onClick={() => setPicked([])} className="text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Clear {picked.length}</button>
-                    : <span className="text-[12px] text-[var(--text-tertiary)]">All in window</span>}
+                  <span className="text-[13px] text-[var(--text-primary)]">Pick positions</span>
+                  <span className="flex items-center gap-3">
+                    {pickList.length > 0 && pickList.some((t) => !pickedSet.has(tkey(t))) && (
+                      <button type="button" onClick={() => setPicked((cur) => Array.from(new Set([...cur, ...pickList.map(tkey)])))}
+                        className="text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Select all {pickList.length}</button>
+                    )}
+                    {picked.length > 0
+                      ? <button type="button" onClick={() => setPicked([])} className="text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Clear {picked.length}</button>
+                      : <span className="text-[12px] text-[var(--text-tertiary)]">All in window</span>}
+                  </span>
                 </div>
                 <input value={pickQuery} onChange={(e) => setPickQuery(e.target.value)} placeholder="Search coin"
                   className="mb-2 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 py-2 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]" />
@@ -703,10 +719,10 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
                 </div>
                 <div className="max-h-[260px] overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)]">
                   {pickList.length === 0 && <p className="px-3 py-6 text-center text-[12px] text-[var(--text-tertiary)]">No positions match.</p>}
-                  {pickList.map((t) => {
-                    const k = tkey(t); const on = picked.includes(k); const full = !on && picked.length >= MAX_PICK;
+                  {pickList.slice(0, pickShown).map((t) => {
+                    const k = tkey(t); const on = pickedSet.has(k);
                     return (
-                      <button key={k} type="button" disabled={full}
+                      <button key={k} type="button"
                         onClick={() => setPicked((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
                         className={cn('flex w-full items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-2 text-left text-[12px] last:border-b-0 transition-colors disabled:opacity-35', on ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]')}>
                         <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors', on ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border-color)]')}>
@@ -720,6 +736,10 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
                       </button>
                     );
                   })}
+                  {pickList.length > pickShown && (
+                    <button type="button" onClick={() => setPickShown((n) => n + 200)}
+                      className="w-full py-2 text-center text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Show more · {pickList.length - pickShown} left</button>
+                  )}
                 </div>
               </Popover>
             </>}
