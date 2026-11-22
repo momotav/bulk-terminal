@@ -5,6 +5,7 @@ import { loadFamilyActivity, useFamilyData, type FamilyPosition } from '@/lib/fa
 import { useAccountFamily } from '@/lib/accountFamily';
 import { FamilyPortfolio } from '@/components/wallet/FamilyPortfolio';
 import { hiResAvatar } from '@/lib/avatar';
+import { BulkAvatar } from '@/components/BulkAvatar';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -943,10 +944,10 @@ export default function WalletPage() {
             <section className="bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] lg:border-r border-[var(--border-color)] px-5 pt-5 pb-5 flex flex-col gap-4 min-w-0">
               <div className="flex items-center gap-3 min-w-0">
                 <Link href="/leaderboard" aria-label="Back to Leaderboard" title="Leaderboard" className="p-1 -ml-1 rounded-md text-[var(--role-content-subtle)] hover:text-[var(--role-content)] transition-colors"><ArrowLeft className="w-4 h-4" /></Link>
-                {twitterAvatar && (
+                {twitterAvatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={twitterAvatar} alt="" width={36} height={36} loading="eager" decoding="async" className="w-9 h-9 rounded-lg object-cover shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                )}
+                ) : <BulkAvatar seed={address} size={36} />}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <h1 className="text-[20px] leading-tight font-medium text-[var(--role-content)] truncate">{displayName || formatAddress(address)}</h1>

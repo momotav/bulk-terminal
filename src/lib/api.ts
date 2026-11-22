@@ -816,6 +816,13 @@ export type BulkLeaderboardRankResponse =
     };
 
 // Analytics API
+export interface LiqMapPosition { wallet: string; side: 'long' | 'short'; notional: number; liq: number; entry: number; leverage: number }
+export interface LiquidationMapResponse {
+  at: number; wallets: number;
+  markets?: { symbol: string; longUsd: number; shortUsd: number; positions: number }[];
+  symbol?: string; mark?: number; coveredUsd?: number; openInterestUsd?: number; positions?: LiqMapPosition[];
+}
+
 export const analytics = {
   // Live order book snapshot for a market. Backed by BULK's /l2book endpoint,
   // proxied through our backend with a 2-second cache so many users viewing
@@ -1275,6 +1282,11 @@ export const analytics = {
   },
 
   // Mark over oracle per market: live, plus hourly averages since collection began.
+  /** Open positions' liquidation prices (top traders, ~5 min fresh). No symbol: per-market totals. */
+  async getLiquidationMap(symbol?: string): Promise<LiquidationMapResponse> {
+    return request(`/api/analytics/liquidation-map${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`);
+  },
+
   async getMarkOracle(hours = 24): Promise<{ live: { symbol: string; bps: number; mark: number; oracle: number; ts: number }[]; history: Record<string, { t: number; bps: number }[]> }> {
     return request(`/api/analytics/mark-oracle?hours=${hours}`);
   },

@@ -50,6 +50,7 @@ export function Workspace() {
   const path = usePathname();
   const st = useDock();
   const mobile = useIsMobile();
+  const [dockHover, setDockHover] = useState<number | null>(null);
   const [menu, setMenu] = useState<'closed' | 'root' | 'chart' | 'book'>('closed');
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { markets } = useMarkets();
@@ -127,17 +128,34 @@ export function Workspace() {
       {/* Dock: minimised windows, then the "+" */}
       <div ref={menuRef} className="fixed bottom-4 right-4 z-[90] flex items-end gap-2">
         {minimized.length > 0 && (
-          <div className="ws-pop flex items-center gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-xl">
-            {minimized.map((w) => (
-              <button key={w.id} type="button"
-                // A popped-out window lives in its own browser window: bring that one forward.
-                onClick={() => (w.popped ? window.open('', `bulkstats-${w.id}`)?.focus() : dock.minimize(w.id, false))}
-                title={`${isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}${w.popped ? ' (in its own window)' : ''}`}
-                className={cn('ws-pop relative w-9 h-9 rounded-xl bg-[var(--bg-base)] border flex items-center justify-center hover:-translate-y-0.5 transition-transform', w.popped ? 'border-dashed border-[var(--text-tertiary)]' : 'border-[var(--border-color)]')}>
-                {isTool(w.kind) ? toolIcon(w, 20) : w.kind === 'basket' ? <Layers className="w-4 h-4 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={20} />}
-                {w.kind === 'book' && <BookOpen className="absolute -right-1 -bottom-1 w-3.5 h-3.5 p-[1px] rounded bg-[var(--bg-muted)] text-[var(--text-secondary)]" />}
-              </button>
-            ))}
+          <div onMouseLeave={() => setDockHover(null)} className="ws-pop flex items-end gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-xl">
+            {minimized.map((w, i) => {
+              const name = `${isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}`;
+              // Dock magnify: the icon under the mouse grows most, its neighbours a little.
+              const d = dockHover === null ? 9 : Math.abs(i - dockHover);
+              // Real size, not a transform, so the tray grows with the icon instead of
+              // the icon spilling over its edge.
+              const box = d === 0 ? 48 : d === 1 ? 41 : 36;
+              const scale = box / 36;
+              return (
+                <button key={w.id} type="button"
+                  onMouseEnter={() => setDockHover(i)} onFocus={() => setDockHover(i)} onBlur={() => setDockHover(null)}
+                  // A popped-out window lives in its own browser window: bring that one forward.
+                  onClick={() => (w.popped ? window.open('', `bulkstats-${w.id}`)?.focus() : dock.minimize(w.id, false))}
+                  aria-label={`${name}${w.popped ? ' (in its own window)' : ''}`}
+                  className={cn('ws-pop group relative shrink-0 rounded-xl bg-[var(--bg-base)] border flex items-center justify-center', w.popped ? 'border-dashed border-[var(--text-tertiary)]' : 'border-[var(--border-color)]', d === 0 && 'shadow-lg')}
+                  style={{ width: box, height: box, transition: 'width 240ms cubic-bezier(.22,1,.36,1), height 240ms cubic-bezier(.22,1,.36,1), box-shadow 200ms ease' }}>
+                  <span className="flex items-center justify-center" style={{ transform: `scale(${scale})`, transition: 'transform 240ms cubic-bezier(.22,1,.36,1)' }}>
+                    {isTool(w.kind) ? toolIcon(w, 20) : w.kind === 'basket' ? <Layers className="w-4 h-4 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={20} />}
+                  </span>
+                  {w.kind === 'book' && <BookOpen className="absolute -right-1 -bottom-1 w-3.5 h-3.5 p-[1px] rounded bg-[var(--bg-muted)] text-[var(--text-secondary)]" />}
+                  <span aria-hidden className="pointer-events-none absolute bottom-full left-1/2 mb-2 whitespace-nowrap rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] shadow-lg"
+                    style={{ opacity: d === 0 ? 1 : 0, transform: `translateX(-50%) translateY(${d === 0 ? 0 : 4}px)`, transition: 'opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1)' }}>
+                    {name}{w.popped && <span className="text-[var(--text-tertiary)]"> · own window</span>}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -175,8 +193,8 @@ export function Workspace() {
             </div>
           )}
           <button type="button" onClick={() => setMenu((m) => (m === 'closed' ? 'root' : 'closed'))} aria-label="Open a tool" aria-expanded={menu !== 'closed'}
-            className="w-12 h-12 rounded-full flex items-center justify-center border border-[var(--border-color)] bg-[var(--bg-muted)] text-[var(--text-primary)] shadow-xl hover:border-[var(--text-tertiary)] transition-colors">
-            <Plus className={cn('w-5 h-5 transition-transform duration-200', menu !== 'closed' && 'rotate-45')} />
+            className="group w-12 h-12 rounded-full flex items-center justify-center border border-[var(--border-color)] bg-[var(--bg-muted)] text-[var(--text-primary)] shadow-xl hover:border-[var(--accent)] hover:shadow-[0_0_0_4px_rgb(243_182_91/0.12),0_10px_30px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 transition-[border-color,box-shadow,transform] duration-300">
+            <Plus className={cn('w-5 h-5 transition-transform duration-300 ease-out', menu !== 'closed' ? 'rotate-45' : 'group-hover:rotate-90')} />
           </button>
         </div>
       </div>

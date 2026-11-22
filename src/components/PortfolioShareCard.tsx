@@ -19,7 +19,8 @@ import { X, Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CardBar, DateRange, Popover, Segmented, Switch, barBtn } from '@/components/share/controls';
 import { CoinIcon } from '@/components/CoinIcon';
 import { analytics, formatNumber, formatCompact, formatAddress, cn } from '@/lib/api';
-import { avatarHues, pickMime, roundRect } from '@/components/TradeShareCard';
+import { pickMime, roundRect } from '@/components/TradeShareCard';
+import { drawAvatar } from '@/lib/bulkAvatar';
 
 export interface PortfolioLeg { coin: string; side: 'long' | 'short'; notional: number; pnl: number }
 /** One position's life: opened, maybe closed, and its PnL (realized, or unrealized if still open). */
@@ -302,13 +303,8 @@ export function PortfolioShareCard({ address, ranges, initial, trades: allTrades
     roundRect(ctx, 3, 3, W - 6, H - 6, 19); ctx.fillStyle = V.bgBase; ctx.fill();
 
     // header
-    const [a1, a2, initials] = avatarHues(opt.hideWallet ? 'bulker' : address);
-    const ax = PAD + 24, ay = PAD + 24, ar = 24;
-    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
-    g.addColorStop(0, a1); g.addColorStop(1, a2);
-    ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `600 ${opt.hideWallet ? 17 : 15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(opt.hideWallet ? 'B' : initials, ax, ay + 1);
+    // BULK-style avatar: the wallet's own colour field (hidden wallet → a neutral one).
+    drawAvatar(ctx, opt.hideWallet ? 'bulker' : address, PAD, PAD, 48, 12);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'bulker' : formatAddress(address), PAD + 58, PAD + 18);
     const badge = 'PORTFOLIO';

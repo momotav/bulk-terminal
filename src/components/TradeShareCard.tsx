@@ -1,5 +1,6 @@
 'use client';
 
+import { drawAvatar } from '@/lib/bulkAvatar';
 // ---------------------------------------------------------------------------
 // TradeShareCard
 //
@@ -329,13 +330,8 @@ export function TradeShareCard({ data, onClose }: Props) {
     ctx.translate(shakeX, shakeY);
 
     // ---- header ----  (wallet hidden → "bulker")
-    const [a1, a2, initials] = avatarHues(opt.hideWallet ? 'bulker' : address);
-    const ax = PAD + 24, ay = PAD + 24, ar = 24;
-    const g = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
-    g.addColorStop(0, a1); g.addColorStop(1, a2);
-    ctx.beginPath(); ctx.arc(ax, ay, ar, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `600 ${opt.hideWallet ? 17 : 15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(opt.hideWallet ? 'B' : initials, ax, ay + 1);
+    // BULK-style avatar: the wallet's own colour field (hidden wallet → a neutral one).
+    drawAvatar(ctx, opt.hideWallet ? 'bulker' : address, PAD, PAD, 48, 12);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = V.text; ctx.font = `600 18px ${FONT}`; ctx.fillText(opt.hideWallet ? 'bulker' : formatAddress(address), PAD + 58, PAD + 18);
     // A liquidation card reads as live until the blast, so the ending isn't given away.

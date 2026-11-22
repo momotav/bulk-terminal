@@ -10,6 +10,7 @@ import { userApi, wallet as walletApi, type WalletData, type ClosedPosition } fr
 import { trackRecord } from '@/lib/walletMetrics';
 import { money, pnlColor, signed } from '@/lib/walletFormat';
 import { hiResAvatar } from '@/lib/avatar';
+import { BulkAvatar } from '@/components/BulkAvatar';
 
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
@@ -202,9 +203,7 @@ export default function ProfilePage() {
               <img src={twitterAvatar} alt="" width={88} height={88} onError={() => setAvatarFailed(true)}
                 className="w-[88px] h-[88px] rounded-2xl object-cover ring-1 ring-[var(--border-color)]" />
             ) : (
-              <div className="w-[88px] h-[88px] rounded-2xl bg-[var(--role-surface-raised)] ring-1 ring-[var(--border-color)] flex items-center justify-center text-[34px] font-medium text-[var(--role-content-muted)]">
-                {twitterName || user?.display_name ? initial : userEmail ? <Mail className="w-9 h-9" /> : <User className="w-9 h-9" />}
-              </div>
+              <BulkAvatar seed={user?.wallet_address || claimedWallet || String(user?.id ?? displayName)} size={88} className="!rounded-2xl ring-1 ring-[var(--border-color)]" />
             )}
           </div>
 

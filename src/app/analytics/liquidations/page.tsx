@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
+import { LiquidationLevels } from '@/components/LiqHeatmap';
 import { useAssetClass } from '@/hooks/useAssetClass';
 import { HIDDEN_COINS } from '@/lib/coins';
 import { ChartFrame } from '@/components/ChartFrame';
@@ -781,6 +782,9 @@ export default function LiquidationsPage() {
     <div className="w-full p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
       <h1 className="page-title text-[var(--text-primary)]">Liquidations</h1>
+
+      {/* Where open positions would be liquidated, by price */}
+      <LiquidationLevels />
 
       {/* Row 1: Treemap + Liquidations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">

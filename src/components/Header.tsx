@@ -1,6 +1,7 @@
 'use client';
 
 import { hiResAvatar } from '@/lib/avatar';
+import { BulkAvatar } from '@/components/BulkAvatar';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -290,10 +291,8 @@ export function Header() {
                 >
                   {twitterAvatar ? (
                     <img src={twitterAvatar} alt="" className="w-5 h-5 rounded-full" />
-                  ) : isEmailUser ? (
-                    <Mail className="w-4 h-4 text-bulk-accent" />
                   ) : (
-                    <Wallet className="w-4 h-4 text-bulk-accent" />
+                    <BulkAvatar seed={user?.wallet_address || claimedWallet || String(user?.id ?? '')} size={20} round />
                   )}
                   
                   <span className="text-sm text-[var(--text-primary)] hidden sm:block max-w-[100px] truncate">

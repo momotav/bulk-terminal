@@ -1,6 +1,7 @@
 'use client';
 
 import { hiResAvatar } from '@/lib/avatar';
+import { BulkAvatar } from '@/components/BulkAvatar';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -188,9 +189,7 @@ export default function FollowingPage() {
                     className="w-12 h-12 rounded-full border border-[var(--border-color)]"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-bulk-green to-bulk-green/50 flex items-center justify-center text-dark-primary font-bold">
-                    {w.wallet_address.slice(0, 2)}
-                  </div>
+                  <BulkAvatar seed={w.wallet_address} size={48} round />
                 )}
                 
                 {/* Info */}

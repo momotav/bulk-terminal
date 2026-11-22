@@ -13,6 +13,7 @@
 // closes on Esc / backdrop / select. Arrow keys move, Enter selects.
 
 import { hiResAvatar } from '@/lib/avatar';
+import { BulkAvatar } from '@/components/BulkAvatar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2, ArrowRight, TrendingUp, Wallet as WalletIcon, LayoutGrid, BarChart3, CornerDownLeft, CandlestickChart } from 'lucide-react';
@@ -348,7 +349,7 @@ function RowIcon({ row }: { row: Row }) {
   if (row.kind === 'wallet') {
     return row.avatar
       ? <img src={row.avatar} alt="" className="h-7 w-7 shrink-0 rounded-md border border-[var(--role-line)] object-cover" />
-      : <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--role-content-subtle)]')}><WalletIcon className="h-3.5 w-3.5" /></span>;
+      : <BulkAvatar seed={row.address} size={28} className="!rounded-md" />;
   }
   if (row.kind === 'market' && row.dock) return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--accent)]')}><CandlestickChart className="h-3.5 w-3.5" /></span>;
   if (row.kind === 'market') return <span className={cn(base, 'bg-[var(--role-surface-raised)] text-[var(--pos)]')}><TrendingUp className="h-3.5 w-3.5" /></span>;

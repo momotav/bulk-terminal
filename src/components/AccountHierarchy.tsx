@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, Layers, CornerLeftUp, ArrowRight } from 'lucide-react';
+import { BulkAvatar } from '@/components/BulkAvatar';
 import { cn } from '@/lib/api';
 import { money, pnlColor, signed } from '@/lib/walletFormat';
 import { accountValue, familyTotals, useAccountFamily } from '@/lib/accountFamily';
@@ -41,9 +42,11 @@ export function AccountHierarchy({ address, onOpenPortfolio }: { address: string
     <div className="relative w-full" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="dialog"
         className={cn('group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors', open ? 'bg-[var(--role-surface-raised)]' : 'hover:bg-[var(--role-surface-raised)]')}>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content-muted)] group-hover:text-[var(--role-content)]">
-          <Layers className="h-4 w-4" />
-        </span>
+        {me ? <BulkAvatar seed={me.pubkey} size={32} /> : (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--role-surface-raised)] text-[var(--role-content-muted)] group-hover:text-[var(--role-content)]">
+            <Layers className="h-4 w-4" />
+          </span>
+        )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] text-[var(--role-content)]">
             {isSub ? <>Sub-account <span className="font-medium">{me!.name}</span></> : 'Master account'}
@@ -74,8 +77,13 @@ export function AccountHierarchy({ address, onOpenPortfolio }: { address: string
                 <button key={a.pubkey} type="button"
                   onClick={() => { setOpen(false); if (!here) router.push(`/wallet/${a.pubkey}`); }}
                   className={cn('w-full flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--role-surface-raised)]', here && 'bg-[var(--role-surface-raised)]')}>
-                  <span className={cn('w-4 shrink-0 flex justify-center', !a.isMaster && 'pl-1')}>
-                    {a.isMaster ? <Layers className="w-3.5 h-3.5 text-[var(--accent)]" /> : <span className="block w-2 h-2 rounded-[2px] border border-[var(--role-content-subtle)]" />}
+                  <span className="relative shrink-0">
+                    <BulkAvatar seed={a.pubkey} size={30} />
+                    {a.isMaster && (
+                      <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--role-surface)]" title="Master account">
+                        <Layers className="h-2.5 w-2.5 text-[var(--accent)]" />
+                      </span>
+                    )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
