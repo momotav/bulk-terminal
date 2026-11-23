@@ -16,7 +16,7 @@ import { ChartView } from './ChartView';
 import { BasketView } from './BasketView';
 import { BookView } from './BookView';
 import { useAvailableCoins } from '@/hooks/useAvailableCoins';
-import { TOOL_MENU, ToolBody, isTool, openTool, toolIcon, toolTitle } from './tools';
+import { TOOL_MENU, ToolBody, isTool, openTool, toolDockName, toolIcon, toolTitle } from './tools';
 import { CoinSearch, useMarkets } from './parts';
 import { BasketLink } from './BasketLink';
 
@@ -130,7 +130,7 @@ export function Workspace() {
         {minimized.length > 0 && (
           <div onMouseLeave={() => setDockHover(null)} className="ws-pop glass-pop flex items-end gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-xl">
             {minimized.map((w, i) => {
-              const name = `${isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}`;
+              const name = `${isTool(w.kind) ? toolDockName(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}`;
               // Dock magnify: the icon under the mouse grows most, its neighbours a little.
               const d = dockHover === null ? 9 : Math.abs(i - dockHover);
               // Real size, not a transform, so the tray grows with the icon instead of
