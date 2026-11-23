@@ -36,6 +36,8 @@ export function LeaderboardBoard({ type, timeframe }: { type: BoardType; timefra
   }, [type, timeframe, network]);
 
   const max = useMemo(() => Math.max(1, ...(rows ?? []).map((r) => Math.abs(r.value))), [rows]);
+  // The whole board's total, for each podium card's share of it.
+  const total = useMemo(() => (rows ?? []).reduce((a, r) => a + Math.abs(r.value), 0), [rows]);
   const signed = type === 'pnl';
   const colorOf = (v: number) => (type === 'pnl' ? (v >= 0 ? 'var(--pos)' : 'var(--neg)') : cfg.color);
 
@@ -63,24 +65,37 @@ export function LeaderboardBoard({ type, timeframe }: { type: BoardType; timefra
     <div className="space-y-4">
       {/* podium */}
       <div className="grid gap-3 md:grid-cols-3">
-        {podium.map((r, i) => (
-          <Link key={r.wallet_address} href={`/wallet/${r.wallet_address}`} prefetch={false}
-            className="group relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] p-4 transition-colors hover:border-[var(--text-tertiary)]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <BulkAvatar seed={r.wallet_address} size={40} />
-                <div>
-                  <div className="font-mono text-[13px] text-[var(--text-primary)]">{formatAddress(r.wallet_address)}</div>
-                  <div className="text-[11px] tabular-nums text-[var(--text-tertiary)]">{r.trades ? `${formatNumber(r.trades, 0)} trades` : cfg.label}</div>
+        {podium.map((r, i) => {
+          const share = total > 0 ? Math.abs(r.value) / total : 0;
+          return (
+            <Link key={r.wallet_address} href={`/wallet/${r.wallet_address}`} prefetch={false}
+              className="group relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] px-4 pb-3.5 pt-4 transition-colors hover:border-[var(--text-tertiary)]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="relative shrink-0">
+                    <BulkAvatar seed={r.wallet_address} size={44} />
+                    <span className={cn('absolute -left-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[var(--bg-muted)] text-[11px] font-medium tabular-nums',
+                      i === 0 ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'bg-[var(--bg-base)] text-[var(--text-secondary)]')}>{i + 1}</span>
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-[13px] text-[var(--text-primary)]">{formatAddress(r.wallet_address)}</div>
+                    <div className="text-[11px] tabular-nums text-[var(--text-tertiary)]">{r.trades ? `${formatNumber(r.trades, 0)} trades` : cfg.label}</div>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[11px] text-[var(--text-tertiary)]">{cfg.value}</div>
+                  <div className="text-[24px] font-medium leading-tight tabular-nums" style={{ color: colorOf(r.value) }}>{money(r.value, signed)}</div>
                 </div>
               </div>
-              <span className={cn('flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-medium tabular-nums',
-                i === 0 ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'bg-[var(--bg-base)] text-[var(--text-secondary)]')}>{i + 1}</span>
-            </div>
-            <div className="mt-4 text-[11px] text-[var(--text-tertiary)]">{cfg.value}</div>
-            <div className="text-[26px] font-medium leading-tight tabular-nums" style={{ color: colorOf(r.value) }}>{money(r.value, signed)}</div>
-          </Link>
-        ))}
+              <div className="mt-3.5 flex items-center gap-2.5">
+                <span className="relative h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'color-mix(in srgb, var(--border-color) 70%, transparent)' }}>
+                  <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max(2, share * 100)}%`, background: colorOf(r.value), opacity: 0.8 }} />
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">{(share * 100).toFixed(share < 0.1 ? 1 : 0)}% of top {rows.length}</span>
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {/* the rest */}
