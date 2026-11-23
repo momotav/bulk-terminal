@@ -2,94 +2,69 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Trophy, Flame, Anchor, Activity } from 'lucide-react';
-import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { LeaderboardBoard, type BoardType } from '@/components/leaderboard/LeaderboardBoard';
 import { WalletRankSearch } from '@/components/leaderboard/WalletRankSearch';
 import { cn } from '@/lib/api';
 import type { TimeFrame } from '@/store';
 
-type LeaderboardType = 'pnl' | 'liquidated' | 'whales' | 'active';
-
-const tabs = [
-  { id: 'pnl', label: 'PnL', icon: Trophy, color: 'text-bulk-green' },
-  { id: 'liquidated', label: 'Liquidations', icon: Flame, color: 'text-bulk-red' },
-  { id: 'whales', label: 'Positions', icon: Anchor, color: 'text-bulk-blue' },
-  { id: 'active', label: 'Volume', icon: Activity, color: 'text-bulk-purple' },
-] as const;
-
-const VALID_TYPES: LeaderboardType[] = ['pnl', 'liquidated', 'whales', 'active'];
+const TABS: { id: BoardType; label: string }[] = [
+  { id: 'pnl', label: 'PnL' },
+  { id: 'active', label: 'Volume' },
+  { id: 'liquidated', label: 'Liquidations' },
+  { id: 'whales', label: 'Positions' },
+];
+const VALID: BoardType[] = ['pnl', 'active', 'liquidated', 'whales'];
+const TIMEFRAMES: [TimeFrame, string][] = [['24h', '24H'], ['7d', '7D'], ['30d', '30D'], ['all', 'All']];
 
 function LeaderboardContent() {
-  // Deep-link support: /leaderboard?type=liquidated lands on that tab, so the
-  // "View full leaderboard" links (and shared URLs) open the right board
-  // instead of always resetting to PnL.
+  // Deep links: /leaderboard?type=liquidated opens that board.
   const searchParams = useSearchParams();
-  const initialType = (() => {
-    const t = searchParams.get('type');
-    return t && VALID_TYPES.includes(t as LeaderboardType) ? (t as LeaderboardType) : 'pnl';
-  })();
-
-  const [activeTab, setActiveTab] = useState<LeaderboardType>(initialType);
-  // Page-local timeframe (NOT the shared store) so the full leaderboard can
-  // default to 7d — 24h is too sparse here (e.g. only a handful of wallets get
-  // liquidated in a day, which made the Liquidations board look empty).
+  const initial = (() => { const t = searchParams.get('type'); return t && VALID.includes(t as BoardType) ? (t as BoardType) : 'pnl'; })();
+  const [tab, setTab] = useState<BoardType>(initial);
+  // 7D by default: a single day is too sparse for some boards (liquidations).
   const [timeframe, setTimeframe] = useState<TimeFrame>('7d');
+  // PnL is a running total; Positions is a live snapshot. Neither has a window.
+  const windowed = tab === 'active' || tab === 'liquidated';
 
   return (
-    <main className="flex-1 responsive-container py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="page-title text-[var(--text-primary)] mb-1">Leaderboard</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Track the top performers, biggest liquidations, and most active traders.
-        </p>
+    <main className="flex-1 responsive-container py-8">
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="page-title mb-1 text-[var(--text-primary)]">Leaderboard</h1>
+          <p className="text-[14px] text-[var(--text-secondary)]">The top traders on BULK by PnL, volume, liquidations and open positions.</p>
+        </div>
+        <WalletRankSearch />
       </div>
 
-      {/* Wallet Rank Search */}
-      <WalletRankSearch />
-
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border',
-              activeTab === tab.id
-                ? 'bg-[var(--bg-muted)] border-[var(--border-color)] text-[var(--text-primary)]'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary-20)]',
-            )}
-          >
-            <tab.icon className={cn('w-4 h-4', activeTab === tab.id && tab.color)} />
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-color)]">
+        <div className="flex gap-1">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" onClick={() => setTab(t.id)}
+              className={cn('relative px-3.5 pb-3 pt-1 text-[14px] transition-colors',
+                tab === t.id ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+              {t.label}
+              {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-[var(--text-primary)]" />}
+            </button>
+          ))}
+        </div>
+        <div className={cn('mb-2 flex rounded-lg bg-[var(--bg-muted)] p-0.5 transition-opacity', !windowed && 'pointer-events-none opacity-40')} title={windowed ? undefined : 'This board is all-time / live'}>
+          {TIMEFRAMES.map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setTimeframe(v)}
+              className={cn('rounded-md px-3 py-1 text-[12px] font-medium transition-colors',
+                timeframe === v && windowed ? 'bg-[var(--bg-base)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>{l}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Leaderboard — all tabs are served from OUR collected data (the
-          `traders` table). Volume/whales/activity/liquidations come straight
-          from the indexed trade feed; PnL is enriched every few minutes from
-          BULK's public account endpoint for our top traders by volume. (We no
-          longer use BULK's indexer leaderboard — it's disabled upstream.) */}
-      <div className="h-[640px]">
-        <LeaderboardTable
-          type={activeTab}
-          limit={100}
-          showTimeframe={activeTab !== 'pnl' && activeTab !== 'whales'}
-          timeframe={timeframe}
-          onTimeframeChange={setTimeframe}
-          hideFullLink
-        />
-      </div>
+      <LeaderboardBoard type={tab} timeframe={windowed ? timeframe : 'all'} />
     </main>
   );
 }
 
 export default function LeaderboardPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
-      <Suspense fallback={<main className="flex-1 responsive-container py-6" />}>
+    <div className="flex min-h-screen flex-col bg-[var(--bg-base)]">
+      <Suspense fallback={<main className="flex-1 responsive-container py-8" />}>
         <LeaderboardContent />
       </Suspense>
     </div>

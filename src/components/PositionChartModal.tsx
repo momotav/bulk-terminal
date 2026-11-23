@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CoinIcon } from '@/components/CoinIcon';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
 import Link from 'next/link';
-import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon, Link2, Check } from 'lucide-react';
+import { X, Loader2, ExternalLink, Image as ImageIcon, Link2, Check } from 'lucide-react';
 import { analytics, wallet, formatNumber, formatCompact, marketStreamUrl, type Candle, type WalletFill } from '@/lib/api';
 import { annotateFills, buildTradeLifecycle, closedTradeLifecycle, type TradeLifecycle } from '@/lib/positionWalk';
 import { anchorFills } from '@/lib/walletMetrics';
@@ -422,17 +422,22 @@ export function PositionChartModal({ position, onClose }: Props) {
   const markerData = useMemo<MarkerDatum[]>(() => {
     if (!position) return [];
     const isLong = position.side === 'long';
+    // Markers sit where the trade actually printed: the first fill's price (and the
+    // last fill's for the close). The entry/close LINES keep the averages. Pinning
+    // the marker to the average entry put it far off the candles on positions built
+    // over many fills (a BTC short opened near 80K, averaged 61.6K a month later).
+    const first = currentPositionFills[0];
+    const last = currentPositionFills[currentPositionFills.length - 1];
     if (position.kind === 'closed') {
       // A long opens with a buy and closes with a sell; a short is the mirror.
       return [
-        { key: 'open', timeSec: Math.floor(position.openedAt / 1000), price: position.entryPrice, isBuy: isLong },
-        { key: 'close', timeSec: Math.floor(position.closedAt / 1000), price: position.closePrice, isBuy: !isLong },
+        { key: 'open', timeSec: Math.floor(position.openedAt / 1000), price: first?.price || position.entryPrice, isBuy: isLong },
+        { key: 'close', timeSec: Math.floor(position.closedAt / 1000), price: (currentPositionFills.length > 1 ? last?.price : 0) || position.closePrice, isBuy: !isLong },
       ];
     }
     // Live: only the open marker, at the start of the current position segment.
-    const openMs = currentPositionFills[0]?.timestamp;
-    if (openMs == null) return [];
-    return [{ key: 'open', timeSec: Math.floor(openMs / 1000), price: position.entryPrice, isBuy: isLong }];
+    if (!first) return [];
+    return [{ key: 'open', timeSec: Math.floor(first.timestamp / 1000), price: first.price || position.entryPrice, isBuy: isLong }];
   }, [position, currentPositionFills]);
   markerDataRef.current = markerData;
 
@@ -544,8 +549,13 @@ export function PositionChartModal({ position, onClose }: Props) {
     chartRef.current = chart;
 
     // Reference prices that must always stay in view (the drawn price lines).
+    // The liquidation line is only fitted into view when it's near (≤10% from the
+    // mark). A far one (27% away on a 10× position) would squash the candles into a
+    // strip; it's named in a corner label instead.
+    const liqNear = position.kind === 'live' && position.liquidationPrice > 0 && position.markPrice > 0
+      && Math.abs(position.liquidationPrice / position.markPrice - 1) <= 0.1;
     const priceRefs = (position.kind === 'live'
-      ? [position.entryPrice, position.markPrice, position.liquidationPrice]
+      ? [position.entryPrice, position.markPrice, ...(liqNear ? [position.liquidationPrice] : [])]
       : [position.entryPrice, position.closePrice]
     ).filter((p) => Number.isFinite(p) && p > 0);
 
@@ -695,7 +705,9 @@ export function PositionChartModal({ position, onClose }: Props) {
       if (bars.length < 2) { ts.fitContent(); return; }
       const step = Math.max(60_000, bars[bars.length - 1].t - bars[bars.length - 2].t);
       const last = bars[bars.length - 1].t, first = bars[0].t;
-      const a = position.kind === 'closed' ? position.openedAt : last - 80 * step;
+      // Live: from when the position opened (its first fill) to now.
+      const openedMs = (markerDataRef.current.find((m) => m.key === 'open')?.timeSec ?? 0) * 1000;
+      const a = position.kind === 'closed' ? position.openedAt : openedMs > 0 ? openedMs : last - 80 * step;
       const b = position.kind === 'closed' ? position.closedAt : last;
       const pad = Math.max((b - a) * 0.9, 30 * step);
       const from = Math.max(first, a - pad), to = Math.min(last + 6 * step, b + pad);
@@ -951,7 +963,6 @@ export function PositionChartModal({ position, onClose }: Props) {
                 <h2 className="truncate text-[20px] font-medium leading-tight text-[var(--text-primary)]">{position.symbol}</h2>
                 <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] font-medium"
                   style={{ color: position.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${position.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}>
-                  {position.side === 'long' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                   {position.side === 'long' ? 'Long' : 'Short'}{position.leverage > 0 ? ` ${Math.round(position.leverage)}×` : ''}
                 </span>
                 {position.kind === 'closed' && (
@@ -1175,6 +1186,11 @@ export function PositionChartModal({ position, onClose }: Props) {
             back to 360px so the chart is always usable. */}
         <div className="h-[65vh] max-h-[720px] min-h-[420px] p-2 relative">
           <div ref={containerRef} className="w-full h-full" />
+          {position.kind === 'live' && position.liquidationPrice > 0 && effMark > 0 && Math.abs(position.liquidationPrice / effMark - 1) > 0.1 && (
+            <div className="pointer-events-none absolute bottom-10 left-4 z-20 rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1 text-[11px] tabular-nums text-[var(--text-secondary)]">
+              Liq. <span style={{ color: 'var(--neg)' }}>{px$(position.liquidationPrice)}</span> · {Math.abs((position.liquidationPrice / effMark - 1) * 100).toFixed(1)}% {position.liquidationPrice < effMark ? 'below' : 'above'}, off chart
+            </div>
+          )}
 
           {/* Candle loading overlay — animated BULK logo over the chart area. */}
           {(loading || error) && (

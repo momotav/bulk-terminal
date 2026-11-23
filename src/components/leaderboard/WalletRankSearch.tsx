@@ -1,225 +1,93 @@
 'use client';
 
-import { useState } from 'react';
-import { Search, Trophy, Flame, Activity, TrendingUp, X, Loader2 } from 'lucide-react';
-import { leaderboard, formatCompact, formatAddress, type WalletRankData } from '@/lib/api';
-import { cn } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Search, X, Loader2, ArrowUpRight } from 'lucide-react';
+import { leaderboard, formatCompact, formatAddress, type WalletRankData } from '@/lib/api';
+import { BulkAvatar } from '@/components/BulkAvatar';
 
+const top = (rank: number, total: number) => {
+  const p = (rank / Math.max(1, total)) * 100;
+  return p < 0.1 ? 'top 0.1%' : `top ${p < 10 ? p.toFixed(1) : Math.round(p)}%`;
+};
+
+/** Find any wallet's rank on each board. Compact field; results open below it. */
 export function WalletRankSearch() {
   const [wallet, setWallet] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<WalletRankData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const open = !!(result || error);
 
-  const handleSearch = async () => {
-    if (!wallet || wallet.length < 32) {
-      setError('Please enter a valid wallet address');
-      return;
-    }
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setResult(null); setError(null); } };
+    document.addEventListener('mousedown', down);
+    return () => document.removeEventListener('mousedown', down);
+  }, [open]);
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
-
+  const search = async () => {
+    const w = wallet.trim();
+    if (w.length < 32) { setError('Paste a full wallet address'); setResult(null); return; }
+    setLoading(true); setError(null); setResult(null);
     try {
-      const data = await leaderboard.getWalletRank(wallet);
-      setResult(data);
-      if (!data.found) {
-        setError('Wallet not found in our database. Try trading on BULK first!');
-      }
-    } catch (err) {
-      setError('Failed to fetch wallet rank. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      const d = await leaderboard.getWalletRank(w);
+      if (d.found) setResult(d); else setError('This wallet hasn’t traded on BULK yet');
+    } catch { setError('Couldn’t look that up. Try again in a moment.'); }
+    finally { setLoading(false); }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
-  const clearSearch = () => {
-    setWallet('');
-    setResult(null);
-    setError(null);
-  };
-
-  const getPercentile = (rank: number, total: number) => {
-    const percentile = ((total - rank + 1) / total) * 100;
-    return percentile.toFixed(1);
-  };
-
-  const getRankColor = (rank: number, total: number) => {
-    const percentile = (rank / total) * 100;
-    if (percentile <= 1) return 'text-yellow-400'; // Top 1%
-    if (percentile <= 5) return 'text-bulk-green'; // Top 5%
-    if (percentile <= 10) return 'text-bulk-blue'; // Top 10%
-    if (percentile <= 25) return 'text-bulk-purple'; // Top 25%
-    return 'text-[var(--text-secondary)]';
-  };
-
+  const r = result?.rankings;
   return (
-    <div className="glass-card p-4 mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <Search className="w-4 h-4 text-bulk-green" />
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Find Your Rank</h3>
-      </div>
+    <div ref={ref} className="relative w-full md:w-[380px]">
+      <form onSubmit={(e) => { e.preventDefault(); void search(); }}
+        className="flex h-10 items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-3 focus-within:border-[var(--text-tertiary)]">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--text-tertiary)]" /> : <Search className="h-4 w-4 text-[var(--text-tertiary)]" />}
+        <input value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder="Find a wallet’s rank"
+          className="min-w-0 flex-1 bg-transparent font-mono text-[13px] text-[var(--text-primary)] outline-none placeholder:font-sans placeholder:text-[var(--text-tertiary)]" />
+        {wallet && (
+          <button type="button" aria-label="Clear" onClick={() => { setWallet(''); setResult(null); setError(null); }} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </form>
 
-      {/* Search Input */}
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={wallet}
-            onChange={(e) => setWallet(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Enter wallet address..."
-            className="w-full bg-[var(--bg-secondary-20)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-text-secondary focus:outline-none focus:border-bulk-green/50 font-mono"
-          />
-          {wallet && (
-            <button
-              onClick={clearSearch}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <button
-          onClick={handleSearch}
-          disabled={loading || !wallet}
-          className="px-4 py-2 bg-bulk-green text-dark-primary rounded-lg text-sm font-medium hover:bg-bulk-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Search className="w-4 h-4" />
-          )}
-          Search
-        </button>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="p-3 bg-bulk-red/10 border border-bulk-red/20 rounded-lg mb-4">
-          <p className="text-sm text-bulk-red">{error}</p>
-        </div>
-      )}
-
-      {/* Results */}
-      {result && result.found && (
-        <div className="space-y-4">
-          {/* Wallet Info */}
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
-            <div>
-              <p className="text-xs text-[var(--text-secondary)] mb-1">Wallet</p>
-              <Link 
-                href={`/wallet/${result.wallet_address}`}
-                className="font-mono text-sm text-bulk-green hover:underline"
-              >
-                {formatAddress(result.wallet_address)}
+      {open && (
+        <div className="glass-pop absolute right-0 top-full z-30 mt-2 w-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-3 shadow-2xl md:w-[440px]">
+          {error && <p className="px-1 py-2 text-[13px] text-[var(--text-secondary)]">{error}</p>}
+          {result && r && (
+            <>
+              <Link href={`/wallet/${result.wallet_address}`} className="mb-3 flex items-center justify-between rounded-xl px-1 py-1 hover:bg-[var(--bg-base)]">
+                <span className="flex items-center gap-2.5">
+                  <BulkAvatar seed={result.wallet_address} size={28} />
+                  <span className="font-mono text-[13px] text-[var(--text-primary)]">{formatAddress(result.wallet_address)}</span>
+                </span>
+                <span className="inline-flex items-center gap-0.5 text-[12px] text-[var(--text-tertiary)]">Open wallet<ArrowUpRight className="h-3.5 w-3.5" /></span>
               </Link>
-            </div>
-            <Link
-              href={`/wallet/${result.wallet_address}`}
-              className="text-xs text-[var(--text-secondary)] hover:text-bulk-green transition-colors"
-            >
-              View Profile →
-            </Link>
-          </div>
-
-          {/* Rankings Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {/* Volume Rank */}
-            {result.rankings.volume && (
-              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <TrendingUp className="w-3.5 h-3.5 text-bulk-green" />
-                  <span className="text-xs text-[var(--text-secondary)]">Volume</span>
-                </div>
-                <p className={cn("text-lg font-bold", getRankColor(result.rankings.volume.rank, result.rankings.volume.total))}>
-                  #{result.rankings.volume.rank.toLocaleString()}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  of {result.rankings.volume.total.toLocaleString()} • Top {getPercentile(result.rankings.volume.rank, result.rankings.volume.total)}%
-                </p>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  ${formatCompact(result.rankings.volume.value)}
-                </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Tile k="Volume" rank={r.volume} v={r.volume ? `$${formatCompact(r.volume.value)}` : null} />
+                <Tile k="PnL" rank={r.pnl} v={r.pnl ? `${r.pnl.value >= 0 ? '+' : '−'}$${formatCompact(Math.abs(r.pnl.value))}` : null}
+                  color={r.pnl ? (r.pnl.value >= 0 ? 'var(--pos)' : 'var(--neg)') : undefined} />
+                <Tile k="Trades" rank={r.trades} v={r.trades ? `${r.trades.value.toLocaleString()} trades` : null} />
+                <Tile k="Liquidations" rank={r.liquidations} v={r.liquidations ? `$${formatCompact(r.liquidations.value)} liquidated` : 'Never liquidated'}
+                  color={r.liquidations ? 'var(--neg)' : undefined} />
               </div>
-            )}
-
-            {/* PnL Rank */}
-            {result.rankings.pnl && (
-              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-                  <span className="text-xs text-[var(--text-secondary)]">PnL</span>
-                </div>
-                <p className={cn("text-lg font-bold", getRankColor(result.rankings.pnl.rank, result.rankings.pnl.total))}>
-                  #{result.rankings.pnl.rank.toLocaleString()}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  of {result.rankings.pnl.total.toLocaleString()} • Top {getPercentile(result.rankings.pnl.rank, result.rankings.pnl.total)}%
-                </p>
-                <p className={cn("text-xs mt-1", result.rankings.pnl.value >= 0 ? 'text-bulk-green' : 'text-bulk-red')}>
-                  {result.rankings.pnl.value >= 0 ? '+' : ''}${formatCompact(result.rankings.pnl.value)}
-                </p>
-              </div>
-            )}
-
-            {/* Trades Rank */}
-            {result.rankings.trades && (
-              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Activity className="w-3.5 h-3.5 text-bulk-purple" />
-                  <span className="text-xs text-[var(--text-secondary)]">Trades</span>
-                </div>
-                <p className={cn("text-lg font-bold", getRankColor(result.rankings.trades.rank, result.rankings.trades.total))}>
-                  #{result.rankings.trades.rank.toLocaleString()}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  of {result.rankings.trades.total.toLocaleString()} • Top {getPercentile(result.rankings.trades.rank, result.rankings.trades.total)}%
-                </p>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  {result.rankings.trades.value.toLocaleString()} trades
-                </p>
-              </div>
-            )}
-
-            {/* Liquidations Rank */}
-            {result.rankings.liquidations ? (
-              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Flame className="w-3.5 h-3.5 text-bulk-red" />
-                  <span className="text-xs text-[var(--text-secondary)]">Liquidations</span>
-                </div>
-                <p className={cn("text-lg font-bold", getRankColor(result.rankings.liquidations.rank, result.rankings.liquidations.total))}>
-                  #{result.rankings.liquidations.rank.toLocaleString()}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  of {result.rankings.liquidations.total.toLocaleString()} rekt
-                </p>
-                <p className="text-xs text-bulk-red mt-1">
-                  -${formatCompact(result.rankings.liquidations.value)}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-[var(--bg-secondary-20)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Flame className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  <span className="text-xs text-[var(--text-secondary)]">Liquidations</span>
-                </div>
-                <p className="text-lg font-bold text-bulk-green">None! 🎉</p>
-                <p className="text-xs text-[var(--text-secondary)]">No liquidations yet</p>
-              </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function Tile({ k, rank, v, color }: { k: string; rank: { rank: number; total: number } | null; v: string | null; color?: string }) {
+  return (
+    <div className="rounded-xl bg-[var(--bg-base)] px-3 py-2.5">
+      <div className="text-[11px] text-[var(--text-tertiary)]">{k}</div>
+      <div className="mt-0.5 text-[18px] font-medium tabular-nums text-[var(--text-primary)]">{rank ? `#${rank.rank.toLocaleString()}` : '—'}</div>
+      <div className="text-[11px] tabular-nums text-[var(--text-tertiary)]">{rank ? `${top(rank.rank, rank.total)} of ${rank.total.toLocaleString()}` : ''}</div>
+      {v && <div className="mt-1 truncate text-[12px] tabular-nums" style={{ color: color ?? 'var(--text-secondary)' }}>{v}</div>}
     </div>
   );
 }
