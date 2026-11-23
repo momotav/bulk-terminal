@@ -16,6 +16,8 @@ import { ChartFrame } from '@/components/ChartFrame';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
 
 // Time period options
+const PERIOD_WORDS: Record<string, string> = { '4h': 'the last 4 hours', '24h': 'the last 24h', '3d': 'the last 3 days', '7d': 'the last 7 days', all: 'all time' };
+
 const PERIODS = [
   { label: '4H', value: '4h' },
   { label: 'D', value: '24h' },
@@ -242,10 +244,14 @@ function LiquidationTreemap({
   data,
   totalValue,
   assets,
+  period,
+  onWiden,
 }: {
   data: { symbol: string; side: string; value: number; count: number }[];
   totalValue: number;
   assets: number;
+  period?: string;
+  onWiden?: () => void;
 }) {
   // Hovered cell state for the tooltip. `rect` is carried so we can clamp the
   // tooltip against the container edges (see tooltip rendering below).
@@ -280,7 +286,7 @@ function LiquidationTreemap({
   // by which side (long vs short) has more cumulative liquidation value.
   // Site-wide All / Crypto / Stocks filter — cells outside the class are
   // dropped, so the treemap (and its total) narrows with every other chart.
-  const { isIn } = useAssetClass();
+  const { isIn, assetClass } = useAssetClass();
   const treemapItems = useMemo(() => {
     const groups: Record<string, { long: number; short: number; total: number }> = {};
     const hiddenSet = new Set(HIDDEN_COINS);
@@ -425,9 +431,19 @@ function LiquidationTreemap({
   }, [treemapItems, total, containerSize]);
 
   if (treemapItems.length === 0) {
+    // Usually not missing data: nothing in this class was liquidated in the window
+    // (e.g. TradFi on a quiet day). Say so, and offer a wider window.
+    const cls = assetClass === 'stock' ? 'TradFi' : assetClass === 'crypto' ? 'crypto' : '';
+    const span = PERIOD_WORDS[period ?? ''] ?? 'this period';
     return (
-      <div className="flex items-center justify-center h-64 text-[var(--text-secondary)]">
-        No liquidation data available
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+        <span className="text-[var(--text-secondary)]">No {cls ? `${cls} ` : ''}liquidations in {span}</span>
+        {onWiden && period !== 'all' && (
+          <button type="button" onClick={onWiden}
+            className="rounded-lg border border-[var(--border-color)] px-3 py-1.5 text-[12px] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-base)]">
+            Show {period === '7d' ? 'all time' : 'the last 7 days'}
+          </button>
+        )}
       </div>
     );
   }
@@ -802,6 +818,8 @@ export default function LiquidationsPage() {
               data={treemapData.data} 
               totalValue={treemapData.totalValue} 
               assets={treemapData.assets} 
+              period={treemapPeriod}
+              onWiden={() => setTreemapPeriod(treemapPeriod === '7d' ? 'all' : '7d')}
             />
           ) : null}
         </div>

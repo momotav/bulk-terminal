@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CoinIcon } from '@/components/CoinIcon';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineStyle, CandlestickData, UTCTimestamp, IPriceLine, type AutoscaleInfo, type WhitespaceData } from 'lightweight-charts';
 import Link from 'next/link';
 import { X, TrendingUp, TrendingDown, Loader2, ExternalLink, Image as ImageIcon, Link2, Check } from 'lucide-react';
@@ -100,6 +101,25 @@ const FULL_HISTORY_MAX_BARS = 4800;
 // When even full history is too many bars (5m/1m over weeks), load this many
 // candles CENTERED on the trade — price action on both sides of the entry.
 const WINDOW_BARS = 2500;
+/** Decimals that keep a price readable at any size (BTC 2, a $0.0025 coin 6). */
+function priceDecimals(p: number): number {
+  const a = Math.abs(p);
+  if (!(a > 0)) return 2;
+  if (a >= 1000) return 2;
+  if (a >= 1) return a >= 100 ? 2 : a >= 10 ? 3 : 4;
+  return Math.min(8, Math.max(4, 3 - Math.floor(Math.log10(a)) + 1));
+}
+const px$ = (p: number) => `$${formatNumber(p, priceDecimals(p))}`;
+const signed$ = (n: number) => `${n >= 0 ? '+' : '−'}$${formatNumber(Math.abs(n), 2)}`;
+
+/** A closed trade opens on candles that fit it: the finest interval where the
+ *  trade spans at most ~90 bars (a 6-minute scalp → 1m, a 2-day hold → 1h). */
+function pickTradeInterval(openedAt: number, closedAt: number): string {
+  const dur = Math.max(60, (closedAt - openedAt) / 1000);
+  for (const [name, sec] of IV_SECONDS) if (dur / sec <= 90) return name;
+  return '1d';
+}
+
 function pickFullInterval(histStart: number, now: number): string {
   const span = (now - histStart) / 1000;
   for (const [name, sec] of IV_SECONDS) {
@@ -158,7 +178,7 @@ export function PositionChartModal({ position, onClose }: Props) {
   // finest one whose full history fits in FIT_BARS, falling back to 1h until
   // the probe resolves.
   const [userInterval, setUserInterval] = useState<string | null>(null);
-  const interval = userInterval ?? (histStart != null ? pickFullInterval(histStart, Date.now()) : '1h');
+  const interval = userInterval ?? (position?.kind === 'closed' ? pickTradeInterval(position.openedAt, position.closedAt) : histStart != null ? pickFullInterval(histStart, Date.now()) : '1h');
 
   // Throttled live mark price (live positions only). null until the first
   // SSE tick arrives; the header falls back to the snapshot mark until then.
@@ -495,10 +515,11 @@ export function PositionChartModal({ position, onClose }: Props) {
       height: initialHeight,
       localization: { locale: 'en-US' },
       layout: {
+        attributionLogo: false,
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor,
         fontSize: 11,
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: getComputedStyle(document.body).fontFamily,
       },
       grid: {
         vertLines: { color: gridColor },
@@ -528,7 +549,9 @@ export function PositionChartModal({ position, onClose }: Props) {
       : [position.entryPrice, position.closePrice]
     ).filter((p) => Number.isFinite(p) && p > 0);
 
+    const prec = priceDecimals(position.entryPrice);
     const series = chart.addCandlestickSeries({
+      priceFormat: { type: 'price', precision: prec, minMove: Math.pow(10, -prec) },
       upColor: posColor,
       downColor: negColor,
       borderUpColor: posColor,
@@ -664,7 +687,22 @@ export function PositionChartModal({ position, onClose }: Props) {
 
     // Fit time range immediately and again after the first paint, in case
     // the container was 0px when we created the chart and it's now real.
-    chart.timeScale().fitContent();
+    // Open zoomed on the trade itself, not the whole loaded history (where a
+    // short trade is a sliver at the edge). Live positions show recent bars.
+    const focusTrade = () => {
+      const ts = chart.timeScale();
+      const bars = plottedCandles;
+      if (bars.length < 2) { ts.fitContent(); return; }
+      const step = Math.max(60_000, bars[bars.length - 1].t - bars[bars.length - 2].t);
+      const last = bars[bars.length - 1].t, first = bars[0].t;
+      const a = position.kind === 'closed' ? position.openedAt : last - 80 * step;
+      const b = position.kind === 'closed' ? position.closedAt : last;
+      const pad = Math.max((b - a) * 0.9, 30 * step);
+      const from = Math.max(first, a - pad), to = Math.min(last + 6 * step, b + pad);
+      if (!(to > from)) { ts.fitContent(); return; }
+      try { ts.setVisibleRange({ from: Math.floor(from / 1000) as UTCTimestamp, to: Math.floor(to / 1000) as UTCTimestamp }); } catch { ts.fitContent(); }
+    };
+    focusTrade();
 
     // Glue the PNL/Size badge to the entry line every animation frame.
     // lightweight-charts has no "price scale changed" event, so dragging the
@@ -753,7 +791,7 @@ export function PositionChartModal({ position, onClose }: Props) {
         const h = containerRef.current.clientHeight;
         if (w > 0 && h > 0) {
           chart.applyOptions({ width: w, height: h });
-          chart.timeScale().fitContent();
+          focusTrade();
           recomputeBadge();
         }
       }
@@ -905,47 +943,35 @@ export function PositionChartModal({ position, onClose }: Props) {
         className="relative w-full max-w-[90vw] max-h-[90vh] bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
-                position.side === 'long'
-                  ? 'bg-bulk-green/15 text-bulk-green'
-                  : 'bg-bulk-red/15 text-bulk-red'
-              }`}
-            >
-              {position.side === 'long' ? (
-                <span className="inline-flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  Long
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-[var(--border-color)]">
+          <div className="flex min-w-0 items-center gap-3">
+            <CoinIcon symbol={position.symbol.replace(/-USD$/, '')} size={36} className="shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-[20px] font-medium leading-tight text-[var(--text-primary)]">{position.symbol}</h2>
+                <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] font-medium"
+                  style={{ color: position.side === 'long' ? 'var(--pos)' : 'var(--neg)', background: `color-mix(in srgb, ${position.side === 'long' ? 'var(--pos)' : 'var(--neg)'} 14%, transparent)` }}>
+                  {position.side === 'long' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {position.side === 'long' ? 'Long' : 'Short'}{position.leverage > 0 ? ` ${Math.round(position.leverage)}×` : ''}
                 </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <TrendingDown className="w-3 h-3" />
-                  Short
-                </span>
-              )}
-            </span>
-            <h2 className="text-lg font-semibold">{position.symbol}</h2>
-            <span className="text-sm text-[var(--text-tertiary)]">
-              {position.leverage > 0 && `${Math.round(position.leverage)}× · `}
-              {formatNumber(position.size, 4)} units
-              {position.kind === 'closed' && (
-                <>
-                  {' · '}
-                  <span className={position.liquidated ? 'text-bulk-orange' : ''}>
-                    {position.liquidated ? 'LIQUIDATED' : 'CLOSED'}
+                {position.kind === 'closed' && (
+                  <span className="rounded-md bg-[var(--bg-base)] px-1.5 py-0.5 text-[12px]" style={{ color: position.liquidated ? 'var(--neg)' : 'var(--text-secondary)' }}>
+                    {position.liquidated ? 'Liquidated' : 'Closed'}
                   </span>
-                  {' '}
-                  {new Date(position.closedAt).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </>
-              )}
-            </span>
+                )}
+              </div>
+              <div className="mt-0.5 truncate text-[12px] tabular-nums text-[var(--text-tertiary)]">
+                {formatNumber(position.size, 4)} {position.symbol.replace(/-USD$/, '')}
+                {position.kind === 'closed' ? (
+                  <>
+                    {' · '}
+                    {/* BULK can report open time = close time; show the range only when it's real. */}
+                    {position.closedAt - position.openedAt > 60_000 && <>{new Date(position.openedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}{' → '}</>}
+                    {new Date(position.closedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                  </>
+                ) : ' · open now'}
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             {/* Open the full shareable trade-observer view for THIS specific
@@ -993,13 +1019,13 @@ export function PositionChartModal({ position, onClose }: Props) {
             the chart view. */}
         {position.kind === 'live' ? (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
-            <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
-            <Stat label="Mark" value={`$${formatNumber(effMark, 2)}`} />
+            <Stat label="Entry" value={px$(position.entryPrice)} />
+            <Stat label="Mark" value={px$(effMark)} />
             <Stat
               label="Liquidation"
               value={
                 position.liquidationPrice > 0
-                  ? `$${formatNumber(position.liquidationPrice, 2)}`
+                  ? px$(position.liquidationPrice)
                   : '-'
               }
               valueClass="text-bulk-red"
@@ -1023,7 +1049,7 @@ export function PositionChartModal({ position, onClose }: Props) {
             />
             <Stat
               label="Unrealized PnL"
-              value={`${displayPnl >= 0 ? '+' : ''}$${formatNumber(displayPnl, 2)}`}
+              value={signed$(displayPnl)}
               valueClass={displayPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
             {/* PnL % = PnL / margin (true return on capital risked).
@@ -1046,10 +1072,11 @@ export function PositionChartModal({ position, onClose }: Props) {
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-px bg-[var(--border-color)]/40 border-b border-[var(--border-color)]">
-            <Stat label="Entry" value={`$${formatNumber(position.entryPrice, 2)}`} />
+            <Stat label="Entry" value={px$(position.entryPrice)} />
             <Stat
               label="Close"
-              value={`$${formatNumber(position.closePrice, 2)}`}
+              value={px$(position.closePrice)}
+              sublabel={position.entryPrice > 0 ? `${position.closePrice >= position.entryPrice ? '+' : '−'}${Math.abs((position.closePrice / position.entryPrice - 1) * 100).toFixed(2)}% from entry` : undefined}
               valueClass={
                 (position.side === 'long'
                   ? position.closePrice > position.entryPrice
@@ -1068,10 +1095,11 @@ export function PositionChartModal({ position, onClose }: Props) {
             <Stat
               label="Notional"
               value={`$${formatCompact(Math.abs(position.size * position.entryPrice))}`}
+              sublabel="at entry"
             />
             <Stat
               label="Realized PnL"
-              value={`${position.realizedPnl >= 0 ? '+' : ''}$${formatNumber(position.realizedPnl, 2)}`}
+              value={signed$(position.realizedPnl)}
               valueClass={position.realizedPnl >= 0 ? 'text-bulk-green' : 'text-bulk-red'}
             />
             {/* ROI % — closed positions don't carry leverage from BULK
@@ -1233,16 +1261,12 @@ function Stat({
   sublabel?: string;
 }) {
   return (
-    <div className="bg-[var(--bg-muted)] p-3">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
-        {label}
-      </div>
-      <div className={`text-base font-mono font-medium mt-0.5 ${valueClass ?? 'text-[var(--text-primary)]'}`}>
+    <div className="bg-[var(--bg-muted)] px-5 py-3.5">
+      <div className="text-[12px] text-[var(--text-tertiary)]">{label}</div>
+      <div className={`mt-1 text-[20px] leading-tight font-medium tabular-nums ${valueClass ?? 'text-[var(--text-primary)]'}`}>
         {value}
       </div>
-      {sublabel && (
-        <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{sublabel}</div>
-      )}
+      <div className="mt-0.5 h-[15px] text-[11px] tabular-nums text-[var(--text-tertiary)]">{sublabel ?? ''}</div>
     </div>
   );
 }
