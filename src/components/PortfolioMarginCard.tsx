@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { MarginStressTest } from '@/components/MarginStressTest';
 import { analytics, cn, formatCompact, formatNumber, type RiskSurfaces } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -241,6 +242,8 @@ export function PortfolioMarginCard() {
           )}
         </div>
       </div>
+
+      <MarginStressTest positions={positions} collateral={collateral} surfaces={surfaces} regimeDts={regimeDts} regime={regimeSel} strict={mode === 'strict'} />
 
       <p className="t-caption px-4 lg:px-5 pb-4 leading-relaxed border-t border-[var(--role-line)] pt-3">
         Implements BULK&apos;s published portfolio-margin calculator: live correlation matrix, risk-surface

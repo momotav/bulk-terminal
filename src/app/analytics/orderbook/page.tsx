@@ -16,6 +16,7 @@ import {
   YAxis,
 } from 'recharts';
 import { LiquidityCard } from '@/components/orderbook/LiquidityCard';
+import { LiquidityHistory } from '@/components/orderbook/LiquidityHistory';
 import { analytics, formatCompact, cn, impactBps, type OrderbookSnapshot, type OrderbookLevel, type OrderbookStats, type OrderbookCompare, type ImpactCurve } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
 import { StatCard as SharedStatCard } from '@/components/StatCard';
@@ -1715,6 +1716,7 @@ export default function OrderBookPage() {
 
       {/* The book at a glance, shareable: spread, mark vs oracle, depth, spread at size */}
       {book && <LiquidityCard coin={coin} book={book} impact={impact} />}
+      <LiquidityHistory coin={coin} />
 
       {/* Stat cards (until the first book arrives) */}
       {!book && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

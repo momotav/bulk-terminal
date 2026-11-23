@@ -816,6 +816,8 @@ export type BulkLeaderboardRankResponse =
     };
 
 // Analytics API
+export interface PositioningRow { symbol: string; ts: number; long: number; short: number; longN: number; shortN: number; longEntry: number | null; shortEntry: number | null; top5Share: number | null; wallets: number; longRatio: number | null; longRatio24hAgo: number | null }
+export interface FundingPremiumRow { symbol: string; fundingNow: number | null; funding24h: number | null; fundingAvg: number | null; positiveShare: number | null; flips: number; premiumNow: number | null; premiumAvg: number | null; premiumAbsAvg: number | null; hours: number }
 export interface LiqMapPosition { wallet: string; side: 'long' | 'short'; notional: number; liq: number; entry: number; leverage: number }
 export interface LiquidationMapResponse {
   at: number; wallets: number;
@@ -1282,6 +1284,27 @@ export const analytics = {
   },
 
   // Mark over oracle per market: live, plus hourly averages since collection began.
+  /** Spread, depth and round-trip cost at size over time, plus cost by UTC hour. */
+  async getLiquidityHistory(symbol: string, days = 7): Promise<{ symbol: string; days: number;
+    series: { t: number; mid: number | null; spread: number | null; bidDepth: number | null; askDepth: number | null; c10k: number | null; c100k: number | null; c1m: number | null }[];
+    byHour: { hour: number; c100k: number | null; spread: number | null; depth: number | null }[] }> {
+    return request(`/api/analytics/liquidity-history?symbol=${encodeURIComponent(symbol)}&days=${days}`);
+  },
+  /** Where the top traders stand per market (latest), or one market's history. */
+  async getPositioning(): Promise<{ markets: PositioningRow[] }> {
+    return request('/api/analytics/positioning');
+  },
+  async getPositioningHistory(symbol: string, days = 7): Promise<{ series: { t: number; long: number; short: number; longEntry: number | null; shortEntry: number | null; longN: number; shortN: number }[] }> {
+    return request(`/api/analytics/positioning?symbol=${encodeURIComponent(symbol)}&days=${days}`);
+  },
+  /** Funding and mark-vs-oracle premium: every market's summary, or one market's hourly series. */
+  async getFundingPremium(days = 7): Promise<{ days: number; markets: FundingPremiumRow[] }> {
+    return request(`/api/analytics/funding-premium?days=${days}`);
+  },
+  async getFundingPremiumSeries(symbol: string, days = 7): Promise<{ series: { t: number; funding: number | null; premium: number | null; mark: number | null }[] }> {
+    return request(`/api/analytics/funding-premium?symbol=${encodeURIComponent(symbol)}&days=${days}`);
+  },
+
   /** Open positions' liquidation prices (top traders, ~5 min fresh). No symbol: per-market totals. */
   async getLiquidationMap(symbol?: string): Promise<LiquidationMapResponse> {
     return request(`/api/analytics/liquidation-map${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`);
