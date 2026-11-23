@@ -23,7 +23,7 @@ export function CoinPick({ value, onChange, exclude = [], align = 'left', allLab
         {value === 'All' && allLabel ? allLabel : <><CoinIcon symbol={value} size={14} />{value}</>}<ChevronDown className="h-3 w-3 text-[var(--text-tertiary)]" />
       </button>
       {open && (
-        <div className={`absolute top-full z-40 mt-1 w-[240px] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-2xl ${align === 'left' ? 'left-0' : 'right-0'}`}>
+        <div className={`glass-pop absolute top-full z-40 mt-1 w-[240px] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-2xl ${align === 'left' ? 'left-0' : 'right-0'}`}>
           {allLabel && (
             <button type="button" onClick={() => { onChange('All'); setOpen(false); }}
               className="mb-1 w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-base)]">{allLabel}</button>

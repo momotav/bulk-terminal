@@ -60,7 +60,7 @@ export function AccountHierarchy({ address, onOpenPortfolio }: { address: string
 
       {open && (
         <div role="dialog" aria-label="Account family"
-          className="absolute left-0 z-50 mt-2 w-full min-w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--role-surface)] shadow-[0_18px_48px_-12px_rgb(0_0_0/0.45)] animate-[ws-pop_.14s_ease-out]">
+          className="glass-pop absolute left-0 z-50 mt-2 w-full min-w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--role-surface)] shadow-[0_18px_48px_-12px_rgb(0_0_0/0.45)] animate-[ws-pop_.14s_ease-out]">
           <div className="px-4 pt-3.5 pb-3 border-b border-[var(--border-color)]">
             <div className="text-[12px] text-[var(--role-content-muted)]">Family value</div>
             <div className="mt-1 flex items-baseline justify-between gap-3">

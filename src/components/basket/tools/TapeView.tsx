@@ -175,7 +175,7 @@ export function TapeView() {
       )}
       {pick && pos && typeof document !== 'undefined' && createPortal(
             <div ref={panelRef} style={{ position: 'fixed', left: pos.left, top: pos.top, maxHeight: pos.h, width: 280, zIndex: 9999 }}
-              className="flex flex-col overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-2 shadow-2xl">
+              className="glass-pop flex flex-col overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-2 shadow-2xl">
               <div className="mb-1.5 px-0.5 text-[11px] font-medium text-[var(--text-secondary)]">Filter by wallet</div>
               <form onSubmit={(e) => { e.preventDefault(); add(draft); }} className="flex gap-1.5">
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Paste a wallet address" ref={(el) => { if (el && !el.dataset.f) { el.dataset.f = "1"; el.focus({ preventScroll: true }); } }} 

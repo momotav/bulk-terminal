@@ -128,7 +128,7 @@ export function Workspace() {
       {/* Dock: minimised windows, then the "+" */}
       <div ref={menuRef} className="fixed bottom-4 right-4 z-[90] flex items-end gap-2">
         {minimized.length > 0 && (
-          <div onMouseLeave={() => setDockHover(null)} className="ws-pop flex items-end gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-xl">
+          <div onMouseLeave={() => setDockHover(null)} className="ws-pop glass-pop flex items-end gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-xl">
             {minimized.map((w, i) => {
               const name = `${isTool(w.kind) ? toolTitle(w) : w.kind === 'chart' ? `${w.coin}-USD` : w.kind === 'book' ? `${w.coin} order book` : 'Basket'}`;
               // Dock magnify: the icon under the mouse grows most, its neighbours a little.
@@ -149,7 +149,7 @@ export function Workspace() {
                     {isTool(w.kind) ? toolIcon(w, 20) : w.kind === 'basket' ? <Layers className="w-4 h-4 text-[var(--text-secondary)]" /> : <CoinIcon symbol={w.coin ?? ''} size={20} />}
                   </span>
                   {w.kind === 'book' && <BookOpen className="absolute -right-1 -bottom-1 w-3.5 h-3.5 p-[1px] rounded bg-[var(--bg-muted)] text-[var(--text-secondary)]" />}
-                  <span aria-hidden className="pointer-events-none absolute bottom-full left-1/2 mb-2 whitespace-nowrap rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] shadow-lg"
+                  <span aria-hidden className="glass-pop pointer-events-none absolute bottom-full left-1/2 mb-2 whitespace-nowrap rounded-md border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] shadow-lg"
                     style={{ opacity: d === 0 ? 1 : 0, transform: `translateX(-50%) translateY(${d === 0 ? 0 : 4}px)`, transition: 'opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1)' }}>
                     {name}{w.popped && <span className="text-[var(--text-tertiary)]"> · own window</span>}
                   </span>
@@ -161,7 +161,7 @@ export function Workspace() {
 
         <div className="relative">
           {menu !== 'closed' && (
-            <div key={menu} className="ws-pop absolute bottom-full right-0 mb-2.5 w-[280px] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-2xl">
+            <div key={menu} className="ws-pop glass-pop absolute bottom-full right-0 mb-2.5 w-[280px] rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-1.5 shadow-2xl">
               {menu === 'root' ? (
                 <>
                   <MenuItem icon={<CandlestickChart className="w-4 h-4" />} title="Chart" sub="Candles for any market" more disabled={full} onClick={() => setMenu('chart')} />

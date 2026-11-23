@@ -69,7 +69,7 @@ export function Popover({ trigger, children, open, onOpenChange, align = 'left',
     <div ref={ref} className="relative">
       {trigger}
       {open && (
-        <div className={cn('z-30 max-h-[calc(100vh-32px)] overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-3 shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)] animate-[ws-pop_.14s_ease-out]',
+        <div className={cn('glass-pop z-30 max-h-[calc(100vh-32px)] overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-3 shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)] animate-[ws-pop_.14s_ease-out]',
           !side && 'absolute bottom-full mb-2', !side && (align === 'left' ? 'left-0' : 'right-0'))}
           style={side ?? { width: `min(${width}px, calc(100vw - 32px))` }}>
           {children}

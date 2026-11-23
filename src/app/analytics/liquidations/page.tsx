@@ -783,8 +783,6 @@ export default function LiquidationsPage() {
       {/* Header */}
       <h1 className="page-title text-[var(--text-primary)]">Liquidations</h1>
 
-      {/* Where open positions would be liquidated, by price */}
-      <LiquidationLevels />
 
       {/* Row 1: Treemap + Liquidations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
@@ -850,6 +848,9 @@ export default function LiquidationsPage() {
           ) : null}
         </div>
       </div>
+
+      {/* Where open positions would be liquidated, by price */}
+      <LiquidationLevels />
 
       {/* Row 2: Chart + Market Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
