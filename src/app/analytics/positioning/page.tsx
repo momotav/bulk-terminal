@@ -5,6 +5,7 @@ import { analytics, cn, formatCompact, type PositioningRow } from '@/lib/api';
 import { CoinIcon } from '@/components/CoinIcon';
 import { SeriesChart, Legend } from '@/components/charts/SeriesChart';
 import { useAssetClass } from '@/hooks/useAssetClass';
+import { AssetClassToggle } from '@/components/AssetClassToggle';
 
 const RANGES = [[1, '1D'], [7, '7D'], [30, '30D']] as const;
 const px = (n: number | null) => (n === null ? '—' : n >= 1000 ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : n >= 1 ? n.toFixed(2) : n.toPrecision(4));
@@ -50,11 +51,14 @@ export default function PositioningPage() {
 
   return (
     <div className="w-full space-y-4 p-4 md:space-y-6 md:p-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h1 className="page-title text-[var(--text-primary)]">Positioning</h1>
         <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
           Where BULK’s {rows?.[0]?.wallets ?? 300} most active traders stand right now: long vs short per market, their average entries and how concentrated it is.
         </p>
+      </div>
+      <AssetClassToggle />
       </div>
 
       {list.length > 0 && (

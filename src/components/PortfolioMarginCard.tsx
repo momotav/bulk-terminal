@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { MarginStressTest } from '@/components/MarginStressTest';
+import { InfoTip } from '@/components/InfoTip';
 import { analytics, cn, formatCompact, formatNumber, type RiskSurfaces } from '@/lib/api';
 import { CoinPicker } from '@/components/CoinPicker';
 import { useCurrentNetwork } from '@/hooks/useCurrentNetwork';
@@ -110,6 +111,11 @@ export function PortfolioMarginCard() {
         <div className="min-w-0">
           <h2 className="panel-title t-h2 flex items-center gap-2">
             <Layers className="w-4 h-4 text-[var(--accent)]" /> Portfolio Margining
+            <InfoTip label="How this is calculated" width={340}>
+              Implements BULK&apos;s published portfolio-margin calculator: live correlation matrix, risk-surface maintenance rates,
+              and regime time-decay (λ = mmrE + (mmrO−mmrE)·p^t). &quot;Live&quot; uses the current time-in-regime; &quot;Strict&quot; shows the
+              worst case the instant a regime kicks in.
+            </InfoTip>
           </h2>
           <p className="t-caption truncate">Build a book — BULK nets correlated legs and the requirement drops.</p>
         </div>
@@ -245,11 +251,6 @@ export function PortfolioMarginCard() {
 
       <MarginStressTest positions={positions} collateral={collateral} surfaces={surfaces} regimeDts={regimeDts} regime={regimeSel} strict={mode === 'strict'} />
 
-      <p className="t-caption px-4 lg:px-5 pb-4 leading-relaxed border-t border-[var(--role-line)] pt-3">
-        Implements BULK&apos;s published portfolio-margin calculator: live correlation matrix, risk-surface
-        maintenance rates, and regime time-decay (λ = mmrE + (mmrO−mmrE)·p^t). &quot;Live&quot; uses the current
-        time-in-regime; &quot;Strict&quot; shows the worst case the instant a regime kicks in.
-      </p>
     </div>
   );
 }

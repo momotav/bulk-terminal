@@ -5,6 +5,8 @@ import { analytics, cn, type FundingPremiumRow } from '@/lib/api';
 import { CoinIcon } from '@/components/CoinIcon';
 import { SeriesChart } from '@/components/charts/SeriesChart';
 import { useAssetClass } from '@/hooks/useAssetClass';
+import { AssetClassToggle } from '@/components/AssetClassToggle';
+import { useAvailableCoins } from '@/hooks/useAvailableCoins';
 
 const RANGES = [[7, '7D'], [30, '30D']] as const;
 // BULK pays funding hourly; APR = hourly rate × 24 × 365.
@@ -22,6 +24,9 @@ export default function FundingPage() {
   const [sort, setSort] = useState<SortKey>('now');
   const [series, setSeries] = useState<{ t: number; funding: number | null; premium: number | null }[] | null>(null);
   const { isIn } = useAssetClass();
+  // Closed / suspended markets sit at BULK's default rate with no trading: leave them out.
+  const { allMarkets } = useAvailableCoins();
+  const inactive = useMemo(() => new Set(allMarkets.filter((m) => m.status === 'CLOSED' || m.status === 'SUSPENDED').map((m) => m.coin)), [allMarkets]);
 
   useEffect(() => {
     let alive = true; setRows(null);
@@ -34,7 +39,7 @@ export default function FundingPage() {
     return () => { alive = false; };
   }, [sel, days]);
 
-  const list = useMemo(() => (rows ?? []).filter((r) => isIn(r.symbol.replace(/-USD$/, ''))).sort((a, b) => {
+  const list = useMemo(() => (rows ?? []).filter((r) => isIn(r.symbol.replace(/-USD$/, '')) && !inactive.has(r.symbol.replace(/-USD$/, ''))).sort((a, b) => {
     switch (sort) {
       case 'name': return a.symbol.localeCompare(b.symbol);
       case 'avg': return (b.fundingAvg ?? 0) - (a.fundingAvg ?? 0);
@@ -42,7 +47,7 @@ export default function FundingPage() {
       case 'flips': return b.flips - a.flips;
       default: return (b.fundingNow ?? 0) - (a.fundingNow ?? 0);
     }
-  }), [rows, sort, isIn]);
+  }), [rows, sort, isIn, inactive]);
 
   const selRow = rows?.find((r) => r.symbol === sel) ?? null;
   const times = (series ?? []).map((p) => p.t);
@@ -58,7 +63,10 @@ export default function FundingPage() {
           <h1 className="page-title text-[var(--text-primary)]">Funding</h1>
           <p className="mt-1 text-[14px] text-[var(--text-secondary)]">Hourly funding and the mark-vs-oracle premium for every market. Positive funding: longs pay shorts.</p>
         </div>
-        <div className="toggle-group">{RANGES.map(([d, l]) => <button key={d} type="button" onClick={() => setDays(d)} className={cn('toggle-btn', days === d && 'active')}>{l}</button>)}</div>
+        <div className="flex items-center gap-2">
+          <AssetClassToggle />
+          <div className="toggle-group">{RANGES.map(([d, l]) => <button key={d} type="button" onClick={() => setDays(d)} className={cn('toggle-btn', days === d && 'active')}>{l}</button>)}</div>
+        </div>
       </div>
 
       {/* selected market */}
@@ -127,7 +135,6 @@ export default function FundingPage() {
           );
         })}
       </div>
-      <p className="px-1 text-[11px] text-[var(--text-tertiary)]">From BULK’s live ticker, averaged per hour. APR = hourly rate × 24 × 365. Premium = mark price vs the Pyth oracle, in basis points.</p>
     </div>
   );
 }

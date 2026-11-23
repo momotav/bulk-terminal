@@ -1,4 +1,5 @@
 'use client';
+import { InfoTip } from '@/components/InfoTip';
 
 // Fees: BULK's fee schedule, a calculator for what a given volume costs, and BULK's own
 // lifetime fee counters. All from /feeState, plus the account fee-tier quote when a
@@ -24,9 +25,9 @@ const card = 'bg-[var(--role-surface)] rounded-lg border border-[var(--border-co
 
 function Heading({ title, note }: { title: string; note?: string }) {
   return (
-    <div className="mb-4">
+    <div className="mb-4 flex items-center gap-2">
       <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
-      {note && <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">{note}</p>}
+      {note && <InfoTip label={`About ${title}`}>{note}</InfoTip>}
     </div>
   );
 }
@@ -200,10 +201,9 @@ export default function FeesPage() {
                   </div>
 
                   <div>
-                    <label className={labelCls} htmlFor="fee-share">Your share of all maker volume on BULK (%)</label>
+                    <label className={cn(labelCls, 'flex items-center gap-1.5')} htmlFor="fee-share">Your share of all maker volume on BULK (%) <InfoTip label="About maker share">Only big market makers earn the rebate. Leave it at 0 if that isn’t you.</InfoTip></label>
                     <input id="fee-share" className={inputCls} inputMode="decimal" value={makerSharePct}
                       onChange={(e) => setMakerSharePct(Math.max(0, Number(e.target.value.replace(/[^\d.]/g, '')) || 0))} />
-                    <p className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">Only big market makers earn the rebate. Leave it at 0 if that isn’t you.</p>
                   </div>
                 </div>
 
@@ -260,8 +260,9 @@ export default function FeesPage() {
                       </table>
                     </div>
                     {policy!.makerShareTiers.length > 0 && (
-                      <p className="text-[12px] text-[var(--text-tertiary)]">
-                        Maker rebates: {policy!.makerShareTiers.map((t) => `${bps(t.rebateBps)} from ${pct(t.thresholdPpm)} of all maker volume`).join(' · ')}.
+                      <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
+                        Maker rebates
+                        <InfoTip label="Maker rebates">{policy!.makerShareTiers.map((t) => `${bps(t.rebateBps)} from ${pct(t.thresholdPpm)} of all maker volume`).join(' · ')}.</InfoTip>
                       </p>
                     )}
                   </div>

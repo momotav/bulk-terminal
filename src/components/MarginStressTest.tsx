@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RiskSurfaces } from '@/lib/api';
+import { InfoTip } from '@/components/InfoTip';
 import { portfolioMargin, lookupRho, normCoin, FALLBACK_RHO, type MarginLeg } from '@/lib/portfolioMargin';
 
 const money = (n: number, signed = false) => `${signed ? (n >= 0 ? '+' : '−') : n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -60,8 +61,14 @@ export function MarginStressTest({ positions, collateral, surfaces, regimeDts, r
     <div className="border-t border-[var(--role-line)] px-4 py-4 lg:px-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-[14px] font-medium text-[var(--role-content)]">Stress test</div>
-          <div className="t-caption">Move one market; the others follow by their correlation to it.</div>
+          <div className="flex items-center gap-2 text-[14px] font-medium text-[var(--role-content)]">
+            Stress test
+            <InfoTip label="How the stress test works" width={340}>
+              Move one market; each other leg moves by that move × its correlation to it (BULK’s live matrix), a simplification
+              that ignores differences in volatility. Margin is BULK’s portfolio formula re-run on the moved positions;
+              liquidation is equity below it.
+            </InfoTip>
+          </div>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-[rgb(var(--p-inset))] p-0.5">
           {assets.map((a) => (
@@ -90,10 +97,6 @@ export function MarginStressTest({ positions, collateral, surfaces, regimeDts, r
         <span>Liquidated if {anchor} falls <b className="font-medium tabular-nums text-[var(--role-content)]">{liq.down === null ? 'more than 95%' : `${Math.abs(liq.down).toFixed(2)}%`}</b></span>
         <span>or rises <b className="font-medium tabular-nums text-[var(--role-content)]">{liq.up === null ? 'more than 300%' : `${liq.up.toFixed(2)}%`}</b></span>
       </div>
-      <p className="t-caption mt-2 leading-relaxed">
-        Each other leg moves by the {anchor} move × its correlation to {anchor} (BULK’s live matrix), a simplification that ignores
-        differences in volatility. Margin is BULK’s portfolio formula re-run on the moved positions; liquidation is equity below it.
-      </p>
     </div>
   );
 }

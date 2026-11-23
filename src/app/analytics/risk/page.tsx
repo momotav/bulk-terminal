@@ -1,4 +1,5 @@
 'use client';
+import { InfoTip } from '@/components/InfoTip';
 
 import { useState, useEffect, useMemo } from 'react';
 import { analytics, formatCompact, cn } from '@/lib/api';
@@ -386,6 +387,7 @@ export default function RiskPage() {
       } catch (error) {
         console.error('Failed to fetch regime:', error);
       }
+      setLoading(false);
     };
     
     fetchRegime();
@@ -419,10 +421,8 @@ export default function RiskPage() {
     fetchFairSpread();
   }, [fairSpreadHours, fairSpreadSymbol, network]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  // (A fixed 1s skeleton used to sit here; the page now shows as soon as the
+  // regime data lands, see fetchRegime.)
 
   const timeRanges = [
     { label: '1D', hours: 24 },
@@ -639,9 +639,9 @@ export default function RiskPage() {
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
                       <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Mark vs fair price</h3>
+                      {/* Not a bid/ask spread: that is on the Order book page, and is far tighter. */}
+                      <InfoTip label="About mark vs fair price">Gap between BULK&apos;s mark and fair price, in bps. Not the order-book spread.</InfoTip>
                     </div>
-                    {/* Not a bid/ask spread: that is on the Order book page, and is far tighter. */}
-                    <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">Gap between BULK&apos;s mark and fair price, in bps. Not the order-book spread.</p>
                   </div>
                   <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
                     {timeRanges.map(r => (

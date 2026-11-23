@@ -1,4 +1,5 @@
 'use client';
+import { InfoTip } from '@/components/InfoTip';
 
 // BULK's fees against Hyperliquid's published schedule, over 14-day volume. Hyperliquid
 // is the closest like-for-like: a high-performance on-chain perp exchange with volume
@@ -73,9 +74,9 @@ export function FeeComparison({ crypto, tradfiTakerBps, volume, takerShare, comp
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {keys.map((k) => (
-          <div key={k.title} className="rounded-lg bg-[var(--bg-muted)] px-4 py-3">
+          <div key={k.title} className="flex items-center justify-between gap-2 rounded-lg bg-[var(--bg-muted)] px-4 py-3">
             <div className="text-[14px] font-medium text-[var(--text-primary)]">{k.title}</div>
-            <div className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">{k.body}</div>
+            <InfoTip label={k.title}>{k.body}</InfoTip>
           </div>
         ))}
       </div>
@@ -123,9 +124,12 @@ export function FeeComparison({ crypto, tradfiTakerBps, volume, takerShare, comp
         ) : 'Pick Crypto in the calculator to compare costs: Hyperliquid prices stock markets on a different basis.'}
       </div>
 
-      <p className="text-[12px] leading-relaxed text-[var(--text-tertiary)]">
-        Hyperliquid base rates from <a href={HL_SOURCE} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[var(--text-secondary)]">its fee docs</a>, checked {HL_CHECKED},
-        before its staking discounts of up to 40% for HYPE holders. Some exchanges, Lighter for one, charge nothing on standard accounts in exchange for slower order handling.
+      <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
+        Source and caveats
+        <InfoTip label="Source and caveats">
+          Hyperliquid base rates from <a href={HL_SOURCE} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[var(--text-primary)]">its fee docs</a>, checked {HL_CHECKED},
+          before its staking discounts of up to 40% for HYPE holders. Some exchanges, Lighter for one, charge nothing on standard accounts in exchange for slower order handling.
+        </InfoTip>
       </p>
     </div>
   );
