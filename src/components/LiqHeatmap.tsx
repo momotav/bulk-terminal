@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { analytics, cn, formatAddress, formatCompact, formatNumber, type LiqMapPosition, type LiquidationMapResponse } from '@/lib/api';
 import { CoinPick } from '@/components/basket/tools/CoinPick';
 import { BulkAvatar } from '@/components/BulkAvatar';
+import { InfoTip } from '@/components/InfoTip';
 
 const RANGES = [[0.05, '±5%'], [0.1, '±10%'], [0.25, '±25%'], [0.5, '±50%']] as const;
 const BUCKETS = 56;
@@ -133,7 +134,10 @@ export function LiquidationLevels() {
     <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] [background-image:var(--surface-gradient)] p-4 md:p-6">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Liquidation levels</h2>
+          <h2 className="flex items-center gap-2 text-base md:text-lg font-semibold text-[var(--text-primary)]">
+            Liquidation levels
+            {data && <InfoTip label="Where this data comes from">From the live accounts of BULK’s {data.wallets} most active traders, updated {ago(data.at)}.</InfoTip>}
+          </h2>
           <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">Where today’s open positions would be liquidated. Longs sit below the price, shorts above.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -265,7 +269,6 @@ export function LiquidationLevels() {
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: LONG }} />Long liquidations</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: SHORT }} />Short liquidations</span>
-        {data && <span className="ml-auto">From {data.wallets} most active traders · updated {ago(data.at)}</span>}
       </div>
 
       {nearest.length > 0 && (

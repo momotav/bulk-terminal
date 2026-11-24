@@ -335,7 +335,8 @@ export default function RiskPage() {
   // the gauge grid stays visually manageable. Aggregate card + up to 4 coins
   // fits one row on desktop. The asset table below the gauges is filtered to
   // the same set.
-  const [regimeCoins, setRegimeCoins] = useState<string[]>([...DEFAULT_COINS]);
+  // Four by default: fills the gauge row next to the Aggregate card.
+  const [regimeCoins, setRegimeCoins] = useState<string[]>(Array.from(new Set([...DEFAULT_COINS, 'HYPE'])).slice(0, 4));
 
   // Volatility Heatmap / Correlation Matrix coin selection — no cap, but
   // matrix switches to hover-to-reveal values when > ~6 coins so the UI
