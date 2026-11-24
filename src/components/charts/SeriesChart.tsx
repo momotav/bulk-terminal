@@ -8,8 +8,10 @@ export interface Series { key: string; label: string; color: string; values: (nu
  * A light multi-line time chart: shared x (ms timestamps), one y-axis, hover line
  * with a frosted readout. Plain SVG so theme colours (CSS vars) always resolve.
  */
-export function SeriesChart({ times, series, height = 240, format = (v) => v.toFixed(2), zeroLine = false, emptyText = 'No data yet' }: {
+export function SeriesChart({ times, series, height = 240, format = (v) => v.toFixed(2), zeroLine = false, emptyText = 'No data yet', animKey }: {
   times: number[]; series: Series[]; height?: number; format?: (v: number) => string; zeroLine?: boolean; emptyText?: string;
+  /** Change it (market, range…) to fade the chart and draw its lines in again. Data refreshes don't. */
+  animKey?: string;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [w, setW] = useState(800);
@@ -68,7 +70,12 @@ export function SeriesChart({ times, series, height = 240, format = (v) => v.toF
           </g>
         ))}
         {zeroLine && lo < 0 && hi > 0 && <line x1={padL} x2={w - padR} y1={y(0)} y2={y(0)} style={{ stroke: 'var(--text-tertiary)', opacity: 0.5 }} />}
-        {series.map((s) => <path key={s.key} d={path(s.values)} fill="none" strokeWidth={2} strokeLinejoin="round" strokeDasharray={s.dashed ? '5 4' : undefined} style={{ stroke: s.color }} />)}
+        <g key={animKey ?? 'static'} className="animate-[chart-fade_.35s_ease-out]">
+          {series.map((s) => s.dashed
+            // Dashed lines keep their dashes (draw-in uses the dash array), so they fade in instead.
+            ? <path key={s.key} d={path(s.values)} fill="none" strokeWidth={2} strokeLinejoin="round" strokeDasharray="5 4" style={{ stroke: s.color }} />
+            : <path key={s.key} d={path(s.values)} pathLength={1} className={animKey ? 'series-draw' : undefined} fill="none" strokeWidth={2} strokeLinejoin="round" style={{ stroke: s.color }} />)}
+        </g>
         <text x={padL} y={height - 6} fontSize={10} style={{ fill: 'var(--text-tertiary)' }}>{fmtT(t0)}</text>
         <text x={w - padR} y={height - 6} fontSize={10} textAnchor="end" style={{ fill: 'var(--text-tertiary)' }}>{fmtT(t1)}</text>
         {idx !== null && (

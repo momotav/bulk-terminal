@@ -37,6 +37,9 @@ export function MarkOraclePanel() {
   const rows = useMemo(() => live.filter((r) => Date.now() - r.ts < STALE_MS).sort((a, b) => Math.abs(b.bps) - Math.abs(a.bps)), [live]);
   const selected = picked ?? rows[0]?.symbol ?? 'BTC-USD';
   const series = history[selected] ?? [];
+  // Draw the line in only on first show and on a coin switch, not on every refresh.
+  const [anim, setAnim] = useState(true);
+  useEffect(() => { setAnim(true); const t = window.setTimeout(() => setAnim(false), 1200); return () => window.clearTimeout(t); }, [selected]);
   const peak = Math.max(1, ...rows.map((r) => Math.abs(r.bps)));
   const tick = { fill: 'var(--text-tertiary)', fontSize: 11 };
 
@@ -44,7 +47,6 @@ export function MarkOraclePanel() {
     <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 sm:p-6">
       <div className="mb-4">
         <div className="flex items-center gap-2">
-          <Scale className="w-5 h-5 text-[var(--accent-primary)]" />
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">Mark vs oracle</h2>
         </div>
         <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">
@@ -98,7 +100,7 @@ export function MarkOraclePanel() {
                   Recording started on Nov 10, 2026. The history fills in hour by hour.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer key={selected} width="100%" height="100%" className="animate-[chart-fade_.35s_ease-out]">
                   <LineChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid vertical={false} stroke="var(--role-line-subtle)" strokeOpacity={0.5} />
                     <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tick={tick} axisLine={false} tickLine={false} minTickGap={48}
@@ -108,7 +110,9 @@ export function MarkOraclePanel() {
                     <Tooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
                       labelFormatter={(t) => new Date(t as number).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                       formatter={(v: number) => [fmtBps(v), 'Mark vs oracle']} />
-                    <Line type="monotone" dataKey="bps" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    {/* Draws in from the left on load and on every coin switch (keyed below). */}
+                    <Line key={selected} type="monotone" dataKey="bps" stroke="var(--accent)" strokeWidth={2} dot={false}
+                      isAnimationActive={anim} animationDuration={900} animationEasing="ease-out" />
                   </LineChart>
                 </ResponsiveContainer>
               )}

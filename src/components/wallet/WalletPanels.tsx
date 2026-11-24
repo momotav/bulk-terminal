@@ -1,4 +1,5 @@
 'use client';
+import { OptionSelect } from '@/components/ui/OptionSelect';
 
 // The wallet page's analysis panels: market treemap, gross to net, maker/taker,
 // PnL calendar, trade history, funding and transfers. Each takes figures that
@@ -442,11 +443,8 @@ export function FillsTable({ fills, address }: { fills: WalletFillLite[]; addres
     <div>
       <div className="flex items-center justify-between gap-3 px-5 py-3">
         <span className="text-[13px] text-[var(--role-content-muted)] tabular-nums">{rows.length.toLocaleString('en-US')} fills</span>
-        <select aria-label="Filter by market" value={market} onChange={(e) => { setMarket(e.target.value); setShown(PAGE); }}
-          className="h-8 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] px-2 text-[13px] text-[var(--role-content)]">
-          <option value="all">All markets</option>
-          {markets.map((m) => <option key={m} value={m}>{coinOf(m)}</option>)}
-        </select>
+        <OptionSelect value={market} onChange={(v) => { setMarket(v); setShown(PAGE); }} className="w-[170px]"
+          options={[{ value: 'all', label: 'All markets' }, ...markets.map((m) => ({ value: m, label: coinOf(m), icon: <CoinIcon symbol={coinOf(m)} size={16} className="shrink-0" /> }))]} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[14px] whitespace-nowrap">

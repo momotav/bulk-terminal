@@ -1115,6 +1115,12 @@ html.light .trade-cta {
    `!important` overrides the opaque inline background recharts / contentStyle
    set. `.glass-tooltip` applies the same look to the non-recharts floating
    tooltips (treemap, heatmap). */
+/* Charts swapping data (coin / range switch): a soft fade, and lines that draw in. */
+@keyframes chart-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes series-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.series-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: series-draw 0.9s cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { .series-draw { animation: none; } }
+
 /* Frosted popups (labels, menus, dropdowns, side panels): the page shows through,
    softly blurred, like the chart tooltips' surface. These open in place rather than
    following the mouse, so the blur costs nothing on hover. */

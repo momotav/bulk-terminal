@@ -511,7 +511,6 @@ export default function RiskPage() {
             <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-6">
               <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Gauge className="w-5 h-5 text-[var(--accent-primary)]" />
                   <h2 className="text-lg font-semibold text-[var(--text-primary)]">Market Regime</h2>
                 </div>
                 {/* Coin picker for the regime section — capped at 4 via
@@ -638,7 +637,6 @@ export default function RiskPage() {
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-[var(--accent-primary)]" />
                       <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Mark vs fair price</h3>
                       {/* Not a bid/ask spread: that is on the Order book page, and is far tighter. */}
                       <InfoTip label="About mark vs fair price">Gap between BULK&apos;s mark and fair price, in bps. Not the order-book spread.</InfoTip>
@@ -739,7 +737,6 @@ export default function RiskPage() {
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
                     <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Volatility History</h3>
                   </div>
                   <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
@@ -829,7 +826,6 @@ export default function RiskPage() {
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
                     <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Volatility Heatmap</h3>
                   </div>
                 </div>
@@ -891,7 +887,6 @@ export default function RiskPage() {
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
                     <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Correlation Matrix</h3>
                   </div>
                 </div>

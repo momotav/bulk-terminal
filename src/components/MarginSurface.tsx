@@ -1,4 +1,5 @@
 'use client';
+import { OptionSelect } from '@/components/ui/OptionSelect';
 
 import { useEffect, useMemo, useState } from 'react';
 import { analytics, cn, impactBps, type RiskSurfaces, type RiskSurfaceEntry, type LeverageCurve, type ImpactCurve } from '@/lib/api';
@@ -344,7 +345,6 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
       <div className={cn('flex items-center gap-3 flex-wrap', embedded ? 'justify-end mb-2' : 'justify-between mb-3')}>
         {!embedded && (
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-[var(--accent-primary)]" />
             <h3 className="text-lg font-semibold text-[var(--text-primary)] whitespace-nowrap">Margin Surface</h3>
           </div>
         )}
@@ -407,17 +407,8 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
           </div>
           {/* Regime dropdown — uses native select for compactness. */}
           {data && availableRegimes.length > 0 && regime !== null && (
-            <select
-              value={regime}
-              onChange={(e) => setRegime(Number(e.target.value))}
-              className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-primary)]"
-            >
-              {availableRegimes.map((r) => (
-                <option key={r} value={r}>
-                  {regimeLabel(r, r === data.liveRegime)}
-                </option>
-              ))}
-            </select>
+            <OptionSelect value={String(regime)} onChange={(v) => setRegime(Number(v))} className="w-[210px]"
+              options={availableRegimes.map((r) => ({ value: String(r), label: regimeLabel(r, r === data.liveRegime) }))} />
           )}
         </div>
       </div>
@@ -489,7 +480,7 @@ export function MarginSurface({ coin: coinProp, embedded = false }: { coin?: str
                 <>
                   {' · '}
                   <span className="font-mono" style={{ color: over ? 'var(--neg)' : 'var(--text-secondary)' }}>
-                    max lev {cap.toFixed(0)}x{over ? ' ⚠ above cap' : ''}
+                    max lev {cap.toFixed(0)}x{over ? ' · above cap' : ''}
                   </span>
                 </>
               );

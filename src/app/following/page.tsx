@@ -104,7 +104,6 @@ export default function FollowingPage() {
       <div className="min-h-screen flex flex-col bg-[var(--bg-base)]">
         <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
           <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-12 text-center">
-            <Users className="w-16 h-16 mx-auto mb-4 text-[var(--text-tertiary)]" />
             <h2 className="text-xl font-bold mb-2">Connect to View Following</h2>
             <p className="text-[var(--text-secondary)] mb-6">
               Connect your wallet to see the wallets you're following.
@@ -128,7 +127,6 @@ export default function FollowingPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="page-title text-[var(--text-primary)] mb-1 flex items-center gap-2">
-              <Users className="w-6 h-6 text-bulk-green" />
               Following
             </h1>
             <p className="text-sm text-[var(--text-secondary)]">
@@ -161,7 +159,6 @@ export default function FollowingPage() {
           </div>
         ) : wallets.length === 0 ? (
           <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg p-12 text-center">
-            <Users className="w-16 h-16 mx-auto mb-4 text-[var(--text-tertiary)]" />
             <h3 className="text-lg font-semibold mb-2">No Wallets Followed</h3>
             <p className="text-[var(--text-secondary)] text-sm mb-6">
               Start following wallets to track their trading activity.

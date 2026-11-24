@@ -269,7 +269,6 @@ export default function PreDepositPage() {
   return (
     <main className="flex-1 w-full px-4 sm:px-6 py-6 space-y-5">
       <div className="flex items-center gap-3">
-        <Landmark className="w-6 h-6 text-[var(--accent)]" />
         <h1 className="page-title text-[var(--text-primary)]">Pre-Deposit</h1>
       </div>
 

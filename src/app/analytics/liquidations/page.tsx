@@ -10,6 +10,7 @@ import {
 import { Flame, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { CoinPicker } from '@/components/CoinPicker';
 import { LiquidationLevels } from '@/components/LiqHeatmap';
+import { CoinIcon } from '@/components/CoinIcon';
 import { useAssetClass } from '@/hooks/useAssetClass';
 import { HIDDEN_COINS } from '@/lib/coins';
 import { ChartFrame } from '@/components/ChartFrame';
@@ -1021,7 +1022,7 @@ export default function LiquidationsPage() {
                   <div className={`text-xl md:text-2xl font-bold flex items-center gap-2 ${
                     marketData.priceChange24h >= 0 ? 'text-[var(--bids)]' : 'text-[var(--asks)]'
                   }`}>
-                    {marketData.priceChange24h >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                    
                     {marketData.priceChange24h >= 0 ? '+' : ''}{marketData.priceChange24h.toFixed(2)}%
                   </div>
                 </div>
@@ -1092,9 +1093,7 @@ export default function LiquidationsPage() {
                   <tr key={liq.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-base)] transition-colors">
                     <td className="py-3 md:py-4">
                       <div className="flex items-center gap-2 md:gap-3">
-                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-[var(--bg-base)] flex items-center justify-center text-xs md:text-sm font-medium">
-                          {liq.symbol.charAt(0)}
-                        </div>
+                        <CoinIcon symbol={String(liq.symbol)} size={26} className="shrink-0" />
                         <span className="font-medium text-sm md:text-base text-[var(--text-primary)]">{liq.symbol}</span>
                       </div>
                     </td>

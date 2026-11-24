@@ -80,7 +80,7 @@ export default function FundingPage() {
             </div>
           </div>
           {selRow && (
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-right">
+            <div key={sel} className="flex flex-wrap gap-x-6 gap-y-2 text-right animate-[chart-fade_.35s_ease-out]">
               <Kv k="Funding now (APR)" v={pct(apr(selRow.fundingNow))} c={tone(selRow.fundingNow)} />
               <Kv k={`${days}D average (APR)`} v={pct(apr(selRow.fundingAvg))} c={tone(selRow.fundingAvg)} />
               <Kv k="Hours longs paid" v={selRow.positiveShare === null ? '—' : `${Math.round(selRow.positiveShare * 100)}%`} />
@@ -93,13 +93,13 @@ export default function FundingPage() {
           <div>
             <div className="mb-1 text-[12px] text-[var(--text-secondary)]">Funding, annualised (hourly)</div>
             {series === null ? <div className="h-[220px] animate-pulse rounded-xl bg-[var(--bg-base)]" /> :
-              <SeriesChart height={220} zeroLine times={times} format={(v) => `${v.toFixed(1)}%`}
+              <SeriesChart height={220} zeroLine times={times} animKey={`${sel}-${days}`} format={(v) => `${v.toFixed(1)}%`}
                 series={[{ key: 'f', label: 'Funding APR', color: 'var(--accent)', values: (series ?? []).map((p) => apr(p.funding)) }]} />}
           </div>
           <div>
             <div className="mb-1 text-[12px] text-[var(--text-secondary)]">Mark vs oracle premium (hourly average)</div>
             {series === null ? <div className="h-[220px] animate-pulse rounded-xl bg-[var(--bg-base)]" /> :
-              <SeriesChart height={220} zeroLine times={times} format={(v) => `${v.toFixed(2)} bp`}
+              <SeriesChart height={220} zeroLine times={times} animKey={`${sel}-${days}`} format={(v) => `${v.toFixed(2)} bp`}
                 series={[{ key: 'p', label: 'Premium', color: 'var(--text-primary)', values: (series ?? []).map((p) => p.premium) }]} />}
           </div>
         </div>
@@ -118,11 +118,11 @@ export default function FundingPage() {
         </div>
         {rows === null && <div className="h-[300px] animate-pulse" />}
         {rows !== null && list.length === 0 && <p className="px-4 py-10 text-center text-[13px] text-[var(--text-tertiary)]">No funding data in this window yet.</p>}
-        {list.map((r) => {
+        {list.map((r, i) => {
           const c = r.symbol.replace(/-USD$/, '');
           return (
-            <button key={r.symbol} type="button" onClick={() => setSel(r.symbol)}
-              className={cn('grid w-full grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))] items-center gap-3 border-b border-[var(--border-color)] px-4 py-2.5 text-left text-[13px] tabular-nums transition-colors last:border-b-0 hover:bg-[var(--bg-base)] md:grid-cols-[minmax(0,1.3fr)_repeat(6,minmax(0,1fr))]',
+            <button key={r.symbol} type="button" onClick={() => setSel(r.symbol)} style={{ '--row-index': i } as React.CSSProperties}
+              className={cn('animate-row-enter grid w-full grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))] items-center gap-3 border-b border-[var(--border-color)] px-4 py-2.5 text-left text-[13px] tabular-nums transition-colors last:border-b-0 hover:bg-[var(--bg-base)] md:grid-cols-[minmax(0,1.3fr)_repeat(6,minmax(0,1fr))]',
                 sel === r.symbol && 'bg-[var(--bg-base)]')}>
               <span className="flex min-w-0 items-center gap-2"><CoinIcon symbol={c} size={18} /><span className="truncate font-medium text-[var(--text-primary)]">{c}</span></span>
               <span className="text-right" style={{ color: tone(r.fundingNow) }}>{pct(apr(r.fundingNow))}</span>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { analytics, cn, formatCompact } from '@/lib/api';
 import { SeriesChart, Legend } from '@/components/charts/SeriesChart';
+import { InfoTip } from '@/components/InfoTip';
 
 type Data = Awaited<ReturnType<typeof analytics.getLiquidityHistory>>;
 const RANGES = [[1, '1D'], [7, '7D'], [30, '30D']] as const;
@@ -44,16 +45,19 @@ export function LiquidityHistory({ coin }: { coin: string }) {
 
   const hours = data?.byHour ?? [];
   const hmax = Math.max(0.0001, ...hours.map((h) => h.c100k ?? 0));
-  const best = hours.length ? hours.reduce((a, b) => ((b.c100k ?? Infinity) < (a.c100k ?? Infinity) ? b : a)) : null;
-  const worst = hours.length ? hours.reduce((a, b) => ((b.c100k ?? -1) > (a.c100k ?? -1) ? b : a)) : null;
   const first = s[0]?.t;
 
   return (
     <div className="glass-card p-4 md:p-5">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="panel-title t-h2">Liquidity history</h2>
-          <p className="t-caption">{sym}: how its book changes over time. Recorded every 5 minutes{first ? ` since ${new Date(first).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}.</p>
+          <h2 className="panel-title t-h2 flex items-center gap-2">
+            Liquidity history
+            <InfoTip label="About liquidity history">
+              How {sym}’s book changes over time, recorded every 5 minutes{first ? ` since ${new Date(first).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}.
+              Cost to trade is a round trip, buying and selling the size at once, against the mid price.
+            </InfoTip>
+          </h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="toggle-group">{VIEWS.map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} className={cn('toggle-btn', view === k && 'active')}>{l}</button>)}</div>
@@ -63,11 +67,10 @@ export function LiquidityHistory({ coin }: { coin: string }) {
 
       {data === null ? <div className="h-[240px] animate-pulse rounded-xl bg-[var(--bg-base)]" /> : (
         <>
-          <SeriesChart times={times} series={series} format={view === 'depth' ? (v) => `$${formatCompact(v)}` : (v) => `${bp(v)} bp`}
+          <SeriesChart times={times} series={series} animKey={`${coin}-${days}-${view}`} format={view === 'depth' ? (v) => `$${formatCompact(v)}` : (v) => `${bp(v)} bp`}
             emptyText="Collecting. The first points appear within minutes and the history builds from here." />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <Legend series={series} />
-            {view === 'cost' && <span className="text-[11px] text-[var(--text-tertiary)]">Round trip: buy and sell at once, vs mid</span>}
           </div>
         </>
       )}
@@ -76,7 +79,6 @@ export function LiquidityHistory({ coin }: { coin: string }) {
         <div className="mt-6 border-t border-[var(--border-color)] pt-4">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-[13px] font-medium text-[var(--text-primary)]">Cost of a $100K round trip by hour (UTC)</span>
-            {best && worst && <span className="text-[11px] text-[var(--text-tertiary)]">cheapest {String(best.hour).padStart(2, '0')}:00 ({bp(best.c100k ?? 0)} bp) · priciest {String(worst.hour).padStart(2, '0')}:00 ({bp(worst.c100k ?? 0)} bp)</span>}
           </div>
           <div className="grid h-[90px] grid-cols-[repeat(24,minmax(0,1fr))] items-end gap-[3px]">
             {Array.from({ length: 24 }, (_, h) => {

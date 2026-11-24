@@ -206,7 +206,6 @@ export function BulkLeaderboardTable({
           rankings come from BULK by definition (this is the BULK widget). */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-color)] flex-wrap">
         <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-bulk-green" />
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
         </div>
 
@@ -273,7 +272,7 @@ export function BulkLeaderboardTable({
                         )}
                       >
                         <span>{m.label}</span>
-                        {isActive && <span className="text-bulk-green">✓</span>}
+                        
                       </button>
                     );
                   })}

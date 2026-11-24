@@ -62,21 +62,47 @@ export function FeeComparison({ crypto, tradfiTakerBps, volume, takerShare, comp
   const tick = { fill: 'var(--text-tertiary)', fontSize: 11 };
 
   const keys = [
-    { title: 'Free to make', body: `0 bps maker fee on every tier. Hyperliquid charges makers ${bps(HL_TIERS[0].makerBps)} to start.` },
+    { stat: '0 bps', title: 'Free to make', body: `0 bps maker fee on every tier. Hyperliquid charges makers ${bps(HL_TIERS[0].makerBps)} to start.` },
     [...crypto, ...HL_TIERS].every((t) => at(crypto, t.thresholdVolume).takerBps < at(HL_TIERS, t.thresholdVolume).takerBps)
-      ? { title: 'Lower taker fee at every volume', body: `From ${bps(crypto[0].takerBps)} against ${bps(HL_TIERS[0].takerBps)}, and still lower at the top tiers.` }
-      : { title: 'Lower taker fee to start', body: `${bps(crypto[0].takerBps)} against ${bps(HL_TIERS[0].takerBps)} on the first tier.` },
-    ...(tradfiTakerBps !== null ? [{ title: 'Stocks and indices for less', body: `TradFi markets are a flat ${bps(tradfiTakerBps)} taker, under half the crypto rate.` }] : []),
-    { title: 'Paid to make, at size', body: 'Market makers above a share of all maker volume earn a rebate on top.' },
+      ? { stat: `${crypto[0].takerBps.toFixed(2)} vs ${HL_TIERS[0].takerBps.toFixed(2)}`, title: 'Lower taker fee at every volume', body: `From ${bps(crypto[0].takerBps)} against ${bps(HL_TIERS[0].takerBps)}, and still lower at the top tiers.` }
+      : { stat: `${crypto[0].takerBps.toFixed(2)} vs ${HL_TIERS[0].takerBps.toFixed(2)}`, title: 'Lower taker fee to start', body: `${bps(crypto[0].takerBps)} against ${bps(HL_TIERS[0].takerBps)} on the first tier.` },
+    ...(tradfiTakerBps !== null ? [{ stat: bps(tradfiTakerBps), title: 'Stocks and indices for less', body: `TradFi markets are a flat ${bps(tradfiTakerBps)} taker, under half the crypto rate.` }] : []),
+    { stat: 'Rebate', title: 'Paid to make, at size', body: 'Market makers above a share of all maker volume earn a rebate on top.' },
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+    <div className="space-y-5">
+      {/* the answer first: what this volume costs here vs Hyperliquid */}
+      {comparing ? (
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--border-color)] sm:grid-cols-3">
+          <div className="bg-[var(--bg-base)] px-5 py-4">
+            <div className="text-[12px] text-[var(--text-tertiary)]">On BULK</div>
+            <div className="mt-1 text-[28px] font-medium leading-none tabular-nums text-[var(--text-primary)]">{usd(bulkCost)}</div>
+            <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">${formatCompact(volume)} over 14 days, {Math.round(takerShare * 100)}% taker</div>
+          </div>
+          <div className="bg-[var(--bg-base)] px-5 py-4">
+            <div className="text-[12px] text-[var(--text-tertiary)]">On Hyperliquid</div>
+            <div className="mt-1 text-[28px] font-medium leading-none tabular-nums text-[var(--text-secondary)]">{usd(hlCost)}</div>
+            <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">same volume, base rates</div>
+          </div>
+          <div className="bg-[var(--bg-base)] px-5 py-4">
+            <div className="text-[12px] text-[var(--text-tertiary)]">You save on BULK</div>
+            <div className="mt-1 text-[28px] font-medium leading-none tabular-nums" style={{ color: hlCost > bulkCost ? 'var(--pos)' : 'var(--text-primary)' }}>{usd(Math.max(0, hlCost - bulkCost))}</div>
+            <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">{hlCost > 0 ? `${Math.max(0, Math.round((1 - bulkCost / hlCost) * 100))}% less` : ''}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[var(--border-color)] px-4 py-3 text-[13px] text-[var(--text-secondary)]">Pick Crypto in the calculator to compare costs: Hyperliquid prices stock markets on a different basis.</div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {keys.map((k) => (
-          <div key={k.title} className="flex items-center justify-between gap-2 rounded-lg bg-[var(--bg-muted)] px-4 py-3">
-            <div className="text-[14px] font-medium text-[var(--text-primary)]">{k.title}</div>
-            <InfoTip label={k.title}>{k.body}</InfoTip>
+          <div key={k.title} className="rounded-xl border border-[var(--border-color)] px-4 py-3 transition-colors hover:border-[var(--text-tertiary)]">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[20px] font-medium leading-tight tabular-nums text-[var(--text-primary)]">{k.stat}</span>
+              <InfoTip label={k.title}>{k.body}</InfoTip>
+            </div>
+            <div className="mt-1 text-[12px] text-[var(--text-tertiary)]">{k.title}</div>
           </div>
         ))}
       </div>
@@ -116,13 +142,6 @@ export function FeeComparison({ crypto, tradfiTakerBps, volume, takerShare, comp
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-lg border border-[var(--border-color)] px-4 py-3 text-[14px] text-[var(--text-secondary)]">
-        {comparing ? (
-          <>On ${formatCompact(volume)} over 14 days at {Math.round(takerShare * 100)}% taker: <span className="text-[var(--text-primary)] tabular-nums">{usd(bulkCost)}</span> in fees on BULK,{' '}
-            <span className="text-[var(--text-primary)] tabular-nums">{usd(hlCost)}</span> on Hyperliquid
-            {hlCost > bulkCost && <>, <span className="text-[var(--pos)] tabular-nums">{usd(hlCost - bulkCost)}</span> less on BULK</>}.</>
-        ) : 'Pick Crypto in the calculator to compare costs: Hyperliquid prices stock markets on a different basis.'}
-      </div>
 
       <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
         Source and caveats

@@ -98,7 +98,6 @@ export function RiskEventsList({ address, limit = 50, type = 'all', bare = false
     <div className="bg-[var(--bg-muted)] border border-[var(--border-color)] rounded-lg flex flex-col">
       <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-bulk-orange" />
           <h2 className="font-semibold">Risk Events</h2>
           {events && events.length > 0 && (
             <span className="text-xs text-[var(--text-tertiary)] font-mono">

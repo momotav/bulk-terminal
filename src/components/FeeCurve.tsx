@@ -50,6 +50,17 @@ export function FeeCurve({ tiers, makerBpsAdj, takerShare, volume, onPick, compa
     }));
   }, [tiers, makerBpsAdj, takerShare, end, compare]);
 
+  // Tier labels only where they fit: at a large volume the low tiers crowd the left
+  // edge and their labels printed on top of each other.
+  const labelled = useMemo(() => {
+    const out = new Set<number>(); let last = -Infinity;
+    for (const t of tiers) {
+      if (!(t.thresholdVolume > 0) || t.thresholdVolume > end) continue;
+      if (t.thresholdVolume - last >= end * 0.09) { out.add(t.thresholdVolume); last = t.thresholdVolume; }
+    }
+    return out;
+  }, [tiers, end]);
+
   const r = tiers[tierIndex(tiers, volume)];
   const you = feeOn(volume, takerShare, r.takerBps, r.makerBps + makerBpsAdj);
   const tick = { fill: 'var(--text-tertiary)', fontSize: 11 };
@@ -72,9 +83,9 @@ export function FeeCurve({ tiers, makerBpsAdj, takerShare, volume, onPick, compa
             <XAxis dataKey="x" type="number" domain={[0, end]} tick={tick} axisLine={false} tickLine={false} tickCount={6}
               tickFormatter={(x) => usd(Number(x))} />
             <YAxis tick={tick} axisLine={false} tickLine={false} width={56} tickFormatter={(y) => usd(Number(y))} />
-            {tiers.filter((t) => t.thresholdVolume > 0 && t.thresholdVolume <= end).map((t, k) => (
+            {tiers.filter((t) => t.thresholdVolume > 0 && t.thresholdVolume <= end).map((t) => (
               <ReferenceLine key={t.thresholdVolume} x={t.thresholdVolume} stroke="var(--border-color)" strokeDasharray="2 4"
-                label={{ value: `Tier ${tiers.indexOf(t) + 1}`, position: 'top', fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                label={labelled.has(t.thresholdVolume) ? { value: `Tier ${tiers.indexOf(t) + 1}`, position: 'top', fill: 'var(--text-tertiary)', fontSize: 10 } : undefined} />
             ))}
             <Tooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
               labelFormatter={(x) => `$${formatCompact(Number(x))} over 14 days`}

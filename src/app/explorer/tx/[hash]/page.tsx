@@ -214,7 +214,6 @@ export default function TxDetailPage() {
         {/* Actions list */}
         <div>
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-bulk-accent" />
             Actions ({tx.actions.length})
           </h2>
 

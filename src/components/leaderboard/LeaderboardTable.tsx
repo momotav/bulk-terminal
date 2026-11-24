@@ -141,9 +141,6 @@ export function LeaderboardTable({
     <div className={cn('glass-card h-full flex flex-col', flush && 'panel-flush')}>
       <div className="panel-header">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="panel-icon" style={{ color: config.accent }}>
-            <config.icon className="w-3.5 h-3.5" strokeWidth={2} />
-          </span>
           <div className="min-w-0">
             <h2 className="panel-title t-h2 truncate">{config.title}</h2>
             <p className="t-caption truncate">{config.subtitle}</p>

@@ -62,11 +62,34 @@ export default function PositioningPage() {
       </div>
 
       {list.length > 0 && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--border-color)] md:grid-cols-4">
-          <Stat k="Long exposure" v={usd(tot.l)} c="var(--pos)" />
-          <Stat k="Short exposure" v={usd(tot.s)} c="var(--neg)" />
-          <Stat k="Net" v={`${tot.l - tot.s >= 0 ? '+' : '−'}${usd(Math.abs(tot.l - tot.s))}`} c={tot.l >= tot.s ? 'var(--pos)' : 'var(--neg)'} />
-          <Stat k="Long share" v={tot.l + tot.s > 0 ? `${Math.round((tot.l / (tot.l + tot.s)) * 100)}%` : '—'} />
+        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-5 py-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <div className="text-[12px] text-[var(--text-tertiary)]">Long exposure</div>
+              <div className="text-[24px] font-medium leading-tight tabular-nums" style={{ color: 'var(--pos)' }}>{usd(tot.l)}</div>
+            </div>
+            <div className="hidden text-center sm:block">
+              <div className="text-[12px] text-[var(--text-tertiary)]">Net · long share</div>
+              <div className="text-[18px] font-medium tabular-nums" style={{ color: tot.l >= tot.s ? 'var(--pos)' : 'var(--neg)' }}>
+                {`${tot.l - tot.s >= 0 ? '+' : '−'}${usd(Math.abs(tot.l - tot.s))}`}
+                <span className="ml-2 text-[var(--text-secondary)]">{tot.l + tot.s > 0 ? `${Math.round((tot.l / (tot.l + tot.s)) * 100)}%` : '—'}</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[12px] text-[var(--text-tertiary)]">Short exposure</div>
+              <div className="text-[24px] font-medium leading-tight tabular-nums" style={{ color: 'var(--neg)' }}>{usd(tot.s)}</div>
+            </div>
+          </div>
+          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full">
+            <div className="transition-[width] duration-700 ease-out" style={{ width: `${tot.l + tot.s > 0 ? (tot.l / (tot.l + tot.s)) * 100 : 50}%`, background: 'var(--pos)', opacity: 0.85 }} />
+            <div className="w-0.5" />
+            <div className="flex-1" style={{ background: 'var(--neg)', opacity: 0.85 }} />
+          </div>
+          <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-[var(--text-tertiary)]">
+            <span>{list.reduce((a, r) => a + r.longN, 0)} long positions</span>
+            <span>across {list.length} markets</span>
+            <span>{list.reduce((a, r) => a + r.shortN, 0)} short positions</span>
+          </div>
         </div>
       )}
 
@@ -77,7 +100,7 @@ export default function PositioningPage() {
             <CoinIcon symbol={coin} size={26} />
             <div>
               <div className="text-[15px] font-medium text-[var(--text-primary)]">{sel}</div>
-              <div className="text-[11px] text-[var(--text-tertiary)]">{selRow ? `${selRow.longN} long · ${selRow.shortN} short · top 5 hold ${selRow.top5Share === null ? '—' : `${Math.round(selRow.top5Share * 100)}%`}` : 'Pick a market below'}</div>
+              <div key={sel} className="text-[11px] text-[var(--text-tertiary)] animate-[chart-fade_.35s_ease-out]">{selRow ? `${selRow.longN} long · ${selRow.shortN} short · top 5 hold ${selRow.top5Share === null ? '—' : `${Math.round(selRow.top5Share * 100)}%`}` : 'Pick a market below'}</div>
             </div>
           </div>
           <div className="toggle-group">{RANGES.map(([d, l]) => <button key={d} type="button" onClick={() => setDays(d)} className={cn('toggle-btn', days === d && 'active')}>{l}</button>)}</div>
@@ -86,13 +109,13 @@ export default function PositioningPage() {
           <div>
             <div className="mb-1 text-[12px] text-[var(--text-secondary)]">Long vs short exposure</div>
             {hist === null ? <div className="h-[220px] animate-pulse rounded-xl bg-[var(--bg-base)]" /> :
-              <SeriesChart height={220} times={times} series={notionalSeries} format={(v) => usd(v)} emptyText="Collecting. History builds from the first snapshots." />}
+              <SeriesChart height={220} times={times} animKey={`${sel}-${days}`} series={notionalSeries} format={(v) => usd(v)} emptyText="Collecting. History builds from the first snapshots." />}
             <div className="mt-2"><Legend series={notionalSeries} /></div>
           </div>
           <div>
             <div className="mb-1 text-[12px] text-[var(--text-secondary)]">Average entry price</div>
             {hist === null ? <div className="h-[220px] animate-pulse rounded-xl bg-[var(--bg-base)]" /> :
-              <SeriesChart height={220} times={times} series={entrySeries} format={(v) => px(v)} emptyText="Collecting. History builds from the first snapshots." />}
+              <SeriesChart height={220} times={times} animKey={`${sel}-${days}`} series={entrySeries} format={(v) => px(v)} emptyText="Collecting. History builds from the first snapshots." />}
             <div className="mt-2"><Legend series={entrySeries} /></div>
           </div>
         </div>
@@ -106,19 +129,19 @@ export default function PositioningPage() {
         </div>
         {rows === null && <div className="h-[300px] animate-pulse" />}
         {rows !== null && list.length === 0 && <p className="px-4 py-10 text-center text-[13px] text-[var(--text-tertiary)]">Collecting the first snapshot. Back in a few minutes.</p>}
-        {list.map((r) => {
+        {list.map((r, i) => {
           const c = r.symbol.replace(/-USD$/, '');
           const lr = r.longRatio ?? 0.5;
           const d = r.longRatio !== null && r.longRatio24hAgo !== null ? (r.longRatio - r.longRatio24hAgo) * 100 : null;
           return (
-            <button key={r.symbol} type="button" onClick={() => setSel(r.symbol)}
-              className={cn('grid w-full grid-cols-[minmax(0,1fr)_minmax(0,2fr)_90px] items-center gap-3 border-b border-[var(--border-color)] px-4 py-2.5 text-left text-[13px] tabular-nums transition-colors last:border-b-0 hover:bg-[var(--bg-base)] md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)_80px_100px_110px_110px_80px]',
+            <button key={r.symbol} type="button" onClick={() => setSel(r.symbol)} style={{ '--row-index': i } as React.CSSProperties}
+              className={cn('animate-row-enter grid w-full grid-cols-[minmax(0,1fr)_minmax(0,2fr)_90px] items-center gap-3 border-b border-[var(--border-color)] px-4 py-2.5 text-left text-[13px] tabular-nums transition-colors last:border-b-0 hover:bg-[var(--bg-base)] md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)_80px_100px_110px_110px_80px]',
                 sel === r.symbol && 'bg-[var(--bg-base)]')}>
               <span className="flex min-w-0 items-center gap-2"><CoinIcon symbol={c} size={18} /><span className="truncate font-medium text-[var(--text-primary)]">{c}</span></span>
               <span className="flex items-center gap-2">
                 <span className="w-9 text-right text-[12px]" style={{ color: 'var(--pos)' }}>{Math.round(lr * 100)}%</span>
                 <span className="flex h-2 flex-1 overflow-hidden rounded-full">
-                  <span style={{ width: `${lr * 100}%`, background: 'var(--pos)', opacity: 0.8 }} />
+                  <span className="transition-[width] duration-700 ease-out" style={{ width: `${lr * 100}%`, background: 'var(--pos)', opacity: 0.8 }} />
                   <span className="w-px" />
                   <span className="flex-1" style={{ background: 'var(--neg)', opacity: 0.8 }} />
                 </span>
@@ -140,11 +163,3 @@ export default function PositioningPage() {
   );
 }
 
-function Stat({ k, v, c }: { k: string; v: string; c?: string }) {
-  return (
-    <div className="bg-[var(--bg-muted)] px-4 py-3">
-      <div className="text-[11px] text-[var(--text-tertiary)]">{k}</div>
-      <div className="mt-0.5 text-[18px] font-medium tabular-nums" style={{ color: c ?? 'var(--text-primary)' }}>{v}</div>
-    </div>
-  );
-}

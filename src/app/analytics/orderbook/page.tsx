@@ -424,16 +424,16 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
                   const p = payload[0].payload as DepthPoint;
                   return (
                     <div className="min-w-[170px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
-                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
+                      <p className="mb-1.5 tabular-nums text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
                       {typeof p.bid === 'number' && (
-                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <p className="flex items-center gap-2 tabular-nums text-xs">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} />
                           <span className="text-[var(--role-content-muted)]">Bids</span>
                           <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.bid)}</span>
                         </p>
                       )}
                       {typeof p.ask === 'number' && (
-                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <p className="flex items-center gap-2 tabular-nums text-xs">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} />
                           <span className="text-[var(--role-content-muted)]">Asks</span>
                           <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(p.ask)}</span>
@@ -460,7 +460,7 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
                 style={{ top: midGeom.top, height: midGeom.height }}
               />
               <div
-                className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold text-[var(--role-content-muted)]"
+                className="absolute -translate-x-1/2 whitespace-nowrap tabular-nums text-[11px] font-semibold text-[var(--role-content-muted)]"
                 style={{ top: midGeom.top - 17 }}
               >
                 Mid ${formatPrice(mid)}
@@ -485,8 +485,8 @@ function DepthChartPanel({ book, mid }: { book: OrderbookSnapshot; mid: number |
                   const sz = side === 'bid' ? p.bid! : p.ask!;
                   return (
                     <div className="min-w-[150px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
-                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
-                      <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                      <p className="mb-1.5 tabular-nums text-[11px] text-[var(--role-content-subtle)]">Price ${formatPrice(p.px)}</p>
+                      <p className="flex items-center gap-2 tabular-nums text-xs">
                         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: side === 'bid' ? 'var(--pos)' : 'var(--neg)' }} />
                         <span className="text-[var(--role-content-muted)]">Size</span>
                         <span className="ml-auto font-medium text-[var(--role-content)]">{formatSize(sz)}</span>
@@ -536,7 +536,7 @@ function LadderColumn({ side, rows, maxSz }: { side: 'bid' | 'ask'; rows: Return
         {rows.map((l) => {
           const pct = (l.sz / maxSz) * 100;
           return (
-            <div key={`${side}-${l.px}`} className="relative grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] items-center gap-1.5 sm:gap-3 px-2 sm:px-3 py-[3px] font-mono text-[11px] sm:text-xs tabular-nums">
+            <div key={`${side}-${l.px}`} className="relative grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] items-center gap-1.5 sm:gap-3 px-2 sm:px-3 py-[4px] tabular-nums text-[12px] sm:text-[13px]">
               <div
                 className={cn('pointer-events-none absolute inset-y-px transition-[width] duration-500 ease-out', side === 'bid' ? 'right-0' : 'left-0')}
                 style={{ width: `${pct}%`, background: fill }}
@@ -603,7 +603,7 @@ function OrderBookPanel({
       </div>
 
       {/* Spread / mid strip. */}
-      <div className="flex items-center justify-center gap-2.5 border-y border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 py-1.5 font-mono text-[11px] tabular-nums">
+      <div className="flex items-center justify-center gap-2.5 border-y border-[var(--role-line-subtle)] bg-[var(--role-background)]/40 py-2 tabular-nums text-[13px]">
         <span className="text-[var(--role-content-subtle)]">Spread</span>
         <span className="font-semibold text-[var(--role-content)]">{formatBps(stats.spreadBps)} bps</span>
         <span className="text-[var(--role-line)]">·</span>
@@ -732,16 +732,16 @@ function ImpactCurvePanel({ book, mid, impact }: { book: OrderbookSnapshot; mid:
                   const row = payload[0].payload as { notional: number; buy?: number; sell?: number };
                   return (
                     <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
-                      <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(row.notional)}</p>
+                      <p className="mb-1.5 tabular-nums text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(row.notional)}</p>
                       {typeof row.buy === 'number' && (
-                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <p className="flex items-center gap-2 tabular-nums text-xs">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--neg)' }} />
                           <span className="text-[var(--role-content-muted)]">Buy</span>
                           <span className="ml-auto font-medium text-[var(--role-content)]">{row.buy.toFixed(2)} bps</span>
                         </p>
                       )}
                       {typeof row.sell === 'number' && (
-                        <p className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <p className="flex items-center gap-2 tabular-nums text-xs">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--pos)' }} />
                           <span className="text-[var(--role-content-muted)]">Sell</span>
                           <span className="ml-auto font-medium text-[var(--role-content)]">{row.sell.toFixed(2)} bps</span>
@@ -813,7 +813,7 @@ function SizeSimPanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: num
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
     <div className="flex items-baseline justify-between border-b border-[var(--role-line-subtle)] py-1.5 last:border-0">
       <span className="text-xs text-[var(--role-content-muted)]">{label}</span>
-      <span className="font-mono text-sm font-medium tabular-nums" style={{ color: accent ?? 'var(--role-content)' }}>{value}</span>
+      <span className="tabular-nums text-sm font-medium" style={{ color: accent ?? 'var(--role-content)' }}>{value}</span>
     </div>
   );
 
@@ -841,10 +841,10 @@ function SizeSimPanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: num
               min={0}
               value={notional}
               onChange={(e) => setNotional(Math.max(0, Number(e.target.value) || 0))}
-              className="w-full bg-transparent font-mono text-sm tabular-nums text-[var(--role-content)] outline-none"
+              className="w-full bg-transparent tabular-nums text-sm text-[var(--role-content)] outline-none"
             />
             {mid != null && mid > 0 && (
-              <span className="shrink-0 font-mono text-[11px] text-[var(--role-content-subtle)]">≈ {formatSize(notional / mid)}</span>
+              <span className="shrink-0 tabular-nums text-[11px] text-[var(--role-content-subtle)]">≈ {formatSize(notional / mid)}</span>
             )}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -861,8 +861,8 @@ function SizeSimPanel({ book, mid, impact }: { book: OrderbookSnapshot; mid: num
             <div className="rounded-[var(--radius-sm)] border border-[var(--role-line-subtle)] bg-[var(--role-background)]/30 p-3">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-[var(--role-content-subtle)]">You pay</div>
               <div className="flex items-end gap-2">
-                <span className="font-mono text-2xl font-medium leading-none tabular-nums text-[var(--role-content)]">{fmtUsdCost(breakdown.totalUsd)}</span>
-                <span className="pb-0.5 font-mono text-[11px] tabular-nums text-[var(--role-content-subtle)]">{formatBps(breakdown.totalBps)} bps</span>
+                <span className="tabular-nums text-2xl font-medium leading-none text-[var(--role-content)]">{fmtUsdCost(breakdown.totalUsd)}</span>
+                <span className="pb-0.5 tabular-nums text-[11px] text-[var(--role-content-subtle)]">{formatBps(breakdown.totalBps)} bps</span>
               </div>
               {/* Stacked bar: spread · slippage · fee */}
               <div className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-[var(--role-line-subtle)]">
@@ -913,7 +913,7 @@ function Legend({ sw, label, value }: { sw: string; label: string; value: string
         <span className="h-1.5 w-1.5 rounded-[1px]" style={{ backgroundColor: sw }} />
         <span className="text-[10px] uppercase tracking-wide text-[var(--role-content-subtle)]">{label}</span>
       </div>
-      <div className="mt-0.5 font-mono text-xs font-medium tabular-nums text-[var(--role-content)]">{value}</div>
+      <div className="mt-0.5 tabular-nums text-xs font-medium text-[var(--role-content)]">{value}</div>
     </div>
   );
 }
@@ -989,7 +989,7 @@ function TwoSidedDepthPanel({ book, mid, impact }: { book: OrderbookSnapshot; mi
           <div className="border-b border-[var(--role-line)] px-4 pb-3 pt-3">
             <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-wider text-[var(--role-content-subtle)]">
               <span>Resting liquidity · ±{bandBp}bp</span>
-              <span>Spread <span className="font-mono text-[11px] font-medium normal-case tracking-normal text-[var(--role-content)]">{formatBps(stats.spreadBps)}</span> bp</span>
+              <span>Spread <span className="tabular-nums text-[11px] font-medium normal-case tracking-normal text-[var(--role-content)]">{formatBps(stats.spreadBps)}</span> bp</span>
             </div>
             {([['Bid', m.bidDepth, 'var(--pos)'], ['Ask', m.askDepth, 'var(--neg)']] as const).map(([lbl, dep, col]) => {
               const w = m.maxDepth > 0 ? (dep / m.maxDepth) * 100 : 0;
@@ -998,7 +998,7 @@ function TwoSidedDepthPanel({ book, mid, impact }: { book: OrderbookSnapshot; mi
                   <span className="w-7 shrink-0 text-[10px] font-medium uppercase" style={{ color: col }}>{lbl}</span>
                   <div className="relative h-5 flex-1 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--role-line-subtle)]">
                     <div className="absolute inset-y-0 left-0 rounded-[var(--radius-sm)]" style={{ width: `${Math.max(w, 2)}%`, backgroundColor: col, opacity: 0.5 }} />
-                    <span className="absolute inset-y-0 right-2 flex items-center font-mono text-[12px] font-medium tabular-nums" style={{ color: 'var(--role-content)' }}>${formatCompact(dep)}</span>
+                    <span className="absolute inset-y-0 right-2 flex items-center tabular-nums text-[12px] font-medium" style={{ color: 'var(--role-content)' }}>${formatCompact(dep)}</span>
                   </div>
                 </div>
               );
@@ -1020,13 +1020,13 @@ function TwoSidedDepthPanel({ book, mid, impact }: { book: OrderbookSnapshot; mi
           <div className="min-h-0 flex-1 overflow-y-auto px-4">
             {m.ladder.map((r) => (
               <div key={r.sz} className="grid grid-cols-3 items-center border-b border-[var(--role-line-subtle)] py-3 last:border-0">
-                <span className="font-mono text-[15px] tabular-nums text-[var(--role-content-subtle)]">
+                <span className="tabular-nums text-[15px] text-[var(--role-content-subtle)]">
                   {slipTxt(r.bid, 'sell', r.sz)}<span className="ml-1 text-[11px]">bp</span>
                 </span>
                 <span className="text-center text-[11px] font-medium uppercase tracking-wider text-[var(--role-content-subtle)]">
                   ${formatCompact(r.sz)} order
                 </span>
-                <span className="text-right font-mono text-[15px] font-medium tabular-nums text-[var(--role-content)]">
+                <span className="text-right tabular-nums text-[15px] font-medium text-[var(--role-content)]">
                   {slipTxt(r.ask, 'buy', r.sz)}<span className="ml-1 text-[11px] text-[var(--role-content-subtle)]">bp</span>
                 </span>
               </div>
@@ -1229,7 +1229,7 @@ function CompareLiquidityTable({ book, compare, base }: { book: OrderbookSnapsho
   }, [book, compare]);
 
   const th = 'px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-[var(--role-content-subtle)] whitespace-nowrap';
-  const td = 'px-3 py-2.5 text-right font-mono text-xs tabular-nums whitespace-nowrap';
+  const td = 'px-3 py-2.5 text-right tabular-nums text-xs whitespace-nowrap';
 
   return (
     <div className="glass-card flex flex-col">
@@ -1386,7 +1386,7 @@ function MultiVenueDepthPanel({ venues }: { venues: ActiveVenue[] }) {
                     <p className="mb-2 text-[11px] font-medium text-[var(--role-content)]">{side} {Math.abs(q).toFixed(2)}% from mid</p>
                     {rows.map((r) => (
                       <div key={r.id} className="mb-1.5 last:mb-0">
-                        <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                        <div className="flex items-center gap-2 tabular-nums text-xs">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: r.color }} />
                           <span className="text-[var(--role-content)]">{r.m!.label}</span>
                           <span className="ml-auto font-medium text-[var(--role-content)]">${formatCompact(r.value)}</span>
@@ -1568,9 +1568,9 @@ function MultiVenueImpactPanel({ venues }: { venues: ActiveVenue[] }) {
                 if (!active || !payload || !payload.length) return null;
                 return (
                   <div className="min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--role-line)] bg-[var(--role-surface)] px-3 py-2 shadow-[var(--shadow-lg)]">
-                    <p className="mb-1.5 font-mono text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(Number(label))}</p>
+                    <p className="mb-1.5 tabular-nums text-[11px] text-[var(--role-content-subtle)]">Order size {formatUsd(Number(label))}</p>
                     {payload.map((p: any) => (
-                      <p key={p.dataKey} className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                      <p key={p.dataKey} className="flex items-center gap-2 tabular-nums text-xs">
                         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.stroke }} />
                         <span className="text-[var(--role-content-muted)]">{venues.find((v) => v.id === p.dataKey)?.label ?? p.dataKey}</span>
                         <span className="ml-auto font-medium text-[var(--role-content)]">{Number(p.value).toFixed(2)} bps</span>
@@ -1714,20 +1714,6 @@ export default function OrderBookPage() {
         </div>
       )}
 
-      {/* The book at a glance, shareable: spread, mark vs oracle, depth, spread at size */}
-      {book && <LiquidityCard coin={coin} book={book} impact={impact} />}
-      <LiquidityHistory coin={coin} />
-
-      {/* Stat cards (until the first book arrives) */}
-      {!book && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '-'} sub="Book midpoint" />
-        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
-        <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '-'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
-        <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '-'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
-        <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="bid" />
-        <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="ask" />
-      </div>}
-
       {/* Depth chart + order book */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="h-[300px] lg:col-span-7 lg:h-[560px]">
@@ -1757,6 +1743,20 @@ export default function OrderBookPage() {
           )}
         </div>
       </div>
+
+      {/* The book at a glance, shareable: spread, mark vs oracle, depth, spread at size */}
+      {book && <LiquidityCard coin={coin} book={book} impact={impact} />}
+      <LiquidityHistory coin={coin} />
+
+      {/* Stat cards (until the first book arrives) */}
+      {!book && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="Mid price" value={stats?.mid != null ? `$${formatPrice(stats.mid)}` : '-'} sub="Book midpoint" />
+        <StatCard label="Spread" value={formatBps(stats?.spreadBps)} unit="bps" sub={stats?.spreadAbs != null ? `$${stats.spreadAbs.toFixed(4)}` : undefined} />
+        <StatCard label="Best bid" value={stats?.bestBid ? `$${formatPrice(stats.bestBid.px)}` : '-'} sub={stats?.bestBid ? `${formatSize(stats.bestBid.sz)} · ${stats.bestBid.n} orders` : undefined} accent="bid" />
+        <StatCard label="Best ask" value={stats?.bestAsk ? `$${formatPrice(stats.bestAsk.px)}` : '-'} sub={stats?.bestAsk ? `${formatSize(stats.bestAsk.sz)} · ${stats.bestAsk.n} orders` : undefined} accent="ask" />
+        <StatCard label="Bid depth" value={stats ? `$${formatCompact(stats.bidDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="bid" />
+        <StatCard label="Ask depth" value={stats ? `$${formatCompact(stats.askDepth2pctUsd)}` : '-'} sub="±2% of mid" accent="ask" />
+      </div>}
 
       {/* Execution & liquidity: cost-to-trade calculator · two-sided depth +
           slippage ladder · cost-by-size curve. */}

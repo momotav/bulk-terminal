@@ -140,7 +140,6 @@ export default function StakingPage() {
   return (
     <main className="flex-1 w-full px-4 sm:px-6 py-6 space-y-5">
       <div className="flex items-center gap-3">
-        <Coins className="w-6 h-6 text-[var(--accent)]" />
         <h1 className="page-title text-[var(--text-primary)]">Staking</h1>
       </div>
 
@@ -232,7 +231,6 @@ export default function StakingPage() {
 
       {/* ============================ NATIVE ============================ */}
       <div className="flex items-center gap-2">
-        <Coins className="w-4 h-4 text-[var(--accent)]" />
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
           Native Staking
           {native?.epoch != null && <span className="text-[var(--text-tertiary)] font-normal"> · Epoch {native.epoch}</span>}
@@ -256,7 +254,6 @@ export default function StakingPage() {
 
       {/* ============================ BULKSOL ============================ */}
       <div className="flex items-center gap-2 pt-1">
-        <Droplet className="w-4 h-4 text-[var(--accent)]" />
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
           BulkSOL · Liquid Staking
           {bulksol?.epoch != null && <span className="text-[var(--text-tertiary)] font-normal"> · Epoch {bulksol.epoch}</span>}
@@ -291,7 +288,6 @@ export default function StakingPage() {
         <div className="bg-[var(--role-surface)] border border-[var(--border-color)] rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[var(--accent)]" />
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Validator Distribution</h2>
             </div>
             <span className="text-xs text-[var(--text-tertiary)]">{validators.length} validators</span>
