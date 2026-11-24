@@ -66,7 +66,7 @@ export const ASSET_CLASSES: readonly { key: AssetClass; label: string }[] = [
 
 /** Base symbols BULK lists that are equities or equity-like (SPACEX, the US500 index, the SOXL and QQQ ETFs). */
 export const STOCK_COINS: readonly string[] = [
-  'NVDA', 'TSLA', 'MSTR', 'MU', 'SNDK', 'SKHYNIX', 'CRCL', 'SPACEX', 'US500', 'SOXL', 'QQQ',
+  'NVDA', 'TSLA', 'MSTR', 'MU', 'SNDK', 'SKHYNIX', 'CRCL', 'SPACEX', 'US500', 'SOXL', 'QQQ', 'ANT', 'AAPL', 'META',
 ];
 
 /** Human names for the tickers — shown as a hint in pickers and the markets table. */
@@ -82,6 +82,9 @@ export const STOCK_NAMES: Record<string, string> = {
   US500: 'S&P 500',
   SOXL: 'Semiconductors 3x',
   QQQ: 'Nasdaq-100',
+  ANT: 'Anthropic',
+  AAPL: 'Apple',
+  META: 'Meta',
 };
 
 const STOCK_SET = new Set(STOCK_COINS);

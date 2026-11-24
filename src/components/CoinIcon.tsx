@@ -32,6 +32,7 @@ const LOCAL: Record<string, string> = {
   PUMP: '/coins/PUMP.svg', SKHYNIX: '/coins/SKHYNIX.svg', SNDK: '/coins/SNDK.svg', SOL: '/coins/SOL.svg', SPACEX: '/coins/SPACEX.svg', SOXL: '/coins/SOXL.svg', QQQ: '/coins/QQQ.svg',
   SUI: '/coins/SUI.svg', TAO: '/coins/TAO.svg', TSLA: '/coins/TSLA.svg', US500: '/coins/US500.svg', XPL: '/coins/XPL.svg',
   XRP: '/coins/XRP.svg', ZEC: '/coins/ZEC.svg',
+  ANT: '/coins/ANT.svg', AAPL: '/coins/AAPL.svg', META: '/coins/META.svg',
   XAU: '/coins/XAU.png',
 };
 
