@@ -1699,7 +1699,7 @@ export default function OrderBookPage() {
     <div className="w-full space-y-4 p-4 md:p-6">
       {/* Header */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-medium leading-none tracking-tight text-[var(--role-content)] sm:text-[28px]">
+        <h1 className="page-title text-[var(--text-primary)]">
           Order book
         </h1>
         <div className="flex items-center gap-2">
