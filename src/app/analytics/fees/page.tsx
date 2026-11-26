@@ -7,7 +7,7 @@ import { InfoTip } from '@/components/InfoTip';
 // against it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2, Search } from 'lucide-react';
 import { analytics, wallet as walletApi, formatNumber, formatCompact, cn, type FeeSchedule, type AccountFeeTier, type FeeTierRow, type MakerShareTier } from '@/lib/api';
 import { feeOn, makerRebate, tierIndex } from '@/lib/fees';
 import { CoinIcon } from '@/components/CoinIcon';
@@ -36,6 +36,57 @@ function Heading({ title, note }: { title: string; note?: string }) {
 const VOL_MIN = 10_000, VOL_MAX = 10_000_000_000;
 const volToPos = (v: number) => Math.round(((Math.log10(Math.min(VOL_MAX, Math.max(VOL_MIN, v || VOL_MIN))) - 4) / 6) * 1000);
 const posToVol = (p: number) => { const v = Math.pow(10, 4 + (p / 1000) * 6); const m = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.round(v / m) * m; };
+
+const VOL_PRESETS = [100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000];
+
+/** Small uppercase section label, with the explanation behind an "i". */
+function SectionLabel({ children, note }: { children: React.ReactNode; note?: string }) {
+  return <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">{children}{note && <InfoTip label={`About ${String(children)}`}>{note}</InfoTip>}</div>;
+}
+
+/** Segmented control in the site's style. */
+function Seg({ value, onChange, options }: { value: number; onChange: (v: number) => void; options: [number, string][] }) {
+  return (
+    <div className="grid h-10 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map(([v, l]) => (
+        <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={value === v}
+          className={cn('rounded-lg text-[13px] transition-colors', value === v ? 'bg-[var(--bg-muted)] text-[var(--text-primary)] shadow-[0_1px_2px_rgb(0_0_0/0.25)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A slider drawn as a row of ticks, lit up to the value; tier thresholds are the taller ticks. */
+function TickSlider({ pos, onChange, marks }: { pos: number; onChange: (p: number) => void; marks: number[] }) {
+  const N = 72;
+  const markAt = new Set(marks.map((m) => Math.round((m / 1000) * (N - 1))));
+  const at = Math.round((pos / 1000) * (N - 1));
+  return (
+    <div className="relative mt-2 h-9 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] px-3">
+      <div className="pointer-events-none absolute inset-x-3 inset-y-0 flex items-center justify-between">
+        {Array.from({ length: N }, (_, i) => (
+          <span key={i} className="w-px rounded-full transition-colors duration-150"
+            style={{ height: i === at ? 20 : markAt.has(i) ? 15 : 10, width: i === at ? 3 : 1, background: i === at ? 'var(--text-primary)' : i < at ? 'var(--accent)' : 'var(--border-color)' }} />
+        ))}
+      </div>
+      <input type="range" min={0} max={1000} step={1} value={pos} onChange={(e) => onChange(Number(e.target.value))} aria-label="Volume"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+    </div>
+  );
+}
+
+function Metric({ k, v, sub, dot, align = 'left' }: { k: string; v: string; sub?: string; dot?: string; align?: 'left' | 'center' | 'right' }) {
+  const a = align === 'center' ? 'text-center items-center' : align === 'right' ? 'text-right items-end' : '';
+  return (
+    <div className={cn('flex min-w-0 flex-col', a)}>
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{dot && <span className="h-2 w-2 rounded-sm" style={{ background: dot }} />}{k}</div>
+      <div className="mt-1 truncate text-[15px] font-medium tabular-nums text-[var(--text-primary)]">{v}</div>
+      {sub && <div className="truncate text-[11px] text-[var(--text-tertiary)]">{sub}</div>}
+    </div>
+  );
+}
 
 function Row({ k, v, tone }: { k: string; v: string; tone?: string }) {
   return <div className="flex items-center justify-between py-2"><span className="text-[var(--text-tertiary)]">{k}</span><span className="tabular-nums" style={{ color: tone ?? 'var(--text-primary)' }}>{v}</span></div>;
@@ -102,6 +153,7 @@ export default function FeesPage() {
   const [showMaker, setShowMaker] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showCurve, setShowCurve] = useState(false);
   const [address, setAddress] = useState('');
   const [quote, setQuote] = useState<AccountFeeTier | null>(null);
   const [quoteState, setQuoteState] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -168,156 +220,125 @@ export default function FeesPage() {
 
         {schedule && (
           <div className="space-y-6">
-            {/* ── Calculator ─────────────────────────────────────────── */}
-            <section className={cn(card, 'p-4 sm:p-6')}>
-              <Heading title="Fee calculator" note={`BULK sets your tier by your volume over the last ${schedule.windowDays} days.`} />
-
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                {/* volume, the one thing that moves your fee */}
-                <div className="rounded-2xl border border-[var(--border-color)] p-5">
-                  <label htmlFor="fee-volume" className="text-[12px] text-[var(--text-tertiary)]">Your volume over {schedule.windowDays} days</label>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-[30px] font-medium text-[var(--text-tertiary)]">$</span>
-                    <input id="fee-volume" inputMode="numeric" value={volume ? volume.toLocaleString('en-US') : ''}
-                      onChange={(e) => setVolume(Number(e.target.value.replace(/[^\d.]/g, '')) || 0)}
-                      className="w-full min-w-0 bg-transparent text-[30px] font-medium tabular-nums text-[var(--text-primary)] outline-none" />
+            {/* ── Calculator: compact, one card ─────────────────────────── */}
+            <section className={cn(card, 'p-4 sm:p-5')}>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <SectionLabel note={`BULK sets your tier by your volume over the last ${schedule.windowDays} days. Paste a wallet to load its real tier and volume.`}>Fee calculator</SectionLabel>
+                <div className="flex w-full items-center gap-1.5 sm:w-[300px]">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                    <input id="fee-wallet" className={cn(inputCls, 'h-9 pl-8 text-[13px]')} placeholder="Your tier from a wallet…" value={address}
+                      onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void loadWallet(); }} />
                   </div>
-
-                  {calc && policy!.tiers.length > 1 && (
-                    <div className="mt-4">
-                      <input type="range" min={0} max={1000} step={1} aria-label="Volume" value={volToPos(volume)}
-                        onChange={(e) => setVolume(posToVol(Number(e.target.value)))} className="w-full accent-[var(--accent)]" />
-                      <div className="relative mt-1 h-9">
-                        {policy!.tiers.map((t, k) => {
-                          const left = volToPos(Math.max(t.thresholdVolume, VOL_MIN)) / 10;
-                          const reached = k <= calc.i;
-                          return (
-                            <button key={k} type="button" onClick={() => setVolume(Math.max(t.thresholdVolume, VOL_MIN))}
-                              className="absolute -translate-x-1/2 text-center" style={{ left: `${left}%` }} title={`Tier ${k + 1}: ${bps(t.takerBps)} from $${formatCompact(t.thresholdVolume)}`}>
-                              <span className={cn('mx-auto block h-2 w-px', reached ? 'bg-[var(--accent)]' : 'bg-[var(--border-color)]')} />
-                              <span className={cn('mt-0.5 block text-[10px] tabular-nums transition-colors', k === calc.i ? 'font-medium text-[var(--text-primary)]' : reached ? 'text-[var(--text-secondary)]' : 'text-[var(--text-tertiary)]')}>{k + 1}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]"><span>$10K</span><span>$10B</span></div>
-                    </div>
-                  )}
-
-                  <div className="mt-5 grid grid-cols-1 gap-3 border-t border-[var(--border-color)] pt-4 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                    <div>
-                      <label className={labelCls} htmlFor="fee-market">Market</label>
-                      <OptionSelect id="fee-market" value={market} onChange={setMarket} options={[
-                        { value: 'crypto', label: 'Crypto, all markets', hint: `from ${bps(schedule.tiers[0]?.takerBps ?? 0)}`, icon: <CoinIcon symbol="BTC-USD" size={18} className="shrink-0" /> },
-                        ...overrides.map((o) => {
-                          const base = baseCoin(o.symbol);
-                          return { value: o.symbol, label: STOCK_NAMES[base] ? `${base} · ${STOCK_NAMES[base]}` : base, hint: bps(o.tiers[0]?.takerBps ?? 0), icon: <CoinIcon symbol={o.symbol} size={18} className="shrink-0" /> };
-                        }),
-                      ]} />
-                    </div>
-                    <div>
-                      <label className={labelCls} htmlFor="fee-taker">Market orders: {takerPct}% taker</label>
-                      <input id="fee-taker" type="range" min={0} max={100} step={5} value={takerPct} onChange={(e) => setTakerPct(Number(e.target.value))} className="mt-3 w-full accent-[var(--accent)]" />
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
-                    <button type="button" onClick={() => setShowWallet((v) => !v)} className="text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline">{showWallet ? 'Hide wallet' : 'Use my wallet’s real tier'}</button>
-                    <button type="button" onClick={() => setShowMaker((v) => !v)} className="text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline">{showMaker ? 'Hide maker share' : 'I make markets'}</button>
-                  </div>
-                  {showWallet && (
-                    <div className="mt-2">
-                      <div className="flex gap-2">
-                        <input id="fee-wallet" className={inputCls} placeholder="Paste a wallet address" value={address}
-                          onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void loadWallet(); }} />
-                        <button type="button" onClick={() => void loadWallet()} disabled={!address.trim() || quoteState === 'loading'}
-                          className="h-10 shrink-0 rounded-lg bg-[var(--text-primary)] px-3.5 text-[13px] font-medium text-[var(--bg-base)] disabled:opacity-40">
-                          {quoteState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Load'}
-                        </button>
-                      </div>
-                      {quoteState === 'error' && <p className="mt-1.5 text-[12px] text-[var(--neg)]">No fee tier found for that wallet.</p>}
-                      {quote && quoteState === 'idle' && <p className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">BULK quotes this wallet at tier {quote.tierIndex + 1}: {bps(quote.takerBps)} taker, {bps(quote.effectiveMakerBps)} maker.</p>}
-                    </div>
-                  )}
-                  {showMaker && (
-                    <div className="mt-2 max-w-[260px]">
-                      <label className={cn(labelCls, 'flex items-center gap-1.5')} htmlFor="fee-share">Share of all maker volume (%) <InfoTip label="About maker share">Only big market makers earn the rebate. Leave it at 0 if that isn’t you.</InfoTip></label>
-                      <input id="fee-share" className={inputCls} inputMode="decimal" value={makerSharePct}
-                        onChange={(e) => setMakerSharePct(Math.max(0, Number(e.target.value.replace(/[^\d.]/g, '')) || 0))} />
-                    </div>
+                  {address.trim() && (
+                    <button type="button" onClick={() => void loadWallet()} disabled={quoteState === 'loading'}
+                      className="h-9 shrink-0 rounded-lg bg-[var(--text-primary)] px-3 text-[12px] font-medium text-[var(--bg-base)] disabled:opacity-40">
+                      {quoteState === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Load'}
+                    </button>
                   )}
                 </div>
-
-                {/* the answer */}
-                {calc && (
-                  <div className="flex flex-col rounded-2xl border border-[var(--border-color)] bg-[var(--bg-muted)] p-5">
-                    <div className="text-[12px] text-[var(--text-tertiary)]">{calc.total < 0 ? 'BULK pays you' : 'You’d pay'}</div>
-                    <div className="mt-1 text-[40px] font-medium leading-none tabular-nums transition-colors" style={{ color: calc.total < 0 ? 'var(--pos)' : 'var(--text-primary)' }}>{usd(Math.abs(calc.total))}</div>
-                    <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">over {schedule.windowDays} days at {takerPct}% taker</div>
-                    <div className="mt-5 divide-y divide-[var(--border-color)] text-[13px]">
-                      <Row k="Tier" v={policy!.tiers.length > 1 ? `${calc.i + 1} of ${policy!.tiers.length}` : 'Flat rate'} />
-                      <Row k="Taker fee" v={`${bps(calc.tier.takerBps)} · ${usd(calc.perMillion)} per $1M`} />
-                      <Row k="Maker fee" v={calc.maker === 0 ? 'Free' : bps(calc.maker)} tone={calc.maker < 0 ? 'var(--pos)' : undefined} />
-                      <Row k="Effective rate" v={volume > 0 ? `${((calc.total / volume) * 1e4).toFixed(2)} bps on all volume` : '—'} />
-                    </div>
-                    {calc.next ? (
-                      <div className="mt-5">
-                        <div className="mb-1.5 flex items-baseline justify-between text-[12px]">
-                          <span className="text-[var(--text-secondary)]">To tier {calc.i + 2} · {bps(calc.next.takerBps)}</span>
-                          <span className="tabular-nums text-[var(--text-tertiary)]">${formatCompact(calc.toNext ?? 0)} to go</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-base)]">
-                          <div className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-500 ease-out"
-                            style={{ width: `${Math.max(2, Math.min(100, ((volume - calc.tier.thresholdVolume) / Math.max(1, calc.next.thresholdVolume - calc.tier.thresholdVolume)) * 100))}%` }} />
-                        </div>
-                        <div className="mt-1 flex justify-between text-[10px] tabular-nums text-[var(--text-tertiary)]">
-                          <span>${formatCompact(calc.tier.thresholdVolume)}</span><span>${formatCompact(calc.next.thresholdVolume)}</span>
-                        </div>
-                        <p className="mt-2 text-[13px] text-[var(--text-secondary)]">Reaching it saves <span className="tabular-nums text-[var(--pos)]">{usd(calc.saving ?? 0)}</span> per $1M you take.</p>
-                      </div>
-                    ) : (
-                      <p className="mt-5 text-[13px] text-[var(--text-secondary)]">{policy!.tiers.length > 1 ? 'Top tier: the lowest taker fee BULK charges.' : 'This market has one rate for everyone.'}</p>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {calc && (
-                <>
-                  <FeeCurve tiers={policy!.tiers} makerBpsAdj={calc.rebate} takerShare={takerPct / 100} volume={volume}
-                    onPick={setVolume} compare={market === 'crypto'} className="mt-5" />
-                  <button type="button" onClick={() => setShowSchedule((v) => !v)} className="mt-3 inline-flex items-center gap-1 text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
-                    <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showSchedule && 'rotate-180')} />Full fee schedule
-                  </button>
-                  {showSchedule && (
-                    <div className="mt-2 animate-[chart-fade_.3s_ease-out]">
-                      <table className="w-full text-[13px]">
-                        <thead>
-                          <tr className="text-left text-[11px] text-[var(--text-tertiary)]">
-                            <th className="pb-2 pr-3 font-normal">Tier</th><th className="pb-2 pr-3 font-normal">{schedule.windowDays}-day volume</th>
-                            <th className="pb-2 pr-3 text-right font-normal">Taker</th><th className="pb-2 pr-3 text-right font-normal">Maker</th><th className="pb-2 text-right font-normal">Per $1M taken</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {policy!.tiers.map((t, k) => (
-                            <tr key={k} className={cn('border-t border-[var(--border-color)]', k === calc.i && 'bg-[var(--bg-muted)]')}>
-                              <td className="py-1.5 pr-3 tabular-nums text-[var(--text-primary)]">{k + 1}</td>
-                              <td className="py-1.5 pr-3 tabular-nums text-[var(--text-secondary)]">{t.thresholdVolume > 0 ? `$${formatCompact(t.thresholdVolume)}` : '$0'}</td>
-                              <td className="py-1.5 pr-3 text-right tabular-nums text-[var(--text-primary)]">{bps(t.takerBps)}</td>
-                              <td className="py-1.5 pr-3 text-right tabular-nums text-[var(--text-secondary)]">{t.makerBps === 0 ? 'Free' : bps(t.makerBps)}</td>
-                              <td className="py-1.5 text-right tabular-nums text-[var(--text-secondary)]">{usd((1_000_000 * t.takerBps) / 10_000)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {policy!.makerShareTiers.length > 0 && (
-                        <p className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
-                          Maker rebates
-                          <InfoTip label="Maker rebates">{policy!.makerShareTiers.map((t) => `${bps(t.rebateBps)} from ${pct(t.thresholdPpm)} of all maker volume`).join(' · ')}.</InfoTip>
-                        </p>
-                      )}
-                    </div>
+              {/* controls: one row */}
+              <div className="grid gap-2 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.4fr)]">
+                <OptionSelect id="fee-market" value={market} onChange={setMarket} options={[
+                  { value: 'crypto', label: 'Crypto, all markets', hint: `from ${bps(schedule.tiers[0]?.takerBps ?? 0)}`, icon: <CoinIcon symbol="BTC-USD" size={18} className="shrink-0" /> },
+                  ...overrides.map((o) => {
+                    const base = baseCoin(o.symbol);
+                    return { value: o.symbol, label: STOCK_NAMES[base] ? `${base} · ${STOCK_NAMES[base]}` : base, hint: bps(o.tiers[0]?.takerBps ?? 0), icon: <CoinIcon symbol={o.symbol} size={18} className="shrink-0" /> };
+                  }),
+                ]} />
+                <Seg value={takerPct} onChange={setTakerPct} options={[[100, 'Market'], [50, 'Mixed'], [0, 'Limit']]} />
+                <div className="flex h-10 items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] pl-3 pr-1 transition-colors focus-within:border-[var(--text-tertiary)]">
+                  <label htmlFor="fee-volume" className="shrink-0 text-[12px] text-[var(--text-tertiary)]">{schedule.windowDays}d vol $</label>
+                  <input id="fee-volume" inputMode="numeric" value={volume ? volume.toLocaleString('en-US') : ''}
+                    onChange={(e) => setVolume(Number(e.target.value.replace(/[^\d.]/g, '')) || 0)}
+                    className="w-full min-w-0 bg-transparent text-[15px] font-medium tabular-nums text-[var(--text-primary)] outline-none" />
+                  <div className="hidden shrink-0 items-center gap-0.5 lg:flex">
+                    {VOL_PRESETS.map((v) => (
+                      <button key={v} type="button" onClick={() => setVolume(v)}
+                        className={cn('h-8 rounded-lg px-2 text-[11px] tabular-nums transition-colors', volume === v ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                        {v >= 1e9 ? `${v / 1e9}B` : v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <TickSlider pos={volToPos(volume)} onChange={(p) => setVolume(posToVol(p))}
+                marks={calc && policy!.tiers.length > 1 ? policy!.tiers.map((t) => volToPos(Math.max(t.thresholdVolume, VOL_MIN))) : []} />
+              {(quoteState === 'error' || (quote && quoteState === 'idle') || showMaker) && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
+                  {quoteState === 'error' && <span className="text-[var(--neg)]">No fee tier found for that wallet.</span>}
+                  {quote && quoteState === 'idle' && <span className="text-[var(--text-tertiary)]">BULK quotes this wallet at tier {quote.tierIndex + 1}: {bps(quote.takerBps)} taker, {bps(quote.effectiveMakerBps)} maker.</span>}
+                  {showMaker && (
+                    <label className="flex items-center gap-2 text-[var(--text-tertiary)]">Share of all maker volume
+                      <input id="fee-share" className={cn(inputCls, 'h-8 w-20')} inputMode="decimal" value={makerSharePct}
+                        onChange={(e) => setMakerSharePct(Math.max(0, Number(e.target.value.replace(/[^\d.]/g, '')) || 0))} />%
+                    </label>
                   )}
-                </>
+                </div>
+              )}
+
+              {/* result: one line */}
+              {calc && (
+                <div className="mt-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-3 border-t border-[var(--border-color)] pt-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{calc.total < 0 ? 'BULK pays you' : 'You pay'}</div>
+                    <div className="mt-1 flex items-baseline gap-2 tabular-nums">
+                      <span className="text-[30px] font-medium leading-none" style={{ color: calc.total < 0 ? 'var(--pos)' : 'var(--text-primary)' }}>{usd(Math.abs(calc.total))}</span>
+                      <span className="text-[13px] text-[var(--text-tertiary)]">{volume > 0 ? `${((calc.total / volume) * 1e4).toFixed(2)} bp` : ''}</span>
+                    </div>
+                  </div>
+                  <div className="grid flex-1 basis-full grid-cols-2 gap-x-6 gap-y-3 sm:basis-auto sm:grid-cols-4 lg:max-w-[640px]">
+                    <Metric k="Tier" v={policy!.tiers.length > 1 ? `${calc.i + 1} of ${policy!.tiers.length}` : 'Flat'} />
+                    <Metric k="Taker" v={bps(calc.tier.takerBps)} sub={`${usd(calc.perMillion)} / $1M`} />
+                    <Metric k="Maker" v={calc.maker === 0 ? 'Free' : bps(calc.maker)} sub={calc.maker < 0 ? 'rebate' : undefined} />
+                    <Metric k={calc.next ? `To tier ${calc.i + 2}` : 'Next tier'} v={calc.next ? `$${formatCompact(calc.toNext ?? 0)}` : 'Top tier'} sub={calc.next ? `saves ${usd(calc.saving ?? 0)} / $1M` : undefined} />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+                <button type="button" onClick={() => setShowCurve((v) => !v)} className="inline-flex items-center gap-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showCurve && 'rotate-180')} />Cost chart
+                </button>
+                <button type="button" onClick={() => setShowSchedule((v) => !v)} className="inline-flex items-center gap-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showSchedule && 'rotate-180')} />Fee schedule
+                </button>
+                <button type="button" onClick={() => setShowMaker((v) => !v)} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">{showMaker ? 'Hide maker share' : 'I make markets'}</button>
+              </div>
+              {calc && showCurve && (
+                <FeeCurve tiers={policy!.tiers} makerBpsAdj={calc.rebate} takerShare={takerPct / 100} volume={volume}
+                  onPick={setVolume} compare={market === 'crypto'} className="mt-3 h-[280px] animate-[chart-fade_.3s_ease-out]" />
+              )}
+              {calc && showSchedule && (
+                <div className="mt-3 animate-[chart-fade_.3s_ease-out]">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="text-left text-[11px] text-[var(--text-tertiary)]">
+                        <th className="pb-2 pr-3 font-normal">Tier</th><th className="pb-2 pr-3 font-normal">{schedule.windowDays}-day volume</th>
+                        <th className="pb-2 pr-3 text-right font-normal">Taker</th><th className="pb-2 pr-3 text-right font-normal">Maker</th><th className="pb-2 text-right font-normal">Per $1M taken</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {policy!.tiers.map((t, k) => (
+                        <tr key={k} className={cn('border-t border-[var(--border-color)]', k === calc.i && 'bg-[var(--bg-muted)]')}>
+                          <td className="py-1.5 pr-3 tabular-nums text-[var(--text-primary)]">{k + 1}</td>
+                          <td className="py-1.5 pr-3 tabular-nums text-[var(--text-secondary)]">{t.thresholdVolume > 0 ? `$${formatCompact(t.thresholdVolume)}` : '$0'}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-[var(--text-primary)]">{bps(t.takerBps)}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-[var(--text-secondary)]">{t.makerBps === 0 ? 'Free' : bps(t.makerBps)}</td>
+                          <td className="py-1.5 text-right tabular-nums text-[var(--text-secondary)]">{usd((1_000_000 * t.takerBps) / 10_000)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {policy!.makerShareTiers.length > 0 && (
+                    <p className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
+                      Maker rebates
+                      <InfoTip label="Maker rebates">{policy!.makerShareTiers.map((t) => `${bps(t.rebateBps)} from ${pct(t.thresholdPpm)} of all maker volume`).join(' · ')}.</InfoTip>
+                    </p>
+                  )}
+                </div>
               )}
             </section>
 

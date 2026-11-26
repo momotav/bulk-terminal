@@ -1,5 +1,6 @@
 'use client';
 
+import { LazySection } from '@/components/LazySection';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Area,
@@ -1726,7 +1727,7 @@ export default function OrderBookPage() {
               )}
             </div>
           ) : multi ? (
-            <MultiVenueDepthPanel venues={activeVenues} />
+            <LazySection minHeight={420}><MultiVenueDepthPanel venues={activeVenues} /></LazySection>
           ) : (
             <DepthChartPanel book={book} mid={stats?.mid ?? null} />
           )}
@@ -1746,7 +1747,7 @@ export default function OrderBookPage() {
 
       {/* The book at a glance, shareable: spread, mark vs oracle, depth, spread at size */}
       {book && <LiquidityCard coin={coin} book={book} impact={impact} />}
-      <LiquidityHistory coin={coin} />
+      <LazySection minHeight={520}><LiquidityHistory coin={coin} /></LazySection>
 
       {/* Stat cards (until the first book arrives) */}
       {!book && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

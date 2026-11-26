@@ -22,9 +22,9 @@ function Split({ long, short, className }: { long: number; short: number; classN
   const share = long + short > 0 ? long / (long + short) : 0.5;
   return (
     <span className={cn('flex h-2 overflow-hidden rounded-full', className)}>
-      <span className="transition-[width] duration-700 ease-out" style={{ width: `${share * 100}%`, background: 'var(--pos)', opacity: 0.85 }} />
+      <span className="grad-pos-l transition-[width] duration-700 ease-out" style={{ width: `${share * 100}%` }} />
       <span className="w-0.5" />
-      <span className="flex-1" style={{ background: 'var(--neg)', opacity: 0.85 }} />
+      <span className="grad-neg-r flex-1" />
     </span>
   );
 }

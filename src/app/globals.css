@@ -1121,6 +1121,23 @@ html.light .trade-cta {
 .series-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: series-draw 0.9s cubic-bezier(.22,1,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .series-draw { animation: none; } }
 
+/* Chart card header: one row. When the card is narrow the coin button drops its
+   text (icons only) so title, coins and timeframe still share the line. */
+.chart-head { container-type: inline-size; }
+@container (max-width: 600px) { .chart-head .cs-label { display: none; } }
+
+/* BULK-style colour gradients: green deepens from teal into the colour, red
+   from dark maroon into a warmer red. `-l` / `-r` = which end is brightest (the
+   outer end of a bar). `tint-*` = a soft corner wash for a card or cell. */
+.grad-pos-r { background: linear-gradient(90deg, rgb(var(--pos-rgb) / 0.35), rgb(var(--pos-rgb) / 0.95)); }
+.grad-pos-l { background: linear-gradient(270deg, rgb(var(--pos-rgb) / 0.35), rgb(var(--pos-rgb) / 0.95)); }
+.grad-neg-r { background: linear-gradient(90deg, rgb(var(--neg-rgb) / 0.35), rgb(var(--neg-rgb) / 0.95)); }
+.grad-neg-l { background: linear-gradient(270deg, rgb(var(--neg-rgb) / 0.35), rgb(var(--neg-rgb) / 0.95)); }
+.tint-pos { background-image: linear-gradient(135deg, rgb(var(--pos-rgb) / 0.22), rgb(var(--pos-rgb) / 0.04) 55%, transparent 80%); }
+.tint-neg { background-image: linear-gradient(135deg, rgb(var(--neg-rgb) / 0.22), rgb(var(--neg-rgb) / 0.04) 55%, transparent 80%); }
+/* Long on the left, short on the right: each side washed from its own edge. */
+.tint-split { background-image: linear-gradient(90deg, rgb(var(--pos-rgb) / 0.16), transparent 38%, transparent 62%, rgb(var(--neg-rgb) / 0.16)); }
+
 /* Frosted popups (labels, menus, dropdowns, side panels): the page shows through,
    softly blurred, like the chart tooltips' surface. These open in place rather than
    following the mouse, so the blur costs nothing on hover. */

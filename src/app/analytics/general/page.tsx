@@ -1,5 +1,6 @@
 'use client';
 
+import { LazySection } from '@/components/LazySection';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { analytics, leaderboard, formatCompact, formatAddress, cn, type LeaderboardEntry, type ChartData } from '@/lib/api';
@@ -183,16 +184,18 @@ const TimeframeSelector = ({
   value: number; 
   onChange: (hours: number) => void;
 }) => (
-  <div className="flex items-center gap-0.5 bg-[var(--bg-muted)] rounded-lg p-0.5">
+  // Same height and look as the coin button beside it: one connected segment.
+  <div className="flex h-9 items-center rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] p-1">
     {timeRanges.map((t) => (
       <button
         key={t.hours}
         onClick={() => onChange(t.hours)}
+        aria-pressed={value === t.hours}
         className={cn(
-          "px-3 py-1 text-xs font-medium rounded transition-colors",
+          "h-7 min-w-[30px] rounded-md px-1.5 text-[12px] font-medium transition-colors",
           value === t.hours
-            ? "bg-[var(--bg-base)] text-[var(--text-primary)] border border-[var(--border-color)]"
-            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            ? "bg-[var(--bg-muted)] text-[var(--text-primary)] shadow-[0_1px_2px_rgb(0_0_0/0.25)]"
+            : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
         )}
       >
         {t.label}
@@ -233,29 +236,17 @@ const ChartCard = ({
     "bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 transition-opacity duration-300 h-full flex flex-col min-w-0 overflow-hidden",
     loading && "opacity-60"
   )}>
-    {/* Header layout (matches Hyperliquid):
-        Row 1: title on the left, timeframe selector on the far right - full width each side
-                so the title never wraps into a second line.
-        Row 2: toggles (coin pills + dropdown trigger + any extra pills) span full width below.
-        This means even with many pills the title stays on a single line at a readable size. */}
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
-      {/* truncate (with min-w-0) instead of whitespace-nowrap: at 25%
-          row width the old nowrap title forced the row past the card
-          edge and the timeframe pills overlapped the neighboring chart.
-          Now the title ellipsizes and the selector wraps below it. */}
-      <h3 className="text-lg font-semibold text-[var(--text-primary)] truncate min-w-0">{title}</h3>
-      <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
-    </div>
-    {toggles && (
-      <div className="mb-4 flex flex-wrap items-start gap-2">
-        {/* flex-wrap + items-start makes standalone pill elements (e.g. the
-            plain Daily New / Cumulative divs used by the New Users chart)
-            sit snug left-aligned at their natural width instead of stretching
-            to the full card width. CoinSelector itself uses the same pattern
-            internally, so the two look consistent. */}
+    {/* One header row: title on the left; the coin button and the timeframe on the
+        right, same height. Wraps under the title when the card is narrow. */}
+    <div className="chart-head mb-4">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <h3 className="min-w-[150px] flex-1 truncate text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {toggles}
+        <TimeframeSelector value={timeframe} onChange={onTimeframeChange} />
       </div>
-    )}
+    </div>
+    </div>
     <div className={cn(
       "relative mt-auto",
       loading && "blur-sm opacity-60",
@@ -1019,10 +1010,10 @@ export default function AnalyticsPage() {
   // (src/components/CoinSelector.tsx), which supports BTC/ETH/SOL as default
   // pills plus a dropdown of every other market BULK lists.
 
-  const CumulativeToggle = ({ label }: { label: string }) => (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
-      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.cumulative }} />
-      {label}
+  // A colour key for charts without a coin picker: dots and labels, not buttons.
+  const KeyDots = ({ items }: { items: [string, string][] }) => (
+    <div className="flex h-9 items-center gap-3 px-1 text-[12px] text-[var(--text-secondary)]">
+      {items.map(([l, c]) => <span key={l} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />{l}</span>)}
     </div>
   );
 
@@ -1206,13 +1197,6 @@ export default function AnalyticsPage() {
                 toggles={<CoinSelector
                   enabled={volumeCoins}
                   onChange={setVolumeCoins}
-                  extraPills={[{
-                    key: 'cumulative',
-                    label: 'Cumulative Volume',
-                    color: COLORS.cumulative,
-                    active: true,
-                    onClick: () => { /* cumulative line is always on */ },
-                  }]}
                 />}
               >
                 {volumeDataFull.length > 0 ? (
@@ -1475,13 +1459,6 @@ export default function AnalyticsPage() {
                 toggles={<CoinSelector
                   enabled={liquidationsCoins}
                   onChange={setLiquidationsCoins}
-                  extraPills={[{
-                    key: 'cumulative',
-                    label: 'Cumulative',
-                    color: COLORS.cumulative,
-                    active: true,
-                    onClick: () => {},
-                  }]}
                 />}
               >
                 {liquidationsDataFull.length > 0 ? (
@@ -1547,7 +1524,7 @@ export default function AnalyticsPage() {
 
             {/* Row 3: Protocol Revenue Chart */}
             <div className="grid grid-cols-1 gap-4">
-              <ProtocolRevenueChart />
+              <LazySection minHeight={360}><ProtocolRevenueChart /></LazySection>
             </div>
 
             <div id="kpi-trades" className="scroll-mt-20" />
@@ -1561,13 +1538,6 @@ export default function AnalyticsPage() {
                 toggles={<CoinSelector
                   enabled={tradesCoins}
                   onChange={setTradesCoins}
-                  extraPills={[{
-                    key: 'cumulative',
-                    label: 'Cumulative',
-                    color: COLORS.cumulative,
-                    active: true,
-                    onClick: () => {},
-                  }]}
                 />}
               >
                 {tradesDataFull.length > 0 ? (
@@ -1639,13 +1609,6 @@ export default function AnalyticsPage() {
                 toggles={<CoinSelector
                   enabled={adlCoins}
                   onChange={setAdlCoins}
-                  extraPills={[{
-                    key: 'cumulative',
-                    label: 'Cumulative',
-                    color: COLORS.cumulative,
-                    active: true,
-                    onClick: () => {},
-                  }]}
                 />}
               >
                 {adlDataFull.length > 0 ? (
@@ -1732,13 +1695,6 @@ export default function AnalyticsPage() {
                 toggles={<CoinSelector
                   enabled={uniqueTradersCoins}
                   onChange={setUniqueTradersCoins}
-                  extraPills={[{
-                    key: 'total',
-                    label: 'Total Unique',
-                    color: COLORS.total,
-                    active: true,
-                    onClick: () => {},
-                  }]}
                 />}
               >
                 {uniqueTradersData.length > 0 ? (
@@ -1809,13 +1765,7 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setNewUsersHours}
                 loading={chartLoading.newUsers}
                 isDragging={newUsersDragging}
-                toggles={<>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
-                    Daily New
-                  </div>
-                  <CumulativeToggle label="Cumulative" />
-                </>}
+                toggles={<KeyDots items={[['Daily new', COLORS.BTC], ['Cumulative', COLORS.cumulative]]} />}
               >
                 {newUsersData.length > 0 ? (
                   <>
@@ -1867,12 +1817,7 @@ export default function AnalyticsPage() {
                 onTimeframeChange={setDauHours}
                 loading={chartLoading.dau}
                 isDragging={dauDragging}
-                toggles={<>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[var(--bg-muted)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.BTC }} />
-                    Daily Active Users
-                  </div>
-                </>}
+                toggles={<KeyDots items={[['Daily active users', COLORS.BTC]]} />}
               >
                 {dauData.length > 0 ? (
                   <>

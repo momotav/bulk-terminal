@@ -1,5 +1,6 @@
 'use client';
 
+import { LazySection } from '@/components/LazySection';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { StatCard } from '@/components/StatCard';
 import { analytics, formatCurrency, formatCompact, formatAddress, formatNumber, cn } from '@/lib/api';
@@ -869,7 +870,7 @@ export default function LiquidationsPage() {
       </div>
 
       {/* Where open positions would be liquidated, by price */}
-      <LiquidationLevels />
+      <LazySection minHeight={520}><LiquidationLevels /></LazySection>
 
       {/* Row 2: Chart + Market Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">

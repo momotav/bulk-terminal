@@ -1,5 +1,6 @@
 'use client';
 
+import { LazySection } from '@/components/LazySection';
 import { useEffect, useMemo, useState } from 'react';
 import { analytics, cn, formatCompact, type PositioningRow } from '@/lib/api';
 import { CoinIcon } from '@/components/CoinIcon';
@@ -64,7 +65,7 @@ export default function PositioningPage() {
       </div>
 
       {list.length > 0 && (
-        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-5 py-4">
+        <div className="tint-split rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] px-5 py-4">
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-[12px] text-[var(--text-tertiary)]">Long exposure</div>
@@ -83,9 +84,9 @@ export default function PositioningPage() {
             </div>
           </div>
           <div className="mt-3 flex h-2.5 overflow-hidden rounded-full">
-            <div className="transition-[width] duration-700 ease-out" style={{ width: `${tot.l + tot.s > 0 ? (tot.l / (tot.l + tot.s)) * 100 : 50}%`, background: 'var(--pos)', opacity: 0.85 }} />
+            <div className="grad-pos-l transition-[width] duration-700 ease-out" style={{ width: `${tot.l + tot.s > 0 ? (tot.l / (tot.l + tot.s)) * 100 : 50}%` }} />
             <div className="w-0.5" />
-            <div className="flex-1" style={{ background: 'var(--neg)', opacity: 0.85 }} />
+            <div className="grad-neg-r flex-1" />
           </div>
           <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-[var(--text-tertiary)]">
             <span>{list.reduce((a, r) => a + r.longN, 0)} long positions</span>
@@ -96,7 +97,7 @@ export default function PositioningPage() {
       )}
 
       <PositionChanges isIn={isIn} />
-      <Cohorts isIn={isIn} />
+      <LazySection minHeight={260}><Cohorts isIn={isIn} /></LazySection>
 
       {/* selected market history */}
       <div className="glass-card p-4 md:p-5">
@@ -146,9 +147,9 @@ export default function PositioningPage() {
               <span className="flex items-center gap-2">
                 <span className="w-9 text-right text-[12px]" style={{ color: 'var(--pos)' }}>{Math.round(lr * 100)}%</span>
                 <span className="flex h-2 flex-1 overflow-hidden rounded-full">
-                  <span className="transition-[width] duration-700 ease-out" style={{ width: `${lr * 100}%`, background: 'var(--pos)', opacity: 0.8 }} />
+                  <span className="grad-pos-l transition-[width] duration-700 ease-out" style={{ width: `${lr * 100}%` }} />
                   <span className="w-px" />
-                  <span className="flex-1" style={{ background: 'var(--neg)', opacity: 0.8 }} />
+                  <span className="grad-neg-r flex-1" />
                 </span>
                 <span className="w-9 text-[12px]" style={{ color: 'var(--neg)' }}>{100 - Math.round(lr * 100)}%</span>
               </span>

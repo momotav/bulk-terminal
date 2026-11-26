@@ -840,6 +840,8 @@ export interface LiquidationMapResponse {
   symbol?: string; mark?: number; coveredUsd?: number; openInterestUsd?: number; positions?: LiqMapPosition[];
 }
 
+let regimeShared: { at: number; p: Promise<any> } | null = null;
+
 export const analytics = {
   // Live order book snapshot for a market. Backed by BULK's /l2book endpoint,
   // proxied through our backend with a 2-second cache so many users viewing
@@ -1271,7 +1273,14 @@ export const analytics = {
       fairBias: number;
     }[];
   }> {
-    return request('/api/analytics/regime');
+    // The Risk page, Margin Surface and Portfolio margining all ask for this at
+    // once: share one in-flight request and reuse the answer for a few seconds.
+    const now = Date.now();
+    if (regimeShared && now - regimeShared.at < 5_000) return regimeShared.p;
+    const p = request<any>('/api/analytics/regime');
+    regimeShared = { at: now, p };
+    p.catch(() => { if (regimeShared?.p === p) regimeShared = null; });
+    return p;
   },
 
   // Volatility chart

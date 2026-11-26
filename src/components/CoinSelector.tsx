@@ -1,5 +1,7 @@
 'use client';
 
+import { CoinIcon } from '@/components/CoinIcon';
+
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/api';
@@ -60,9 +62,15 @@ export interface CoinSelectorProps {
    * volatility heatmap (heatmap cells are per-coin).
    */
   omitOther?: boolean;
+  /**
+   * One button instead of the pill rows: the selected coins' icons and names,
+   * opening the list (with the All / Crypto / TradFi switch inside). For panel
+   * headers where the full pill set is too busy (Market Regime).
+   */
+  compact?: boolean;
 }
 
-export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOther }: CoinSelectorProps) {
+export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOther, compact = true }: CoinSelectorProps) {
   // `allCoins` and `defaults` are already narrowed to the site-wide asset
   // class (All / Crypto / Stocks) — see useAvailableCoins.
   const { coins: allCoins, loading, defaults, assetClass } = useAvailableCoins();
@@ -76,6 +84,17 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
   // the joined list so it only runs when the set actually changes, and guarded
   // by `loading` so we never prune against a half-loaded (fallback) list.
   const availKey = allCoins.join(',');
+  // Switching All / Crypto / TradFi resets the chart to that class's default
+  // coins. Pruning alone isn't enough: going TradFi → All kept SNDK/MU/NVDA
+  // (stocks are valid under All), so "All" still looked like TradFi.
+  const prevClass = useRef(assetClass);
+  useEffect(() => {
+    if (prevClass.current === assetClass) return;
+    prevClass.current = assetClass;
+    if (loading) return;
+    onChange([...defaults, ...(enabledSet.has(OTHER_KEY) ? [OTHER_KEY] : [])]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetClass, loading]);
   useEffect(() => {
     if (loading) return;
     const valid = new Set<string>([...allCoins, OTHER_KEY, ...defaults]);
@@ -178,6 +197,85 @@ export function CoinSelector({ enabled, onChange, extraPills, maxCount, omitOthe
     // Extra pills are controlled by the parent so we don't touch them.
     onChange([]);
   };
+
+  const listBody = (
+    <div className="max-h-64 overflow-y-auto">
+      {defaultsInDropdown.length > 0 && (
+        <div className="py-1">
+          {defaultsInDropdown.map((coin) => (
+            <DropdownRow key={coin} coin={coin} active={enabledSet.has(coin)} bold icon={compact}
+              disabled={atCap && !enabledSet.has(coin)} onClick={() => toggleFromDropdown(coin)} />
+          ))}
+        </div>
+      )}
+      {defaultsInDropdown.length > 0 && othersInDropdown.length > 0 && <div className="border-t border-[var(--border-color)]" />}
+      {othersInDropdown.length > 0 && (
+        <div className="py-1">
+          {othersInDropdown.map((coin) => (
+            <DropdownRow key={coin} coin={coin} active={enabledSet.has(coin)} icon={compact}
+              disabled={atCap && !enabledSet.has(coin)} onClick={() => toggleFromDropdown(coin)} />
+          ))}
+        </div>
+      )}
+      {compact && !omitOther && !search && (
+        <div className="border-t border-[var(--border-color)] py-1">
+          <DropdownRow coin={OTHER_KEY} label="Others (everything else)" active={enabledSet.has(OTHER_KEY)} onClick={() => togglePill(OTHER_KEY)} />
+        </div>
+      )}
+      {defaultsInDropdown.length === 0 && othersInDropdown.length === 0 && (
+        <div className="px-3 py-4 text-xs text-[var(--text-tertiary)] text-center">No coins match &ldquo;{search}&rdquo;</div>
+      )}
+    </div>
+  );
+
+  if (compact) {
+    const picked = enabled.filter((c) => c !== OTHER_KEY);
+    const label = picked.length === 0 ? 'Pick coins' : picked.length <= 4 ? picked.join(', ') : `${picked.slice(0, 3).join(', ')} +${picked.length - 3}`;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+      {extraPills?.map((p) => (
+        <button key={p.key} type="button" onClick={p.onClick} aria-pressed={p.active}
+          className={cn('flex h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-medium transition-colors',
+            p.active ? 'border-[var(--border-color)] bg-[var(--bg-muted)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+          <span className="h-2 w-2 rounded-full" style={{ background: p.active ? p.color : 'transparent', boxShadow: `inset 0 0 0 1px ${p.color}` }} />{p.label}
+        </button>
+      ))}
+      <div className="relative" ref={dropdownRef}>
+        <button type="button" onClick={() => setOpen((v) => !v)} disabled={loading} title={label}
+          className="flex h-9 items-center gap-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-muted)] pl-2 pr-3 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--text-tertiary)] disabled:opacity-50">
+          {/* Icons double as the chart legend: the dot under each is that coin's line/bar colour. */}
+          <span className="flex -space-x-1.5">
+            {picked.slice(0, 3).map((c) => (
+              <span key={c} className="relative rounded-full ring-2 ring-[var(--bg-muted)]">
+                <CoinIcon symbol={c} size={20} />
+                <span className="absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full ring-1 ring-[var(--bg-muted)]" style={{ background: getCoinColor(c) }} />
+              </span>
+            ))}
+            {enabledSet.has(OTHER_KEY) && !omitOther && <span className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] ring-2 ring-[var(--bg-muted)]" style={{ background: getCoinColor(OTHER_KEY), color: 'var(--bg-base)' }}>+</span>}
+          </span>
+          <span className="cs-label max-w-[160px] truncate">{label}</span>
+          <ChevronDown size={14} className={cn('text-[var(--text-tertiary)] transition-transform', open && 'rotate-180')} />
+        </button>
+        {open && (
+          <div className="glass-pop absolute right-0 z-20 mt-1.5 w-[280px] overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-muted)] shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-color)] p-2">
+              <AssetClassToggle />
+              <button type="button" onClick={deselectAll} className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Clear</button>
+            </div>
+            <div className="border-b border-[var(--border-color)] p-2">
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search coins…" autoFocus
+                className="w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--text-secondary)] focus:outline-none" />
+            </div>
+            {maxCount !== undefined && (
+              <div className="px-3 pt-2 text-[11px] text-[var(--text-tertiary)]">{atCap ? `${maxCount} of ${maxCount} picked. Remove one to add another.` : `Pick up to ${maxCount}.`}</div>
+            )}
+            {listBody}
+          </div>
+        )}
+      </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 items-start">
@@ -340,10 +438,15 @@ function DropdownRow({
   bold,
   disabled,
   onClick,
+  icon,
+  label,
 }: {
   coin: string;
+  label?: string;
   active: boolean;
   bold?: boolean;
+  /** The coin's logo instead of its chart-colour swatch. */
+  icon?: boolean;
   /** Grayed out and non-interactive — used when the user is at maxCount. */
   disabled?: boolean;
   onClick: () => void;
@@ -359,18 +462,22 @@ function DropdownRow({
           : 'hover:bg-[var(--bg-base)]'
       )}
     >
-      <span
-        className="inline-block w-3 h-3 rounded-sm shrink-0"
-        style={{ background: getCoinColor(coin) }}
-      />
+      {icon && coin !== OTHER_KEY ? <CoinIcon symbol={coin} size={18} className="shrink-0" /> : (
+        <span
+          className="inline-block w-3 h-3 rounded-sm shrink-0"
+          style={{ background: getCoinColor(coin) }}
+        />
+      )}
       <span className={cn(
         'flex-1 text-left',
         bold
           ? 'font-semibold text-[var(--text-primary)]'
           : 'font-normal text-[var(--text-secondary)]'
       )}>
-        {coin}
+        {label ?? coin}
       </span>
+      {/* Its colour on the charts, so the list reads as a legend too. */}
+      {icon && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: getCoinColor(coin) }} />}
       {active && (
         <Check size={12} className="text-[var(--text-primary)] shrink-0" strokeWidth={3} />
       )}

@@ -6,6 +6,7 @@ import { analytics, cn, formatAddress, formatCompact, type PositionChange } from
 import { CoinIcon } from '@/components/CoinIcon';
 import { BulkAvatar } from '@/components/BulkAvatar';
 import { InfoTip } from '@/components/InfoTip';
+import { DivergingBar } from '@/components/charts/DivergingBar';
 
 const WINDOWS = [[15, '15m'], [60, '1h'], [240, '4h'], [1440, '24h'], [4320, '3d'], [10080, '7d']] as const;
 const usd = (n: number) => `$${formatCompact(Math.abs(n))}`;
@@ -70,15 +71,10 @@ export function PositionChanges({ isIn }: { isIn: (coin: string) => boolean }) {
             <div className="space-y-1">
               {markets.map((m) => {
                 const net = m.longAdded - m.shortAdded; // + = traders got more long
-                const w = (Math.abs(net) / maxNet) * 50;
                 return (
                   <div key={m.symbol} className="grid grid-cols-[64px_minmax(0,1fr)_96px] items-center gap-2 py-1 text-[12px] tabular-nums" title={`Longs ${m.longAdded >= 0 ? '+' : '−'}${usd(m.longAdded)} · shorts ${m.shortAdded >= 0 ? '+' : '−'}${usd(m.shortAdded)} · ${m.wallets} wallet${m.wallets === 1 ? '' : 's'}`}>
                     <span className="flex items-center gap-1.5 text-[var(--text-primary)]"><CoinIcon symbol={coinOf(m.symbol)} size={14} />{coinOf(m.symbol)}</span>
-                    <span className="relative h-2">
-                      <span className="absolute inset-y-0 left-1/2 w-px bg-[var(--border-color)]" />
-                      <span className="absolute inset-y-0 rounded-full transition-all duration-700 ease-out"
-                        style={net >= 0 ? { left: '50%', width: `${w}%`, background: 'var(--pos)' } : { right: '50%', width: `${w}%`, background: 'var(--neg)' }} />
-                    </span>
+                    <DivergingBar value={net / maxNet} />
                     <span className="text-right" style={{ color: net >= 0 ? 'var(--pos)' : 'var(--neg)' }}>{usd(net)} {net >= 0 ? 'long' : 'short'}</span>
                   </div>
                 );

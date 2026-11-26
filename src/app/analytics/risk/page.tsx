@@ -17,6 +17,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { CoinPicker } from '@/components/CoinPicker';
 import { MarginSurface } from '@/components/MarginSurface';
 import { PortfolioMarginCard } from '@/components/PortfolioMarginCard';
+import { LazySection } from '@/components/LazySection';
 import { MarkOraclePanel } from '@/components/MarkOraclePanel';
 import {
   DEFAULT_COINS,
@@ -314,7 +315,6 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function RiskPage() {
-  const [loading, setLoading] = useState(true);
 
   // useAvailableCoins is still available here if any future section needs the
   // full market list, but the Fair Spread picker now uses <CoinPicker> which
@@ -388,7 +388,6 @@ export default function RiskPage() {
       } catch (error) {
         console.error('Failed to fetch regime:', error);
       }
-      setLoading(false);
     };
     
     fetchRegime();
@@ -499,13 +498,9 @@ export default function RiskPage() {
       <main className="flex-1 w-full px-3 sm:px-6 lg:px-10 py-6">
         <h1 className="page-title text-[var(--text-primary)] mb-6">Risk</h1>
 
-        {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-[350px] animate-pulse" />
-            ))}
-          </div>
-        ) : (
+        {/* No page-wide loading gate: each section shows its own placeholder, so the
+            page doesn't sit blank waiting for the slowest request. Sections below
+            the fold mount (and fetch) as you scroll toward them. */}
           <div className="space-y-6">
             {/* Market Regime Section */}
             <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-6">
@@ -522,6 +517,7 @@ export default function RiskPage() {
                   onChange={setRegimeCoins}
                   maxCount={4}
                   omitOther
+                  compact
                 />
               </div>
 
@@ -608,8 +604,8 @@ export default function RiskPage() {
                   </div>
                 </div>
               ) : (
-                <div className="h-32 flex items-center justify-center text-[var(--text-tertiary)]">
-                  Loading regime data...
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
+                  {Array.from({ length: 5 }, (_, i) => <div key={i} className="h-[170px] animate-pulse rounded-lg bg-[var(--bg-base)]" />)}
                 </div>
               )}
             </div>
@@ -619,18 +615,19 @@ export default function RiskPage() {
                 rest of the risk panels because it answers "what does that
                 regime mean for your margin?" - the natural follow-up
                 question after seeing the regime score. */}
-            <MarginSurface />
+            <LazySection minHeight={620}><MarginSurface /></LazySection>
 
             {/* Row 1.6: Portfolio Margining explainer — full width.
                 Follows the margin surface ("what does one position cost?")
                 with "what does a HEDGE cost?" - the cross-asset netting that
                 the single-coin surface can't show on its own. */}
-            <PortfolioMarginCard />
+            <LazySection minHeight={640}><PortfolioMarginCard /></LazySection>
 
             {/* Mark vs oracle: where BULK prices each market against Pyth spot. */}
-            <MarkOraclePanel />
+            <LazySection minHeight={420}><MarkOraclePanel /></LazySection>
 
             {/* Row 2: Fair vs Mark Spread + Volatility History (side-by-side). */}
+            <LazySection minHeight={380}>
             <ResizableChartRow storageKey="risk-spread-vol" defaultHeight={250}>
               {/* Fair vs Mark Spread (moved up from Row 3 to Row 2-left). */}
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4 h-full flex flex-col">
@@ -817,10 +814,12 @@ export default function RiskPage() {
                 )}
               </div>
             </ResizableChartRow>
+            </LazySection>
 
             {/* Row 3: Volatility Heatmap + Correlation Matrix (side-by-side).
                 Both are driven by the same `heatmapCoins` state so the two
                 panels are always in sync. */}
+            <LazySection minHeight={420}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Volatility Heatmap. */}
               <div className="bg-[var(--role-surface)] rounded-lg border border-[var(--border-color)] p-4">
@@ -905,8 +904,8 @@ export default function RiskPage() {
                 )}
               </div>
             </div>
+            </LazySection>
           </div>
-        )}
       </main>
     </div>
   );

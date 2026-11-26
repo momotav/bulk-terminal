@@ -8,8 +8,10 @@ export interface Series { key: string; label: string; color: string; values: (nu
  * A light multi-line time chart: shared x (ms timestamps), one y-axis, hover line
  * with a frosted readout. Plain SVG so theme colours (CSS vars) always resolve.
  */
-export function SeriesChart({ times, series, height = 240, format = (v) => v.toFixed(2), zeroLine = false, emptyText = 'No data yet', animKey }: {
+export function SeriesChart({ times, series, height = 240, format = (v) => v.toFixed(2), zeroLine = false, emptyText = 'No data yet', animKey, watermark }: {
   times: number[]; series: Series[]; height?: number; format?: (v: number) => string; zeroLine?: boolean; emptyText?: string;
+  /** The BULKSTATS logo behind the plot, like the site's other charts. */
+  watermark?: boolean;
   /** Change it (market, range…) to fade the chart and draw its lines in again. Data refreshes don't. */
   animKey?: string;
 }) {
@@ -51,6 +53,9 @@ export function SeriesChart({ times, series, height = 240, format = (v) => v.toF
   const span = t1 - t0;
   const fmtT = (t: number) => new Date(t).toLocaleString('en-US', span > 3 * 86_400_000 ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   const idx = hover;
+  const wmSize = Math.max(0, Math.min(260, w / 3, height * 0.8));
+  // The logo only on charts big enough to carry it; on small ones it's clutter.
+  const showMark = watermark ?? height >= 160;
 
   return (
     <div ref={box} className="relative select-none" style={{ height }}
@@ -62,7 +67,17 @@ export function SeriesChart({ times, series, height = 240, format = (v) => v.toF
         times.forEach((tt, i) => { const d = Math.abs(tt - t); if (d < bd) { bd = d; best = i; } });
         setHover(best);
       }}>
-      <svg width={w} height={height} className="block">
+      {showMark && (
+        // Centered on the whole chart box.
+        <div className="pointer-events-none absolute inset-0" aria-hidden
+          style={{
+            backgroundColor: 'var(--text-primary)', opacity: 0.06,
+            WebkitMaskImage: 'url(/chartlogo.png)', maskImage: 'url(/chartlogo.png)',
+            WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center',
+            WebkitMaskSize: `${wmSize}px`, maskSize: `${wmSize}px`,
+          }} />
+      )}
+      <svg width={w} height={height} className="relative block">
         {ticks.map((v, i) => (
           <g key={i}>
             <line x1={padL} x2={w - padR} y1={y(v)} y2={y(v)} strokeDasharray="2 5" style={{ stroke: 'var(--border-color)' }} />

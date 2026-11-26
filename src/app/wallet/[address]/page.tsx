@@ -9,7 +9,7 @@ import { BulkAvatar } from '@/components/BulkAvatar';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Star, StarOff, Copy, Check, ExternalLink, AlertCircle, Loader2, UserCheck, Shield, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Star, Copy, Check, ExternalLink, AlertCircle, Loader2, UserCheck, Shield, Image as ImageIcon } from 'lucide-react';
 import { wallet, analytics, formatNumber, formatCompact, formatAddress, formatPercent, type WalletData, type ClosedPosition, type ActivityEvent, type WalletFunding, userApi } from '@/lib/api';
 import { isSystemWallet } from '@/lib/systemWallets';
 import type { WalletFill } from '@/lib/api';
@@ -962,6 +962,16 @@ export default function WalletPage() {
                     <div className="text-[12px] text-[var(--role-content-subtle)] truncate">First seen {new Date(tracked.first_seen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                   ) : null}
                 </div>
+                {!isOwnWallet && (
+                  <button onClick={toggleFollow} disabled={followLoading} aria-pressed={isFollowing}
+                    title={isFollowing ? 'Following. Click to unfollow' : 'Follow this wallet'} aria-label={isFollowing ? 'Unfollow wallet' : 'Follow wallet'}
+                    className="group shrink-0 rounded-lg p-2 transition-colors hover:bg-[var(--role-surface-raised)] disabled:opacity-50">
+                    {followLoading ? <Loader2 className="h-5 w-5 animate-spin text-[var(--role-content-subtle)]" /> : (
+                      <Star className={cn('h-5 w-5 transition-all duration-200 group-active:scale-90', isFollowing ? 'text-[var(--accent)]' : 'text-[var(--role-content-subtle)] group-hover:text-[var(--role-content)]')}
+                        fill={isFollowing ? 'currentColor' : 'none'} strokeWidth={1.75} />
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 empty:hidden">
@@ -1007,20 +1017,6 @@ export default function WalletPage() {
                     {claimLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}This is my wallet
                   </button>
                 )}
-                <div className="flex items-center gap-2">
-                  {!isOwnWallet && (
-                    <button onClick={toggleFollow} disabled={followLoading}
-                      className={cn('inline-flex flex-1 items-center justify-center gap-2 h-9 rounded-xl text-[14px] font-medium border transition-colors disabled:opacity-50',
-                        isFollowing ? 'border-[var(--border-color)] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)]' : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110')}>
-                      {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <StarOff className="w-4 h-4" /> : <Star className="w-4 h-4" />}
-                      {isFollowing ? 'Following' : 'Follow'}
-                    </button>
-                  )}
-                  <a href={`https://explorer.bulk.trade/address/${address}`} target="_blank" rel="noopener noreferrer" title="Open in BULK Explorer"
-                    className={cn('inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--border-color)] px-3 text-[13px] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', isOwnWallet && 'flex-1')}>Explorer<ExternalLink className="h-3 w-3 text-[var(--role-content-subtle)]" /></a>
-                  <a href={`https://solscan.io/account/${address}`} target="_blank" rel="noopener noreferrer" title="Open on Solscan"
-                    className={cn('inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--border-color)] px-3 text-[13px] text-[var(--role-content)] hover:bg-[var(--role-surface-raised)] transition-colors', isOwnWallet && 'flex-1')}>Solscan<ExternalLink className="h-3 w-3 text-[var(--role-content-subtle)]" /></a>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 rounded-xl bg-[var(--role-surface-raised)]">
