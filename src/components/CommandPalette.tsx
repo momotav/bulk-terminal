@@ -31,6 +31,7 @@ const PAGES: { label: string; href: string; hint: string }[] = [
   { label: 'Liquidations', href: '/analytics/liquidations', hint: 'Forced closes by market, side and size' },
   { label: 'Risk', href: '/analytics/risk', hint: 'Fair-vs-mark spread, mark vs oracle, volatility and margin surface' },
   { label: 'Funding', href: '/analytics/funding', hint: 'Hourly funding, APR and mark-vs-oracle premium for every market' },
+  { label: 'Order Flow', href: '/analytics/flow', hint: 'Taker buys vs sells, new longs vs short covering, per market' },
   { label: 'Positioning', href: '/analytics/positioning', hint: 'Long vs short exposure of the top traders per market' },
   { label: 'Fees', href: '/analytics/fees', hint: 'Fee calculator, fee schedule and fees collected' },
   { label: 'Staking', href: '/analytics/staking', hint: 'BulkSOL TVL, validators and stake flows' },

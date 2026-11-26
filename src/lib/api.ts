@@ -816,6 +816,12 @@ export type BulkLeaderboardRankResponse =
     };
 
 // Analytics API
+export type FlowKind = 'new_longs' | 'short_covering' | 'new_shorts' | 'longs_closing' | 'quiet';
+export interface FlowRow {
+  symbol: string; buyUsd: number; sellUsd: number; buys: number; sells: number;
+  priceChg: number | null; oiChg: number | null; oiUsd: number | null; oiDeltaUsd: number | null; kind: FlowKind | null;
+}
+export interface FlowPoint { t: number; buy: number; sell: number; net: number; cvd: number; price: number | null; oi: number | null }
 export interface CohortRow {
   key: string; label: string; min: number | null; max: number | null; wallets: number; withPositions: number;
   long: number; short: number; longShare24hAgo: number | null; markets: { symbol: string; long: number; short: number }[];
@@ -1298,6 +1304,13 @@ export const analytics = {
     series: { t: number; mid: number | null; spread: number | null; bidDepth: number | null; askDepth: number | null; c10k: number | null; c100k: number | null; c1m: number | null }[];
     byHour: { hour: number; c100k: number | null; spread: number | null; depth: number | null }[] }> {
     return request(`/api/analytics/liquidity-history?symbol=${encodeURIComponent(symbol)}&days=${days}`);
+  },
+  /** Taker buys vs sells per market over `hours`, with the price/OI change and the kind of flow. */
+  async getOrderFlow(hours: number): Promise<{ hours: number; markets: FlowRow[] }> {
+    return request(`/api/analytics/order-flow?hours=${hours}`);
+  },
+  async getOrderFlowSeries(symbol: string, days: number): Promise<{ series: FlowPoint[] }> {
+    return request(`/api/analytics/order-flow?symbol=${encodeURIComponent(symbol)}&days=${days}`);
   },
   /** The top traders grouped by all-time PnL or account size, with each group's exposure. */
   async getCohorts(kind: 'pnl' | 'size'): Promise<{ at: number; kind: string; wallets: number; cohorts: CohortRow[] }> {

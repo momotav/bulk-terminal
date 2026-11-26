@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network, PanelLeftClose, PanelLeftOpen, Receipt, Percent, Users } from 'lucide-react';
+import { BarChart3, Flame, Gauge, BookOpen, Landmark, Coins, Network, PanelLeftClose, PanelLeftOpen, Receipt, Percent, Users, ArrowLeftRight } from 'lucide-react';
 import { ChartFocuser } from '@/components/ChartFocuser';
 
 const SLIDE_MS = 200; // matches the sidebar's duration-200
@@ -38,6 +38,11 @@ const menuItems = [
     name: 'Funding',
     href: '/analytics/funding',
     icon: Percent,
+  },
+  {
+    name: 'Order Flow',
+    href: '/analytics/flow',
+    icon: ArrowLeftRight,
   },
   {
     name: 'Positioning',
