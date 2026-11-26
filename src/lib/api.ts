@@ -816,6 +816,15 @@ export type BulkLeaderboardRankResponse =
     };
 
 // Analytics API
+export interface CohortRow {
+  key: string; label: string; min: number | null; max: number | null; wallets: number; withPositions: number;
+  long: number; short: number; longShare24hAgo: number | null; markets: { symbol: string; long: number; short: number }[];
+}
+export type PositionChangeKind = 'opened' | 'closed' | 'added' | 'reduced' | 'flipped';
+export interface PositionChange {
+  wallet: string; symbol: string; kind: PositionChangeKind; side: 'long' | 'short';
+  sizeBefore: number; sizeNow: number; notionalBefore: number; notionalNow: number; deltaUsd: number; entryNow: number | null;
+}
 export interface PositioningRow { symbol: string; ts: number; long: number; short: number; longN: number; shortN: number; longEntry: number | null; shortEntry: number | null; top5Share: number | null; wallets: number; longRatio: number | null; longRatio24hAgo: number | null }
 export interface FundingPremiumRow { symbol: string; fundingNow: number | null; funding24h: number | null; fundingAvg: number | null; positiveShare: number | null; flips: number; premiumNow: number | null; premiumAvg: number | null; premiumAbsAvg: number | null; hours: number }
 export interface LiqMapPosition { wallet: string; side: 'long' | 'short'; notional: number; liq: number; entry: number; leverage: number }
@@ -1289,6 +1298,17 @@ export const analytics = {
     series: { t: number; mid: number | null; spread: number | null; bidDepth: number | null; askDepth: number | null; c10k: number | null; c100k: number | null; c1m: number | null }[];
     byHour: { hour: number; c100k: number | null; spread: number | null; depth: number | null }[] }> {
     return request(`/api/analytics/liquidity-history?symbol=${encodeURIComponent(symbol)}&days=${days}`);
+  },
+  /** The top traders grouped by all-time PnL or account size, with each group's exposure. */
+  async getCohorts(kind: 'pnl' | 'size'): Promise<{ at: number; kind: string; wallets: number; cohorts: CohortRow[] }> {
+    return request(`/api/analytics/cohorts?kind=${kind}`);
+  },
+  async getCohortHistory(cohort: string, days = 7): Promise<{ series: { t: number; long: number; short: number; wallets: number | null }[] }> {
+    return request(`/api/analytics/cohorts?cohort=${encodeURIComponent(cohort)}&days=${days}`);
+  },
+  /** What the top traders opened, closed, added, cut or flipped over the last `windowMin` minutes. */
+  async getPositionChanges(windowMin: number): Promise<{ window: number; from: number | null; to: number | null; total: number; changes: PositionChange[]; markets: { symbol: string; longAdded: number; shortAdded: number; wallets: number }[] }> {
+    return request(`/api/analytics/position-changes?window=${windowMin}`);
   },
   /** Where the top traders stand per market (latest), or one market's history. */
   async getPositioning(): Promise<{ markets: PositioningRow[] }> {

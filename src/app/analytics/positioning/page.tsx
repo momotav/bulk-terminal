@@ -6,6 +6,8 @@ import { CoinIcon } from '@/components/CoinIcon';
 import { SeriesChart, Legend } from '@/components/charts/SeriesChart';
 import { useAssetClass } from '@/hooks/useAssetClass';
 import { AssetClassToggle } from '@/components/AssetClassToggle';
+import { PositionChanges } from '@/components/positioning/PositionChanges';
+import { Cohorts } from '@/components/positioning/Cohorts';
 
 const RANGES = [[1, '1D'], [7, '7D'], [30, '30D']] as const;
 const px = (n: number | null) => (n === null ? '—' : n >= 1000 ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : n >= 1 ? n.toFixed(2) : n.toPrecision(4));
@@ -92,6 +94,9 @@ export default function PositioningPage() {
           </div>
         </div>
       )}
+
+      <PositionChanges isIn={isIn} />
+      <Cohorts isIn={isIn} />
 
       {/* selected market history */}
       <div className="glass-card p-4 md:p-5">
